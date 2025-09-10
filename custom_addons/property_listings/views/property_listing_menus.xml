@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <menuitem id="property_listing_menu_root"
+              name="Property Listings"
+              sequence="20"/>
+
+    <menuitem id="property_listing_menu_main"
+              name="Listings"
+              parent="property_listing_menu_root"
+              sequence="10"/>
+
+    <menuitem id="property_listing_menu_action"
+              name="Properties"
+              parent="property_listing_menu_main"
+              action="property_listing_action"
+              sequence="10"/>
+
+</odoo>

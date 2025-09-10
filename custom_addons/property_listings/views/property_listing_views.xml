@@ -1,0 +1,121 @@
+<odoo>
+    <record id="property_listing_view_form" model="ir.ui.view">
+        <field name="name">property.listing.form</field>
+        <field name="model">property.listing</field>
+        <field name="arch" type="xml">
+            <form>
+                <header>
+                    <!-- <field name="property_status" widget="statusbar"/> -->
+                </header>
+                <sheet>
+                    <div class="oe_title"><h1><field name="name" placeholder="Owner Name..."/></h1></div>
+                    <group>
+                        <group>
+                            <field name="phone"/>
+                            <!--<field name="email"/> -->
+                        </group>
+                        <group>
+                            <field name="rm_id"/>
+                            <field name="sales_executive_id"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Property Details">
+                            <group>
+                                <group>
+                                    <field name="listing_type"/>
+                                    <field name="property_type"/>
+                                    <field name="residential_type" invisible="property_type != 'residential'"/>
+                                    <field name="commercial_type" invisible="property_type != 'commercial'"/>
+                                    <field name="bhk"/>
+                                    <!--<field name="bathroom"/>-->
+                                    <field name="property_address"/>
+                                </group>
+                                <group>
+                                    <field name="country_id"/>
+                                    <field name="state_id"/>
+                                    <field name="city_id"/>
+                                    <field name="location_id"/>
+                                    <field name="tag"/>
+                                </group>
+                            </group>
+                        </page>
+                        <!-- Future implementation: uncomment these -->
+                        <!-- <page string="Area &amp; Specs">
+                            <group>
+                                <group>
+                                    <field name="carpet_plot_area"/>
+                                    <field name="carpet_construction_area"/>
+                                    <field name="super_built_up_plot_space"/>
+                                    <field name="super_built_up_construction_area"/>
+                                </group>
+                                <group>
+                                    <field name="property_on_floor"/>
+                                    <field name="property_facing"/>
+                                    <field name="lift_per_block"/>
+                                    <field name="furniture_details"/>
+                                    <field name="age_of_property"/>
+                                    <field name="parking_details"/>
+                                </group>
+                            </group>
+                        </page>
+                        <page string="Financials &amp; Service">
+                            <group>
+                                <group>
+                                    <field name="property_price"/>
+                                    <field name="form_number"/>
+                                    <field name="receipt_number"/>
+                                    <field name="payment_mode"/>
+                                </group>
+                                <group>
+                                    <field name="payment_package"/>
+                                    <field name="package_amount"/>
+                                    <field name="net_amount"/>
+                                    <field name="due_amount"/>
+                                    <field name="total_package_amount"/>
+                                    <field name="gst_status"/>
+                                </group>
+                            </group>
+                        </page> -->
+                        <page string="Marketing &amp; Status">
+                            <group>
+                                <field name="property_link"/>
+                                <!-- Future implementation: uncomment this -->
+                                <!-- <field name="link_360_dgt"/> -->
+                                <!-- <field name="id_99acres"/> -->
+                                <!-- <field name="id_housing"/> -->
+                                <!-- <field name="id_magicbricks"/> -->
+                                <!-- <field name="id_olx"/> -->
+                                <!-- <field name="instagram_reel"/> -->
+                            </group>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="property_listing_view_list" model="ir.ui.view">
+        <field name="name">property.listing.list</field>
+        <field name="model">property.listing</field>
+        <field name="arch" type="xml">
+            <list>
+                <field name="name"/>
+                <field name="property_type"/>
+                <field name="bhk"/>
+                <field name="location_id"/>
+                <field name="rm_id"/>
+                <!--<field name="property_status"/> -->
+            </list>
+        </field>
+    </record>
+
+
+    <record id="property_listing_action" model="ir.actions.act_window">
+        <field name="name">Properties</field>
+        <field name="res_model">property.listing</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+   
+</odoo>

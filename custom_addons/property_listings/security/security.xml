@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+        <record id="module_category_property_listings" model="ir.module.category">
+            <field name="name">Real Estate</field>
+            <field name="description">User access levels for the Property Listings module</field>
+            <field name="sequence">20</field>
+        </record>
+
+        <record id="group_property_listings_rm" model="res.groups">
+            <field name="name">RM (Read-Only)</field>
+            <field name="category_id" ref="module_category_property_listings"/>
+        </record>
+
+        <record id="group_property_listings_manager" model="res.groups">
+            <field name="name">Ops Manager (Full Access)</field>
+            <field name="category_id" ref="module_category_property_listings"/>
+            <field name="implied_ids" eval="[(4, ref('group_property_listings_rm'))]"/>
+        </record>
+    </data>
+</odoo>

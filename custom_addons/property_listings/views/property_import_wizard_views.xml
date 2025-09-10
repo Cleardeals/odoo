@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="property_import_wizard_view_form" model="ir.ui.view">
+        <field name="name">property.import.wizard.form</field>
+        <field name="model">property.import.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Import Property Listings">
+                <group>
+                    <field name="csv_file" filename="file_name"/>
+                    <field name="file_name" invisible="1"/>
+                </group>
+                <footer>
+                    <button name="action_import_properties" string="Import" type="object" class="btn-primary"/>
+                    <button string="Cancel" class="btn-secondary" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_property_import_wizard" model="ir.actions.act_window">
+        <field name="name">Import Properties from CSV</field>
+        <field name="res_model">property.import.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+
+    <menuitem id="property_import_menu"
+              name="Import Properties"
+              parent="property_listing_menu_main"
+              action="action_property_import_wizard"
+              sequence="20"/>
+</odoo>
