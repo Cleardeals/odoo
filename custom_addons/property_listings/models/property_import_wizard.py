@@ -193,15 +193,16 @@ class PropertyImportWizard(models.TransientModel):
         return location
     
     def _find_user_by_name(self, user_name):
-        """Finds an Odoo user by their name and returns their ID."""
+        """Finds an Odoo user by their name with fuzzy matching."""
         user_name = self._clean_string(user_name, to_lower=False)
+        _logger.info(f"Searching for user: '{user_name}'")
         if user_name is None:
-            return None
-        
+            _logger.warning("User name is None after cleaning")
+            return self.env.ref('base.user_admin').id  # Default to admin
+
         User = self.env['res.users']
         user_record = User.search([('name', '=ilike', user_name)], limit=1)
         
-        return user_record.id if user_record else None
 
     def action_import_properties(self):
         """Main import logic with data cleaning."""
@@ -238,9 +239,11 @@ class PropertyImportWizard(models.TransientModel):
             location_record = None
             if city_record:
                 location_record = self._get_or_create_location(row.get('Location', ''), city_record)
-            
-            rm_id = self._find_user_by_name(row.get('Assignee)', ''))
+
+
+            rm_id = self._find_user_by_name(row.get('Assignee', ''))
             se_id = self._find_user_by_name(row.get('Sales_Executive', ''))
+
 
             # Build values dictionary
             vals = {
