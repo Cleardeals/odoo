@@ -24,6 +24,21 @@
         </field>
     </record>
 
+    <record id="lead_score_view_list" model="ir.ui.view">
+        <field name="name">lead.score.list</field>
+        <field name="model">lead.score</field>
+        <field name="arch" type="xml">
+            <list string="Leads">
+                <field name="name"/>
+                <field name="predicted_score"/>
+                <field name="state"/>
+                <field name="project_name"/>
+                <field name="assigned_rm_id"/>
+                <field name="next_follow_up_date"/>
+            </list>
+        </field>
+    </record>
+
     <record id="lead_score_view_form" model="ir.ui.view">
         <field name="name">lead.score.form</field>
         <field name="model">lead.score</field>
@@ -70,7 +85,7 @@
     <record id="lead_score_action" model="ir.actions.act_window">
         <field name="name">Leads</field>
         <field name="res_model">lead.score</field>
-        <field name="view_mode">kanban,list,form</field>
+        <field name="view_mode">list,kanban,form</field>
     </record>
 
     <menuitem id="lead_score_menu_root" name="Lead Scoring" sequence="5"/>
