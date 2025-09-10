@@ -1,0 +1,54 @@
+from odoo import fields, models 
+
+class LeadScore(models.Model):
+    _name = 'lead.score'
+    _description = 'Lead Scoring Record From BQ (Table name : whatsapp_automation_list, Dataset name : lead_scoring, Project ID: cleardeals-459513)'
+    _order = 'predicted_score desc'
+
+    # Core Lead Information
+    name = fields.Char(string='Lead Name', required=True)
+    assigned_rm_id = fields.Many2one('res.users', string='Assigned RM')
+    standardized_phone = fields.Char(string = 'Standardized Phone')
+
+    # Scoring Information
+    predicted_score = fields.Float(string='Predicted Score')
+    current_status = fields.Char(string='Current Status (Stage in Funnel)')
+
+    #Property Details
+    project_name = fields.Char(string='Project Name')
+    property_type = fields.Char(string='Property Type')
+    property_tag = fields.Char(string='Property Tag')
+    property_address = fields.Char(string='Property Address')
+    bhk = fields.Char(string='BHK')
+    price_range = fields.Char(string='Price Range (Lacs)')
+    carpet_area = fields.Char(string='Carpet Area (Sqft)')
+    super_built_up_area = fields.Char(string='Super Built-up Area')
+    property_link = fields.Char(string='Property Link')
+    location = fields.Char(string='Location')
+    property_on_floor = fields.Char(string='Property on Floor')
+    property_facing = fields.Char(string='Property Facing')
+    furniture_details = fields.Char(string='Furniture Details')
+    age_of_property = fields.Char(string='Age of Property')
+    parking_details = fields.Char(string='Parking Details')
+    bathroom = fields.Char(string='Bathrooms')
+    offer_price = fields.Char(string='Offer Price (Lacs)')
+
+    # Fields for RM Interaction
+    site_visit_scheduled_date = fields.Date(string='Site Visit Scheduled For Date')
+    feedback = fields.Text(string='Feedback')
+    next_follow_up_date = fields.Date(string='Next Follow-up Date')
+    state = fields.Selection([
+        ('busy', 'Busy'),
+        ('lead', 'Lead'),
+        ('ringing', 'Ringing'),
+        ('call_back_later', 'Call Back Later'),
+        ('site_visit_scheduled', 'Site Visit Scheduled'),
+        ('option_not_matching_requirements', 'Option Not Matching Requirements'),
+        ('details_shared_of_property', 'Details Shared of Property'),
+        ('no_requirements', 'No Requirements'),
+        ('details_shared_and_interested_for_site_visit', 'Details Shared and Interested for Site Visit'),
+        ('switched_off', 'Switched Off'),
+        ('requirement_closed', 'Requirement Closed'),
+        ('property_sold_out', 'Property Sold Out'),
+        ('rescheduled', 'Rescheduled'),
+    ], string='Status', default='lead', required=True)
