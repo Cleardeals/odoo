@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="lead_score_view_kanban" model="ir.ui.view">
+        <field name="name">lead.score.kanban</field>
+        <field name="model">lead.score</field>
+        <field name="arch" type="xml">
+            <kanban default_group_by="state">
+                <field name="predicted_score"/>
+                <field name="assigned_rm_id"/>
+                <field name="name"/>
+                <templates>
+                    <t t-name="kanban-box">
+                        <div t-attf-class="oe_kanban_global_click">
+                            <div class="oe_kanban_details">
+                                <strong><field name="name"/></strong>
+                                <div>Score: <field name="predicted_score" widget="float_time"/></div>
+                                <div class="text-muted"><field name="assigned_rm_id"/></div>
+                            </div>
+                        </div>
+                    </t>
+                </templates>
+            </kanban>
+        </field>
+    </record>
+
+    <record id="lead_score_view_form" model="ir.ui.view">
+        <field name="name">lead.score.form</field>
+        <field name="model">lead.score</field>
+        <field name="arch" type="xml">
+            <form>
+                <header>
+                    <field name="state" widget="statusbar"/>
+                </header>
+                <sheet>
+                    <div class="oe_title"><h1><field name="name"/></h1></div>
+                    <group>
+                        <group>
+                            <field name="assigned_rm_id"/>
+                            <field name="standardized_phone"/>
+                            <field name="predicted_score"/>
+                        </group>
+                        <group>
+                            <field name="current_status"/>
+                            <field name="next_follow_up_date"/>
+                            <field name="site_visit_scheduled_date"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Property Details">
+                            <group>
+                                <field name="project_name"/>
+                                <field name="property_type"/>
+                                <field name="property_tag"/>
+                                <field name="property_address"/>
+                                <field name="bhk"/>
+                                <field name="price_range"/>
+                                <field name="carpet_area"/>
+                            </group>
+                        </page>
+                        <page string="Feedback">
+                            <field name="feedback"/>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="lead_score_action" model="ir.actions.act_window">
+        <field name="name">Leads</field>
+        <field name="res_model">lead.score</field>
+        <field name="view_mode">kanban,list,form</field>
+    </record>
+
+    <menuitem id="lead_score_menu_root" name="Lead Scoring" sequence="5"/>
+    <menuitem id="lead_score_menu_main" name="Leads" parent="lead_score_menu_root" action="lead_score_action"/>
+
+</odoo>

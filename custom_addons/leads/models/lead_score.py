@@ -32,6 +32,7 @@ class LeadScore(models.Model):
     parking_details = fields.Char(string='Parking Details')
     bathroom = fields.Char(string='Bathrooms')
     offer_price = fields.Char(string='Offer Price (Lacs)')
+    bathroom = fields.Char(string='Bathrooms')
 
     # Fields for RM Interaction
     site_visit_scheduled_date = fields.Date(string='Site Visit Scheduled For Date')
@@ -51,4 +52,7 @@ class LeadScore(models.Model):
         ('requirement_closed', 'Requirement Closed'),
         ('property_sold_out', 'Property Sold Out'),
         ('rescheduled', 'Rescheduled'),
+        ('budget_not_sufficient', 'Budget Not Sufficient'),
+        ('number_not_in_use_wrong_number', 'Number Not in Use/Wrong Number'),
+        ('other', 'Other')
     ], string='Status', default='lead', required=True)
