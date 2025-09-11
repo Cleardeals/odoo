@@ -1,3 +1,6 @@
-id,name,model_id/id,group_id/id,perm_read,perm_write,perm_create,perm_unlink
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
 access_lead_score_rm,lead.score.rm,model_lead_score,leads.group_lead_score_rm,1,1,1,1
 access_lead_import_wizard,lead.import.wizard,model_lead_import_wizard,base.group_user,1,1,1,1
+access_whatsapp_response_rm,whatsapp.response.rm,model_whatsapp_response,leads.group_lead_score_rm,1,1,1,1
+access_whatsapp_response_manager,whatsapp.response.manager,model_whatsapp_response,leads.group_lead_score_manager,1,1,1,1
+access_whatsapp_response_admin,whatsapp.response.admin,model_whatsapp_response,base.group_system,1,1,1,1

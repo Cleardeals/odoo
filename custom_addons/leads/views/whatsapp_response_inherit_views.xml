@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    
+    <record id="whatsapp_response_action_lead" model="ir.actions.act_window">
+        <field name="name">WhatsApp Responses</field>
+        <field name="res_model">whatsapp.response</field>
+        <field name="view_mode">tree,form</field>
+        <field name="domain">[('lead_id', '=', active_id)]</field>
+        <field name="context">{'default_lead_id': active_id}</field>
+    </record>
+
+    <record id="lead_score_view_form_inherit_whatsapp" model="ir.ui.view">
+        <field name="name">lead.score.form.whatsapp</field>
+        <field name="model">lead.score</field>
+        <field name="inherit_id" ref="leads.lead_score_view_form"/>
+        <field name="arch" type="xml">
+            
+            <div class="oe_title" position="before">
+                <div class="oe_button_box" name="button_box">
+                    <button class="oe_stat_button" 
+                            type="action" 
+                            name="%(whatsapp_response_action_lead)d" 
+                            icon="fa-whatsapp" 
+                            invisible="[('whatsapp_response_count', '=', 0)]">
+
+                        <field name="whatsapp_response_count" widget="statinfo" string="Responses"/>
+                    </button>
+                </div>
+            </div>
+
+            <notebook position="inside">
+                <page string="WhatsApp Responses" invisible="[('whatsapp_response_count', '=', 0)]">
+                    <field name="whatsapp_response_ids" 
+                           readonly="1"
+                           context="{'tree_view_ref': 'leads.whatsapp_response_view_tree'}">
+                    </field>
+                </page>
+            </notebook>
+        </field>
+    </record>
+
+</odoo>

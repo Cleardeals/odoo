@@ -21,7 +21,7 @@
         <record id="lead_score_rm_read_rule" model="ir.rule">
             <field name="name">Lead RM Own and Actionable Leads</field>
             <field name="model_id" ref="model_lead_score"/>
-            <field name="domain_force"> [('assigned_rm_id', '=', user.id)]</field>
+            <field name="domain_force">[('assigned_rm_id', '=', user.id)]</field>
             <field name="groups" eval="[(4, ref('group_lead_score_rm'))]"/>
         </record>
 
@@ -31,5 +31,20 @@
             <field name="domain_force">[(1, '=', 1)]</field>
             <field name="groups" eval="[(4, ref('group_lead_score_manager'))]"/>
         </record>
+
+        <record id="whatsapp_response_rm_read_rule" model="ir.rule">
+            <field name="name">WhatsApp Responses for Lead RM</field>
+            <field name="model_id" ref="model_whatsapp_response"/>
+            <field name="domain_force">[('lead_id.assigned_rm_id', '=', user.id)]</field>
+            <field name="groups" eval="[(4, ref('group_lead_score_rm'))]"/>
+        </record>   
+
+        <record id="whatsapp_response_manager_all_rule" model="ir.rule">
+            <field name="name">WhatsApp Responses for Lead Manager</field>
+            <field name="model_id" ref="model_whatsapp_response"/>
+            <field name="domain_force">[(1, '=', 1)]</field>
+            <field name="groups" eval="[(4, ref('group_lead_score_manager'))]"/>
+        </record>
+        
     </data>
 </odoo>

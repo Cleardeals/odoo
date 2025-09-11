@@ -44,6 +44,7 @@
                 <field name="name"/>
                 <field name="next_follow_up_date"/>
                 <field name="is_actionable_today"/>
+                <field name="whatsapp_response_count"/> <!-- Added for stat button -->
                 <templates>
                     <t t-name="kanban-box">
                         <div t-attf-class="oe_kanban_global_click">
@@ -58,6 +59,12 @@
                                 <!-- Visual indicator for actionable leads -->
                                 <div t-if="record.is_actionable_today.raw_value" class="mt-1">
                                     <span class="badge badge-warning">Action Required</span>
+                                </div>
+                                <!-- WhatsApp Responses count -->
+                                <div t-if="record.whatsapp_response_count.raw_value" class="mt-1">
+                                    <span class="badge badge-info">
+                                        <field name="whatsapp_response_count"/> Responses
+                                    </span>
                                 </div>
                             </div>
                         </div>
@@ -79,6 +86,7 @@
                 <field name="project_name"/>
                 <field name="assigned_rm_id"/>
                 <field name="next_follow_up_date"/>
+                <field name="whatsapp_response_count" string="Responses"/> <!-- Added -->
                 <!-- Add actionable indicator with conditional formatting -->
                 <field name="is_actionable_today" string="Action Required" 
                        widget="boolean_toggle" 
@@ -103,6 +111,7 @@
                         <i class="fa fa-warning"/> This lead requires follow-up action today or is overdue!
                     </div>
                     
+
                     <div class="oe_title"><h1><field name="name"/></h1></div>
                     <group>
                         <group>
@@ -131,6 +140,36 @@
                         </page>
                         <page string="Feedback">
                             <field name="feedback"/>
+                        </page>
+                        <page string="WhatsApp Responses" attrs="{'invisible': [('whatsapp_response_count', '=', 0)]}">
+                            <field name="whatsapp_response_ids" 
+                                   readonly="1"
+                                   context="{'tree_view_ref': 'leads.whatsapp_response_view_tree'}">
+                                <list>
+                                    <field name="response_date" widget="datetime"/>
+                                    <field name="lead_name"/>
+                                    <field name="number"/>
+                                    <field name="response"/>
+                                    <field name="response_type" widget="badge" 
+                                           decoration-success="response_type == 'positive'"
+                                           decoration-danger="response_type == 'negative'"
+                                           decoration-info="response_type == 'neutral'"/>
+                                    <field name="project_name" optional="show"/>
+                                    <field name="bhk" optional="show"/>
+                                    <field name="predicted_score" widget="percentage" optional="show"/>
+                                    <field name="assigned_rm_id"/>
+                                    <field name="is_processed" widget="boolean_toggle"/>
+                                    <button name="action_process_response" 
+                                            type="object" 
+                                            string="Process" 
+                                            class="btn-primary"
+                                            invisible="[('is_processed', '=', True)]"/>
+                                </list>
+                            </field>
+                            <div class="o_view_nocontent_empty_folder" 
+                                 invisible="[('whatsapp_response_count', '!=', 0)]">
+                                <p>No WhatsApp responses for this lead.</p>
+                            </div>
                         </page>
                     </notebook>
                 </sheet>

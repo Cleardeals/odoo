@@ -1,0 +1,281 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    
+    <!-- Search View -->
+    <record id="whatsapp_response_view_search" model="ir.ui.view">
+        <field name="name">whatsapp.response.search</field>
+        <field name="model">whatsapp.response</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="number"/>
+                <field name="lead_name"/>
+                <field name="project_name"/>
+                <field name="assigned_rm_id"/>
+                
+                <!-- Response Type Filters -->
+                <filter name="positive_responses" string="Positive Responses" 
+                        domain="[('response_type', '=', 'positive')]"
+                        help="Shows 'Yes I am interested' and 'Liked Property' responses"/>
+                
+                
+                <filter name="neutral_responses" string="Neutral/Reschedule" 
+                        domain="[('response_type', '=', 'neutral')]"
+                        help="Shows neutral and reschedule responses"/>
+                
+                <separator/>
+                
+                <!-- Processing Status -->
+                <filter name="unprocessed" string="Unprocessed" 
+                        domain="[('is_processed', '=', False)]"
+                        help="Responses that haven't been processed yet"/>
+                
+                <filter name="processed" string="Processed" 
+                        domain="[('is_processed', '=', True)]"
+                        help="Responses that have been processed"/>
+                
+                <separator/>
+                
+                <!-- Time Filters -->
+                <filter name="today" string="Today" 
+                        domain="[('response_date', '&gt;=', context_today().strftime('%Y-%m-%d'))]"
+                        help="Responses received today"/>
+                
+                <filter name="last_7_days" string="Last 7 Days" 
+                        domain="[('response_date', '&gt;=', (context_today() - datetime.timedelta(days=7)).strftime('%Y-%m-%d'))]"
+                        help="Responses from the last week"/>
+                
+                <separator/>
+                
+                
+                <group expand="0" string="Group By">
+                    <filter name="group_by_response" string="Response" context="{'group_by': 'response'}"/>
+                    <filter name="group_by_type" string="Response Type" context="{'group_by': 'response_type'}"/>
+                    <!--<filter name="group_by_rm" string="Assigned RM" context="{'group_by': 'assigned_rm_id'}"/>-->
+                    <filter name="group_by_date" string="Response Date" context="{'group_by': 'response_date:day'}"/>
+                    <filter name="group_by_processed" string="Processing Status" context="{'group_by': 'is_processed'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+    
+    <!-- Tree/List View -->
+    <record id="whatsapp_response_view_tree" model="ir.ui.view">
+        <field name="name">whatsapp.response.list</field>
+        <field name="model">whatsapp.response</field>
+        <field name="arch" type="xml">
+            <list string="WhatsApp Responses" 
+                  decoration-success="response_type == 'positive'"
+                  decoration-danger="response_type == 'negative'"
+                  decoration-info="response_type == 'neutral'">
+                <field name="lead_name"/>
+                <field name="number"/>
+                <field name="response"/>
+                <field name="response_type" widget="badge" 
+                       decoration-success="response_type == 'positive'"
+                       decoration-danger="response_type == 'negative'"
+                       decoration-info="response_type == 'neutral'"/>
+                <field name="project_name" optional="show"/>
+                <field name="bhk" optional="show"/>
+                <field name="predicted_score" widget="percentage" optional="show"/>
+                <field name="assigned_rm_id"/>
+                <field name="is_processed" widget="boolean_toggle"/>
+                <button name="action_process_response" 
+                        type="object" 
+                        string="Process" 
+                        class="btn-primary"
+                        invisible="[('is_processed', '=', True)]"/>
+            </list>
+        </field>
+    </record>
+    
+    <!-- Kanban View -->
+    <record id="whatsapp_response_view_kanban" model="ir.ui.view">
+        <field name="name">whatsapp.response.kanban</field>
+        <field name="model">whatsapp.response</field>
+        <field name="arch" type="xml">
+            <kanban default_group_by="response_type" class="o_kanban_mobile">
+                <field name="response_type"/>
+                <field name="lead_name"/>
+                <field name="number"/>
+                <field name="response"/>
+                <field name="project_name"/>
+                <field name="predicted_score"/>
+                <field name="is_processed"/>
+                <field name="response_date"/>
+                <field name="assigned_rm_id"/>
+                <templates>
+                    <t t-name="kanban-box">
+                        <div t-attf-class="oe_kanban_card oe_kanban_global_click">
+                            <div class="oe_kanban_content">
+                                <div class="o_kanban_record_top mb-2">
+                                    <div class="o_kanban_record_headings">
+                                        <strong class="o_kanban_record_title">
+                                            <field name="lead_name"/>
+                                        </strong>
+                                    </div>
+                                    <span t-if="!record.is_processed.raw_value" 
+                                          class="badge badge-warning float-right">New</span>
+                                    <span t-if="record.is_processed.raw_value" 
+                                          class="badge badge-success float-right">Processed</span>
+                                </div>
+                                
+                                <div class="text-muted mb-1">
+                                    <i class="fa fa-phone" title="Phone"/> <field name="number"/>
+                                </div>
+                                
+                                <div class="mb-2">
+                                    <strong>Response:</strong>
+                                    <span t-if="record.response.raw_value == 'yes_interested'" 
+                                          class="text-success">Yes I am interested</span>
+                                    <span t-elif="record.response.raw_value == 'liked_property'" 
+                                          class="text-success">Liked Property</span>
+                                    <span t-elif="record.response.raw_value == 'more_options'" 
+                                          class="text-info">More Options</span>
+                                    <span t-elif="record.response.raw_value == 'reschedule'" 
+                                          class="text-warning">Reschedule</span>
+                                    <span t-elif="record.response.raw_value == 'reschedule_visit'" 
+                                          class="text-warning">Reschedule Visit</span>
+                                    <span t-elif="record.response.raw_value == 'no_reschedule'" 
+                                          class="text-danger">No, reschedule</span>
+                                </div>
+                                
+                                <div t-if="record.project_name.raw_value" class="text-muted">
+                                    <i class="fa fa-building-o" title="Project"/> <field name="project_name"/>
+                                </div>
+                                
+                                <div class="o_kanban_record_bottom mt-2">
+                                    <div class="oe_kanban_bottom_left">
+                                        <small class="text-muted">
+                                            Score: <field name="predicted_score" widget="float"/>
+                                        </small>
+                                    </div>
+                                    <div class="oe_kanban_bottom_right">
+                                        <field name="assigned_rm_id" widget="many2one_avatar_user"/>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </t>
+                </templates>
+            </kanban>
+        </field>
+    </record>
+    
+    <!-- Form View -->
+    <record id="whatsapp_response_view_form" model="ir.ui.view">
+        <field name="name">whatsapp.response.form</field>
+        <field name="model">whatsapp.response</field>
+        <field name="arch" type="xml">
+            <form>
+                <header>
+                    <button name="action_process_response" 
+                            type="object" 
+                            string="Mark as Processed" 
+                            class="btn-primary"
+                            invisible="[('is_processed', '=', True)]"/>
+                    <field name="is_processed" widget="boolean_button" 
+                           options='{"terminology": "processed"}'/>
+                </header>
+                <sheet>
+                    <div class="oe_button_box" position="inside">
+                        <button class="oe_stat_button" 
+                                type="object"
+                                name="action_view_lead"
+                                icon="fa-user"
+                                invisible="[('lead_id', '=', False)]">
+                            <div class="o_stat_info">
+                                <field name="lead_name" class="o_stat_text"/>
+                                <span class="o_stat_text">Lead</span>
+                            </div>
+                        </button>
+                    </div>
+                    
+                    <widget name="web_ribbon" 
+                            text="Positive" 
+                            bg_color="bg-success"
+                            invisible="[('response_type', '!=', 'positive')]"/>
+                    <widget name="web_ribbon" 
+                            text="Negative" 
+                            bg_color="bg-danger"
+                            invisible="[('response_type', '!=', 'negative')]"/>
+                    
+                    <group>
+                        <group>
+                            <field name="lead_id" options="{'no_create': True}"/>
+                            <field name="number"/>
+                            <field name="response"/>
+                            <field name="response_date"/>
+                        </group>
+                        <group>
+                            <field name="assigned_rm_id" readonly="1"/>
+                            <field name="current_status" readonly="1"/>
+                            <field name="response_type" readonly="1"/>
+                        </group>
+                    </group>
+
+                    <group string="Property Details" invisible="[('lead_id', '=', False)]">
+                        <group>
+                            <field name="project_name" readonly="1"/>
+                            <field name="property_address" readonly="1"/>
+                            <field name="bhk" readonly="1"/>
+                        </group>
+                        <group>
+                            <field name="predicted_score" widget="progressbar" readonly="1"/>
+                        </group>
+                    </group>
+                    
+                    <group string="Notes">
+                        <field name="notes" nolabel="1" placeholder="Add any notes about this response..."/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+    
+
+    
+    <!-- Actions -->
+    <record id="whatsapp_response_action_all" model="ir.actions.act_window">
+        <field name="name">WhatsApp Responses</field>
+        <field name="res_model">whatsapp.response</field>
+        <field name="view_mode">list,kanban,form</field>
+        <field name="context">{
+            'search_default_unprocessed': 1,
+            'search_default_my_responses': 1
+        }</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                No WhatsApp responses yet
+            </p>
+            <p>
+                Create WhatsApp responses manually by selecting a lead and response type.
+            </p>
+        </field>
+    </record>
+    
+    <!-- Action for Positive Responses -->
+    <record id="whatsapp_response_action_positive" model="ir.actions.act_window">
+        <field name="name">Positive Responses</field>
+        <field name="res_model">whatsapp.response</field>
+        <field name="view_mode">list,kanban,form</field>
+        <field name="domain">[('response_type', '=', 'positive')]</field>
+        <field name="context">{
+            'search_default_my_responses': 1,
+            'search_default_unprocessed': 1
+        }</field>
+    </record>
+    
+    <!-- Menu Items -->
+    <menuitem id="whatsapp_response_menu_main" 
+              name="WhatsApp Responses" 
+              parent="leads.lead_score_menu_root" 
+              action="whatsapp_response_action_all"
+              sequence="15"/>
+    
+    <menuitem id="whatsapp_response_menu_positive" 
+              name="Positive Responses" 
+              parent="leads.lead_score_menu_root" 
+              action="whatsapp_response_action_positive"
+              sequence="16"/>
+
+</odoo>

@@ -90,6 +90,24 @@ class LeadScore(models.Model):
         store=True,
         help="True if the follow-up date is today or earlier.")
     
+    whatsapp_response_ids = fields.One2many(
+        'whatsapp.response', 
+        'lead_id', 
+        string='WhatsApp Responses ID'
+    )
+
+
+
+        # You probably also have a field for the count, make sure it's there
+    whatsapp_response_count = fields.Integer(
+        compute='_compute_whatsapp_response_count', 
+        string='Response Count'
+    )
+
+    def _compute_whatsapp_response_count(self):
+        for lead in self:
+            lead.whatsapp_response_count = len(lead.whatsapp_response_ids)
+    
     @api.depends('next_follow_up_date')
     def _compute_is_actionable_today(self):
         """ Compute if the lead is actionable today based on the next follow-up date."""
