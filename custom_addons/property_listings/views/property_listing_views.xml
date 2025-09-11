@@ -5,14 +5,14 @@
         <field name="arch" type="xml">
             <form>
                 <header>
-                    <!-- <field name="property_status" widget="statusbar"/> -->
+                    <field name="property_status" widget="statusbar"/> 
                 </header>
                 <sheet>
                     <div class="oe_title"><h1><field name="name" placeholder="Owner Name..."/></h1></div>
                     <group>
                         <group>
                             <field name="phone"/>
-                            <!--<field name="email"/> -->
+                            <field name="email"/>
                         </group>
                         <group>
                             <field name="rm_id"/>
@@ -28,7 +28,7 @@
                                     <field name="residential_type" invisible="property_type != 'residential'"/>
                                     <field name="commercial_type" invisible="property_type != 'commercial'"/>
                                     <field name="bhk"/>
-                                    <!--<field name="bathroom"/>-->
+                                    <field name="bathroom"/>
                                     <field name="property_address"/>
                                 </group>
                                 <group>
@@ -41,7 +41,7 @@
                             </group>
                         </page>
                         <!-- Future implementation: uncomment these -->
-                        <!-- <page string="Area &amp; Specs">
+                        <page string="Area &amp; Specs">
                             <group>
                                 <group>
                                     <field name="carpet_plot_area"/>
@@ -76,17 +76,17 @@
                                     <field name="gst_status"/>
                                 </group>
                             </group>
-                        </page> -->
+                        </page>
                         <page string="Marketing &amp; Status">
                             <group>
                                 <field name="property_link"/>
                                 <!-- Future implementation: uncomment this -->
-                                <!-- <field name="link_360_dgt"/> -->
-                                <!-- <field name="id_99acres"/> -->
-                                <!-- <field name="id_housing"/> -->
-                                <!-- <field name="id_magicbricks"/> -->
-                                <!-- <field name="id_olx"/> -->
-                                <!-- <field name="instagram_reel"/> -->
+                                <field name="link_360_dgt"/>
+                                <field name="id_99acres"/>
+                                <field name="id_housing"/>
+                                <field name="id_magicbricks"/>
+                                <field name="id_olx"/>
+                                <field name="instagram_reel"/>
                             </group>
                         </page>
                     </notebook>
@@ -105,7 +105,7 @@
                 <field name="bhk"/>
                 <field name="location_id"/>
                 <field name="rm_id"/>
-                <!--<field name="property_status"/> -->
+                <field name="property_status"/>
             </list>
         </field>
     </record>
