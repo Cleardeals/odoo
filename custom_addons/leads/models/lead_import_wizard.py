@@ -103,8 +103,8 @@ class LeadImportWizard(models.TransientModel):
                     'name': lead_name,
                     'standardized_phone': row.get('standardized_phone', '').strip(),
                     'predicted_score': float(row.get('predicted_score') or 0.0),
-                    'current_status': row.get('current_status', '').strip(),
-                    
+                    'current_status': lead_state,
+
                     # Link to other models
                     'assigned_rm_id': rm_id,
                     #'property_id': property_id,
