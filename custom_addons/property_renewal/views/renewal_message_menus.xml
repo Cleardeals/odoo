@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <menuitem 
+        id="menu_renewal_root"
+        name="Property Renewal"
+        web_icon="fa-home"
+        sequence="30"/>
+
+    <menuitem
+        id="menu_renewal_conversations_rm"
+        name="My Property Conversations"
+        parent="menu_renewal_root"
+        action="action_renewal_message"
+        groups="property_renewal.group_renewal_rm"
+        sequence="1"/>
+
+    <menuitem
+        id="menu_renewal_conversations_manager"
+        name="All Conversations"
+        parent="menu_renewal_root"
+        action="action_renewal_message"
+        groups="property_renewal.group_renewal_manager"
+        sequence="2"/>
+
+</odoo>

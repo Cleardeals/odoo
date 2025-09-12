@@ -21,7 +21,7 @@ class PropertyListing(models.Model):
     location_id = fields.Many2one('res.location', string="Location", domain="[('city_id', '=', city_id)]")
     
     # 8. Tag
-    tag = fields.Char(string="Property Tag")
+    tag = fields.Char(string="Property ")
 
     # 11, 13, 14, 15. Property Type and Specs
     bhk = fields.Char(string="BHK")
