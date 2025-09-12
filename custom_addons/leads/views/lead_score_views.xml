@@ -141,7 +141,7 @@
                         <page string="Feedback">
                             <field name="feedback"/>
                         </page>
-                        <page string="WhatsApp Responses" invisible="[('whatsapp_response_count', '=', 0)]">
+                        <page string="WhatsApp Responses">
                             <field name="whatsapp_response_ids" 
                                    readonly="1"
                                    context="{'tree_view_ref': 'leads.whatsapp_response_view_tree'}">
