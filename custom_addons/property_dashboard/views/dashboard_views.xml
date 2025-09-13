@@ -1,0 +1,22 @@
+<odoo>
+    <record id="action_property_dashboard" model="ir.actions.client">
+        <field name="name">Manager's Dashboard</field>
+        <field name="tag">property_dashboard.dashboard</field>
+    </record>
+
+    <menuitem 
+        id = "menu_property_dashboard_root"
+        name = "Dashboard"
+        sequence = "0"
+    />
+
+    <menuitem
+        id="menu_property_dashboard_main"
+        name="Overview"
+        parent = "menu_property_dashboard_root"
+        action="action_property_dashboard"
+        sequence="1"
+        groups="property_dashboard.group_property_dashboard_manager"
+    />
+
+</odoo>

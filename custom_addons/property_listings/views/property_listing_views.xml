@@ -37,6 +37,7 @@
                                     <field name="city_id"/>
                                     <field name="location_id"/>
                                     <field name="tag"/>
+                                    <field name="property_status"/>
                                 </group>
                             </group>
                         </page>
