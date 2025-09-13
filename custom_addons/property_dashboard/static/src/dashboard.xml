@@ -1,60 +1,174 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <templates xml:space="preserve">
     <t t-name="property_dashboard.Dashboard" owl="1">
-        <div class="o_property_dashboard p-4">
+        <div class="o_property_dashboard p-4" style="overflow-y: auto; height: 100vh;">
+            <!-- Header -->
             <div class="row mb-4">
                 <div class="col-8">
-                    <h3>Real Estate Operations</h3>
+                    <h3>Real Estate Operations Dashboard</h3>
                 </div>
                 <div class="col-4 text-right text-muted">
+                    <button t-on-click="refreshData" class="btn btn-sm btn-outline-primary me-2" t-att-disabled="state.isLoading">
+                        <i class="fa fa-refresh" t-att-class="{'fa-spin': state.isLoading}" role="img" aria-label="Refresh"/>
+                        Refresh
+                    </button>
                     <i class="fa fa-refresh fa-spin fa-fw" t-if="state.isLoading" role="img" aria-label="Loading..."/>
                     <span t-else="">
                         <i class="fa fa-check-circle fa-fw text-success" role="img" aria-label="Updated"/>
-                        Last Updated: <t t-esc="state.lastUpdateTime"/>
+                        <t t-esc="state.lastUpdateTime"/>
                     </span>
                 </div>
             </div>
             
+            <!-- Error Display -->
             <div t-if="state.error" class="alert alert-danger" role="alert">
                 <strong>Error:</strong> <t t-esc="state.error"/>
             </div>
 
-            <div t-else="" class="row">
-                <div class="col-lg-5">
-                    <div class="row">
-                        <div class="col-md-6 mb-4">
-                            <div class="card shadow-sm text-center p-3">
-                                <h5 class="card-title text-muted">Active Listings</h5>
-                                <h2 class="display-4 font-weight-bold text-primary">
-                                    <t t-esc="state.kpis.active_listings or 0"/>
-                                </h2>
-                            </div>
+            <div t-else="">
+                <!-- KPI Cards -->
+                <div class="row mb-4">
+                    <div class="col-lg-3 col-md-6 mb-3">
+                        <div class="card shadow-sm text-center p-3 h-100">
+                            <h6 class="card-title text-muted mb-1">Total Listings</h6>
+                            <h2 class="display-5 font-weight-bold text-dark mb-0">
+                                <t t-esc="state.kpis.total_listings or 0"/>
+                            </h2>
                         </div>
-                        <div class="col-md-6 mb-4">
-                            <div class="card shadow-sm text-center p-3">
-                                <h5 class="card-title text-muted">Properties Sold</h5>
-                                <h2 class="display-4 font-weight-bold text-success">
-                                    <t t-esc="state.kpis.sold_listings or 0"/>
-                                </h2>
-                            </div>
+                    </div>
+                    <div class="col-lg-3 col-md-6 mb-3">
+                        <div class="card shadow-sm text-center p-3 h-100">
+                            <h6 class="card-title text-muted mb-1">Active Listings</h6>
+                            <h2 class="display-5 font-weight-bold text-primary mb-0">
+                                <t t-esc="state.kpis.active_listings or 0"/>
+                            </h2>
                         </div>
-                        <div class="col-md-6 mb-4">
-                            <div class="card shadow-sm text-center p-3">
-                                <h5 class="card-title text-muted">New This Month</h5>
-                                <h2 class="display-4 font-weight-bold text-info">
-                                    <t t-esc="state.kpis.new_this_month or 0"/>
-                                </h2>
-                            </div>
+                    </div>
+                    <div class="col-lg-3 col-md-6 mb-3">
+                        <div class="card shadow-sm text-center p-3 h-100">
+                            <h6 class="card-title text-muted mb-1">Properties Sold</h6>
+                            <h2 class="display-5 font-weight-bold text-success mb-0">
+                                <t t-esc="state.kpis.sold_listings or 0"/>
+                            </h2>
                         </div>
-                    
+                    </div>
+                    <div class="col-lg-3 col-md-6 mb-3">
+                        <div class="card shadow-sm text-center p-3 h-100">
+                            <h6 class="card-title text-muted mb-1">Expired Listings</h6>
+                            <h2 class="display-5 font-weight-bold text-danger mb-0">
+                                <t t-esc="state.kpis.expired_listings or 0"/>
+                            </h2>
+                        </div>
                     </div>
                 </div>
 
-                <div class="col-lg-7">
-                    <div class="card shadow-sm h-100">
-                        <div class="card-header">Live Listings by Type</div>
-                        <div class="card-body d-flex justify-content-center align-items-center">
-                            <canvas id="listingsChart"/>
+                <!-- Secondary KPIs -->
+                <div class="row mb-4">
+                    <div class="col-lg-3 col-md-6 mb-3">
+                        <div class="card shadow-sm text-center p-3 h-100">
+                            <h6 class="card-title text-muted mb-1">New This Month</h6>
+                            <h3 class="font-weight-bold text-info mb-0">
+                                <t t-esc="state.kpis.new_this_month or 0"/>
+                            </h3>
+                        </div>
+                    </div>
+                    <div class="col-lg-3 col-md-6 mb-3">
+                        <div class="card shadow-sm text-center p-3 h-100">
+                            <h6 class="card-title text-muted mb-1">Sold This Month</h6>
+                            <h3 class="font-weight-bold text-success mb-0">
+                                <t t-esc="state.kpis.sold_this_month or 0"/>
+                            </h3>
+                        </div>
+                    </div>
+                    <div class="col-lg-3 col-md-6 mb-3">
+                        <div class="card shadow-sm text-center p-3 h-100">
+                            <h6 class="card-title text-muted mb-1">Conversion Rate</h6>
+                            <h3 class="font-weight-bold text-warning mb-0">
+                                <t t-esc="state.kpis.conversion_rate or 0"/>%
+                            </h3>
+                        </div>
+                    </div>
+                    <div class="col-lg-3 col-md-6 mb-3">
+                        <div class="card shadow-sm text-center p-3 h-100">
+                            <h6 class="card-title text-muted mb-1">Expiring Soon</h6>
+                            <h3 class="font-weight-bold text-warning mb-0">
+                                <t t-esc="state.kpis.expiring_soon or 0"/>
+                            </h3>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Charts Section -->
+                <div class="row">
+                    <!-- Property Type Chart -->
+                    <div class="col-lg-4 col-md-6 mb-3">
+                        <div class="card shadow-sm">
+                            <div class="card-header py-2">
+                                <h6 class="mb-0 small">Property Type Distribution</h6>
+                            </div>
+                            <div class="card-body p-2" style="height: 200px;">
+                                <canvas id="propertyTypeChart"/>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Listing Type Chart -->
+                    <div class="col-lg-4 col-md-6 mb-3">
+                        <div class="card shadow-sm">
+                            <div class="card-header py-2">
+                                <h6 class="mb-0 small">Sell vs Rent</h6>
+                            </div>
+                            <div class="card-body p-2" style="height: 200px;">
+                                <canvas id="listingTypeChart"/>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Current Status Chart -->
+                    <div class="col-lg-4 col-md-6 mb-3">
+                        <div class="card shadow-sm">
+                            <div class="card-header py-2">
+                                <h6 class="mb-0 small">Current Status</h6>
+                            </div>
+                            <div class="card-body p-2" style="height: 200px;">
+                                <canvas id="currentStatusChart"/>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Monthly Trend Chart -->
+                    <div class="col-lg-6 col-md-12 mb-3">
+                        <div class="card shadow-sm">
+                            <div class="card-header py-2">
+                                <h6 class="mb-0 small">Registration Trend (Last 6 Months)</h6>
+                            </div>
+                            <div class="card-body p-2" style="height: 250px;">
+                                <canvas id="monthlyTrendChart"/>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Service Validity Chart -->
+                    <div class="col-lg-6 col-md-6 mb-3">
+                        <div class="card shadow-sm">
+                            <div class="card-header py-2">
+                                <h6 class="mb-0 small">Service Validity Periods</h6>
+                            </div>
+                            <div class="card-body p-2" style="height: 250px;">
+                                <canvas id="serviceValidityChart"/>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Top Cities Chart -->
+                    <div class="col-lg-12 mb-3">
+                        <div class="card shadow-sm">
+                            <div class="card-header py-2">
+                                <h6 class="mb-0 small">Top 5 Cities by Active Listings</h6>
+                            </div>
+                            <div class="card-body p-2" style="height: 250px;">
+                                <canvas id="topCitiesChart" style="width: 50%; height: 100%;"/>
+                            </div>
                         </div>
                     </div>
                 </div>

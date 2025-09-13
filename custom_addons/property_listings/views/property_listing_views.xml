@@ -68,6 +68,8 @@
                                     <field name="receipt_number"/>
                                     <field name="payment_mode"/>
                                     <field name="property_register_date"/>
+                                    <field name="service_validity"/>
+                                    <field name="expiry_date"/>
                                 </group>
                                 <group>
                                     <field name="payment_package"/>
@@ -75,7 +77,8 @@
                                     <field name="net_amount"/>
                                     <field name="due_amount"/>
                                     <field name="total_package_amount"/>
-                                    <field name="gst_status"/>
+                                    <field name="gst_status" readonly="1"/>
+                                    
                                 </group>
                             </group>
                         </page>

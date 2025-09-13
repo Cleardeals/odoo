@@ -65,6 +65,7 @@ class PropertyListing(models.Model):
     inventory_count = fields.Integer(string="Number of Inventory", default=1)
     property_register_date = fields.Date(string="Property Register Date")
     gst_status = fields.Selection([('gst', 'GST Applicable'), ('no_gst', 'No GST')], string="GST Status")
+    expiry_date = fields.Date(string="Expiry Date", compute='_compute_expiry_date', store=True)
     
     # 2, 26, 33. Assigned Users
     rm_id = fields.Many2one('res.users', string="Relationship Manager")
@@ -84,6 +85,13 @@ class PropertyListing(models.Model):
     id_magicbricks = fields.Char(string="Magicbricks ID")
     id_olx = fields.Char(string="OLX ID")
 
+    @api.onchange('property_register_date', 'service_validity')
+    def _compute_expiry_date(self):
+        for record in self:
+            if record.property_register_date and record.service_validity:
+                record.expiry_date = fields.Date.add(record.property_register_date, months=int(record.service_validity))
+            else:
+                record.expiry_date = False
     
     def _cron_expire_listings(self):
         """ Automated action to expire property listings based on service validity."""
