@@ -4,6 +4,8 @@ class PropertyListing(models.Model):
     _name = 'property.listing'
     _description = 'Onboarded Property Listing'
 
+    currency_id = fields.Many2one('res.currency', string="Currency", default=lambda self: self.env.user.company_id.currency_id)
+
     # 1. Name of the owner of the property
     name = fields.Char(string="Owner Name", required=True)
     # 3. Phone number of the owner
@@ -50,16 +52,16 @@ class PropertyListing(models.Model):
     service_call_date = fields.Date(string="Service Call Date", required=True)
     payment_package = fields.Char(string="Payment Package")
     form_number = fields.Char(string="Form Number")
-    property_price = fields.Float(string="Property Price")
+    property_price = fields.Monetary(string="Property Price", currency_field='currency_id')
     payment_mode = fields.Char(string="Payment Mode")
     receipt_number = fields.Char(string="Receipt Number")
     service_validity = fields.Selection([
         ('1', '1 Month'), ('3', '3 Months'), ('6', '6 Months'), ('12', '12 Months')
     ], string="Service Validity (Months)")
-    package_amount = fields.Float(string="Package Amount")
-    net_amount = fields.Float(string="Net Amount")
-    due_amount = fields.Float(string="Due Amount")
-    total_package_amount = fields.Float(string="Total Package Amount")
+    package_amount = fields.Monetary(string="Package Amount", currency_field='currency_id')
+    net_amount = fields.Monetary(string="Net Amount", currency_field='currency_id')
+    due_amount = fields.Monetary(string="Due Amount", currency_field='currency_id')
+    total_package_amount = fields.Monetary(string="Total Package Amount", currency_field='currency_id')
     inventory_count = fields.Integer(string="Number of Inventory", default=1)
     property_register_date = fields.Date(string="Property Register Date")
     gst_status = fields.Selection([('gst', 'GST Applicable'), ('no_gst', 'No GST')], string="GST Status")

@@ -67,6 +67,7 @@
                                     <field name="form_number"/>
                                     <field name="receipt_number"/>
                                     <field name="payment_mode"/>
+                                    <field name="property_register_date"/>
                                 </group>
                                 <group>
                                     <field name="payment_package"/>

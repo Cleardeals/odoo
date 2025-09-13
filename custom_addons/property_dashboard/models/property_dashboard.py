@@ -1,4 +1,6 @@
 from odoo import models, api
+from datetime import date
+from dateutil.relativedelta import relativedelta
 import logging
 
 _logger = logging.getLogger(__name__)
@@ -12,53 +14,37 @@ class PropertyDashboard(models.TransientModel):
         
         try:
             # Get the model - add error handling
-            if 'property.listing' not in self.env:
-                _logger.error("❌ Model 'property.listing' not found!")
-                return {'active_listings': 0, 'sold_listings': 0, 'error': 'Model not found'}
             
             listings_model = self.env['property.listing']
             _logger.info(f"📦 Using model: {listings_model._name}")
 
-            # Check if model has records
-            total_records = listings_model.search_count([])
-            _logger.info(f"📊 Total records in property.listing: {total_records}")
 
-            # Find ALL unique property_status values
-            try:
-                statuses = listings_model.read_group(
-                    [], 
-                    ['property_status'], 
-                    ['property_status']
-                )
-                _logger.info(f"📋 All property_status values found: {statuses}")
-            except Exception as e:
-                _logger.error(f"❌ Error reading property_status groups: {e}")
-                statuses = []
+            active_count = listings_model.search_count([('property_status', '=', 'live')])
+            sold_count = listings_model.search_count([('property_status', '=', 'sold')])
+            
+            start_of_month = date.today().replace(day=1)
+            new_this_month = listings_model.search_count([('property_register_date', '>=', start_of_month)])
 
-            # Count active and sold with error handling
-            try:
-                active_count = listings_model.search_count([('property_status', '=', 'live')])
-                sold_count = listings_model.search_count([('property_status', '=', 'sold')])
-                
-                _logger.info(f"📊 Active count (searching for 'live'): {active_count}")
-                _logger.info(f"📊 Sold count (searching for 'sold'): {sold_count}")
-                
-                # Use actual counts instead of hardcoded values
-                result = {
-                    'active_listings': active_count,
-                    'sold_listings': sold_count,
-                    'total_records': total_records,
-                    'available_statuses': [status['property_status'] for status in statuses if status['property_status']]
-                }
-                
-            except Exception as e:
-                _logger.error(f"❌ Error counting records: {e}")
-                result = {
-                    'active_listings': 0,
-                    'sold_listings': 0,
-                    'error': str(e)
-                }
+            # Chart Data
 
+            type_data = listings_model.read_group(
+                [('property_status', '=', 'live'), ('property_price', '>', 0)],
+                ['property_type'],
+                ['property_type']
+            )
+
+            chart_data = {
+                'labels': [d.get('property_type') for d in type_data],
+                'values': [d.get('property_type_count', 0) for d in type_data],
+            }
+
+            result = {
+                'active_listings': active_count,
+                'sold_listings': sold_count,
+                'new_this_month': new_this_month,
+                'listings_by_type': chart_data,
+            }
+            
             _logger.info(f"📤 Returning KPIs: {result}")
             return result
             
@@ -67,5 +53,10 @@ class PropertyDashboard(models.TransientModel):
             return {
                 'active_listings': 0,
                 'sold_listings': 0,
+                'new_this_month': 0,
+                'listings_by_type': {
+                    'labels': [],
+                    'values': []
+                },
                 'error': str(e)
             }

@@ -26,7 +26,7 @@
                 
                 <group expand="0" string="Group By">
                     <filter name="group_by_rm" string="Assigned RM" context="{'group_by': 'assigned_rm_id'}"/>
-                    <filter name="group_by_state" string="State" context="{'group_by': 'state'}"/>
+                    <filter name="group_by_state" string="Current Status" context="{'group_by': 'current_status'}"/>
                     <filter name="group_by_follow_up" string="Follow-up Date" context="{'group_by': 'next_follow_up_date'}"/>
                 </group>
             </search>
@@ -196,13 +196,6 @@
         </field>
     </record>
 
-    <!-- Action for Managers - shows all leads -->
-    <record id="lead_score_action_manager" model="ir.actions.act_window">
-        <field name="name">All Leads</field>
-        <field name="res_model">lead.score</field>
-        <field name="view_mode">list,kanban,form</field>
-        <field name="context">{}</field>
-    </record>
 
     <!-- Original action (keep for compatibility) -->
     <record id="lead_score_action" model="ir.actions.act_window">
@@ -222,13 +215,6 @@
               groups="leads.group_lead_score_rm"
               sequence="10"/>
     
-    <!-- Menu for Managers - shows all leads -->
-    <menuitem id="lead_score_menu_manager" 
-              name="All Leads" 
-              parent="lead_score_menu_root" 
-              action="lead_score_action_manager"
-              groups="leads.group_lead_score_manager"
-              sequence="20"/>
     
     <!-- Generic menu (fallback) -->
     <menuitem id="lead_score_menu_main" 

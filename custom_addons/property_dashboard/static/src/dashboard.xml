@@ -1,27 +1,61 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <templates xml:space="preserve">
     <t t-name="property_dashboard.Dashboard" owl="1">
-        <div class="container-fluid p-4">
+        <div class="o_property_dashboard p-4">
             <div class="row mb-4">
-                <h3>Property Dashboard</h3>
+                <div class="col-8">
+                    <h3>Real Estate Operations</h3>
+                </div>
+                <div class="col-4 text-right text-muted">
+                    <i class="fa fa-refresh fa-spin fa-fw" t-if="state.isLoading" role="img" aria-label="Loading..."/>
+                    <span t-else="">
+                        <i class="fa fa-check-circle fa-fw text-success" role="img" aria-label="Updated"/>
+                        Last Updated: <t t-esc="state.lastUpdateTime"/>
+                    </span>
+                </div>
+            </div>
+            
+            <div t-if="state.error" class="alert alert-danger" role="alert">
+                <strong>Error:</strong> <t t-esc="state.error"/>
             </div>
 
-            <div class="row">
-                <div class="col-lg-3 col-md-6">
-                    <div class="card shadow-sm text-center p-3 mb-4">
-                        <h5 class="card-title text-muted">Active Listings</h5>
-                        <h2 class="display-4 font-weight-bold text-primary">
-                            <t t-esc="state.kpis.active_listings or 0"/>
-                        </h2>
+            <div t-else="" class="row">
+                <div class="col-lg-5">
+                    <div class="row">
+                        <div class="col-md-6 mb-4">
+                            <div class="card shadow-sm text-center p-3">
+                                <h5 class="card-title text-muted">Active Listings</h5>
+                                <h2 class="display-4 font-weight-bold text-primary">
+                                    <t t-esc="state.kpis.active_listings or 0"/>
+                                </h2>
+                            </div>
+                        </div>
+                        <div class="col-md-6 mb-4">
+                            <div class="card shadow-sm text-center p-3">
+                                <h5 class="card-title text-muted">Properties Sold</h5>
+                                <h2 class="display-4 font-weight-bold text-success">
+                                    <t t-esc="state.kpis.sold_listings or 0"/>
+                                </h2>
+                            </div>
+                        </div>
+                        <div class="col-md-6 mb-4">
+                            <div class="card shadow-sm text-center p-3">
+                                <h5 class="card-title text-muted">New This Month</h5>
+                                <h2 class="display-4 font-weight-bold text-info">
+                                    <t t-esc="state.kpis.new_this_month or 0"/>
+                                </h2>
+                            </div>
+                        </div>
+                    
                     </div>
                 </div>
 
-                <div class="col-lg-3 col-md-6">
-                    <div class="card shadow-sm text-center p-3 mb-4">
-                        <h5 class="card-title text-muted">Properties Sold</h5>
-                        <h2 class="display-4 font-weight-bold text-primary">
-                            <t t-esc="state.kpis.sold_listings or 0"/>
-                        </h2>
+                <div class="col-lg-7">
+                    <div class="card shadow-sm h-100">
+                        <div class="card-header">Live Listings by Type</div>
+                        <div class="card-body d-flex justify-content-center align-items-center">
+                            <canvas id="listingsChart"/>
+                        </div>
                     </div>
                 </div>
             </div>
