@@ -143,6 +143,15 @@ class PropertyDashboard(models.TransientModel):
                 top_cities_chart['labels'].append(city_name)
                 top_cities_chart['values'].append(d.get('city_id_count', 0))
 
+            
+            # Group Properties by RM_id and get corresponding counts
+            rm_property_data = listings_model.read_group(
+                [('property_status', '=', 'live'), ('rm_id', '!=', False)],
+                ['rm_id'],
+                ['rm_id'],
+                orderby='rm_id_count DESC',
+            )
+
             result = {
                 # Main KPIs
                 'total_listings': total_listings,
@@ -161,6 +170,9 @@ class PropertyDashboard(models.TransientModel):
                 'current_status_chart': current_status_chart,
                 'service_validity_chart': service_validity_chart,
                 'top_cities_chart': top_cities_chart,
+
+                # RM-wise property counts
+                'rm_property_table': rm_property_data
             }
             
             _logger.info(f"📤 Returning Enhanced KPIs: {result}")
