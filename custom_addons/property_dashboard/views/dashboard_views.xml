@@ -1,7 +1,12 @@
 <odoo>
     <record id="action_property_dashboard" model="ir.actions.client">
-        <field name="name">Manager's Dashboard</field>
+        <field name="name">Properties Dashboard</field>
         <field name="tag">property_dashboard.dashboard</field>
+    </record>
+
+    <record id="action_leads_dashboard" model="ir.actions.client">
+        <field name="name">Leads Dashboard</field>
+        <field name="tag">property_dashboard.leads_dashboard</field>
     </record>
 
     <menuitem 
@@ -12,11 +17,18 @@
 
     <menuitem
         id="menu_property_dashboard_main"
-        name="Overview"
+        name="Properties Overview"
         parent = "menu_property_dashboard_root"
         action="action_property_dashboard"
         sequence="1"
         groups="property_dashboard.group_property_dashboard_manager"
     />
-
+    <menuitem
+        id="menu_leads_dashboard_main"
+        name="Leads Analysis"
+        parent = "menu_property_dashboard_root"
+        action="action_leads_dashboard"
+        sequence="2"
+        groups="property_dashboard.group_property_dashboard_manager"
+    />
 </odoo>

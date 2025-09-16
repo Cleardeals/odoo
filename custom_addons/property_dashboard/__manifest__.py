@@ -11,8 +11,11 @@
     ],
     'assets': {
         'web.assets_backend':[
-            'property_dashboard/static/src/dashboard.js',
-            'property_dashboard/static/src/dashboard.xml',
+            'property_dashboard/static/src/property_dashboard/dashboard.js',
+            'property_dashboard/static/src/property_dashboard/dashboard.xml',
+
+            'property_dashboard/static/src/leads_dashboard/leads_dashboard.js',
+            'property_dashboard/static/src/leads_dashboard/leads_dashboard.xml',
         ],
     },
     'application': True,

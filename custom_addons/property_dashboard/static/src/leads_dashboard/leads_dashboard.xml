@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="property_dashboard.LeadsDashboard" owl="1">
+        <div class="p-4 bg-light h-100">
+            <h3>Leads Analysis Dashboard</h3>
+            <div t-if="state.error" class="alert alert-danger" role="alert">
+                <strong>Error:</strong> <t t-esc="state.error"/>
+            </div>
+            <div t-else="" class="row mt-4">
+                <div class="col-md-3">
+                    <div class="card shadow-sm text-center p-3">
+                        <h5 class="card-title text-muted">Total Leads</h5>
+                        <h2 class="display-4 font-weight-bold text-primary">
+                            <t t-esc="state.kpis.total_leads or 0"/>
+                        </h2>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card shadow-sm text-center p-3">
+                        <h5 class="card-title text-muted">Actionable Today</h5>
+                        <h2 class="display-4 font-weight-bold text-warning">
+                            <t t-esc="state.kpis.actionable_leads or 0"/>
+                        </h2>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card shadow-sm h-100">
+                        <div class="card-header">Leads by Stage</div>
+                        <div class="card-body d-flex justify-content-center align-items-center">
+                            <canvas id="leadStageChart"/>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </t>
+</templates>
