@@ -17,6 +17,7 @@
             </form>
         </field>
     </record>
+    
 
     <record id="action_lead_import_wizard" model="ir.actions.act_window">
         <field name="name">Import Leads from CSV</field>

@@ -80,6 +80,8 @@
         <field name="model">lead.score</field>
         <field name="arch" type="xml">
             <list string="Leads">
+                <header>
+                </header>
                 <field name="name"/>
                 <field name="predicted_score"/>
                 <field name="state"/>

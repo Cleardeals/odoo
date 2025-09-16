@@ -142,4 +142,9 @@ class LeadScore(models.Model):
         if self.current_status != 'site_visit_scheduled':
             self.next_follow_up_date = fields.Date.context_today(self)
 
+    def action_open_bigquery_wizard(self):
+        """ This method is called by the button. """
+        action = self.env['ir.actions.act_window']._for_xml_id('leads.action_fetch_leads_wizard')
+        return action
+
 

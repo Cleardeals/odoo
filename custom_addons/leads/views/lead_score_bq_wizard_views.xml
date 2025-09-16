@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_lead_score_bq_wizard_form" model="ir.ui.view">
+        <field name="name">lead.score.bq.wizard.form</field>
+        <field name="model">lead.score.bq.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Fetch Leads from BigQuery">
+                <div invisible="[('state', '=', 'done')]">
+                    <p>You are about to fetch the latest lead data from Google BigQuery.</p>
+                    <p>This will create new leads and update existing ones based on their phone number. Do you want to continue?</p>
+                </div>
+
+                <div invisible="[('state', '=', 'init')]">
+                    <h2>Fetch Complete! 🚀</h2>
+                    <group>
+                        <field name="leads_created"/>
+                        <field name="leads_updated"/>
+                    </group>
+                </div>
+                
+                <footer>
+                    <button name="action_fetch_from_bigquery" 
+                            string="Fetch Data" 
+                            type="object" 
+                            class="btn-primary"
+                            invisible="[('state', '=', 'done')]"/>
+                    <button string="Cancel" 
+                            class="btn-secondary" 
+                            special="cancel" 
+                            invisible="[('state', '=', 'done')]"/>
+                    <button string="Close" 
+                            class="btn-primary" 
+                            special="cancel" 
+                            invisible="[('state', '=', 'init')]"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_lead_import_bq_wizard" model="ir.actions.act_window">
+        <field name="name">Import Leads from BigQuery</field>
+        <field name="res_model">lead.score.bq.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+        <field name="view_id" ref="view_lead_score_bq_wizard_form"/>
+    </record>
+
+    <menuitem id="lead_import_menu"
+              name="Import Leads From BigQuery"
+              action="action_lead_import_bq_wizard"
+              sequence="100"/>
+
+</odoo>
