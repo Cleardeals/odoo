@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <menuitem id="lead_score_menu_root"
+              name="Lead Scoring"
+              sequence="5"/>
+
+    <menuitem id="lead_score_menu_main"
+              name="Leads"
+              parent="lead_score_menu_root"
+              sequence="10"/>
+
+    <menuitem id="lead_score_menu_action"
+              name="All Leads"
+              parent="lead_score_menu_main"
+              action="lead_score_action"
+              sequence="10"/>
+
+    <menuitem id="lead_score_menu_rm"
+              name="My Actionable Leads"
+              parent="lead_score_menu_main"
+              action="lead_score_action_rm"
+              groups="leads.group_lead_score_rm"
+              sequence="15"/>
+</odoo>

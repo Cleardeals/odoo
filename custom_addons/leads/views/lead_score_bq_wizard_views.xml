@@ -1,54 +1,61 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
-
-    <record id="view_lead_score_bq_wizard_form" model="ir.ui.view">
+    <record id="lead_score_bq_wizard_view_form" model="ir.ui.view">
         <field name="name">lead.score.bq.wizard.form</field>
         <field name="model">lead.score.bq.wizard</field>
         <field name="arch" type="xml">
             <form string="Fetch Leads from BigQuery">
-                <div invisible="[('state', '=', 'done')]">
-                    <p>You are about to fetch the latest lead data from Google BigQuery.</p>
-                    <p>This will create new leads and update existing ones based on their phone number. Do you want to continue?</p>
-                </div>
-
-                <div invisible="[('state', '=', 'init')]">
-                    <h2>Fetch Complete! 🚀</h2>
-                    <group>
-                        <field name="leads_created"/>
-                        <field name="leads_updated"/>
-                    </group>
-                </div>
-                
+                <group>
+                    <div invisible="state != 'init'">
+                        <p class="oe_grey">
+                            Click the "Fetch from BigQuery" button to import and update leads from the configured BigQuery table.
+                            <br/>
+                            This process may take a few minutes depending on the number of records.
+                        </p>
+                    </div>
+                    <div invisible="state != 'done'">
+                        <p><strong>Import from BigQuery completed successfully</strong></p>
+                        <group>
+                            <field name="leads_created" readonly="1"/>
+                            <field name="leads_updated" readonly="1"/>
+                        </group>
+                    </div>
+                </group>
                 <footer>
-                    <button name="action_fetch_from_bigquery" 
-                            string="Fetch Data" 
-                            type="object" 
+                    <button name="action_fetch_from_bigquery"
+                            string="Fetch from BigQuery"
+                            type="object"
                             class="btn-primary"
-                            invisible="[('state', '=', 'done')]"/>
-                    <button string="Cancel" 
-                            class="btn-secondary" 
-                            special="cancel" 
-                            invisible="[('state', '=', 'done')]"/>
-                    <button string="Close" 
-                            class="btn-primary" 
-                            special="cancel" 
-                            invisible="[('state', '=', 'init')]"/>
+                            invisible="state != 'init'"
+                            data-hotkey="q"/>
+                    <button string="Cancel"
+                            class="btn-secondary"
+                            special="cancel"
+                            data-hotkey="z"/>
                 </footer>
+                <field name="state" invisible="1"/>
             </form>
         </field>
     </record>
 
-    <record id="action_lead_import_bq_wizard" model="ir.actions.act_window">
+    <record id="action_open_lead_score_bq_wizard" model="ir.actions.act_window">
         <field name="name">Import Leads from BigQuery</field>
         <field name="res_model">lead.score.bq.wizard</field>
         <field name="view_mode">form</field>
         <field name="target">new</field>
-        <field name="view_id" ref="view_lead_score_bq_wizard_form"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Launch the BigQuery Import
+            </p>
+            <p>
+                This tool will connect to Google BigQuery to create new leads and update existing ones in Odoo.
+            </p>
+        </field>
     </record>
 
-    <menuitem id="lead_import_menu"
-              name="Import Leads From BigQuery"
-              action="action_lead_import_bq_wizard"
-              sequence="100"/>
-
+    <menuitem id="menu_import_leads_from_bq"
+              name="Import Leads"
+              parent="lead_score_menu_main"
+              action="action_open_lead_score_bq_wizard"
+              sequence="20"/>
 </odoo>
