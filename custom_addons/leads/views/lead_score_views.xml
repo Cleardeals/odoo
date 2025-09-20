@@ -85,7 +85,8 @@
                 <field name="current_status"/>
                 <field name="project_name"/>
                 <field name="assigned_rm_id"/>
-                <field name="next_follow_up_date"/>
+                <field name="site_visit_scheduled_date"/>
+                <!--<field name="next_follow_up_date"/>-->
                 <field name="whatsapp_response_count" string="Responses"/>
                 <field name="is_actionable_today" string="Action Required" 
                        widget="boolean_toggle" 
