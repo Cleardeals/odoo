@@ -1,6 +1,3 @@
-# Odoo Data Volumes - VERY IMPORTANT
-odoo-db-data/
-odoo-web-data/
 
 # Local Python Environment
 venv/
@@ -11,7 +8,6 @@ __pycache__/
 *.pyc
 
 # Database Backups
-*.dump
 *.sql
 *.zip
 
