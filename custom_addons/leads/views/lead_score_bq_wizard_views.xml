@@ -52,10 +52,4 @@
             </p>
         </field>
     </record>
-
-    <menuitem id="menu_import_leads_from_bq"
-              name="Import Leads"
-              parent="lead_score_menu_main"
-              action="action_open_lead_score_bq_wizard"
-              sequence="20"/>
 </odoo>

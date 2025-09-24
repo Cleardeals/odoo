@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:17
+    environment:
+      - POSTGRES_DB=postgres
+      - POSTGRES_PASSWORD=odoo  # <-- SET A STRONG PASSWORD
+      - POSTGRES_USER=odoo
+    volumes:
+      - ./odoo-db-data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  odoo:
+    build: .  # Build the image from your Dockerfile
+    depends_on:
+      - db
+    ports:
+      - "8069:8069"
+    volumes:
+      - ./config:/etc/odoo                       # Mounts your custom config
+      - ./odoo-web-data:/var/lib/odoo            # Mounts Odoo's file storage
+      - ./custom_addons:/mnt/extra-addons/custom # Makes custom addons available
+    restart: unless-stopped

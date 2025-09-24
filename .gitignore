@@ -1,20 +1,24 @@
-*.log
+# Odoo Data Volumes - VERY IMPORTANT
+odoo-db-data/
+odoo-web-data/
 
-
-*.pyc
-__pycache__/
-
-sessions/
-
-filestore/
-
+# Local Python Environment
 venv/
-env/
-.idea/
-.vscode/
-pycache/
+.venv/
+
+# Python Cache
+__pycache__/
 *.pyc
+
+# Database Backups
+*.dump
+*.sql
+*.zip
+
+# IDE and OS specific files
+.vscode/
+.idea/
 .DS_Store
-dist/
-build/
-*.egg-info/
+```
+
+
