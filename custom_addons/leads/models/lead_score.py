@@ -53,11 +53,15 @@ class LeadScore(models.Model):
     parking_details = fields.Char(string='Parking Details')
     bathroom = fields.Char(string='Bathrooms')
     offer_price = fields.Char(string='Offer Price (Lacs)')
-    bathroom = fields.Char(string='Bathrooms')
 
     # Fields for RM Interaction
     site_visit_scheduled_date = fields.Date(string='Site Visit Scheduled For Date')
-    feedback = fields.Text(string='Feedback')
+    #feedback = fields.Text(string='Feedback')
+    feedback = fields.Selection([
+        ('buyer_did_not_visit_property', 'Buyer Did Not Visit Property'),
+        ('buyer_not_interested', 'Buyer Not Interested'),
+        ('visit_needs_to_be_rescheduled', 'Visit Needs to be Rescheduled'),
+    ], string='Feedback')
     next_follow_up_date = fields.Date(
         string='Next Follow-up Date',
         compute = '_compute_next_follow_up_date',
@@ -120,7 +124,7 @@ class LeadScore(models.Model):
     def _compute_next_follow_up_date(self):
         """ Compute the follow-up date based on the state and the site visit date."""
         for lead in self:
-            if lead.current_status == 'site_visit_scheduled' and lead.site_visit_scheduled_date:
+            if (lead.current_status == 'site_visit_scheduled' or lead.current_status == 'rescheduled') and lead.site_visit_scheduled_date:
                 lead.next_follow_up_date = lead.site_visit_scheduled_date + timedelta(days=1)
             else:
                 # if the follow up date was never set the default is today.
@@ -133,14 +137,14 @@ class LeadScore(models.Model):
         """
 
         for lead in self:
-            if lead.current_status == 'site_visit_scheduled':
+            if lead.current_status == 'site_visit_scheduled' or lead.current_status == 'rescheduled':
                 lead.site_visit_scheduled_date = lead.next_follow_up_date - timedelta(days=1)
 
     @api.onchange('current_status')
     def _onchange_state_set_follow_up(self):
         """When the state changes in the UI, set a default follow-up date."""
-        if self.current_status != 'site_visit_scheduled':
-            self.next_follow_up_date = fields.Date.context_today(self)
+        if self.current_status != 'site_visit_scheduled' and self.current_status != 'rescheduled':
+            self.next_follow_up_date = fields.Date.context_today(self) + timedelta(days=1)
 
     def action_open_bigquery_wizard(self):
         """ This method is called by the button. """

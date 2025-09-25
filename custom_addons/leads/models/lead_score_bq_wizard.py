@@ -29,15 +29,14 @@ class LeadScoreBqWizard(models.TransientModel):
         
         try:
             client = bigquery.Client(project=project_id)
-            client.list_datasets(max_results=1)
+            client.list_datasets(max_results=1) 
             _logger.info("Successfully connected to BigQuery project %s.", project_id)
         except Exception as e:
             _logger.error("Failed to connect to BigQuery: %s", str(e))
             raise UserError(f"Failed to connect to BigQuery: {str(e)}")
         
         query = """
-        SELECT * 
-        FROM `cleardeals-459513.lead_scoring.whatsapp_automation_list`
+        SELECT * FROM `cleardeals-459513.lead_scoring.whatsapp_automation_list`
         WHERE standardized_phone IS NOT NULL
         """
         
@@ -48,15 +47,14 @@ class LeadScoreBqWizard(models.TransientModel):
             raise UserError(f"Failed to execute query: {str(e)}")
         
         LeadScore = self.env['lead.score']
-        # Map BigQuery current_status to Odoo lead.score.current_status
         status_mapping = {
             'site visit scheduled': 'site_visit_scheduled',
             'busy': 'busy',
             'lead': 'lead',
             'ringing': 'ringing',
             'call back later': 'call_back_later',
-            'call back from client': 'call_back_later',  # Added mapping
-            'sales-lead-ops': 'lead',  # Adjust based on desired status
+            'call back from client': 'call_back_later',
+            'sales-lead-ops': 'lead',
             'option not matching requirements': 'option_not_matching_requirements',
             'details shared of property': 'details_shared_of_property',
             'no requirements': 'no_requirements',
@@ -72,16 +70,15 @@ class LeadScoreBqWizard(models.TransientModel):
 
         created_count = 0
         updated_count = 0
-        unmatched_rms = set()  # Track unmatched RM names for logging
+        unmatched_rms = set()
 
         for row in results:
             phone = row.get('standardized_phone')
+            if not phone:
+                continue
+
             raw_status = row.get('current_status') or 'lead'
-            # Normalize and map status
-            normalized_status = raw_status.lower().replace(' ', '_')
             mapped_status = status_mapping.get(raw_status.lower(), 'lead')
-            if normalized_status != mapped_status:
-                _logger.warning("Mapped BigQuery status '%s' to '%s' for lead %s", raw_status, mapped_status, phone)
 
             vals = {
                 'name': row.get('customer_name'),
@@ -106,38 +103,68 @@ class LeadScoreBqWizard(models.TransientModel):
                 'bathroom': row.get('Bathroom'),
             }
 
-            # Handle Many2one fields (assigned_rm_id)
             rm_name = row.get('assigned_rm')
             if rm_name:
-                rm_name = rm_name.strip()  # Remove leading/trailing spaces
-                user = self.env['res.users'].search([('name', '=', rm_name)], limit=1)
-                if not user:
-                    # Fallback to case-insensitive partial match
-                    user = self.env['res.users'].search([('name', 'ilike', rm_name)], limit=1)
+                user = self.env['res.users'].search([('name', '=ilike', rm_name.strip())], limit=1)
                 if user:
                     vals['assigned_rm_id'] = user.id
                 else:
                     unmatched_rms.add(rm_name)
-                    _logger.warning("Assigned RM '%s' not found in Odoo users for lead %s", rm_name, phone)
-
-            # Handle date fields
+                    _logger.warning("Assigned RM '%s' not found for lead %s", rm_name, phone)
+            
+            # The site_visit_date is now handled conditionally inside the update logic,
+            # so we prepare the value but don't add it to 'vals' just yet.
+            site_visit_date_obj = None
             site_visit_str = row.get('site_visit_date')
             if site_visit_str:
                 try:
-                    date_obj = datetime.strptime(site_visit_str, '%d/%m/%Y').date()
-                    vals['site_visit_scheduled_date'] = date_obj
-                except (ValueError, TypeError) as e:
+                    site_visit_date_obj = datetime.strptime(site_visit_str, '%d/%m/%Y').date()
+                    vals['site_visit_scheduled_date'] = site_visit_date_obj
+                except (ValueError, TypeError):
                     _logger.warning("Invalid date format for site_visit_date: %s for lead %s", site_visit_str, phone)
 
-            # Create or update lead
             try:
                 existing_lead = LeadScore.search([('standardized_phone', '=', phone)], limit=1)
-                if existing_lead:
-                    existing_lead.write(vals)
-                    updated_count += 1
-                else:
+
+                if not existing_lead:
                     LeadScore.create(vals)
                     created_count += 1
+                    continue
+
+                # --- UPDATED LOGIC FOR HANDLING EXISTING LEADS ---
+
+                # 1. (NEW) If status is site visit scheduled/rescheduled, check for date mismatch.
+                if existing_lead.current_status in ['site_visit_scheduled', 'rescheduled']:
+                    odoo_date = existing_lead.site_visit_scheduled_date
+                    
+                    # Compare only if both dates are available.
+                    if site_visit_date_obj and odoo_date and site_visit_date_obj != odoo_date:
+                        _logger.info(
+                            f"Skipping update for {phone}: Site visit date mismatch. "
+                            f"Odoo ({odoo_date}) is preserved over BQ ({site_visit_date_obj})."
+                        )
+                        continue # Skip entire update, preserving Odoo data
+
+                # 2. If status is 'rescheduled', skip data update but "touch" the record.
+                # This acts as a fallback if the date check above didn't apply.
+                if existing_lead.current_status == 'rescheduled':
+                    existing_lead.write({})
+                    _logger.info(f"Skipping update for {phone}: Odoo status is 'rescheduled'.")
+                    continue
+                
+                # 3. If feedback is filled, skip the update.
+                if existing_lead.feedback:
+                    if existing_lead.feedback == 'visit_needs_to_be_rescheduled':
+                        existing_lead.write({})
+                        _logger.info(f"Skipping update for {phone}: Feedback requires rescheduling.")
+                    else:
+                        _logger.info(f"Skipping update for {phone}: Feedback is already filled in Odoo.")
+                    continue
+                
+                # If no skip conditions are met, perform the update.
+                existing_lead.write(vals)
+                updated_count += 1
+
             except Exception as e:
                 _logger.error("Error processing lead %s: %s", phone, str(e))
                 continue
