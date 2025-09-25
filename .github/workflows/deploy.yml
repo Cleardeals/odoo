@@ -11,21 +11,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: SSH into VM and deploy
-        uses: appleboy/ssh-action@master
-        with: 
+        uses: appleboy/ssh-action@v1.0.3  # Pin to a stable version
+        with:
           host: ${{ secrets.VM_IP }}
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22  # Explicitly set for clarity
+          timeout: 120s  # Increased to handle latency and VM delays
+          command_timeout: 15m  # Sufficient for Docker build/restart
+          debug: true  # Enable verbose logging for troubleshooting
           script: |
-            # Navigate to the project directory on the VM
-            cd ~/odoo-project
-            # Pull the latest code from main branch
+            set -e  # Exit on any error
+            echo "Connected as $(whoami)"
+            df -h  # Check disk space
+            free -m  # Check memory
+            cd ~/odoo-project || { echo "Error: odoo-project directory not found"; exit 1; }
             echo ">>> Pulling latest changes from Git..."
-            git pull origin main
-            # Rebuild the Odoo image with the new code
+            git pull origin main || { echo "Error: Git pull failed"; exit 1; }
             echo ">>> Rebuilding Odoo image..."
-            docker-compose build odoo
-            # Restart the odoo service with the newly built image
+            docker-compose build odoo || { echo "Error: Docker build failed"; exit 1; }
             echo ">>> Restarting the Odoo Service..."
-            docker-compose up -d --force-recreate odoo
-            echo ">>> Deployment Finished Successfully"
+            docker-compose up -d --force-recreate odoo || { echo "Error: Docker restart failed"; exit 1; }
+            echo ">>> Deployment Finished Successfully!"
