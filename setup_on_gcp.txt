@@ -5,6 +5,7 @@ Step-4: docker-compose exec db dropdb -U odoo odoo_db
 Step-5: docker-compose exec db createdb -U odoo odoo_db
 Step-6: docker-compose cp odoo_backup.dump db:/tmp/odoo_backup.dump
 Step 7: docker-compose exec db pg_restore -U odoo -d odoo_db --verbose --clean --no-acl --no-owner /tmp/odoo_backup.dump 
-Step 8: docker-compose start odoo
+Step 8: sudo chown -R 101:101 ./odoo-web-data
+Step 9: docker-compose start odoo
 
 
