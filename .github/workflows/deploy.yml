@@ -1,0 +1,31 @@
+name: Deploy Odoo to GCP VM
+# This pipeline runs on every push to the main branch
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Deploy to VM
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH into VM and deploy
+        uses: appleboy/ssh-action@master
+        with: 
+          host: ${{ secrets.VM_IP }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            # Navigate to the project directory on the VM
+            cd ~/odoo-project
+            # Pull the latest code from main branch
+            echo ">>> Pulling latest changes from Git..."
+            git pull origin main
+            # Rebuild the Odoo image with the new code
+            echo ">>> Rebuilding Odoo image..."
+            docker-compose build odoo
+            # Restart the odoo service with the newly built image
+            echo ">>> Restarting the Odoo Service..."
+            docker-compose up -d --force-recreate odoo
+            echo ">>> Deployment Finished Successfully"
