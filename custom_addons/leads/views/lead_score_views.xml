@@ -35,7 +35,7 @@
         <field name="name">lead.score.kanban</field>
         <field name="model">lead.score</field>
         <field name="arch" type="xml">
-            <kanban default_group_by="state" default_order="write_date desc, predicted_score desc">
+            <kanban default_group_by="state" default_order="predicted_score desc">
                 <field name="predicted_score"/>
                 <field name="assigned_rm_id"/>
                 <field name="name"/>
