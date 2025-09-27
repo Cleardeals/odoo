@@ -30,6 +30,7 @@ class LeadScore(models.Model):
         ('property_sold_out', 'Property Sold Out'),
         ('rescheduled', 'Rescheduled'),
         ('budget_not_sufficient', 'Budget Not Sufficient'),
+        ('site_visit_done', 'Site Visit Done'),
         ('number_not_in_use_wrong_number', 'Number Not in Use/Wrong Number'),
         ('other', 'Other')
     ], string='Current Status', default='lead', required=True)
@@ -60,6 +61,7 @@ class LeadScore(models.Model):
     feedback = fields.Selection([
         ('buyer_did_not_visit_property', 'Buyer Did Not Visit Property'),
         ('buyer_not_interested', 'Buyer Not Interested'),
+        ('buyer_not_picking_call', 'Buyer Not Picking Call'),
         ('visit_needs_to_be_rescheduled', 'Visit Needs to be Rescheduled'),
     ], string='Feedback')
     next_follow_up_date = fields.Date(
@@ -85,6 +87,7 @@ class LeadScore(models.Model):
         ('rescheduled', 'Rescheduled'),
         ('budget_not_sufficient', 'Budget Not Sufficient'),
         ('number_not_in_use_wrong_number', 'Number Not in Use/Wrong Number'),
+        ('site_visit_done', 'Site Visit Done'),
         ('other', 'Other')
     ], string='Status', default='lead', required=True)
 
