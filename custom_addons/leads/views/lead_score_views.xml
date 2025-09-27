@@ -12,10 +12,10 @@
                 <field name="write_date"/> <!-- Added for date-based filtering -->
                 <field name="create_date"/> <!-- Added for date-based filtering -->
                 <filter name="actionable_today" string="Actionable Today" 
-                        domain="[('is_actionable_today', '=', True), ('current_status', '!=', 'option_not_matching_requirements'), ('current_status', '!=', 'no_requirements'), ('current_status', '!=', 'requirements_closed'),('predicted_score', '>=', 0.3)]"
+                        domain="[('is_actionable_today', '=', True), ('current_status', '!=', 'option_not_matching_requirements'), ('current_status', '!=', 'no_requirements'), ('current_status', '!=', 'requirement_closed'),('predicted_score', '>=', 0.3)]"
                         help="Leads that need follow-up today or are overdue"/>
                 <filter name="future_follow_up" string="Future Follow-ups" 
-                        domain="[('is_actionable_today', '=', False), ('current_status', '!=', 'option_not_matching_requirements'), ('current_status', '!=', 'no_requirements'), ('current_status', '!=', 'requirements_closed'),('predicted_score', '>=', 0.3)]"
+                        domain="[('is_actionable_today', '=', False), ('current_status', '!=', 'option_not_matching_requirements'), ('current_status', '!=', 'no_requirements'), ('current_status', '!=', 'requirement_closed'),('predicted_score', '>=', 0.3)]"
                         help="Leads scheduled for future follow-up"/>
                 <filter name="recently_updated" string="Recently Updated"
                         domain="[('write_date', '>=', (context_today() - datetime.timedelta(days=7)).strftime('%Y-%m-%d'))]"
