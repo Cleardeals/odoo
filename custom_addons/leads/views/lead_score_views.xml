@@ -73,7 +73,7 @@
         <field name="name">lead.score.list</field>
         <field name="model">lead.score</field>
         <field name="arch" type="xml">
-            <list string="Leads" default_order="write_date desc, predicted_score desc">
+            <list string="Leads" default_order="predicted_score desc">
                 <control>
                     <button name="%(action_open_lead_score_bq_wizard)d"
                             string="Import from BigQuery"
