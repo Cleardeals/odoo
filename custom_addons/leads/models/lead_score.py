@@ -24,7 +24,7 @@ class LeadScore(models.Model):
         ('option_not_matching_requirements', 'Option Not Matching Requirements'),
         ('details_shared_of_property', 'Details Shared of Property'),
         ('no_requirements', 'No Requirements'),
-        ('details_shared_and_interested_for_site_visit', 'Details Shared and Interested for Site Visit'),
+        ('detail_shared_and_interested_for_site_visit', 'Detail Shared and Interested for Site Visit'),
         ('switched_off', 'Switched Off'),
         ('requirement_closed', 'Requirement Closed'),
         ('property_sold_out', 'Property Sold Out'),
