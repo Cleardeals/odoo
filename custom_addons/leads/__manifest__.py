@@ -10,6 +10,7 @@
         'security/security.xml',
         'security/ir.model.access.csv',
         'data/ir_config_parameter_data.xml',
+        'data/lead_score_cron.xml',
 
         # Defines the wizard's action first, as other views depend on it.
         'views/lead_score_bq_wizard_views.xml',

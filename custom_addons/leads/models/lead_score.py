@@ -153,5 +153,17 @@ class LeadScore(models.Model):
         """ This method is called by the button. """
         action = self.env['ir.actions.act_window']._for_xml_id('leads.action_fetch_leads_wizard')
         return action
+    
 
+    def _recompute_actionable_flag(self):
+        """
+        Scheduled action to re-evaluate the actionale flag for leads that are not yet marked actionable but whose follow-up date is today or earlier.
+    
+        """
+        today = fields.Date.today()
+        leads_to_update = self.search([
+            ('is_actionable_today', '=', False),
+            ('next_follow_up_date', '<=', today)
+        ])
+        leads_to_update._compute_is_actionable_today()
 
