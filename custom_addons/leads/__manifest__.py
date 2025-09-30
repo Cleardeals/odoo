@@ -1,7 +1,7 @@
 {
     'name': "Lead Scoring",
     'version': '1.0',
-    'depends': ['base', 'web'],  # Added 'web' for UI components like kanban and list views
+    'depends': ['base', 'web', 'mail'],  # Added 'web' for UI components like kanban and list views
     'author': "Nirat Patel",
     'category': 'Sales',
     'description': "Manages ML-based lead scoring for RMs.",
