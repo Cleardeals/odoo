@@ -3,6 +3,7 @@ from odoo import models, fields, api
 class WhatsAppResponse(models.Model):
     _name = 'whatsapp.response'
     _description = 'WhatsApp Response from Leads'
+    _inherit = ['mail.thread', 'mail.activity.mixin']
     _order = 'create_date desc'
 
     # Relational field
@@ -77,3 +78,11 @@ class WhatsAppResponse(models.Model):
         """Mark response as processed."""
         for record in self:
             record.is_processed = True
+
+    def name_get(self):
+        """Custom display name for records."""
+        result = []
+        for record in self:
+            name = f"Response from {record.lead_name}"
+            result.append((record.id, name))
+        return result

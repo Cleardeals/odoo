@@ -136,7 +136,7 @@
                             </group>
                         </page>
                         <page string="Feedback">
-                            <field name="feedback"/>
+                            <field name="feedback" placeholder="Select appropriate feedback"/>
                         </page>
                         <page string="WhatsApp Responses">
                             <field name="whatsapp_response_ids" 
