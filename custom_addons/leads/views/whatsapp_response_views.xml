@@ -205,7 +205,7 @@
                         <group>
                             <field name="lead_id" options="{'no_create': True}"/>
                             <field name="number"/>
-                            <field name="response" widget="badge" style="font-size: 1.1rem;"/>
+                            <field name="response" style="font-size: 1.1rem;"/>
                             <field name="response_date"/>
                         </group>
                         <group>
