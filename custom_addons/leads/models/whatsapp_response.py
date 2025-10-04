@@ -20,6 +20,7 @@ class WhatsAppResponse(models.Model):
         ('more_options', 'More Options'),
         ('going_for_site_visit', 'Going for site visit'),
         ('need_support', 'Need Support'),
+        ('generic_response', 'Generic Response')
     ], string='Response', required=True)
 
     # Related fields
