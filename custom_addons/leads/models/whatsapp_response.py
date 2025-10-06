@@ -18,6 +18,7 @@ class WhatsAppResponse(models.Model):
         ('reschedule_visit', 'Reschedule visit'),
         ('liked_property', 'Liked Property'),
         ('more_options', 'More Options'),
+        ('successfully_visited', 'Successfully Visited'),
         ('going_for_site_visit', 'Going for site visit'),
         ('need_support', 'Need Support'),
         ('generic_response', 'Generic Response')
