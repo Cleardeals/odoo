@@ -195,11 +195,7 @@
                     <widget name="web_ribbon" 
                             text="Positive" 
                             bg_color="bg-success"
-                            invisible="[('response_type', '!=', 'positive')]"/>
-                    <widget name="web_ribbon" 
-                            text="Negative" 
-                            bg_color="bg-danger"
-                            invisible="[('response_type', '!=', 'negative')]"/>
+                            invisible = "response_type != 'positive'" />
                     
                     <group>
                         <group>
