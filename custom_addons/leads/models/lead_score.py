@@ -58,12 +58,24 @@ class LeadScore(models.Model):
     # Fields for RM Interaction
     site_visit_scheduled_date = fields.Date(string='Site Visit Scheduled For Date')
     #feedback = fields.Text(string='Feedback')
-    feedback = fields.Selection([
+
+    feedback_general = fields.Selection([
         ('buyer_did_not_visit_property', 'Buyer Did Not Visit Property'),
         ('buyer_not_interested', 'Buyer Not Interested'),
         ('buyer_not_picking_call', 'Buyer Not Picking Call'),
         ('visit_needs_to_be_rescheduled', 'Visit Needs to be Rescheduled'),
+        ('other', 'Other'),
     ], string='Feedback')
+
+    feedback_site_visit_done = fields.Selection([
+        ('requirements_not_matching', 'Requirements Not Matching'),
+        ('buyer_liked_property', 'Buyer Liked Property'),
+        ('buyer_requirement_closed', 'Buyer Requirement Closed'),
+        ('buyer_visit_from_outside', 'Buyer Visit From Outside'),
+        ('buyer_not_pickup_call', 'Buyer Not Picking Call'),
+        ('other', 'Other')
+    ], string='Feedback for Site Visit Done')
+
     next_follow_up_date = fields.Date(
         string='Next Follow-up Date',
         compute = '_compute_next_follow_up_date',
@@ -90,6 +102,8 @@ class LeadScore(models.Model):
         ('site_visit_done', 'Site Visit Done'),
         ('other', 'Other')
     ], string='Status', default='lead', required=True)
+
+    notes = fields.Text(string='Notes')
 
     is_actionable_today = fields.Boolean(
         string='Is Actionable Today',
