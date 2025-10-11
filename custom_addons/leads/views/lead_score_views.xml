@@ -81,6 +81,7 @@
                             class="oe_highlight"/>
                 </control>
                 <field name="name"/>
+                <field name="standardized_phone"/>
                 <field name="predicted_score"/>
                 <field name="current_status"/>
                 <field name="project_name"/>

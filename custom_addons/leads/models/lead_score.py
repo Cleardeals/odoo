@@ -9,7 +9,7 @@ class LeadScore(models.Model):
     # Core Lead Information
     name = fields.Char(string='Lead Name', required=True)
     assigned_rm_id = fields.Many2one('res.users', string='Assigned RM')
-    standardized_phone = fields.Char(string = 'Standardized Phone')
+    standardized_phone = fields.Char(string = 'Phone')
 
     # Scoring Information
     predicted_score = fields.Float(string='Predicted Score')
