@@ -12,15 +12,15 @@ class WhatsAppResponse(models.Model):
     # Original fields
     number = fields.Char(string='Phone Number', required=True)
     response = fields.Selection([
-        ('yes_interested', 'Yes I am interested'),
-        ('reschedule', 'Reschedule'),
-        ('no_reschedule', 'No, reschedule'),
-        ('reschedule_visit', 'Reschedule visit'),
-        ('liked_property', 'Liked Property'),
-        ('more_options', 'More Options'),
+        ('going_for_visit', 'Going for Visit'),
+        ('need_assistance', 'Need Assistance'),
+        ('need_to_reschedule', 'Need to Reschedule'),
+        ('liked_the_property', 'Liked the Property'),
+        ('pick_a_convenient_time', 'Pick a Convenient Time'),
         ('successfully_visited', 'Successfully Visited'),
-        ('going_for_site_visit', 'Going for site visit'),
-        ('need_support', 'Need Support'),
+        ('schedule_a_visit', 'Schedule a Visit'),
+        ('need_more_information', 'Need More Information'),
+        ('call_rm', 'Call RM'),
         ('generic_response', 'Generic Response')
     ], string='Response', required=True)
 
@@ -68,7 +68,7 @@ class WhatsAppResponse(models.Model):
     @api.depends('response')
     def _compute_response_type(self):
         """Categorize responses as positive, negative, or neutral."""
-        positive_responses = ['yes_interested', 'liked_property']
+        positive_responses = ['yes_interested', 'liked_the_property', 'going_for_visit', 'successfully_visited', 'schedule_a_visit']
 
         for record in self:
             if record.response in positive_responses:
