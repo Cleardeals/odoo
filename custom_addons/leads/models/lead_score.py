@@ -79,7 +79,6 @@ class LeadScore(models.Model):
     next_follow_up_date = fields.Date(
         string='Next Follow-up Date',
         compute = '_compute_next_follow_up_date',
-        inverse = '_inverse_next_follow_up_date',
         store=True,
         readonly=False)
     
@@ -148,14 +147,6 @@ class LeadScore(models.Model):
                 if not lead.next_follow_up_date:
                     lead.next_follow_up_date = fields.Date.context_today(lead)
 
-    def _inverse_next_follow_up_date(self):
-        """ Allows the user to manually set the next follow-up date.
-        or sets the site visit date if the state is correct.
-        """
-
-        for lead in self:
-            if lead.current_status == 'site_visit_scheduled' or lead.current_status == 'rescheduled':
-                lead.site_visit_scheduled_date = lead.next_follow_up_date - timedelta(days=1)
 
     @api.onchange('current_status')
     def _onchange_state_set_follow_up(self):

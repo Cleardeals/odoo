@@ -153,8 +153,8 @@ class LeadScoreBqWizard(models.TransientModel):
                     continue
                 
                 # 3. If feedback is filled, skip the update.
-                if existing_lead.feedback:
-                    if existing_lead.feedback == 'visit_needs_to_be_rescheduled':
+                if existing_lead.feedback_general:
+                    if existing_lead.feedback_general == 'visit_needs_to_be_rescheduled':
                         existing_lead.write({})
                         _logger.info(f"Skipping update for {phone}: Feedback requires rescheduling.")
                     else:
