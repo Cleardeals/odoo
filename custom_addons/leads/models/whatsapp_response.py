@@ -21,6 +21,7 @@ class WhatsAppResponse(models.Model):
         ('schedule_a_visit', 'Schedule a Visit'),
         ('need_more_information', 'Need More Information'),
         ('call_rm', 'Call RM'),
+        ('call_me_back', 'Call Me Back'),
         ('generic_response', 'Generic Response')
     ], string='Response', required=True)
 
