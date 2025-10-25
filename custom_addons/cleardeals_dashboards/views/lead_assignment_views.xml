@@ -14,7 +14,7 @@
         </field>
     </record>
 
-    <record id="view_active_lead_assignment_search" model="ir.ui.view">
+   <record id="view_active_lead_assignment_search" model="ir.ui.view">
         <field name="name">active.lead.assignment.search</field>
         <field name="model">active.lead.assignment</field>
         <field name="arch" type="xml">
@@ -24,15 +24,22 @@
                 <field name="original_property_tag"/>
                 <separator/>
                 <filter string="Today" name="today" domain="[('assignment_date', '=', context_today())]"/>
+                <filter string="This Week" name="this_week" domain="[('assignment_date', '&gt;=', (context_today() - relativedelta(weeks=1, weekday=0)).strftime('%Y-%m-%d')), ('assignment_date', '&lt;=', (context_today() + relativedelta(weeks=0, weekday=6)).strftime('%Y-%m-%d'))]"/>
+                <filter string="This Month" name="this_month" domain="[('assignment_date', '&gt;=', (context_today() - relativedelta(day=1)).strftime('%Y-%m-%d')), ('assignment_date', '&lt;=', (context_today() + relativedelta(day=31)).strftime('%Y-%m-%d'))]"/>
+                <filter string="This Quarter" name="this_quarter" domain="[('assignment_date', '&gt;=', (context_today() - relativedelta(months=(context_today().month-1)%3, day=1)).strftime('%Y-%m-%d')), ('assignment_date', '&lt;=', (context_today() + relativedelta(months=(2-((context_today().month-1)%3)), day=31)).strftime('%Y-%m-%d'))]"/>
+                <filter string="This Year" name="this_year" domain="[('assignment_date', '&gt;=', (context_today() - relativedelta(month=1, day=1)).strftime('%Y-%m-%d')), ('assignment_date', '&lt;=', (context_today() + relativedelta(month=12, day=31)).strftime('%Y-%m-%d'))]"/>
                 <separator/>
                 <group expand="0" string="Group By">
                     <filter string="Lead" name="group_by_lead" context="{'group_by': 'lead_score_id'}"/>
                     <filter string="Assigned Property" name="group_by_assigned_property" context="{'group_by': 'assigned_property_tag'}"/>
                     <filter string="Original Property" name="group_by_original_property" context="{'group_by': 'original_property_tag'}"/>
-                    <filter string="Assignment Date" name="group_by_assignment_date" context="{'group_by': 'assignment_date'}"/>
+                    <separator/>
+                    <filter string="Assignment Date: Day" name="group_by_assignment_date_day" context="{'group_by': 'assignment_date:day'}"/>
+                    <filter string="Assignment Date: Month" name="group_by_assignment_date_month" context="{'group_by': 'assignment_date:month'}"/>
+                    <filter string="Assignment Date: Year" name="group_by_assignment_date_year" context="{'group_by': 'assignment_date:year'}"/>
                 </group>
             </search>
-        </field>    
+        </field>     
     </record>
 
    <record id="view_active_lead_assignment_graph" model="ir.ui.view">
@@ -60,7 +67,7 @@
     <record id="action_active_lead_assignment_dashboard" model="ir.actions.act_window">
         <field name="name">Lead Routing Dashboard</field>
         <field name="res_model">active.lead.assignment</field>
-        <field name="view_mode">graph,pivot,list</field>
+        <field name="view_mode">pivot,graph,list</field>
         <field name="search_view_id" ref="view_active_lead_assignment_search"/>
         <field name="context">
             {'search_default_group_by_assigned_property': 1}

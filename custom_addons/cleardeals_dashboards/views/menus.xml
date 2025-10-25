@@ -12,4 +12,11 @@
         parent="menu_main_dashboard_root"
         action="action_active_lead_assignment_dashboard"
         sequence="1"/>
+
+    <menuitem
+        id="menu_unassigned_properties_dashboard"
+        name="Unassigned Properties"
+        parent="menu_main_dashboard_root"
+        action="cleardeals_dashboards.action_unassigned_properties_dashboard"
+        sequence="2"/>
 </odoo>

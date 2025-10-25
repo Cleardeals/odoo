@@ -11,6 +11,7 @@
         'security/ir.model.access.csv',
         'data/ir_cron_data.xml',
         'views/lead_assignment_views.xml',
+        'views/property_assignment_stat_views.xml',
         'views/menus.xml',
     ],
     'external_dependencies': {

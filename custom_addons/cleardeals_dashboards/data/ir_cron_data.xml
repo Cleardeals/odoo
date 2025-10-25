@@ -12,5 +12,17 @@
             
             <field name="nextcall" eval="(DateTime.now() + relativedelta(hours=4)).strftime('%Y-%m-%d 04:00:00')" />
         </record>
+
+        <record id="ir_cron_sync_property_stats" model="ir.cron">
+            <field name="name">Sync: Property Assignment Stats</field>
+            <field name="model_id" ref="model_property_assignment_stat"/>
+            <field name="state">code</field>
+            <field name="code">model._cron_sync_property_stats()</field>
+            <field name="user_id" ref="base.user_root"/>
+            <field name="interval_number">1</field>
+            <field name="interval_type">days</field>
+            <field name="nextcall" eval="(DateTime.now() + relativedelta(hours=4, minutes=5)).strftime('%Y-%m-%d 04:05:00')" />
+        </record>
+        
     </data>
 </odoo>
