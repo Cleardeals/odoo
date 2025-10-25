@@ -15,8 +15,8 @@
 
     <menuitem
         id="menu_unassigned_properties_dashboard"
-        name="Unassigned Properties"
+        name="Property Performance"
         parent="menu_main_dashboard_root"
-        action="cleardeals_dashboards.action_unassigned_properties_dashboard"
+        action="cleardeals_dashboards.action_property_performance_dashboard"
         sequence="2"/>
 </odoo>

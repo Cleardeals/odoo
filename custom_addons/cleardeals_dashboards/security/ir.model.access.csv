@@ -1,3 +1,3 @@
 id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
 access_active_lead_assignment_user,active.lead.assignment user,model_active_lead_assignment,base.group_user,1,0,0,0
-access_property_assignment_stat_user,property.assignment.stat user,model_property_assignment_stat,base.group_user,1,0,0,0
+access_property_daily_stat_user,property.daily.stat user,model_property_daily_stat,base.group_user,1,0,0,0
