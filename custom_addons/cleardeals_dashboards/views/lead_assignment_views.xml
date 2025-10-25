@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_active_lead_assignment_list" model="ir.ui.view">
+        <field name="name">active.lead.assignment.list</field>
+        <field name="model">active.lead.assignment</field>
+        <field name="arch" type="xml">
+            <list>
+                <field name="lead_name"/>
+                <field name="lead_phone"/>
+                <field name="assigned_property_tag"/>
+                <field name="original_property_tag"/>
+                <field name="assignment_date"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_active_lead_assignment_search" model="ir.ui.view">
+        <field name="name">active.lead.assignment.search</field>
+        <field name="model">active.lead.assignment</field>
+        <field name="arch" type="xml">
+            <search string="Search Assignments">
+                <field name="lead_score_id"/>
+                <field name="assigned_property_tag"/>
+                <field name="original_property_tag"/>
+                <separator/>
+                <filter string="Today" name="today" domain="[('assignment_date', '=', context_today())]"/>
+                <separator/>
+                <group expand="0" string="Group By">
+                    <filter string="Lead" name="group_by_lead" context="{'group_by': 'lead_score_id'}"/>
+                    <filter string="Assigned Property" name="group_by_assigned_property" context="{'group_by': 'assigned_property_tag'}"/>
+                    <filter string="Original Property" name="group_by_original_property" context="{'group_by': 'original_property_tag'}"/>
+                    <filter string="Assignment Date" name="group_by_assignment_date" context="{'group_by': 'assignment_date'}"/>
+                </group>
+            </search>
+        </field>    
+    </record>
+
+   <record id="view_active_lead_assignment_graph" model="ir.ui.view">
+        <field name="name">active.lead.assignment.graph</field>
+        <field name="model">active.lead.assignment</field>
+        <field name="arch" type="xml">
+            <graph string="Lead Assignments Dashboard" type="bar">
+                <field name="assigned_property_tag" type="row"/>
+                <field name="assignment_date" type="col"/>
+            </graph>
+        </field>
+    </record>
+
+    <record id="view_active_lead_assignment_pivot" model="ir.ui.view">
+        <field name="name">active.lead.assignment.pivot</field>
+        <field name="model">active.lead.assignment</field>
+        <field name="arch" type="xml">
+            <pivot string="Lead Assignments Pivot">
+                <field name="assigned_property_tag" type="row"/>
+                <field name="assignment_date" type="col"/>
+            </pivot>
+        </field>
+    </record>
+
+    <record id="action_active_lead_assignment_dashboard" model="ir.actions.act_window">
+        <field name="name">Lead Routing Dashboard</field>
+        <field name="res_model">active.lead.assignment</field>
+        <field name="view_mode">graph,pivot,list</field>
+        <field name="search_view_id" ref="view_active_lead_assignment_search"/>
+        <field name="context">
+            {'search_default_group_by_assigned_property': 1}
+        </field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                No lead assignments found.
+            </p><p>
+                This dashboard tracks leads assigned to new properties based on their feedback.
+                Data is synced from BigQuery daily.
+            </p>
+        </field>
+    </record>
+
+</odoo>

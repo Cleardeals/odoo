@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <menuitem 
+        id="menu_main_dashboard_root"
+        name="Cleardeals Dashboards"
+        web_icon="cleardeals_dashboards/static/description/icon.png" 
+        sequence="20"/> 
+    
+    <menuitem
+        id="menu_lead_routing_dashboard_item"
+        name="Lead Routing"
+        parent="menu_main_dashboard_root"
+        action="action_active_lead_assignment_dashboard"
+        sequence="1"/>
+</odoo>
