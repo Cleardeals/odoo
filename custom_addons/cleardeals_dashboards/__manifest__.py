@@ -8,6 +8,7 @@
         'base', 'leads'
     ],
     'data': [
+        'security/security.xml',
         'security/ir.model.access.csv',
         'data/ir_cron_data.xml',
         'views/lead_assignment_views.xml',

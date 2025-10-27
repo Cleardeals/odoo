@@ -22,18 +22,24 @@ class PropertyDailyStat(models.Model):
     assignment_count = fields.Integer(string="Assignments This Day", readonly=True)
     
     # This boolean is computed from the count, so it's fast.
-    is_unassigned = fields.Boolean(
-        string="Unassigned", 
-        compute='_compute_is_unassigned', 
+    assignment_status = fields.Selection(
+        [('unassigned', 'Unassigned (0 Leads)'), 
+         ('assigned', 'Assigned (1+ Leads)')], 
+        string="Assignment Status", 
+        compute='_compute_assignment_status', 
         store=True,
         index=True
     )
 
+    # --- Compute method for the Selection field ---
     @api.depends('assignment_count')
-    def _compute_is_unassigned(self):
-        """Set the flag for easy filtering."""
+    def _compute_assignment_status(self):
+        """Set the status based on assignment count."""
         for rec in self:
-            rec.is_unassigned = (rec.assignment_count == 0)
+            if rec.assignment_count == 0:
+                rec.assignment_status = 'unassigned'
+            else:
+                rec.assignment_status = 'assigned'
 
     _sql_constraints = [
         ('property_date_uniq', 'unique(property_tag, date)', 'Property Tag + Date must be unique.')
