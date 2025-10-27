@@ -115,3 +115,50 @@ class PropertyDailyStat(models.Model):
         except Exception as e:
             _logger.error(f"Error during Property Daily Stat sync: {e}")
             self.env.cr.rollback()
+
+    @api.model
+    def _get_koi_total_assignments(self, domain=None):
+        """KPI: Total assignments. This KPI respecths the filters from the search view."""
+        final_domain = domain or []
+
+        read_data = self.read_group(
+            final_domain,
+            ['assignment_count:sum'],
+            []
+        )
+
+        value = read_data[0]['assignment_count'] if read_data else 0
+        return {
+            'value': f"{value:,.0f}",
+            'tooltip': _("Total assignments in the selected period")
+        }
+    
+    @api.model
+    def _get_kpi_unassigned_days(self, domain=None):
+        """
+        KPI: Total unassigned properties
+        """
+        final_domain = domain or []
+        final_domain.extend([('assignment_status', '=', 'unassigned')])
+        count = self.search_count(final_domain)
+        return {
+            'value': f"{count:,.0f}", # Format with commas
+            'tooltip': _("Total property-days with 0 assignments in the selected period")
+        }
+
+    @api.model
+    def _get_kpi_unassigned_today(self, domain=None):
+        """
+        KPI: Static KPI for "Today". 
+        This method IGNORES the domain filter on purpose.
+        """
+        today = fields.Date.context_today(self)
+        count = self.search_count([
+            ('date', '=', today),
+            ('assignment_status', '=', 'unassigned')
+        ])
+        return {
+            'value': f"{count:,.0f}", # Format with commas
+            'tooltip': _("Total properties with 0 assignments today")
+        }
+
