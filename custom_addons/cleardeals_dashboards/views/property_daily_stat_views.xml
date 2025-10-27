@@ -13,11 +13,6 @@
         }</field>
     </record>
     
-    <!-- 
-      STEP 2: ADD A NEW KANBAN VIEW
-      This view will act as your KPI dashboard.
-      The column aggregates (count and sum) will be your KPIs.
-    -->
     <record id="view_property_daily_stat_kanban" model="ir.ui.view">
         <field name="name">property.daily.stat.kanban</field>
         <field name="model">property.daily.stat</field>

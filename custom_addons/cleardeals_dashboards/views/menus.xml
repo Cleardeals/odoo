@@ -17,7 +17,7 @@
 
     <menuitem
         id="menu_unassigned_properties_dashboard"
-        name="Property Performance"
+        name="Property Wise Analysis"
         parent="menu_main_dashboard_root"
         action="cleardeals_dashboards.action_property_performance_dashboard"
         groups="cleardeals_dashboards.group_dashboard_manager"
