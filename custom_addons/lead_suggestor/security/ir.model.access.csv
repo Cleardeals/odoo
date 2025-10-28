@@ -1,0 +1,8 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_rm_prop_inv_rm,access.rm.prop.inv.rm,model_property_inventory,group_property_prospector_rm,1,1,1,0
+access_rm_prop_sugg_rm,access.rm.prop.sugg.rm,model_property_lead_suggestion,group_property_prospector_rm,1,1,1,0
+access_rm_sugg_wiz_rm,access.rm.sugg.wiz.rm,model_suggestion_feedback_wizard,group_property_prospector_rm,1,1,1,1
+access_rm_prop_inv_mgr,access.rm.prop.inv.mgr,model_property_inventory,group_property_prospector_manager,1,1,1,1
+access_rm_prop_sugg_mgr,access.rm.prop.sugg.mgr,model_property_lead_suggestion,group_property_prospector_manager,1,1,1,1
+access_rm_sugg_wiz_mgr,access.rm.sugg.wiz.mgr,model_suggestion_feedback_wizard,group_property_prospector_manager,1,1,1,1
+

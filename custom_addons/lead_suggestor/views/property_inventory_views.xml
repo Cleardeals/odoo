@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- 1. Kanban View - This is the primary dashboard -->
+    <record id="view_property_inventory_kanban" model="ir.ui.view">
+        <field name="name">property.inventory.kanban</field>
+        <field name="model">property.inventory</field>
+        <field name="arch" type="xml">
+            <kanban class="o_kanban_mobile" create="false">
+                <field name="property_tag"/>
+                <field name="rm_user_id"/>
+                <field name="suggestion_count"/>
+                <field name="new_suggestion_count"/>
+                <templates>
+                    <t t-name="kanban-box">
+                        <div t-attf-class="oe_kanban_global_click">
+                            <div class="oe_kanban_details">
+                                <strong class="o_kanban_record_title">
+                                    <field name="property_tag"/>
+                                </strong>
+                                <div class="text-muted">
+                                    <span t-if="record.rm_user_id.value">
+                                        <i class="fa fa-user" aria-label="RM"/>
+                                        <t t-esc="record.rm_user_id.value"/>
+                                    </span>
+                                </div>
+                            </div>
+                            <!-- Counters -->
+                            <div class="o_kanban_footer">
+                                <div class="o_kanban_footer_left">
+                                    <span class="text-muted">
+                                        <i class="fa fa-users" aria-label="Total Suggestions"/>
+                                        <t t-esc="record.suggestion_count.value"/> Total
+                                    </span>
+                                </div>
+                                <div class="o_kanban_footer_right">
+                                    <span t-if="record.new_suggestion_count.value > 0" 
+                                          class="badge badge-danger" 
+                                          title="New Suggestions">
+                                        <i class="fa fa-star" aria-label="New"/>
+                                        <t t-esc="record.new_suggestion_count.value"/> New
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </t>
+                </templates>
+            </kanban>
+        </field>
+    </record>
+
+    <!-- 2. Form View - This holds the list of leads -->
+    <record id="view_property_inventory_form" model="ir.ui.view">
+        <field name="name">property.inventory.form</field>
+        <field name="model">property.inventory</field>
+        <field name="arch" type="xml">
+            <form string="Property Inventory" create="false" edit="false">
+                <sheet>
+                    <div class="oe_title">
+                        <h1>
+                            <field name="property_tag"/>
+                        </h1>
+                    </div>
+                    <group>
+                        <field name="rm_user_id"/>
+                        <field name="suggestion_count" string="Total Suggestions"/>
+                        <field name="new_suggestion_count" string="New Suggestions"/>
+                    </group>
+                    <notebook>
+                        <page string="Similar Leads" name="suggestions">
+                            <field name="suggestion_ids" nolabel="1">
+                                <!-- This is the inline list of leads -->
+                                <list editable="bottom" create="false" delete="false">
+                                    <field name="status" widget="badge" 
+                                           decoration-success="status == 'converted'"
+                                           decoration-warning="status == 'contacted'"
+                                           decoration-danger="status == 'not_interested'"
+                                           decoration-info="status == 'new'"/>
+                                    <field name="generation_date" readonly="1"/>
+                                    <field name="lead_name" readonly="1"/>
+                                    <field name="suggested_lead_phone" readonly="1"/>
+                                    <field name="original_property_tag" readonly="1" string="Liked"/>
+                                    <field name="original_property_similarity" readonly="1" string="Match (%)" widget="progressbar"/>
+                                    <field name="rm_feedback"/>
+                                    <button name="action_log_feedback" type="object"
+                                        string="Log Feedback" icon="fa-pencil-square-o"
+                                        class="btn-primary"/>
+                                </list>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- 3. Search View -->
+    <record id="view_property_inventory_search" model="ir.ui.view">
+        <field name="name">property.inventory.search</field>
+        <field name="model">property.inventory</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="property_tag"/>
+                <field name="rm_user_id"/>
+                <filter name="filter_new_suggestions" 
+                        string="With New Suggestions" 
+                        domain="[('new_suggestion_count', '>', 0)]"/>
+                <group expand="0" string="Group By">
+                    <filter string="Assigned RM" name="group_by_rm" context="{'group_by': 'rm_user_id'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <!-- 4. Window Action (FOR RM USER) -->
+    <record id="action_property_inventory_rm" model="ir.actions.act_window">
+        <field name="name">My Property Suggestions</field>
+        <field name="res_model">property.inventory</field>
+        <field name="view_mode">kanban,form</field>
+        <field name="search_view_id" ref="view_property_inventory_search"/>
+        <field name="domain">[('rm_user_id', '=', uid)]</field>
+        <field name="context">{'search_default_filter_new_suggestions': 1}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                No properties are assigned to you.
+            </p><p>
+                This dashboard shows all active properties assigned to you.
+                Click on a property to see a list of similar leads to contact.
+            </p>
+        </field>
+    </record>
+
+    <!-- 5. Window Action (FOR MANAGER) -->
+    <!-- 
+      FIX: Added id="action_property_inventory_manager"
+    -->
+    <record id="action_property_inventory_manager" model="ir.actions.act_window">
+        <field name="name">All Property Suggestions</field>
+        <field name="res_model">property.inventory</field>
+        <field name="view_mode">kanban,form</field>
+        <field name="search_view_id" ref="view_property_inventory_search"/>
+        <field name="domain">[]</field> <!-- No domain, shows all -->
+        <field name="context">{'search_default_group_by_rm': 1}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                No property suggestions found.
+            </p><p>
+                This dashboard shows all properties and their suggested leads.
+                Use the 'Group By' filter to see properties by RM.
+            </p>
+        </field>
+    </record>
+</odoo>
+
