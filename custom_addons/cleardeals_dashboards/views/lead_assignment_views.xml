@@ -1,10 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
+    
     <record id="view_active_lead_assignment_list" model="ir.ui.view">
         <field name="name">active.lead.assignment.list</field>
         <field name="model">active.lead.assignment</field>
         <field name="arch" type="xml">
-            <list>
+            <list string="Lead Assignments" create="false" edit="false"> 
                 <field name="lead_name"/>
                 <field name="lead_phone"/>
                 <field name="assigned_property_tag"/>
@@ -14,12 +15,13 @@
         </field>
     </record>
 
-   <record id="view_active_lead_assignment_search" model="ir.ui.view">
+    <record id="view_active_lead_assignment_search" model="ir.ui.view">
         <field name="name">active.lead.assignment.search</field>
         <field name="model">active.lead.assignment</field>
         <field name="arch" type="xml">
             <search string="Search Assignments">
-                <field name="lead_score_id"/>
+                <field name="lead_name"/>
+                <field name="lead_phone"/>
                 <field name="assigned_property_tag"/>
                 <field name="original_property_tag"/>
                 <separator/>
@@ -30,7 +32,7 @@
                 <filter string="This Year" name="this_year" domain="[('assignment_date', '&gt;=', (context_today() - relativedelta(month=1, day=1)).strftime('%Y-%m-%d')), ('assignment_date', '&lt;=', (context_today() + relativedelta(month=12, day=31)).strftime('%Y-%m-%d'))]"/>
                 <separator/>
                 <group expand="0" string="Group By">
-                    <filter string="Lead" name="group_by_lead" context="{'group_by': 'lead_score_id'}"/>
+                    <filter string="Lead Name" name="group_by_lead" context="{'group_by': 'lead_name'}"/>
                     <filter string="Assigned Property" name="group_by_assigned_property" context="{'group_by': 'assigned_property_tag'}"/>
                     <filter string="Original Property" name="group_by_original_property" context="{'group_by': 'original_property_tag'}"/>
                     <separator/>
@@ -42,7 +44,7 @@
         </field>     
     </record>
 
-   <record id="view_active_lead_assignment_graph" model="ir.ui.view">
+    <record id="view_active_lead_assignment_graph" model="ir.ui.view">
         <field name="name">active.lead.assignment.graph</field>
         <field name="model">active.lead.assignment</field>
         <field name="arch" type="xml">

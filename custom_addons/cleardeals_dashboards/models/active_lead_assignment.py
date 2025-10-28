@@ -6,7 +6,7 @@ import logging
 _logger = logging.getLogger(__name__)
 
 BIGQUERY_PROJECT_ID = 'cleardeals-459513'
-ASSIGNMENT_TABLE_ID = "active_to_active.odoo_lead_assignments"
+ASSIGNMENT_TABLE_ID = "active_to_active.lead_assignments"
 
 class ActiveLeadAssignment(models.Model):
     _name = "active.lead.assignment"
@@ -14,24 +14,15 @@ class ActiveLeadAssignment(models.Model):
     _order = "assignment_date desc"
 
 
-    lead_score_id = fields.Many2one(
-        'lead.score',
-        string="Lead",
-        readonly=True,
-        required=True,
-        index=True,
-        ondelete='cascade'
-    )
-
-    lead_name = fields.Char(related='lead_score_id.name', string="Lead Name", readonly=True)
-    lead_phone = fields.Char(related='lead_score_id.standardized_phone', string="Lead Phone", readonly=True)
+    lead_phone = fields.Char(string="Lead Phone", readonly=True)
+    lead_name = fields.Char(string="Lead Name", readonly=True)
 
     assigned_property_tag = fields.Char(string="Assigned Property Tag", readonly=True)
     original_property_tag = fields.Char(string="Original Property Tag", readonly=True)
     assignment_date = fields.Date(string="Assignment Date", readonly=True)
 
     _sql_constraints = [
-        ('lead_property_uniq', 'unique(lead_score_id, assigned_property_tag)',
+        ('lead_property_uniq', 'unique(lead_phone, assigned_property_tag)',
         'This lead/Property assignment already exists.')
     ]
 
@@ -50,6 +41,7 @@ class ActiveLeadAssignment(models.Model):
         query = f"""
             SELECT
                 lead_phone,
+                lead_name,
                 assigned_property_tag,
                 original_property_tag,
                 assignment_date
@@ -67,31 +59,26 @@ class ActiveLeadAssignment(models.Model):
             missing_lead_count = 0
 
             for row in results:
-                phone_from_bq = row.lead_phone
-                lead_score_rec = LeadScore.search([('standardized_phone', '=', phone_from_bq)], limit=1)
-
-                if not lead_score_rec:
-                    _logger.warning(f"Skipping assignment: No lead.score found with phone {phone_from_bq}")
-                    missing_lead_count += 1
-                    continue
-                
                 exists = self.search_count([
-                    ('lead_score_id', '=', lead_score_rec.id),
+                    ('lead_phone', '=', row.lead_phone),
                     ('assigned_property_tag', '=', row.assigned_property_tag)
                 ])
 
                 if not exists:
                     try:
                         self.create({
-                            'lead_score_id': lead_score_rec.id,
+                            'lead_phone': row.lead_phone,
+                            'lead_name': row.lead_name,
                             'assigned_property_tag': row.assigned_property_tag,
                             'original_property_tag': row.original_property_tag,
                             'assignment_date': row.assignment_date
                         })
                         created_count += 1
-                    except Exception as create_e:
-                        _logger.error(f"Failed to create assignment for lead {lead_score_rec.id} and property {row.assigned_property_tag}: {create_e}")
+                    except Exception as e:
+                        _logger.error(f"Error creating Active Lead Assignment for lead {row.lead_phone}: {e}")
                         self.env.cr.rollback()
+
+            _logger.info(f"BigQuery data fetch complete. Created {created_count} new assignments. {missing_lead_count} leads missing in lead.score.")
             
         except Exception as e:
             _logger.error(f"Error executing BigQuery query: {e}")

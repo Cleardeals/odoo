@@ -9,7 +9,7 @@ _logger = logging.getLogger(__name__)
 BIGQUERY_PROJECT_ID = "cleardeals-459513"
 # Use the new eligibility log table
 ELIGIBILITY_LOG_TABLE_ID = "cleardeals-459513.active_to_active.daily_eligibility_log"
-ASSIGNMENT_TABLE_ID = "cleardeals-459513.active_to_active.odoo_lead_assignments"
+ASSIGNMENT_TABLE_ID = "cleardeals-459513.active_to_active.lead_assignments"
 
 class PropertyDailyStat(models.Model):
     _name = 'property.daily.stat'
