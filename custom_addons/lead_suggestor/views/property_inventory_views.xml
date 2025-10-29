@@ -93,7 +93,7 @@
                                     <field name="suggested_lead_phone" readonly="1"/>
                                     <field name="contact_type" string="Lead Status" readonly="1"/>
                                     <field name="original_property_tag" readonly="1" string="Liked"/>
-                                    <field name="original_property_similarity" readonly="1" string="Match (%)" widget="progressbar"/>
+                                    <field name="original_property_similarity" readonly="1" string="Match (%)" />
                                     <field name="rm_feedback"/>
                                     <button name="action_log_feedback" type="object"
                                         string="Feedback" icon="fa-pencil-square-o"
