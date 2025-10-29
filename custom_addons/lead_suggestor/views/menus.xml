@@ -1,19 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
-    <!-- 
-      This creates a NEW main application menu icon
-      It is visible *only* to users in our new group.
-    -->
+
     <menuitem 
         id="menu_rm_prospector_root"
-        name="Property Prospector"
+        name="Lead Suggestor"
         web_icon="rm_property_prospector,static/description/icon.png"
         groups="group_property_prospector_rm"
         sequence="6"/>
     
-    <!-- 
-      This is the main action for RMs (shows only "My" records)
-    -->
+
     <menuitem
         id="menu_rm_prospector_dashboard"
         name="My Property Suggestions"
@@ -21,11 +16,6 @@
         action="action_property_inventory_rm"
         sequence="10"/>
 
-    <!-- 
-      NEW: This is the action for Managers (shows "All" records)
-      - Points to a new action: 'action_property_inventory_manager'
-      - Visible only to the new group: 'group_property_prospector_manager'
-    -->
     <menuitem
         id="menu_rm_prospector_manager_dashboard"
         name="All Property Suggestions"

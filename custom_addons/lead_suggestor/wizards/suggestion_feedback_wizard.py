@@ -3,8 +3,7 @@ from odoo import models, fields, api, _
 class SuggestionFeedbackWizard(models.TransientModel):
     _name = "suggestion.feedback.wizard"
     _description = "Wizard to log feedback for a suggested lead"
-    
-    suggestion_id = fields.Many2one('property_lead.suggestion', string="Suggested Lead", required=True)
+    suggestion_id = fields.Many2one('property.lead.suggestion', string="Suggested Lead", required=True)
 
     status = fields.Selection([
         ('new', 'New'),

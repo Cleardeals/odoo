@@ -28,7 +28,7 @@ class PropertyLeadSuggestion(models.Model):
         readonly=True,
         group_operator="avg"
     )
-
+    contact_type = fields.Char(string="Contact Type", readonly=True)
     generation_date = fields.Date(string="Generation Date", readonly=True, default=fields.Date.context_today)
 
     status = fields.Selection([
@@ -86,7 +86,8 @@ class PropertyLeadSuggestion(models.Model):
                 lead_name,
                 original_property_tag,
                 original_property_similarity,
-                generation_date
+                generation_date,
+                current_status
             FROM `{SUGGESTIONS_TABLE_ID}`
             WHERE generation_date >= DATE_SUB(CURRENT_DATE('Asia/Kolkata'), INTERVAL 3 DAY)
         """
@@ -119,6 +120,7 @@ class PropertyLeadSuggestion(models.Model):
                         'original_property_tag': row.original_property_tag,
                         'original_property_similarity': (row.original_property_similarity or 0) * 100.0,
                         'generation_date': row.generation_date,
+                        'contact_type': row.current_status,
                         'status': 'new',
                     })
                     synced_count += 1
