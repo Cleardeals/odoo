@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+        <record id="ir_cron_fetch_lead_assignments" model="ir.cron">
+            <field name="name">Sync: Fetch Lead Assignments from BigQuery</field>
+            <field name="model_id" ref="model_active_lead_assignment"/>
+            <field name="state">code</field>
+            <field name="code">model._cron_fetch_bigquery_data()</field>
+            <field name="user_id" ref="base.user_root"/>
+            <field name="interval_number">1</field>
+            <field name="interval_type">days</field>
+            
+            <field name="nextcall" eval="(DateTime.now() + relativedelta(hours=4)).strftime('%Y-%m-%d 04:00:00')" />
+        </record>
+
+        <record id="ir_cron_sync_property_stats" model="ir.cron">
+            <field name="name">Sync: Property Daily Stats</field>
+            <field name="model_id" ref="model_property_daily_stat"/>
+            <field name="state">code</field>
+            <field name="code">model._cron_sync_daily_stats()</field>
+            <field name="user_id" ref="base.user_root"/>
+            <field name="interval_number">1</field>
+            <field name="interval_type">days</field>
+            <field name="nextcall" eval="(DateTime.now() + relativedelta(hours=4, minutes=5)).strftime('%Y-%m-%d 04:05:00')" />
+        </record>
+
+    </data>
+</odoo>
