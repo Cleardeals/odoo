@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from odoo import models, fields, api, _
 from google.cloud import bigquery
 import logging
@@ -8,52 +9,61 @@ SUGGESTIONS_TABLE_ID = "cleardeals-459513.active_to_active.suggested_leads_for_p
 BIGQUERY_PROJECT_ID = "cleardeals-459513"
 
 class PropertyLeadSuggestion(models.Model):
-    _name = "property.lead.suggestion"
-    _description = "Suggested Leads for a Property"
-    _order = "generation_date desc, status asc"
-    _rec_name = "suggested_lead_phone"
+    _name = 'property.lead.suggestion'
+    _description = 'Suggested Lead for a Property'
+    _order = 'generation_date desc, status asc'
+    _rec_name = 'suggested_lead_phone'
 
-    property_inventory_id = fields.Many2one('property.inventory', string="Property", required=True, ondelete='cascade')
+    property_inventory_id = fields.Many2one(
+        'property.inventory',
+        string="Property",
+        ondelete='cascade',
+        required=True
+    )
+    property_tag = fields.Char(
+        related='property_inventory_id.property_tag',
+        store=True,
+        string="Property Tag"
+    )
 
-    property_tag = fields.Char(related = 'property_inventory_id.property_tag', string="Property Tag", store=True)
-
-    suggested_lead_phone = fields.Char(string="Suggested Lead Phone", required=True, readonly=True)
+    # --- Lead Details ---
+    suggested_lead_phone = fields.Char(string="Lead Phone", readonly=True, required=True)
     lead_name = fields.Char(string="Lead Name", readonly=True)
 
-    # --- Match Details
-    original_property_tag = fields.Char(string="Original Property Tag", readonly=True, required=True)
+    # --- Match Details ---
+    original_property_tag = fields.Char(string="Original Property", readonly=True)
     original_property_similarity = fields.Float(
-        string="Similarity (%)", 
-        digits=(16, 2), 
+        string="Similarity (%)",
+        digits=(16, 2),
         readonly=True,
-        group_operator="avg"
+        aggregator="avg"  # <-- FIX: Changed deprecated 'group_operator' to 'aggregator'
     )
-    contact_type = fields.Char(string="Contact Type", readonly=True)
-    generation_date = fields.Date(string="Generation Date", readonly=True, default=fields.Date.context_today)
+    contact_type = fields.Char(string="Lead's Current Status", readonly=True)
+    generation_date = fields.Date(string="Suggested On", readonly=True, default=fields.Date.context_today)
 
+    # --- RM Feedback Fields ---
     status = fields.Selection([
         ('new', 'New'),
         ('contacted', 'Contacted'),
         ('not_interested', 'Not Interested'),
-        ('interested', 'Interested'),
+        ('interested', 'Interested'), # <-- FIX: Added 'interested' back
         ('converted', 'Converted')
-    ], string="Status", default='new', required=True, index=True)
-
+    ], string="Status", default='new', index=True, required=True)
 
     rm_feedback = fields.Text(string="RM Feedback")
 
     _sql_constraints = [
-        ('prop_lead_uniq', 'unique(property_inventory_id, suggested_lead_phone)', 'This lead has already been suggested for this property.')
+        ('prop_lead_uniq', 'unique(property_inventory_id, suggested_lead_phone)',
+         'This lead is already a suggestion for this property.')
     ]
 
     def action_log_feedback(self):
         """
-        Opens a wizard to log feedback for this suggested lead.
+        Opens a wizard for the RM to log feedback on this suggestion.
         """
-
-        self.ensure_one
+        self.ensure_one() # <-- FIX: Added parentheses () to call the function
         return {
-                        'type': 'ir.actions.act_window',
+            'type': 'ir.actions.act_window',
             'name': _('Log Feedback for %s', self.lead_name or self.suggested_lead_phone),
             'res_model': 'suggestion.feedback.wizard',
             'view_mode': 'form',
@@ -64,21 +74,51 @@ class PropertyLeadSuggestion(models.Model):
                 'default_rm_feedback': self.rm_feedback,
             }
         }
-    
+
     @api.model
     def _cron_sync_suggestions(self):
         """
-        Cron Job: Syncs new suggestions from the BigQuery table.
-        It only fetches suggestions from the last 3 days to keep it efficient.
+        Cron Job: Syncs NEW suggestions from the BigQuery table
+        for the last 3 days, appending only those not already present.
+        
+        --- OPTIMIZED to avoid N+1 query loops ---
         """
-        _logger.info("Starting Lead Suggestions sync...")
+        _logger.info("Starting Optimized Lead Suggestions sync...")
+
         try:
             client = bigquery.Client(project=BIGQUERY_PROJECT_ID)
         except Exception as e:
             _logger.error(f"Failed to create BigQuery client: {e}")
             return
+
+        # --- OPTIMIZATION 1: Fetch all properties into a dictionary ---
+        _logger.info("Fetching all existing properties from Odoo...")
+        try:
+            PropertyInventory = self.env['property.inventory']
+            all_props_recs = PropertyInventory.sudo().search_read([], ['property_tag'])
+            # Create a map of {'property_tag': property_id}
+            property_map = {rec['property_tag']: rec['id'] for rec in all_props_recs}
+            _logger.info(f"Loaded {len(property_map)} properties into memory map.")
+        except Exception as e:
+            _logger.error(f"Failed to fetch property inventory: {e}")
+            return
             
-        # Fetch new suggestions from the last 3 days
+        # --- OPTIMIZATION 2: Fetch all existing suggestion keys into a set ---
+        _logger.info("Fetching all existing suggestion keys from Odoo...")
+        try:
+            existing_sugg_recs = self.sudo().search_read([], ['property_inventory_id', 'suggested_lead_phone'])
+            # Create a set of (property_id, 'lead_phone')
+            existing_keys = {
+                (rec['property_inventory_id'][0], rec['suggested_lead_phone'])
+                for rec in existing_sugg_recs
+            }
+            _logger.info(f"Loaded {len(existing_keys)} existing suggestion keys into memory set.")
+        except Exception as e:
+            _logger.error(f"Failed to fetch existing suggestions: {e}")
+            return
+
+
+        # Fetch suggestions from the last 3 days, including current_status
         query = f"""
             SELECT
                 active_property_tag,
@@ -91,44 +131,64 @@ class PropertyLeadSuggestion(models.Model):
             FROM `{SUGGESTIONS_TABLE_ID}`
             WHERE generation_date >= DATE_SUB(CURRENT_DATE('Asia/Kolkata'), INTERVAL 3 DAY)
         """
-        
+
         try:
+            _logger.info("Querying BigQuery for recent suggestions...")
             query_job = client.query(query)
-            results = query_job.result()
-            
-            PropertyInventory = self.env['property.inventory']
-            synced_count = 0
-            
+            results = list(query_job.result())
+            _logger.info(f"Fetched {len(results)} suggestions from BigQuery.")
+
+            vals_to_create = []
+            skipped_prop_not_found = 0
+            skipped_already_exists = 0
+
             for row in results:
-                # Find the parent property in Odoo
-                prop = PropertyInventory.search([('property_tag', '=', row.active_property_tag)], limit=1)
-                if not prop:
-                    _logger.warning(f"Skipping suggestion, property '{row.active_property_tag}' not found in Odoo.")
+                # Basic validation
+                if not row.active_property_tag or not row.suggested_lead_phone:
                     continue
+
+                # --- OPTIMIZED LOOKUP (Fast) ---
+                # Find the parent property ID from our Python dictionary
+                prop_id = property_map.get(row.active_property_tag)
                 
-                # Check if this suggestion already exists
-                existing = self.search([
-                    ('property_inventory_id', '=', prop.id),
-                    ('suggested_lead_phone', '=', row.suggested_lead_phone)
-                ], limit=1)
+                if not prop_id:
+                    _logger.warning(f"Skipping suggestion, property '{row.active_property_tag}' not found in Odoo property map.")
+                    skipped_prop_not_found += 1
+                    continue
+
+                # --- OPTIMIZED LOOKUP (Fast) ---
+                # Check if this suggestion key is in our Python set
+                suggestion_key = (prop_id, row.suggested_lead_phone)
                 
-                if not existing:
-                    self.create({
-                        'property_inventory_id': prop.id,
-                        'suggested_lead_phone': row.suggested_lead_phone,
-                        'lead_name': row.lead_name,
-                        'original_property_tag': row.original_property_tag,
-                        'original_property_similarity': (row.original_property_similarity or 0) * 100.0,
-                        'generation_date': row.generation_date,
-                        'contact_type': row.current_status,
-                        'status': 'new',
-                    })
-                    synced_count += 1
-            
-            _logger.info(f"Successfully synced {synced_count} new lead suggestions.")
+                if suggestion_key in existing_keys:
+                    skipped_already_exists += 1
+                    continue
+
+                # If we reach here, it's a new suggestion. Add to our batch list.
+                vals_to_create.append({
+                    'property_inventory_id': prop_id,
+                    'suggested_lead_phone': row.suggested_lead_phone,
+                    'lead_name': row.lead_name,
+                    'original_property_tag': row.original_property_tag,
+                    'original_property_similarity': (row.original_property_similarity or 0.0) * 100.0,
+                    'generation_date': row.generation_date,
+                    'contact_type': row.current_status,
+                    'status': 'new',
+                })
+                # Add the key to our set so we don't add it twice *in this run*
+                existing_keys.add(suggestion_key)
+
+            # --- OPTIMIZATION 3: Create all new records in one batch ---
+            if vals_to_create:
+                _logger.info(f"Creating {len(vals_to_create)} new suggestions in a batch...")
+                self.sudo().create(vals_to_create)
+                _logger.info("Batch creation complete.")
+            else:
+                _logger.info("No new suggestions to create.")
+
+            _logger.info(f"Lead Suggestions Sync Summary: Created {len(vals_to_create)} new suggestions. Skipped {skipped_prop_not_found} (prop not found). Skipped {skipped_already_exists} (already exists).")
 
         except Exception as e:
-            _logger.error(f"Error during Lead Suggestions sync: {e}")
+            _logger.error(f"Error during Lead Suggestions sync BQ query or processing: {e}")
             self.env.cr.rollback()
-
 
