@@ -1,30 +1,31 @@
 {
     'name': "Lead Scoring",
     'version': '1.0',
-    'depends': ['base', 'web', 'mail'],  # Added 'web' for UI components like kanban and list views
+    'depends': ['base', 'web', 'mail'], # 'crm' is NOT needed
     'author': "Nirat Patel",
     'category': 'Sales',
-    'description': "Manages ML-based lead scoring for RMs.",
-    # In /mnt/extra-addons/custom/leads/__manifest__.py
+    'description': "Manages ML-based lead scoring and CSV lead imports for RMs.",
     'data': [
+        # Security (Load First)
         'security/security.xml',
         'security/ir.model.access.csv',
+
+        # Data
         'data/ir_config_parameter_data.xml',
         'data/lead_score_cron.xml',
 
-        # Defines the wizard's action first, as other views depend on it.
+        # Wizard Views (Load before models that use them)
         'views/lead_score_bq_wizard_views.xml',
+        'views/lead_csv_import_wizard_views.xml', # <-- Correct path
 
-        # Defines the main lead score views and actions, which use the wizard action.
+        # Model Views (Load before menus)
         'views/lead_score_views.xml',
-
-        # Loads all menu items last, as they depend on all the actions defined above.
-        'views/lead_score_menu.xml',
-
-        # Defines the views for the separate WhatsApp model.
         'views/whatsapp_response_views.xml',
-
-        # Inherits from lead_score_views to add WhatsApp features.
         'views/whatsapp_response_inherit_views.xml',
+        'views/imported_lead_views.xml', 
+
+        # Menu items (Load Last)
+        'views/lead_score_menu.xml', # <-- Must be last
     ],
 }
+

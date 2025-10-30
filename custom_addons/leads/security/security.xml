@@ -45,6 +45,29 @@
             <field name="domain_force">[(1, '=', 1)]</field>
             <field name="groups" eval="[(4, ref('group_lead_score_manager'))]"/>
         </record>
+
+
+        <record id="imported_lead_rm_rule" model="ir.rule">
+            <field name="name">Imported Leads: RM - Own Leads Only</field>
+            <field name="model_id" ref="model_imported_lead"/>
+            <field name="domain_force">[('rm_user_id', '=', user.id)]</field>
+            <field name="groups" eval="[(4, ref('leads.group_lead_score_rm'))]"/>
+            <field name="perm_read" eval="True"/>
+            <field name="perm_write" eval="True"/>
+            <field name="perm_create" eval="True"/>
+            <field name="perm_unlink" eval="True"/>
+        </record>
+
+        <record id="imported_lead_manager_rule" model="ir.rule">
+            <field name="name">Imported Leads: Manager - All Leads</field>
+            <field name="model_id" ref="model_imported_lead"/>
+            <field name="domain_force">[(1, '=', 1)]</field>
+            <field name="groups" eval="[(4, ref('leads.group_lead_score_manager'))]"/>
+            <field name="perm_read" eval="True"/>
+            <field name="perm_write" eval="True"/>
+            <field name="perm_create" eval="True"/>
+            <field name="perm_unlink" eval="True"/>
+        </record>
         
     </data>
 </odoo>
