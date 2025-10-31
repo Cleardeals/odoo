@@ -6,7 +6,7 @@ import logging
 
 _logger = logging.getLogger(__name__)
 
-# --- CONFIG: Pointing to Customer_Data as the main source ---
+# --- Pointing to Customer_Data as the main source ---
 MASTER_PROPERTY_TABLE = "cleardeals-459513.cleardeals_dataset.Customer_Data"
 BIGQUERY_PROJECT_ID = "cleardeals-459513"
 
@@ -60,7 +60,8 @@ class PropertyInventory(models.Model):
         Cron Job: Syncs ACTIVE properties from BigQuery Customer_Data.
         1. Gets LATEST record for each Tag (deduplication by Created_Date DESC)
         2. Calculates status: Sold/Expired/Active
-        3. Only syncs properties with status = 'Active'
+        3. Syncs properties with status = 'Active' using an UPSERT strategy.
+        4. Deactivates properties in Odoo that are no longer 'Active' in BigQuery.
         """
         _logger.info("Starting ACTIVE Property Inventory sync from BigQuery Customer_Data...")
         
@@ -68,25 +69,6 @@ class PropertyInventory(models.Model):
             client = bigquery.Client(project=BIGQUERY_PROJECT_ID)
         except Exception as e:
             _logger.error(f"Failed to create BigQuery client: {e}")
-            return
-
-        # --- DELETE EXISTING DATA FIRST ---
-        try:
-            _logger.info("Deleting ALL existing property lead suggestions...")
-            suggestions_to_delete = self.env['property.lead.suggestion'].search([])
-            suggestions_to_delete.unlink()
-            _logger.info(f"Deleted {len(suggestions_to_delete)} suggestions.")
-
-            _logger.info("Deleting ALL existing property inventory records...")
-            inventory_to_delete = self.env['property.inventory'].search([])
-            inventory_to_delete.unlink()
-            _logger.info(f"Deleted {len(inventory_to_delete)} inventory records.")
-            
-            # Commit the deletions before proceeding
-            self.env.cr.commit()
-        except Exception as delete_err:
-            _logger.error(f"Error deleting existing records: {delete_err}")
-            self.env.cr.rollback()
             return
 
         query = f"""
@@ -148,16 +130,28 @@ class PropertyInventory(models.Model):
             _logger.info(f"✅ Fetched {len(results)} active properties from BigQuery.")
             
             Users = self.env['res.users']
-            synced_count = 0
+            
+            # --- Fetch all existing properties for comparison ---
+            _logger.info("Fetching existing properties from Odoo...")
+            existing_props = self.search_read([], ['property_tag', 'is_active'])
+            # Create a map for quick lookup: {'TAG-123': {'id': 1, 'is_active': True}, ...}
+            existing_props_map = {prop['property_tag']: prop for prop in existing_props}
+            _logger.info(f"Found {len(existing_props_map)} existing properties in Odoo.")
+            
+            # --- Counters ---
+            created_count = 0
+            updated_count = 0
             skipped_null_date = 0
             missing_rm_count = 0
-            processed_tags = set()
+            bq_active_tags = set() 
 
             for row in results:
                 # Basic validation
-                if not row.property_tag or row.property_tag in processed_tags:
+                if not row.property_tag:
                     continue
-                processed_tags.add(row.property_tag)
+                
+                # Add to set of active tags
+                bq_active_tags.add(row.property_tag)
 
                 if row.expiry_date is None:
                     skipped_null_date += 1
@@ -175,8 +169,8 @@ class PropertyInventory(models.Model):
                             if rm_user:
                                 rm_user_id = rm_user.id
                             else:
-                                missing_rm_count += 1
                                 _logger.warning(f"Property '{row.property_tag}': RM '{clean_rm_name}' not found in Odoo Users.")
+                                missing_rm_count += 1 
                     except Exception as user_search_err:
                         _logger.error(f"Error searching for RM user '{assigned_rm_name}': {user_search_err}")
 
@@ -185,16 +179,20 @@ class PropertyInventory(models.Model):
                 service_expiry_date_str = row.Service_Expiry_Date if row.Service_Expiry_Date else ''
                 
                 try:
-                    # BigQuery returns date objects directly
                     if isinstance(row.expiry_date, str):
                         service_expiry_date = datetime.strptime(row.expiry_date, '%Y-%m-%d').date()
                     else:
                         service_expiry_date = row.expiry_date
+                    
+                    if not service_expiry_date: # Double check after conversion
+                        _logger.warning(f"Property '{row.property_tag}': Failed to parse date '{row.Service_Expiry_Date}'")
+                        skipped_null_date += 1
+                        continue
                 except Exception as date_err:
                     _logger.warning(f"Property '{row.property_tag}': Error converting expiry date: {date_err}")
                     continue
 
-                # Prepare values for creation
+                # Prepare values for creation/update
                 vals = {
                     'property_tag': row.property_tag,
                     'owner_name': row.owner_name if row.owner_name else '',
@@ -202,27 +200,72 @@ class PropertyInventory(models.Model):
                     'rm_user_id': rm_user_id,
                     'service_expiry_date': service_expiry_date,
                     'service_expiry_date_str': service_expiry_date_str,
-                    'is_active': True,
+                    'is_active': True, # Mark as active since it came from the 'Active' BQ query
                 }
 
-                # Create the property record
+                # --- Upsert Logic ---
+                existing_prop_data = existing_props_map.get(row.property_tag)
+                
                 try:
-                    self.create(vals)
-                    synced_count += 1
+                    if existing_prop_data:
+                        # UPDATE existing property
+                        prop_id = existing_prop_data['id']
+                        prop_record = self.browse(prop_id)
+                        prop_record.write(vals)
+                        updated_count += 1
+                    else:
+                        # CREATE new property
+                        self.create(vals)
+                        created_count += 1
+                
+                    # Commit periodically to avoid long transactions 
+                    if (created_count + updated_count) % 100 == 0:
+                        self.env.cr.commit()
+                
                 except Exception as db_err:
-                    _logger.error(f"Database error creating property '{row.property_tag}': {db_err}")
+                    _logger.error(f"Database error processing property '{row.property_tag}': {db_err}")
                     self.env.cr.rollback()
-                    self.env.cr.commit()
+                    continue
+            
+            # ---  Deactivation step ---
+            _logger.info("Deactivating properties that are no longer active in BigQuery...")
+            tags_in_odoo = set(existing_props_map.keys())
+            tags_to_deactivate = tags_in_odoo - bq_active_tags
+            deactivated_count = 0
+            
+            if tags_to_deactivate:
+                prop_ids_to_deactivate = []
+                for tag in tags_to_deactivate:
+                    prop_data = existing_props_map[tag]
+                    # Only deactivate if it's currently marked active
+                    if prop_data['is_active']:
+                        prop_ids_to_deactivate.append(prop_data['id'])
+                
+                if prop_ids_to_deactivate:
+                    try:
+                        properties_to_deactivate = self.browse(prop_ids_to_deactivate)
+                        properties_to_deactivate.write({'is_active': False})
+                        deactivated_count = len(properties_to_deactivate)
+                        _logger.info(f"Successfully deactivated {deactivated_count} properties.")
+                    except Exception as deactivation_err:
+                        _logger.error(f"Error deactivating properties: {deactivation_err}")
+                        self.env.cr.rollback()
 
+            # --- Final Summary ---
             _logger.info(f"")
             _logger.info(f"========== Property Inventory Sync Summary ==========")
             _logger.info(f"  Total records fetched from BQ: {len(results)}")
-            _logger.info(f"  Processed unique tags: {len(processed_tags)}")
-            _logger.info(f"  Successfully created: {synced_count}")
+            _logger.info(f"  Processed BQ tags: {len(bq_active_tags)}")
+            _logger.info(f"  Successfully created: {created_count}")
+            _logger.info(f"  Successfully updated: {updated_count}")
+            _logger.info(f"  Deactivated (Sold/Expired): {deactivated_count}")
             _logger.info(f"  Skipped (NULL expiry date): {skipped_null_date}")
             if missing_rm_count > 0:
-                _logger.warning(f"  Missing RM assignments: {missing_rm_count}")
+                _logger.warning(f"  Missing RM assignments (warnings): {missing_rm_count}")
             _logger.info(f"=====================================================")
+            
+            # Final commit
+            self.env.cr.commit()
 
         except Exception as e:
             _logger.error(f"Error during Property Inventory sync: {e}")
