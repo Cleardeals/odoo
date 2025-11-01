@@ -6,7 +6,7 @@ import logging
 
 _logger = logging.getLogger(__name__)
 
-# --- CONFIG: Pointing to Customer_Data as the main source ---
+# --- Pointing to Customer_Data as the main source ---
 MASTER_PROPERTY_TABLE = "cleardeals-459513.cleardeals_dataset.Customer_Data"
 BIGQUERY_PROJECT_ID = "cleardeals-459513"
 
@@ -22,6 +22,8 @@ class PropertyInventory(models.Model):
     rm_user_id = fields.Many2one('res.users', string="Assigned RM", readonly=True, index=True)
     service_expiry_date = fields.Date(string="Service Expiry Date", readonly=True, index=True)
     service_expiry_date_str = fields.Char(string="Expiry Date (Display)", readonly=True)
+
+    welcome_call_date = fields.Date(string="Welcome Call Date", readonly=True, index=True)
     
     # Status field to track if property is active
     is_active = fields.Boolean(string="Is Active", default=True, readonly=True, index=True)
@@ -98,6 +100,11 @@ class PropertyInventory(models.Model):
                         SAFE.PARSE_DATE('%d/%m/%Y', Service_Expiry_Date),
                         SAFE.PARSE_DATE('%d-%m-%Y', Service_Expiry_Date)
                     ) as expiry_date,
+                    -- Parse welcome call date with both formats
+                    COALESCE(
+                        SAFE.PARSE_DATE('%d/%m/%Y', Welcome_Call_Date),
+                        SAFE.PARSE_DATE('%d-%m-%Y', Welcome_Call_Date)
+                    ) as welcome_call_date,
                     CASE
                         WHEN Property_Status IN ('Sold-CD', 'Sold-Others', 'Rented-CD') THEN 'Sold'
                         WHEN COALESCE(
@@ -117,6 +124,7 @@ class PropertyInventory(models.Model):
                 assigned_rm,
                 Service_Expiry_Date,
                 expiry_date,
+                welcome_call_date,
                 calculated_status
             FROM PropertiesWithStatus
             WHERE calculated_status = 'Active'
@@ -192,6 +200,18 @@ class PropertyInventory(models.Model):
                     _logger.warning(f"Property '{row.property_tag}': Error converting expiry date: {date_err}")
                     continue
 
+                
+                welcome_call_date = None
+                try:
+                    if row.welcome_call_date:
+                        if isinstance(row.welcome_call_date, str):
+                            welcome_call_date = datetime.strptime(row.welcome_call_date, '%Y-%m-%d').date()
+                        else:
+                            welcome_call_date = row.welcome_call_date
+                except Exception as welcome_date_err:
+                    _logger.warning(f"Property '{row.property_tag}': Error converting welcome call date: {welcome_date_err}")
+                    welcome_call_date = None
+
                 # Prepare values for creation/update
                 vals = {
                     'property_tag': row.property_tag,
@@ -200,6 +220,7 @@ class PropertyInventory(models.Model):
                     'rm_user_id': rm_user_id,
                     'service_expiry_date': service_expiry_date,
                     'service_expiry_date_str': service_expiry_date_str,
+                    'welcome_call_date': welcome_call_date,
                     'is_active': True, # Mark as active since it came from the 'Active' BQ query
                 }
 
@@ -226,6 +247,7 @@ class PropertyInventory(models.Model):
                     _logger.error(f"Database error processing property '{row.property_tag}': {db_err}")
                     self.env.cr.rollback()
                     continue
+            
             
             # ---  Deactivation step ---
             _logger.info("Deactivating properties that are no longer active in BigQuery...")
