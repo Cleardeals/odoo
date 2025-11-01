@@ -2,6 +2,7 @@
 from odoo import models, fields, api, _
 from google.cloud import bigquery
 import logging
+import re
 
 _logger = logging.getLogger(__name__)
 
@@ -27,6 +28,11 @@ class PropertyLeadSuggestion(models.Model):
     )
     
     suggested_lead_phone = fields.Char(string="Lead Phone", readonly=True, required=True)
+    suggested_lead_phone_whatsapp_url = fields.Char(
+        string="WhatsApp URL",
+        compute='_compute_suggested_lead_phone_whatsapp_url',
+        store=False  # No need to store, it's always dynamic
+    )
     lead_name = fields.Char(string="Lead Name", readonly=True)
 
     original_property_tag = fields.Char(string="Original Property", readonly=True)
@@ -56,6 +62,40 @@ class PropertyLeadSuggestion(models.Model):
         ('prop_lead_uniq', 'unique(property_inventory_id, suggested_lead_phone)',
          'This lead is already a suggestion for this property.')
     ]
+
+    @api.depends('suggested_lead_phone')
+    def _compute_suggested_lead_phone_whatsapp_url(self):
+        """
+        Generates a sane WhatsApp URL, prepending '91' if a 10-digit
+        Indian number is detected.
+        """
+        for rec in self:
+            if not rec.suggested_lead_phone:
+                rec.suggested_lead_phone_whatsapp_url = False
+                continue
+
+            # 1. Clean all non-numeric characters
+            sane_phone = re.sub(r'\D', '', rec.suggested_lead_phone)
+            
+            number_to_use = False
+            
+            # 2. Check for common Indian number formats
+            if len(sane_phone) == 10:
+                # e.g., 9876543210 -> 919876543210
+                number_to_use = f"91{sane_phone}"
+            elif len(sane_phone) == 12 and sane_phone.startswith('91'):
+                # e.g., 919876543210 -> 919876543210 (already correct)
+                number_to_use = sane_phone
+            elif len(sane_phone) == 11 and sane_phone.startswith('0'):
+                # e.g., 09876543210 -> 919876543210
+                number_to_use = f"91{sane_phone[1:]}"
+            
+            # 3. If a valid format was found, create the URL
+            if number_to_use:
+                rec.suggested_lead_phone_whatsapp_url = f"https://api.whatsapp.com/send?phone={number_to_use}"
+            else:
+                # Not a recognizable format, so don't create a link
+                rec.suggested_lead_phone_whatsapp_url = False
 
     def action_log_feedback(self):
         """
