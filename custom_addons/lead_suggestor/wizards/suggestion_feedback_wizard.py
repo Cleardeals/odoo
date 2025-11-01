@@ -8,9 +8,12 @@ class SuggestionFeedbackWizard(models.TransientModel):
     status = fields.Selection([
         ('new', 'New'),
         ('contacted', 'Contacted'),
+        ('details_shared_of_property', 'Details Shared of Property'),
         ('not_interested', 'Not Interested'),
-        ('converted', 'Converted')
-    ], string="Status", required=True)
+        ('interested', 'Interested'), 
+        ('converted', 'Converted'),
+        ('other', 'Other'),
+    ], string="Status", default='new', index=True, required=True)
     
     rm_feedback = fields.Text(string="RM Feedback")
 
