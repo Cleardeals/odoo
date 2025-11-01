@@ -25,18 +25,16 @@ class PropertyLeadSuggestion(models.Model):
         store=True,
         string="Property Tag"
     )
-
-    # --- Lead Details ---
+    
     suggested_lead_phone = fields.Char(string="Lead Phone", readonly=True, required=True)
     lead_name = fields.Char(string="Lead Name", readonly=True)
 
-    # --- Match Details ---
     original_property_tag = fields.Char(string="Original Property", readonly=True)
     original_property_similarity = fields.Float(
         string="Similarity (%)",
         digits=(16, 2),
         readonly=True,
-        aggregator="avg"  # <-- FIX: Changed deprecated 'group_operator' to 'aggregator'
+        aggregator="avg"  
     )
     contact_type = fields.Char(string="Lead's Current Status", readonly=True)
     generation_date = fields.Date(string="Suggested On", readonly=True, default=fields.Date.context_today)
@@ -45,9 +43,11 @@ class PropertyLeadSuggestion(models.Model):
     status = fields.Selection([
         ('new', 'New'),
         ('contacted', 'Contacted'),
+        ('details_shared_of_property', 'Details Shared of Property'),
         ('not_interested', 'Not Interested'),
-        ('interested', 'Interested'), # <-- FIX: Added 'interested' back
-        ('converted', 'Converted')
+        ('interested', 'Interested'), 
+        ('converted', 'Converted'),
+        ('other', 'Other'),
     ], string="Status", default='new', index=True, required=True)
 
     rm_feedback = fields.Text(string="RM Feedback")
@@ -61,7 +61,7 @@ class PropertyLeadSuggestion(models.Model):
         """
         Opens a wizard for the RM to log feedback on this suggestion.
         """
-        self.ensure_one() # <-- FIX: Added parentheses () to call the function
+        self.ensure_one() 
         return {
             'type': 'ir.actions.act_window',
             'name': _('Log Feedback for %s', self.lead_name or self.suggested_lead_phone),
