@@ -3,6 +3,7 @@ from odoo import models, fields, api, _
 from google.cloud import bigquery
 import logging
 import re
+from urllib.parse import quote # (This import is no longer needed, but safe to keep)
 
 _logger = logging.getLogger(__name__)
 
@@ -32,6 +33,11 @@ class PropertyLeadSuggestion(models.Model):
         string="WhatsApp URL",
         compute='_compute_suggested_lead_phone_whatsapp_url',
         store=False  # No need to store, it's always dynamic
+    )
+    suggested_lead_phone_html = fields.Html(
+        string="Lead Phone",
+        compute='_compute_suggested_lead_phone_html',
+        store=False
     )
     lead_name = fields.Char(string="Lead Name", readonly=True)
 
@@ -66,8 +72,8 @@ class PropertyLeadSuggestion(models.Model):
     @api.depends('suggested_lead_phone')
     def _compute_suggested_lead_phone_whatsapp_url(self):
         """
-        Generates a sane WhatsApp URL, prepending '91' if a 10-digit
-        Indian number is detected.
+        Generates a WhatsApp URL using whatsapp:// protocol, prepending '91' 
+        if a 10-digit Indian number is detected.
         """
         for rec in self:
             if not rec.suggested_lead_phone:
@@ -92,11 +98,36 @@ class PropertyLeadSuggestion(models.Model):
             
             # 3. If a valid format was found, create the URL
             if number_to_use:
-                rec.suggested_lead_phone_whatsapp_url = f"https://api.whatsapp.com/send?phone={number_to_use}"
+                # Use whatsapp:// protocol for direct desktop app opening
+                rec.suggested_lead_phone_whatsapp_url = f"whatsapp://send?phone={number_to_use}"
             else:
                 # Not a recognizable format, so don't create a link
                 rec.suggested_lead_phone_whatsapp_url = False
 
+    # --- MODIFIED FUNCTION ---
+    @api.depends('suggested_lead_phone', 'suggested_lead_phone_whatsapp_url')
+    def _compute_suggested_lead_phone_html(self):
+        """
+        Creates a simple WhatsApp link to open the desktop app.
+        """
+        for rec in self:
+            phone_display = rec.suggested_lead_phone or ''
+            
+            if rec.suggested_lead_phone_whatsapp_url:
+                # Get the whatsapp:// URL
+                whatsapp_url = rec.suggested_lead_phone_whatsapp_url
+                
+                # Create simple HTML link
+                rec.suggested_lead_phone_html = \
+                    f'<a href="{whatsapp_url}" ' \
+                    f'title="Click to open WhatsApp" ' \
+                    f'style="text-decoration: none; cursor: pointer;">' \
+                    f'<i class="fa fa-whatsapp" style="color:green; font-size: 16px;"/> {phone_display}</a>'
+            else:
+                # Otherwise, just show the plain phone number
+                rec.suggested_lead_phone_html = phone_display
+    
+            
     def action_log_feedback(self):
         """
         Opens a wizard for the RM to log feedback on this suggestion.
@@ -231,4 +262,3 @@ class PropertyLeadSuggestion(models.Model):
         except Exception as e:
             _logger.error(f"Error during Lead Suggestions sync BQ query or processing: {e}")
             self.env.cr.rollback()
-
