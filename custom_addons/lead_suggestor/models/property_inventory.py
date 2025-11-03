@@ -28,6 +28,13 @@ class PropertyInventory(models.Model):
     # Status field to track if property is active
     is_active = fields.Boolean(string="Is Active", default=True, readonly=True, index=True)
 
+    # --- NEW FIELDS ---
+    bhk = fields.Char(string="BHK", readonly=True)
+    location = fields.Char(string="Location", readonly=True)
+    city = fields.Char(string="City", readonly=True)
+    property_link = fields.Char(string="Property Link", readonly=True)
+    # ------------------
+
     suggestion_ids = fields.One2many(
         'property.lead.suggestion',
         'property_inventory_id',
@@ -95,6 +102,13 @@ class PropertyInventory(models.Model):
                     Assignee AS assigned_rm,
                     Service_Expiry_Date,
                     Property_Status,
+
+                    -- NEW FIELDS TO PULL FROM BQ --
+                    BHK,
+                    Location,
+                    City1 AS city,
+                    Property_Link,
+                    
                     -- Parse expiry date with both formats
                     COALESCE(
                         SAFE.PARSE_DATE('%d/%m/%Y', Service_Expiry_Date),
@@ -125,7 +139,14 @@ class PropertyInventory(models.Model):
                 Service_Expiry_Date,
                 expiry_date,
                 welcome_call_date,
-                calculated_status
+                calculated_status,
+
+                -- NEW FIELDS TO SELECT --
+                BHK,
+                Location,
+                city,
+                Property_Link
+
             FROM PropertiesWithStatus
             WHERE calculated_status = 'Active'
             ORDER BY expiry_date ASC NULLS LAST
@@ -222,6 +243,12 @@ class PropertyInventory(models.Model):
                     'service_expiry_date_str': service_expiry_date_str,
                     'welcome_call_date': welcome_call_date,
                     'is_active': True, # Mark as active since it came from the 'Active' BQ query
+
+                    # --- NEW FIELDS TO SAVE ---
+                    'bhk': row.BHK if row.BHK else '',
+                    'location': row.Location if row.Location else '',
+                    'city': row.city if row.city else '',
+                    'property_link': row.Property_Link if row.Property_Link else '',
                 }
 
                 # --- Upsert Logic ---
