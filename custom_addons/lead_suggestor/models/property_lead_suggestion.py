@@ -127,6 +127,84 @@ class PropertyLeadSuggestion(models.Model):
                 # Otherwise, just show the plain phone number
                 rec.suggested_lead_phone_html = phone_display
     
+
+    def action_whatsapp_with_copy(self):
+        """
+        This action prepares the data and calls a Client Action
+        to handle the copying and link opening.
+        """
+        self.ensure_one()
+        
+        if not self.suggested_lead_phone_whatsapp_url:
+            return
+
+        whatsapp_url = self.suggested_lead_phone_whatsapp_url
+        
+        # --- ACCESS THE NEW PROPERTY FIELDS ---
+        prop = self.property_inventory_id
+        
+        # Get property details
+        prop_bhk = prop.bhk or "a property" # Fallback if BHK is empty
+        prop_location = prop.location or ""
+        prop_city = prop.city or ""
+        prop_link = prop.property_link or ""
+        
+        # Get lead's name for a personal touch
+        lead_name = self.lead_name or "there"
+        if ' ' in lead_name:
+             lead_name = lead_name.split(' ')[0] # Use first name only
+
+        # --- NEW: Clean the location string ---
+        # This removes prefixes like "A-", "B-", etc.
+        if prop_location:
+            # Replaces a pattern like "A-" at the start of the string with ""
+            prop_location = re.sub(r'^[A-Z]-', '', prop_location)
+        # ------------------------------------
+
+        # Build location string, e.g., "Maninagar, Ahmedabad"
+        location_parts = []
+        if prop_location:
+            location_parts.append(prop_location)
+        if prop_city:
+            location_parts.append(prop_city)
+        location_str = ", ".join(location_parts)
+        
+        if not location_str:
+            location_str = "your area"
+
+        # 💬 YOUR NEW MESSAGE TEMPLATE
+        message_parts = [
+            f"Hey {lead_name}! 👋\n",
+            f"Looking for {prop_bhk} in {location_str}? 🏡\n",
+            "A new property matching your needs just went live — act fast before it’s taken!\n",
+        ]
+
+        # Add link only if it exists
+        if prop_link:
+            message_parts.append(f"💬 Click here more details: {prop_link}\n")
+        else:
+            message_parts.append("💬 Reply 'Hi' for more details!\n") 
+
+        # Add the static footer
+        message_parts.extend([
+            "Cleardeals Advantage:",
+            "0% Brokerage | Verified Properties | Faster Closures\n",
+            "Reply \"Hi\" to get more details"
+        ])
+
+        # Join all parts with newlines
+        message_text = "\n".join(message_parts)
+        
+        # Return an action that calls our JavaScript
+        return {
+            'type': 'ir.actions.client',
+            'tag': 'whatsapp_with_copy', 
+            'target': 'new',
+            'context': {
+                'whatsapp_url': whatsapp_url,
+                'message_text': message_text,
+            }
+        }
             
     def action_log_feedback(self):
         """

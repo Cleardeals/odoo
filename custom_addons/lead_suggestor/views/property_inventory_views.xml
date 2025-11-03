@@ -121,10 +121,16 @@
                                            decoration-info="status == 'new'"/>
                                     <field name="generation_date" readonly="1"/>
                                     <field name="lead_name" readonly="1"/>
-                                    <field name="suggested_lead_phone_html" 
-                                        widget="html" 
-                                        readonly="1" 
-                                        string="Lead Phone"/>
+    
+                                        <field name="suggested_lead_phone" readonly="1" string="Lead Phone"/>
+                                                                              
+                                        <button name="action_whatsapp_with_copy"
+                                            type="object"
+                                            icon="fa-whatsapp"
+                                            title="Chat on WhatsApp (and copy message)"
+                                            class="btn-link" 
+                                            attrs="{'invisible': [('suggested_lead_phone_whatsapp_url', '=', False)]}"/>
+
                                     <field name="contact_type" string="Lead Status" readonly="1"/>
                                     <field name="original_property_tag" readonly="1" string="Liked"/>
                                     <field name="original_property_similarity" readonly="1" string="Match (%)" />
