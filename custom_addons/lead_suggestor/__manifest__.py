@@ -15,6 +15,7 @@
     'category': 'Operations',
     'depends': [
         'base', 
+        'web',
     ],
     'data': [
         # Security
@@ -33,7 +34,9 @@
 
     ],
     'assets': {
-        'web.assets_backend': [],
+        'web.assets_backend': [
+            'lead_suggestor/static/src/js/whatsapp_action.js'
+        ],
     },
     'installable': True,
     'application': True,
