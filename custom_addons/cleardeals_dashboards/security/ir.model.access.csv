@@ -1,3 +1,5 @@
 id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
 access_active_lead_assignment_manager,active.lead.assignment dashboard manager,model_active_lead_assignment,cleardeals_dashboards.group_dashboard_manager,1,0,0,0
 access_property_daily_stat_manager,property.daily.stat dashboard manager,model_property_daily_stat,cleardeals_dashboards.group_dashboard_manager,1,0,0,0
+access_property_inventory_dashboard_manager,property.inventory dashboard manager,lead_suggestor.model_property_inventory,cleardeals_dashboards.group_dashboard_manager,1,0,0,0
+access_property_lead_suggestion_dashboard_manager,property.lead.suggestion dashboard manager,lead_suggestor.model_property_lead_suggestion,cleardeals_dashboards.group_dashboard_manager,1,0,0,0

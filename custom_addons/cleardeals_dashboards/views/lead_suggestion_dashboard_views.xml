@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_property_lead_suggestion_search_dashboard" model="ir.ui.view">
+        <field name="name">property.lead.suggestion.search.dashboard</field>
+        <field name="model">property.lead.suggestion</field>
+        <field name="arch" type="xml">
+            <search string="Search Suggestions">
+                <field name="property_tag"/>
+                <field name="rm_user_id"/>
+                <field name="suggested_lead_phone"/>
+                <field name="lead_name"/>
+                <separator/>
+                <filter string="New" name="filter_new" domain="[('status', '=', 'new')]"/>
+                <filter string="Contacted" name="filter_contacted" domain="[('status', '=', 'contacted')]"/>
+                <filter string="Interested" name="filter_interested" domain="[('status', '=', 'interested')]"/>
+                <filter string="Converted" name="filter_converted" domain="[('status', '=', 'converted')]"/>
+                <filter string="Not Interested" name="filter_not_interested" domain="[('status', '=', 'not_interested')]"/>
+                <separator/>
+                <filter string="Suggested Today" name="today" domain="[('generation_date', '=', context_today())]"/>
+                <filter string="Suggested This Week" name="this_week" domain="[('generation_date', '&gt;=', (context_today() - relativedelta(weeks=1, weekday=0)).strftime('%Y-%m-%d')), ('generation_date', '&lt;=', (context_today() + relativedelta(weeks=0, weekday=6)).strftime('%Y-%m-%d'))]"/>
+                <filter string="Suggested This Month" name="this_month" domain="[('generation_date', '&gt;=', (context_today() - relativedelta(day=1)).strftime('%Y-%m-%d'))]"/>
+                <separator/>
+                <group expand="0" string="Group By">
+                    <filter string="Assigned RM" name="group_by_rm" context="{'group_by': 'rm_user_id'}"/>
+                    <filter string="Property" name="group_by_property" context="{'group_by': 'property_tag'}"/>
+                    <filter string="Status" name="group_by_status" context="{'group_by': 'status'}"/>
+                    <separator/>
+                    <filter string="Generation Date: Day" name="group_by_date_day" context="{'group_by': 'generation_date:day'}"/>
+                    <filter string="Generation Date: Month" name="group_by_date_month" context="{'group_by': 'generation_date:month'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="view_property_lead_suggestion_pivot_dashboard" model="ir.ui.view">
+        <field name="name">property.lead.suggestion.pivot.dashboard</field>
+        <field name="model">property.lead.suggestion</field>
+        <field name="arch" type="xml">
+            <pivot string="Lead Suggestion Analysis">
+                <field name="rm_user_id" type="row"/>
+                <field name="status" type="col"/>
+                <field name="original_property_similarity" type="measure" operator="avg"/>
+            </pivot>
+        </field>
+    </record>
+
+    <record id="view_property_lead_suggestion_graph_dashboard" model="ir.ui.view">
+        <field name="name">property.lead.suggestion.graph.dashboard</field>
+        <field name="model">property.lead.suggestion</field>
+        <field name="arch" type="xml">
+            <graph string="Lead Suggestion Analysis" type="bar">
+                <field name="status" type="col"/>
+                <field name="rm_user_id" type="row"/>
+            </graph>
+        </field>
+    </record>
+
+    <record id="view_property_lead_suggestion_list_dashboard" model="ir.ui.view">
+        <field name="name">property.lead.suggestion.list.dashboard</field>
+        <field name="model">property.lead.suggestion</field>
+        <field name="arch" type="xml">
+            <list string="Suggestions" create="false" edit="false">
+                <field name="generation_date"/>
+                <field name="rm_user_id"/>
+                <field name="property_tag"/>
+                <field name="lead_name"/>
+                <field name="suggested_lead_phone"/>
+                <field name="status" widget="badge"
+                       decoration-success="status == 'converted'"
+                       decoration-warning="status in ('contacted', 'interested')"
+                       decoration-danger="status == 'not_interested'"
+                       decoration-info="status == 'new'"/>
+                <field name="original_property_similarity" string="Match (%)"/>
+                <field name="rm_feedback"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="action_lead_suggestion_dashboard" model="ir.actions.act_window">
+        <field name="name">Lead Suggestion Analysis</field>
+        <field name="res_model">property.lead.suggestion</field>
+        <field name="view_mode">pivot,graph,list</field>
+        <field name="search_view_id" ref="view_property_lead_suggestion_search_dashboard"/>
+        <field name="context">{
+            'search_default_group_by_rm': 1,
+            'search_default_this_month': 1,
+            'pivot_measures': ['__count']
+        }</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                No lead suggestions found.
+            </p><p>
+                This dashboard analyzes the performance of lead suggestions
+                generated by the BigQuery pipeline.
+            </p>
+        </field>
+    </record>
+
+</odoo>
