@@ -14,18 +14,21 @@
         'data/ir_config_parameter_data.xml',
         'data/lead_score_cron.xml',
 
-        # Wizard Views (Load before models that use them)
+        # Wizard Views
         'views/lead_score_bq_wizard_views.xml',
-        'views/lead_csv_import_wizard_views.xml', # <-- Correct path
+        'views/lead_csv_import_wizard_views.xml', 
 
-        # Model Views (Load before menus)
+        # Model Views
         'views/lead_score_views.xml',
-        'views/whatsapp_response_views.xml',
+        # NO, not here: 'views/whatsapp_response_views.xml',
         'views/whatsapp_response_inherit_views.xml',
         'views/imported_lead_views.xml', 
 
-        # Menu items (Load Last)
-        'views/lead_score_menu.xml', # <-- Must be last
+        # Menu items (Load parent menu first)
+        'views/lead_score_menu.xml', # <-- MOVED UP. This defines the parent menu.
+
+        # NOW load the child menu
+        'views/whatsapp_response_views.xml', # <-- NOW this will work.
     ],
 }
 
