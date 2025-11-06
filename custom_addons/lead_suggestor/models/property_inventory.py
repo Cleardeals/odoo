@@ -52,6 +52,11 @@ class PropertyInventory(models.Model):
         store=True
     )
 
+    ninety_nine_acres_id = fields.Char(string="99acres ID", readonly=True, index =True)
+    housing_id = fields.Char(string="Housing.com ID", readonly=True, index =True)
+    magicbricks_id = fields.Char(string="Magicbricks ID", readonly=True, index =True)
+    olx_id = fields.Char(string="OLX ID", readonly=True, index =True)
+
     _sql_constraints = [
         ('property_tag_uniq', 'unique(property_tag)', 'Property Tag must be unique.')
     ]
@@ -102,6 +107,10 @@ class PropertyInventory(models.Model):
                     Assignee AS assigned_rm,
                     Service_Expiry_Date,
                     Property_Status,
+                    `99acres_ID` as ninety_nine_acres_id,
+                    Housing_ID as housing_id,
+                    Magicbricks_ID as magicbricks_id,
+                    OLX_ID as olx_id,
 
                     -- NEW FIELDS TO PULL FROM BQ --
                     BHK,
@@ -140,6 +149,10 @@ class PropertyInventory(models.Model):
                 expiry_date,
                 welcome_call_date,
                 calculated_status,
+                ninety_nine_acres_id,
+                housing_id,
+                magicbricks_id,
+                olx_id,
 
                 -- NEW FIELDS TO SELECT --
                 BHK,
@@ -249,6 +262,10 @@ class PropertyInventory(models.Model):
                     'location': row.Location if row.Location else '',
                     'city': row.city if row.city else '',
                     'property_link': row.Property_Link if row.Property_Link else '',
+                    'ninety_nine_acres_id': row.ninety_nine_acres_id if row.ninety_nine_acres_id else False,
+                    'housing_id': row.housing_id if row.housing_id else False,
+                    'magicbricks_id': row.magicbricks_id if row.magicbricks_id else False,
+                    'olx_id': row.olx_id if row.olx_id else False
                 }
 
                 # --- Upsert Logic ---
