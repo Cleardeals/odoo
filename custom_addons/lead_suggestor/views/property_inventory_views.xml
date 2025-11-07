@@ -98,6 +98,7 @@
                             <field name="rm_user_id" readonly="1"/>
                             <field name="owner_name" readonly="1"/>
                             <field name="owner_phone" readonly="1"/>
+                            <field name="magicbricks_id" readonly="1"/>
                         </group>
                         <group>
                             <field name="service_expiry_date_str" readonly="1" string="Service Expiry Date"/> 

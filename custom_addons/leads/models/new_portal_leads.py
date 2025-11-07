@@ -15,6 +15,7 @@ class NewPortalLead(models.Model):
     email = fields.Char('Email Address', index=True)   
     portal_name = fields.Char('Portal Source', help="e.g., Magicbricks, 99acres")
     project_name = fields.Char('Project Name', help="Project Name from portal")
+    portal_property_id = fields.Char('Portal Property ID', help="The property ID as per the portal", index=True)
     raw_data = fields.Text('Raw Data Dump')
 
     # Processing and Assignment Fields
@@ -23,10 +24,10 @@ class NewPortalLead(models.Model):
         ('new', 'New'),
         ('assigned', 'Assigned'),
         ('failed', 'Failed Assignment'),
-    ], default='new', required=True, tracking=True, index=True, copy=False)
+    ], default='new', required=True, index=True, copy=False)
 
     property_id = fields.Many2one('property.inventory', string='Related Property')
-    user_id = fields.Many2one('res.users', string='Assigned RM', tracking=True, copy=False)
+    user_id = fields.Many2one('res.users', string='Assigned RM', copy=False)
     process_notes = fields.Text('Processing Notes')
 
     def _find_property(self):
@@ -71,7 +72,6 @@ class NewPortalLead(models.Model):
         _logger.warning(f"Property {property_id.property_tag} has no RM. Assigning to admin")
         return self.env.ref('base.user_admin')
     
-    @api.job(default_channel='root.portal_lead_processing')
     def _process_lead_logic(self):
         """
         The slow job. This runs in the background via a queue job
@@ -128,4 +128,4 @@ class NewPortalLead(models.Model):
                 description=f"RETRY: Processing portal lead ID {lead.id}: {lead.name}"
             )._process_lead_logic()
 
-            
+

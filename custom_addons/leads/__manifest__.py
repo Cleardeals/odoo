@@ -13,7 +13,7 @@
         # Data
         'data/ir_config_parameter_data.xml',
         'data/lead_score_cron.xml',
-        'data/new_portal_lead_cron.xml'
+        'data/new_portal_lead_cron.xml',
 
         # Wizard Views
         'views/lead_score_bq_wizard_views.xml',
@@ -24,10 +24,11 @@
         # NO, not here: 'views/whatsapp_response_views.xml',
         'views/whatsapp_response_inherit_views.xml',
         'views/imported_lead_views.xml', 
-        'views/new_portal_lead_views.xml',
+        
 
         # Menu items (Load parent menu first)
         'views/lead_score_menu.xml', # <-- MOVED UP. This defines the parent menu.
+        'views/new_portal_lead_views.xml',
 
         # NOW load the child menu
         'views/whatsapp_response_views.xml', # <-- NOW this will work.
