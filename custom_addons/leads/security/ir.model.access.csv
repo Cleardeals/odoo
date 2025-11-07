@@ -8,3 +8,4 @@ access_imported_lead_rm,access.imported.lead.rm,model_imported_lead,leads.group_
 access_imported_lead_manager,access.imported.lead.manager,model_imported_lead,leads.group_lead_score_manager,1,1,1,1
 access_lead_csv_import_wizard,access.lead.csv.import.wizard,model_lead_csv_import_wizard,leads.group_lead_score_manager,1,1,1,1
 access_message_wizard,access.message.wizard,model_message_wizard,base.group_user,1,1,1,1
+access_leads_new_all_users,leads.new.all,model_leads_new,base.group_user,1,1,1,1
