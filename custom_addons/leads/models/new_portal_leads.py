@@ -1,5 +1,11 @@
 from odoo import models, fields, api
 import logging
+import xml.etree.ElementTree as ET
+from datetime import timedelta
+import urllib.request
+import urllib.parse
+import urllib.error
+import json
 
 _logger = logging.getLogger(__name__)   
 
@@ -11,7 +17,7 @@ class NewPortalLead(models.Model):
     # Lead Fields
 
     name = fields.Char('Lead Name', required=True, index=True)
-    phone = fields.Char('Phone Number', required=True, index=True)
+    phone = fields.Char('Phone Number', index=True)
     email = fields.Char('Email Address', index=True)   
     portal_name = fields.Char('Portal Source', help="e.g., Magicbricks, 99acres")
     project_name = fields.Char('Project Name', help="Project Name from portal")
@@ -129,3 +135,168 @@ class NewPortalLead(models.Model):
             )._process_lead_logic()
 
 
+    def _api_fetch_99acres(self):
+        """
+        Builds the XML, sends the POST request to 99acres, and returns a list of leads.
+        """
+        _logger.info("Attempting to fetch leads from 99acres API...")
+
+        API_URL = "https://www.99acres.com/99api/v1/getmy99Response/OeAuXClO43hwseaXEQ/uid/"
+        DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
+
+        # Get credentials from Odoo System Parameters
+        config = self.env['ir.config_parameter'].sudo()
+        username = config.get_param('99acres.api.username')
+        password = config.get_param('99acres.api.password')
+
+        if not username or not password:
+            _logger.error("CRITICAL: 99acres.api.username or .password not set in system parameters.")
+            return []
+        
+        # 2. Set time range: 20 minutes ago to now
+        now = fields.Datetime.now()
+        start_time = fields.Datetime.subtract(now, minutes=20)
+        start_date = start_time.strftime(DATE_FORMAT)
+        end_date = now.strftime(DATE_FORMAT)
+
+        # 3. Build the XML request body
+        xml_request = f"""<?xml version='1.0'?>
+        <query>
+            <user_name>{username}</user_name>
+            <pswd>{password}</pswd>
+            <start_date>{start_date}</start_date>
+            <end_date>{end_date}</end_date>
+        </query>"""
+
+        # 4. Build POST data using urllib
+        payload = {'xml': xml_request}
+        # Encode the payload into bytes
+        data = urllib.parse.urlencode(payload).encode('utf-8')
+
+        _logger.info(f"99acres: Requesting leads from {start_date} to {end_date}")
+
+        # 5. Make the API call 
+        try:
+            req = urllib.request.Request(API_URL, data=data, method='POST')
+
+            # Open the url
+            with urllib.request.urlopen(req, timeout=30) as response:
+                # Read and decode the response
+                response_body = response.read().decode('utf-8')
+
+                # Check for HTTP success
+                if response.status != 200:
+                    _logger.error(f"99acres HTTP Error: {response.status} | Response: {response_body}")
+                    return []
+                
+                # 6. Parse the XML response
+                return self._parse_99acres_response(response_body)
+
+        except urllib.error.HTTPError as e:
+            # Handle the HTTP Errors
+            _logger.error(f"99acres HTTPError: {e.code} - {e.reason}")
+            try:
+                # Try to read the error body
+                _logger.error(f"Response Body: {e.read().decode('utf-8')}")
+            except Exception:
+                pass
+        
+        except urllib.error.URLError as e:
+            # Handle other errors 
+            _logger.error(f"99acres URLError: {e.reason}")
+        except Exception as e:
+            _logger.error(f"Error Fetching 99acres leads: {e}")
+        
+        return []
+    
+    def _parse_99acres_response(self, xml_string):
+        """
+        Parses the XML String and returns a list of lead dicitionaries.
+        """
+        _logger.info("Parsing 99acres response XML...")
+        leads_list = []
+        try:
+            root = ET.fromstring(xml_string)
+
+            # Check for API error
+            if root.get('ActionStatus') == 'False':
+                error_msg = root.findtext('.//Message', 'Unknown error')
+                _logger.error(f"99acres API Error: {error_msg}")
+                return []
+            
+            for resp in root.findall('Resp'):
+                try:
+                    qry_dtl = resp.find('QryDtl')
+                    cntct_dtl = resp.find('CntctDtl')
+                    if qry_dtl is None or cntct_dtl is None:
+                        _logger.warning("Skipping a Resp entry due to missing QryDtl or CntctDtl.")
+                        continue
+
+                    # Translate their field names to the keys our
+                    # _cron_pull_external_leads method expects.
+                    lead_data = {
+                        'lead_name': cntct_dtl.findtext('Name'),
+                        'lead_email': cntct_dtl.findtext('Email'),
+                        'lead_mobile': cntct_dtl.findtext('Phone'),
+                        'project' : qry_dtl.findtext('CmpctLabl', 'N/A'),
+                        'property_code': qry_dtl.findtext('ProdId', 'N/A'),
+                        'raw_json': {
+                            'QueryInfo': qry_dtl.findtext('QryInfo', 'N/A'),
+                            'ReceivedOn': qry_dtl.findtext('RcvdOn', 'N/A'),
+                            'ResponseType': qry_dtl.findtext('ResType', 'N/A'),
+                        }
+                    }
+                    leads_list.append(lead_data)
+                except Exception as e:
+                    _logger.warning(f"Error parsing one 99acres lead: {str(e)}")
+                
+            _logger.info(f"99acres: Parsed {len(leads_list)} leads")
+            return leads_list 
+        
+        except ET.ParseError as e:
+            _logger.error(f"Failed to parse 99acres XML response: {e}")
+            return []
+        
+    def _api_fetch_housing(self):
+        """ Placeholder for future Housing.com API integration."""
+        return []
+
+    @api.model
+    def _cron_pull_external_leads(self):
+        """
+        Called by the 15 minutes cron to pull leads from all
+        non-webhook portals and create leads.new records.
+        """
+        portal_mappers = {
+            '99acres': self._api_fetch_99acres,
+            'Housing.com': self._api_fetch_housing,
+        }
+        
+        for portal_name, fetch_method in portal_mappers.items():
+            try:
+                # 1. Call the specific API fetch method
+                leads = fetch_method()
+
+                # 2. Process the results
+                _logger.info(f"CRON: Found {len(leads)} leads from {portal_name} API.")
+                for lead in leads:
+                    # 3. Create the leads.new record
+                    lead_vals = {
+                        'name': lead.get('lead_name'),
+                        'phone': lead.get('lead_mobile'),
+                        'email': lead.get('lead_email'),
+                        'project_name': lead.get('project'),
+                        'portal_name': portal_name,
+                        'portal_property_id': lead.get('property_code'),
+                        'raw_data': json.dumps(lead.get('raw_json') or lead, indent=2),
+                        'state': 'new',
+                    }
+                    new_lead = self.create(lead_vals)
+
+                    # 4. Enqueue the processing job
+                    new_lead.with_delay(
+                        description = f"Processing {portal_name} Lead: {new_lead.name}"
+                    )._process_lead_logic()
+
+            except Exception as e:
+                _logger.error(f"Failed to pull leads from {portal_name} API: {e}")
