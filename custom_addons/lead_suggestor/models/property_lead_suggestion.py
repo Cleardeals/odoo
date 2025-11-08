@@ -60,7 +60,6 @@ class PropertyLeadSuggestion(models.Model):
         digits=(16, 2),
         readonly=True,
         aggregator="avg"  
-        aggregator="avg"  
     )
     contact_type = fields.Char(string="Lead's Current Status", readonly=True)
     generation_date = fields.Date(string="Suggested On", readonly=True, default=fields.Date.context_today)
