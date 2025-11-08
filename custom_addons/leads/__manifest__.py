@@ -24,7 +24,6 @@
         'views/lead_score_views.xml',
         # NO, not here: 'views/whatsapp_response_views.xml',
         'views/whatsapp_response_inherit_views.xml',
-        'views/imported_lead_views.xml', 
         
 
         # Menu items (Load parent menu first)

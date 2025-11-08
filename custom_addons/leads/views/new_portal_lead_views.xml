@@ -1,5 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-
 <odoo>
     <record id="view_new_portal_lead_list" model="ir.ui.view">
         <field name="name">leads.new.list</field>
@@ -71,5 +70,6 @@
               name="New Portal Leads"
               parent="leads.lead_score_menu_main" 
               action="action_new_portal_lead"
-              sequence="10"/>
+              sequence="10"
+              groups="leads.group_lead_score_manager"/>
 </odoo>
