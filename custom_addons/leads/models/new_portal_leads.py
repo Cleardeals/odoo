@@ -89,7 +89,7 @@ class NewPortalLead(models.Model):
             ('portal_property_id', '=', portal_prop_id),
             ('create_date', '>=', time_limit),
         ]
-
+        # Search the domain for any existing or duplicate leads
         existing_lead = self.search(domain, limit=1)
 
         if existing_lead:
