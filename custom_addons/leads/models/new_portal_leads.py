@@ -6,11 +6,17 @@ import urllib.request
 import urllib.parse
 import urllib.error
 import json
+import requests
+import hmac
+import hashlib
+import time
+import re
 
 _logger = logging.getLogger(__name__)   
 
 class NewPortalLead(models.Model):
     _name = 'leads.new'
+    _inherit = ['mail.thread', 'mail.activity.mixin']
     _description = "New Leads from Portals"
     _order = 'create_date desc'
 
@@ -35,6 +41,68 @@ class NewPortalLead(models.Model):
     property_id = fields.Many2one('property.inventory', string='Related Property')
     user_id = fields.Many2one('res.users', string='Assigned RM', copy=False)
     process_notes = fields.Text('Processing Notes')
+
+    @api.model
+    def _standardize_phone(self, phone_number):
+        """
+        Strips all non-numeric characters from the phone number
+        and returns a 10-digit number if possible.
+        """
+        if not phone_number:
+            return ''
+        
+        numeric_phone = re.sub(r'\D', '', phone_number)
+
+        # Check if it starts with 91 and is 12 digits long
+        if len(numeric_phone) == 12 and numeric_phone.startswith('91'):
+            return numeric_phone[2:]
+        
+        # Check if it's already 10 digits
+        if len(numeric_phone) == 10:
+            return numeric_phone
+        
+        _logger.warning(f"Phone number {phone_number} could not be standardized.")
+        return numeric_phone  # Return as-is if it doesn't fit expected formats
+    
+    @api.model
+    def create_lead_if_not_duplicate(self, lead_vals):
+        """
+        Central Function to create leads.
+        Checks for duplicates before creating new lead.
+        A duplicate is same phone + same portal_property_id in last 30 days.
+        """
+        phone_raw = lead_vals.get('phone')
+        phone_clean = self._standardize_phone(phone_raw)
+        portal_prop_id = lead_vals.get('portal_property_id')
+
+        lead_vals['phone'] = phone_clean
+
+        # if we don't have a phone or propertyID, we can't check for duplocates, so we just create the lead
+        if not phone_clean or not portal_prop_id:
+            _logger.info("Cannot check for duplicate (missing phone/prop_id), creating lead.")
+            return self.create(lead_vals)
+        
+        # Look for an existing lead in the last 30 days
+        time_limit = fields.Datetime.now() - timedelta(days=30)
+        domain = [
+            ('phone', '=', phone_clean),
+            ('portal_property_id', '=', portal_prop_id),
+            ('create_date', '>=', time_limit),
+        ]
+
+        existing_lead = self.search(domain, limit=1)
+
+        if existing_lead:
+            _logger.info(f"Duplicate lead detected. Phone: {phone_clean}, Property: {portal_prop_id}. Skipping creation.")
+            existing_lead.message_post(
+                body=f"Duplicate inquiry received from {lead_vals.get('portal_name')}. Raw data: {lead_vals.get('raw_data')}",
+                subject=f"Duplicate Inquiry ({lead_vals.get('portal_name')})"
+            )
+            return None
+        else:
+            # NOT A DUPLICATE
+            return self.create(lead_vals)
+
 
     def _find_property(self):
         """ Finds the synced property based on the portal name and the portal ID."""
@@ -83,8 +151,10 @@ class NewPortalLead(models.Model):
         The slow job. This runs in the background via a queue job
         """
         self.ensure_one()
+        _logger.info(f"🔄 Processing lead {self.id}: {self.name} (state: {self.state})")
+        
         if self.state != 'new':
-            _logger.info(f"Skipping lead {self.id}, state is {self.state}")
+            _logger.info(f"⏭️ Skipping lead {self.id}, state is {self.state}")
             return
         
         try:
@@ -93,11 +163,16 @@ class NewPortalLead(models.Model):
             
             if not property_rec:
                 # Data Lag: Property not found
-                self.process_notes = f"Attempt {fields.Datetime.now()}: Property not found for {self.portal_name} ID: {self.portal_property_id}\n"
+                msg = f"Attempt {fields.Datetime.now()}: Property not found for {self.portal_name} ID: {self.portal_property_id}"
+                _logger.warning(f"⚠️ Lead {self.id}: {msg}")
+                self.process_notes = msg + "\n"
                 return
+            
+            _logger.info(f"✅ Lead {self.id}: Found property {property_rec.property_tag} (ID: {property_rec.id})")
             
             # 2. Try to find the correct RM
             rm_user = self._find_rm(property_rec)
+            _logger.info(f"✅ Lead {self.id}: Found RM {rm_user.name} (ID: {rm_user.id})")
 
             # 3. Success assign the lead.
             self.write({
@@ -106,9 +181,10 @@ class NewPortalLead(models.Model):
                 'state': 'assigned',
                 'process_notes': f"Successfully assigned to RM {rm_user.name} for property {property_rec.property_tag}.\n"
             })
+            _logger.info(f"🎉 Lead {self.id}: Successfully assigned to {rm_user.name} for property {property_rec.property_tag}")
 
         except Exception as e:
-            _logger.error(f"Failed to process lead {self.id}: {e}")
+            _logger.error(f"❌ Failed to process lead {self.id}: {e}", exc_info=True)
             self.write({
                 'state': 'failed',
                 'process_notes': f"Processing failed with error: {str(e)}\n"
@@ -124,7 +200,7 @@ class NewPortalLead(models.Model):
         _logger.info("CRON: Starting re-process for unassigned leads...")
         domain = [
             ('state', '=', 'new'),
-            ('create_date', '<', fields.Datetime.now() - fields.Date.timedelta(hours=1))
+            ('create_date', '<', fields.Datetime.now() - timedelta(hours=1))
         ]
         leads_to_retry = self.search(domain)
         _logger.info(f"CRON: Found {len(leads_to_retry)} unassigned leads to reprocess.")
@@ -237,7 +313,7 @@ class NewPortalLead(models.Model):
                     lead_data = {
                         'lead_name': cntct_dtl.findtext('Name'),
                         'lead_email': cntct_dtl.findtext('Email'),
-                        'lead_mobile': cntct_dtl.findtext('Phone'),
+                        'lead_phone': cntct_dtl.findtext('Phone'),
                         'project' : qry_dtl.findtext('CmpctLabl', 'N/A'),
                         'property_code': qry_dtl.findtext('ProdId', 'N/A'),
                         'raw_json': {
@@ -258,8 +334,110 @@ class NewPortalLead(models.Model):
             return []
         
     def _api_fetch_housing(self):
-        """ Placeholder for future Housing.com API integration."""
-        return []
+        """ 
+        Fetches new leads from the Housing.com API using HMAC auth.
+        """
+        _logger.info("CRON: Attempting to fetch leads from Housing.com API...")
+        HOUSING_ENDPOINT = "https://pahal.housing.com/api/v0/get-broker-leads"
+        HEADERS = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.212 Safari/537.36' 
+        }
+        
+        # 1. Get credentials from Odoo System Parameters
+        config = self.env['ir.config_parameter'].sudo()
+        api_key = config.get_param('housing.api.key')
+        api_id = config.get_param('housing.api.id')
+
+        if not api_key or not api_id:
+            _logger.error("CRITICAL: housing.api.key or housing.api.id not set in system parameters")
+            return []
+
+        try:
+            # 2. Set time Paramters  20 minutes for 15 min cron
+            end_time = int(time.time())
+            start_time = end_time - (20 * 60)  # 20 minutes ago
+            current_time_str = str(end_time)    
+
+            # 3. Generate hash(H)
+            hash_h = hmac.new(
+                api_key.encode('utf-8'),
+                current_time_str.encode('utf-8'),
+                hashlib.sha256
+            ).hexdigest()
+
+            # 4. Build request parameters
+            params = {
+                'start_date': start_time,
+                'end_date': end_time,
+                'current_time': current_time_str,
+                'hash': hash_h,
+                'id': api_id,
+                'per_page': 1000,
+            }
+
+            # 5. make the API call
+            response = requests.get(HOUSING_ENDPOINT, params=params, headers=HEADERS, timeout=30)
+            response.raise_for_status() # Raise HTTPError for bad responses
+
+            response_data = response.json() 
+
+            # 6. Check  the response
+            if 'apiErrors' in response_data:
+                _logger.error(f"Housing.com API Errors: {json.dumps(response_data)}")
+                return []
+            
+            if 'data' in response_data and response_data['data']:
+                raw_leads = response_data['data']
+                _logger.info(f'Housing.com: Found {len(raw_leads)} leads from API.')
+                return self._parse_housing_response(raw_leads)
+            
+            _logger.info("Housing.com: API call successful, now new leads found.")
+            return []
+        
+        except requests.exceptions.HTTPError as e:
+            _logger.error(f"Housing.com HTTPError: {e.response.status_code} | Response : {e.response.text}")
+        except Exception as e:
+            _logger.error(f"Error fetching Housing.com leads: {str(e)}")
+        
+        return[]
+
+
+    def _parse_housing_response(self, raw_leads):
+        """
+        Parses thel list of raw lead objects from HOusing.com
+        asdn tranlates them into our standard dictionary format.
+        """
+        leads_list = []
+        for lead in raw_leads:
+            try:
+                prop_name = lead.get('apartment_names', '')
+                locality = lead.get('locality_name', '')
+                if prop_name and locality:
+                    project_str = f"{prop_name} in {locality}"
+                else:
+                    project_str = prop_name or locality or 'N/A'
+
+                translated_lead = {
+                    'lead_name': lead.get('lead_name'),
+                    'lead_phone': lead.get('lead_phone'),
+                    'lead_email': lead.get('lead_email'),
+                    'property_code': str(lead.get('flat_id')),
+                    'project': project_str,
+                    'raw_json': lead,
+                }
+
+                # Simple Validation
+                if not translated_lead['lead_phone']:
+                    _logger.warning(f"Housing.com lead skipped due to missing phone: {json.dumps(lead)}")
+                    continue
+
+                leads_list.append(translated_lead)
+            
+            except Exception as e:
+                _logger.warning(f"Error parsing one Housing.com lead: {str(e)}")
+
+        return leads_list
+
 
     @api.model
     def _cron_pull_external_leads(self):
@@ -283,7 +461,7 @@ class NewPortalLead(models.Model):
                     # 3. Create the leads.new record
                     lead_vals = {
                         'name': lead.get('lead_name'),
-                        'phone': lead.get('lead_mobile'),
+                        'phone': lead.get('lead_phone'),
                         'email': lead.get('lead_email'),
                         'project_name': lead.get('project'),
                         'portal_name': portal_name,
@@ -291,12 +469,13 @@ class NewPortalLead(models.Model):
                         'raw_data': json.dumps(lead.get('raw_json') or lead, indent=2),
                         'state': 'new',
                     }
-                    new_lead = self.create(lead_vals)
+                    new_lead = self.create_lead_if_not_duplicate(lead_vals)
 
                     # 4. Enqueue the processing job
-                    new_lead.with_delay(
-                        description = f"Processing {portal_name} Lead: {new_lead.name}"
-                    )._process_lead_logic()
+                    if new_lead:
+                        new_lead.with_delay(
+                            description = f"Processing {portal_name} Lead: {new_lead.name}"
+                        )._process_lead_logic()
 
             except Exception as e:
                 _logger.error(f"Failed to pull leads from {portal_name} API: {e}")

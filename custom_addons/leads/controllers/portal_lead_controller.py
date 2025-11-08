@@ -58,13 +58,14 @@ class MagicBricksController(http.Controller):
             }
 
             # 3. Create the basic lead record
-
-            new_lead = request.env['leads.new'].sudo().create(lead_vals)
+            LeadModel = request.env['leads.new'].sudo()
+            new_lead = LeadModel.create_lead_if_not_duplicate(lead_vals)
 
             # 4. Enqueue the lead for processing via job queue
-            new_lead.with_delay(
-                description = f"Processing MagicBricks Lead: {new_lead.name}"
-            )._process_lead_logic()
+            if new_lead:
+                new_lead.with_delay(
+                    description = f"Processing MagicBricks Lead: {new_lead.name}"
+                )._process_lead_logic()
 
             # 5. send success response
             return Response("Success: Lead punched in the CRM", status=200, mimetype='text/plain')

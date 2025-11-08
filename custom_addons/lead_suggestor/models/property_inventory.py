@@ -108,9 +108,9 @@ class PropertyInventory(models.Model):
                     Service_Expiry_Date,
                     Property_Status,
                     `99acres_ID` as ninety_nine_acres_id,
-                    Housing_ID as housing_id,
-                    Magicbricks_ID as magicbricks_id,
-                    OLX_ID as olx_id,
+                    SPLIT(CAST(Housing_ID AS STRING), '.')[OFFSET(0)] AS housing_id,
+                    SPLIT(CAST(Magicbricks_ID AS STRING), '.')[OFFSET(0)] AS magicbricks_id,
+                    SPLIT(CAST(OLX_ID AS STRING), '.')[OFFSET(0)] AS olx_id,
 
                     -- NEW FIELDS TO PULL FROM BQ --
                     BHK,
