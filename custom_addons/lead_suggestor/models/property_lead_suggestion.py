@@ -4,6 +4,8 @@ from google.cloud import bigquery
 import logging
 import re
 from urllib.parse import quote # (This import is no longer needed, but safe to keep)
+import re
+from urllib.parse import quote # (This import is no longer needed, but safe to keep)
 
 _logger = logging.getLogger(__name__)
 
@@ -28,7 +30,18 @@ class PropertyLeadSuggestion(models.Model):
         string="Property Tag"
     )
     
+    
     suggested_lead_phone = fields.Char(string="Lead Phone", readonly=True, required=True)
+    suggested_lead_phone_whatsapp_url = fields.Char(
+        string="WhatsApp URL",
+        compute='_compute_suggested_lead_phone_whatsapp_url',
+        store=False  # No need to store, it's always dynamic
+    )
+    suggested_lead_phone_html = fields.Html(
+        string="Lead Phone",
+        compute='_compute_suggested_lead_phone_html',
+        store=False
+    )
     suggested_lead_phone_whatsapp_url = fields.Char(
         string="WhatsApp URL",
         compute='_compute_suggested_lead_phone_whatsapp_url',
@@ -47,6 +60,7 @@ class PropertyLeadSuggestion(models.Model):
         digits=(16, 2),
         readonly=True,
         aggregator="avg"  
+        aggregator="avg"  
     )
     contact_type = fields.Char(string="Lead's Current Status", readonly=True)
     generation_date = fields.Date(string="Suggested On", readonly=True, default=fields.Date.context_today)
@@ -56,7 +70,11 @@ class PropertyLeadSuggestion(models.Model):
         ('new', 'New'),
         ('contacted', 'Contacted'),
         ('details_shared_of_property', 'Details Shared of Property'),
+        ('details_shared_of_property', 'Details Shared of Property'),
         ('not_interested', 'Not Interested'),
+        ('interested', 'Interested'), 
+        ('converted', 'Converted'),
+        ('other', 'Other'),
         ('interested', 'Interested'), 
         ('converted', 'Converted'),
         ('other', 'Other'),
@@ -206,10 +224,149 @@ class PropertyLeadSuggestion(models.Model):
             }
         }
             
+
+    @api.depends('suggested_lead_phone')
+    def _compute_suggested_lead_phone_whatsapp_url(self):
+        """
+        Generates a WhatsApp URL using whatsapp:// protocol, prepending '91' 
+        if a 10-digit Indian number is detected.
+        """
+        for rec in self:
+            if not rec.suggested_lead_phone:
+                rec.suggested_lead_phone_whatsapp_url = False
+                continue
+
+            # 1. Clean all non-numeric characters
+            sane_phone = re.sub(r'\D', '', rec.suggested_lead_phone)
+            
+            number_to_use = False
+            
+            # 2. Check for common Indian number formats
+            if len(sane_phone) == 10:
+                # e.g., 9876543210 -> 919876543210
+                number_to_use = f"91{sane_phone}"
+            elif len(sane_phone) == 12 and sane_phone.startswith('91'):
+                # e.g., 919876543210 -> 919876543210 (already correct)
+                number_to_use = sane_phone
+            elif len(sane_phone) == 11 and sane_phone.startswith('0'):
+                # e.g., 09876543210 -> 919876543210
+                number_to_use = f"91{sane_phone[1:]}"
+            
+            # 3. If a valid format was found, create the URL
+            if number_to_use:
+                # Use whatsapp:// protocol for direct desktop app opening
+                rec.suggested_lead_phone_whatsapp_url = f"whatsapp://send?phone={number_to_use}"
+            else:
+                # Not a recognizable format, so don't create a link
+                rec.suggested_lead_phone_whatsapp_url = False
+
+    # --- MODIFIED FUNCTION ---
+    @api.depends('suggested_lead_phone', 'suggested_lead_phone_whatsapp_url')
+    def _compute_suggested_lead_phone_html(self):
+        """
+        Creates a simple WhatsApp link to open the desktop app.
+        """
+        for rec in self:
+            phone_display = rec.suggested_lead_phone or ''
+            
+            if rec.suggested_lead_phone_whatsapp_url:
+                # Get the whatsapp:// URL
+                whatsapp_url = rec.suggested_lead_phone_whatsapp_url
+                
+                # Create simple HTML link
+                rec.suggested_lead_phone_html = \
+                    f'<a href="{whatsapp_url}" ' \
+                    f'title="Click to open WhatsApp" ' \
+                    f'style="text-decoration: none; cursor: pointer;">' \
+                    f'<i class="fa fa-whatsapp" style="color:green; font-size: 16px;"/> {phone_display}</a>'
+            else:
+                # Otherwise, just show the plain phone number
+                rec.suggested_lead_phone_html = phone_display
+    
+
+    def action_whatsapp_with_copy(self):
+        """
+        This action prepares the data and calls a Client Action
+        to handle the copying and link opening.
+        """
+        self.ensure_one()
+        
+        if not self.suggested_lead_phone_whatsapp_url:
+            return
+
+        whatsapp_url = self.suggested_lead_phone_whatsapp_url
+        
+        # --- ACCESS THE NEW PROPERTY FIELDS ---
+        prop = self.property_inventory_id
+        
+        # Get property details
+        prop_bhk = prop.bhk or "a property" # Fallback if BHK is empty
+        prop_location = prop.location or ""
+        prop_city = prop.city or ""
+        prop_link = prop.property_link or ""
+        
+        # Get lead's name for a personal touch
+        lead_name = self.lead_name or "there"
+        if ' ' in lead_name:
+             lead_name = lead_name.split(' ')[0] # Use first name only
+
+        # --- NEW: Clean the location string ---
+        # This removes prefixes like "A-", "B-", etc.
+        if prop_location:
+            # Replaces a pattern like "A-" at the start of the string with ""
+            prop_location = re.sub(r'^[A-Z]-', '', prop_location)
+        # ------------------------------------
+
+        # Build location string, e.g., "Maninagar, Ahmedabad"
+        location_parts = []
+        if prop_location:
+            location_parts.append(prop_location)
+        if prop_city:
+            location_parts.append(prop_city)
+        location_str = ", ".join(location_parts)
+        
+        if not location_str:
+            location_str = "your area"
+
+        # 💬 YOUR NEW MESSAGE TEMPLATE
+        message_parts = [
+            f"Hey {lead_name}! 👋\n",
+            f"Looking for {prop_bhk} in {location_str}? 🏡\n",
+            "A new property matching your needs just went live — act fast before it’s taken!\n",
+        ]
+
+        # Add link only if it exists
+        if prop_link:
+            message_parts.append(f"💬 Click here more details: {prop_link}\n")
+        else:
+            message_parts.append("💬 Reply 'Hi' for more details!\n") 
+
+        # Add the static footer
+        message_parts.extend([
+            "Cleardeals Advantage:",
+            "0% Brokerage | Verified Properties | Faster Closures\n",
+            "Reply \"Hi\" to get more details"
+        ])
+
+        # Join all parts with newlines
+        message_text = "\n".join(message_parts)
+        
+        # Return an action that calls our JavaScript
+        return {
+            'type': 'ir.actions.client',
+            'tag': 'whatsapp_with_copy', 
+            'target': 'new',
+            'context': {
+                'whatsapp_url': whatsapp_url,
+                'message_text': message_text,
+            }
+        }
+            
     def action_log_feedback(self):
         """
         Opens a wizard for the RM to log feedback on this suggestion.
         """
+        self.ensure_one() 
         self.ensure_one() 
         return {
             'type': 'ir.actions.act_window',
