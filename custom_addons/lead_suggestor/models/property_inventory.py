@@ -7,7 +7,6 @@ import logging
 _logger = logging.getLogger(__name__)
 
 # --- Pointing to Customer_Data as the main source ---
-# --- Pointing to Customer_Data as the main source ---
 MASTER_PROPERTY_TABLE = "cleardeals-459513.cleardeals_dataset.Customer_Data"
 BIGQUERY_PROJECT_ID = "cleardeals-459513"
 
@@ -25,18 +24,9 @@ class PropertyInventory(models.Model):
     service_expiry_date_str = fields.Char(string="Expiry Date (Display)", readonly=True)
 
     welcome_call_date = fields.Date(string="Welcome Call Date", readonly=True, index=True)
-
-    welcome_call_date = fields.Date(string="Welcome Call Date", readonly=True, index=True)
     
     # Status field to track if property is active
     is_active = fields.Boolean(string="Is Active", default=True, readonly=True, index=True)
-
-    # --- NEW FIELDS ---
-    bhk = fields.Char(string="BHK", readonly=True)
-    location = fields.Char(string="Location", readonly=True)
-    city = fields.Char(string="City", readonly=True)
-    property_link = fields.Char(string="Property Link", readonly=True)
-    # ------------------
 
     # --- NEW FIELDS ---
     bhk = fields.Char(string="BHK", readonly=True)
@@ -62,11 +52,6 @@ class PropertyInventory(models.Model):
         store=True
     )
 
-    ninety_nine_acres_id = fields.Char(string="99acres ID", readonly=True, index =True)
-    housing_id = fields.Char(string="Housing.com ID", readonly=True, index =True)
-    magicbricks_id = fields.Char(string="Magicbricks ID", readonly=True, index =True)
-    olx_id = fields.Char(string="OLX ID", readonly=True, index =True)
-
     _sql_constraints = [
         ('property_tag_uniq', 'unique(property_tag)', 'Property Tag must be unique.')
     ]
@@ -84,8 +69,6 @@ class PropertyInventory(models.Model):
         Cron Job: Syncs ACTIVE properties from BigQuery Customer_Data.
         1. Gets LATEST record for each Tag (deduplication by Created_Date DESC)
         2. Calculates status: Sold/Expired/Active
-        3. Syncs properties with status = 'Active' using an UPSERT strategy.
-        4. Deactivates properties in Odoo that are no longer 'Active' in BigQuery.
         3. Syncs properties with status = 'Active' using an UPSERT strategy.
         4. Deactivates properties in Odoo that are no longer 'Active' in BigQuery.
         """
@@ -119,10 +102,6 @@ class PropertyInventory(models.Model):
                     Assignee AS assigned_rm,
                     Service_Expiry_Date,
                     Property_Status,
-                    `99acres_ID` as ninety_nine_acres_id,
-                    SPLIT(CAST(Housing_ID AS STRING), '.')[OFFSET(0)] AS housing_id,
-                    SPLIT(CAST(Magicbricks_ID AS STRING), '.')[OFFSET(0)] AS magicbricks_id,
-                    SPLIT(CAST(OLX_ID AS STRING), '.')[OFFSET(0)] AS olx_id,
 
                     -- NEW FIELDS TO PULL FROM BQ --
                     BHK,
@@ -135,11 +114,6 @@ class PropertyInventory(models.Model):
                         SAFE.PARSE_DATE('%d/%m/%Y', Service_Expiry_Date),
                         SAFE.PARSE_DATE('%d-%m-%Y', Service_Expiry_Date)
                     ) as expiry_date,
-                    -- Parse welcome call date with both formats
-                    COALESCE(
-                        SAFE.PARSE_DATE('%d/%m/%Y', Welcome_Call_Date),
-                        SAFE.PARSE_DATE('%d-%m-%Y', Welcome_Call_Date)
-                    ) as welcome_call_date,
                     -- Parse welcome call date with both formats
                     COALESCE(
                         SAFE.PARSE_DATE('%d/%m/%Y', Welcome_Call_Date),
@@ -166,10 +140,6 @@ class PropertyInventory(models.Model):
                 expiry_date,
                 welcome_call_date,
                 calculated_status,
-                ninety_nine_acres_id,
-                housing_id,
-                magicbricks_id,
-                olx_id,
 
                 -- NEW FIELDS TO SELECT --
                 BHK,
@@ -200,30 +170,14 @@ class PropertyInventory(models.Model):
             # --- Counters ---
             created_count = 0
             updated_count = 0
-            
-            # --- Fetch all existing properties for comparison ---
-            _logger.info("Fetching existing properties from Odoo...")
-            existing_props = self.search_read([], ['property_tag', 'is_active'])
-            # Create a map for quick lookup: {'TAG-123': {'id': 1, 'is_active': True}, ...}
-            existing_props_map = {prop['property_tag']: prop for prop in existing_props}
-            _logger.info(f"Found {len(existing_props_map)} existing properties in Odoo.")
-            
-            # --- Counters ---
-            created_count = 0
-            updated_count = 0
             skipped_null_date = 0
             missing_rm_count = 0
-            bq_active_tags = set() 
             bq_active_tags = set() 
 
             for row in results:
                 # Basic validation
                 if not row.property_tag:
-                if not row.property_tag:
                     continue
-                
-                # Add to set of active tags
-                bq_active_tags.add(row.property_tag)
                 
                 # Add to set of active tags
                 bq_active_tags.add(row.property_tag)
@@ -246,7 +200,6 @@ class PropertyInventory(models.Model):
                             else:
                                 _logger.warning(f"Property '{row.property_tag}': RM '{clean_rm_name}' not found in Odoo Users.")
                                 missing_rm_count += 1 
-                                missing_rm_count += 1 
                     except Exception as user_search_err:
                         _logger.error(f"Error searching for RM user '{assigned_rm_name}': {user_search_err}")
 
@@ -264,28 +217,10 @@ class PropertyInventory(models.Model):
                         _logger.warning(f"Property '{row.property_tag}': Failed to parse date '{row.Service_Expiry_Date}'")
                         skipped_null_date += 1
                         continue
-                    
-                    if not service_expiry_date: # Double check after conversion
-                        _logger.warning(f"Property '{row.property_tag}': Failed to parse date '{row.Service_Expiry_Date}'")
-                        skipped_null_date += 1
-                        continue
                 except Exception as date_err:
                     _logger.warning(f"Property '{row.property_tag}': Error converting expiry date: {date_err}")
                     continue
 
-                
-                welcome_call_date = None
-                try:
-                    if row.welcome_call_date:
-                        if isinstance(row.welcome_call_date, str):
-                            welcome_call_date = datetime.strptime(row.welcome_call_date, '%Y-%m-%d').date()
-                        else:
-                            welcome_call_date = row.welcome_call_date
-                except Exception as welcome_date_err:
-                    _logger.warning(f"Property '{row.property_tag}': Error converting welcome call date: {welcome_date_err}")
-                    welcome_call_date = None
-
-                # Prepare values for creation/update
                 
                 welcome_call_date = None
                 try:
@@ -314,10 +249,6 @@ class PropertyInventory(models.Model):
                     'location': row.Location if row.Location else '',
                     'city': row.city if row.city else '',
                     'property_link': row.Property_Link if row.Property_Link else '',
-                    'ninety_nine_acres_id': row.ninety_nine_acres_id if row.ninety_nine_acres_id else False,
-                    'housing_id': row.housing_id if row.housing_id else False,
-                    'magicbricks_id': row.magicbricks_id if row.magicbricks_id else False,
-                    'olx_id': row.olx_id if row.olx_id else False
                 }
 
                 # --- Upsert Logic ---
@@ -339,57 +270,9 @@ class PropertyInventory(models.Model):
                     if (created_count + updated_count) % 100 == 0:
                         self.env.cr.commit()
                 
-                # --- Upsert Logic ---
-                existing_prop_data = existing_props_map.get(row.property_tag)
-                
-                try:
-                    if existing_prop_data:
-                        # UPDATE existing property
-                        prop_id = existing_prop_data['id']
-                        prop_record = self.browse(prop_id)
-                        prop_record.write(vals)
-                        updated_count += 1
-                    else:
-                        # CREATE new property
-                        self.create(vals)
-                        created_count += 1
-                
-                    # Commit periodically to avoid long transactions 
-                    if (created_count + updated_count) % 100 == 0:
-                        self.env.cr.commit()
-                
                 except Exception as db_err:
                     _logger.error(f"Database error processing property '{row.property_tag}': {db_err}")
-                    _logger.error(f"Database error processing property '{row.property_tag}': {db_err}")
                     self.env.cr.rollback()
-                    continue
-            
-            
-            # ---  Deactivation step ---
-            _logger.info("Deactivating properties that are no longer active in BigQuery...")
-            tags_in_odoo = set(existing_props_map.keys())
-            tags_to_deactivate = tags_in_odoo - bq_active_tags
-            deactivated_count = 0
-            
-            if tags_to_deactivate:
-                prop_ids_to_deactivate = []
-                for tag in tags_to_deactivate:
-                    prop_data = existing_props_map[tag]
-                    # Only deactivate if it's currently marked active
-                    if prop_data['is_active']:
-                        prop_ids_to_deactivate.append(prop_data['id'])
-                
-                if prop_ids_to_deactivate:
-                    try:
-                        properties_to_deactivate = self.browse(prop_ids_to_deactivate)
-                        properties_to_deactivate.write({'is_active': False})
-                        deactivated_count = len(properties_to_deactivate)
-                        _logger.info(f"Successfully deactivated {deactivated_count} properties.")
-                    except Exception as deactivation_err:
-                        _logger.error(f"Error deactivating properties: {deactivation_err}")
-                        self.env.cr.rollback()
-
-            # --- Final Summary ---
                     continue
             
             
@@ -425,18 +308,10 @@ class PropertyInventory(models.Model):
             _logger.info(f"  Successfully created: {created_count}")
             _logger.info(f"  Successfully updated: {updated_count}")
             _logger.info(f"  Deactivated (Sold/Expired): {deactivated_count}")
-            _logger.info(f"  Processed BQ tags: {len(bq_active_tags)}")
-            _logger.info(f"  Successfully created: {created_count}")
-            _logger.info(f"  Successfully updated: {updated_count}")
-            _logger.info(f"  Deactivated (Sold/Expired): {deactivated_count}")
             _logger.info(f"  Skipped (NULL expiry date): {skipped_null_date}")
             if missing_rm_count > 0:
                 _logger.warning(f"  Missing RM assignments (warnings): {missing_rm_count}")
-                _logger.warning(f"  Missing RM assignments (warnings): {missing_rm_count}")
             _logger.info(f"=====================================================")
-            
-            # Final commit
-            self.env.cr.commit()
             
             # Final commit
             self.env.cr.commit()

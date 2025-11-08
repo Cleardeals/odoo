@@ -1,81 +1,24 @@
 version: '3.8'
 
 services:
-  # 1. The Traefik Reverse Proxy
-  traefik:
-    image: traefik:v2.10
-    container_name: traefik
-    command:
-      - "--api.insecure=true" # (Optional) Traefik dashboard on port 8080
-      - "--providers.docker=true"
-      - "--providers.docker.exposedbydefault=false"
-      - "--entrypoints.web.address=:80"
-      - "--entrypoints.websecure.address=:443"
-      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
-      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
-      - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
-      - "--certificatesresolvers.myresolver.acme.email=cdgcphub@gmail.com" # !! CHANGE THIS
-      - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
-    ports:
-      - "80:80"       # Public HTTP
-      - "443:443"     # Public HTTPS
-      - "8080:8080"   # (Optional) Traefik Dashboard
-    volumes:
-      - "/var/run/docker.sock:/var/run/docker.sock:ro"
-      - "./letsencrypt:/letsencrypt"
-    networks:
-      - web
-    restart: unless-stopped
-
-  # 2. Your Database Service (Modified)
   db:
     image: postgres:17
-    # 'ports' section removed for security. Odoo will access it over the 'web' network.
     environment:
       - POSTGRES_DB=postgres
-      - POSTGRES_PASSWORD=odoo # <-- SET A STRONG PASSWORD
+      - POSTGRES_PASSWORD=odoo  # <-- SET A STRONG PASSWORD
       - POSTGRES_USER=odoo
     volumes:
-      - ./odoo-db-data:/var/lib/postgresql/data # <-- KEPT YOUR EXISTING DATA
-    networks:
-      - web
+      - ./odoo-db-data:/var/lib/postgresql/data
     restart: unless-stopped
 
-  # 3. Your Odoo Service (Modified)
   odoo:
-    build: . # <-- KEPT YOUR CUSTOM BUILD
+    build: .  # Build the image from your Dockerfile
     depends_on:
       - db
-    # 'ports' section removed. Traefik now handles this.
+    ports:
+      - "8069:8069"
     volumes:
-      - ./config:/etc/odoo # <-- KEPT YOUR CONFIG
-      - ./odoo-web-data:/var/lib/odoo # <-- KEPT YOUR FILESTORE DATA
-      - ./custom_addons:/mnt/extra-addons/custom # <-- KEPT YOUR ADDONS
-    networks:
-      - web
-    environment:
-      # These tell Odoo it's behind a secure proxy
-      - ODOO_PROXY=True
-      - WEB_BASE_URL=https://odoo.cleardeals.xyz
-    labels:
-      - "traefik.enable=true"
-
-      # --- Main Odoo Router (Port 8069) ---
-      - "traefik.http.routers.odoo.rule=Host(`odoo.cleardeals.xyz`)"
-      - "traefik.http.routers.odoo.entrypoints=websecure"
-      - "traefik.http.routers.odoo.tls.certresolver=myresolver"
-      - "traefik.http.routers.odoo.service=odoo-service"
-      - "traefik.http.services.odoo-service.loadbalancer.server.port=8069" # Odoo app port
-
-      # --- Odoo Chat/Longpolling Router (Port 8072) ---
-      # This assumes your odoo.conf has workers running on port 8072
-      - "traefik.http.routers.odoo-chat.rule=Host(`odoo.cleardeals.xyz`) && PathPrefix(`/longpolling`)"
-      - "traefik.http.routers.odoo-chat.entrypoints=websecure"
-      - "traefik.http.routers.odoo-chat.tls.certresolver=myresolver"
-      - "traefik.http.routers.odoo-chat.service=odoo-chat-service"
-      - "traefik.http.services.odoo-chat-service.loadbalancer.server.port=8072" # Odoo longpolling port
+      - ./config:/etc/odoo                       # Mounts your custom config
+      - ./odoo-web-data:/var/lib/odoo            # Mounts Odoo's file storage
+      - ./custom_addons:/mnt/extra-addons/custom # Makes custom addons available
     restart: unless-stopped
-
-networks:
-  web:
-    driver: bridge
