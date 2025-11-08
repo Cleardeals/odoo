@@ -13,8 +13,6 @@
                 <field name="service_expiry_date"/>
                 <field name="welcome_call_date"/> 
                 
-                <field name="welcome_call_date"/> 
-                
                 <templates>
                     <t t-name="kanban-box">
                         
@@ -36,28 +34,7 @@
                                 </t>
                             </div>
                             
-                        <div class="oe_kanban_global_click #{!selection_mode ? '' : 'o_kanban_selected'}">
-                            
-                            <div class="o_kanban_tags" style="margin-bottom: 8px;">
-                                <t t-if="record.service_expiry_date.raw_value &amp;&amp; record.service_expiry_date.raw_value &lt; new Date().toISOString().split('T')[0]">
-                                    <span class="badge" style="font-size: 0.85em; background-color: #dc3545; color: white;">
-                                        <i class="fa fa-exclamation-triangle"/> SERVICE EXPIRED
-                                    </span>
-                                </t>
-                                
-                                <t t-if="record.welcome_call_date.raw_value &amp;&amp; 
-                                         record.welcome_call_date.raw_value &lt;= new Date().toISOString().split('T')[0] &amp;&amp;
-                                         record.welcome_call_date.raw_value &gt;= new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]">
-                                    <span class="badge" style="font-size: 0.85em; margin-left: 4px; background-color: #28a745; color: white;">
-                                        <i class="fa fa-star"/> NEW PROPERTY
-                                    </span>
-                                </t>
-                            </div>
-                            
                             <div class="oe_kanban_details">
-                                <strong class="o_kanban_record_title">
-                                    <field name="property_tag"/>
-                                </strong>
                                 <strong class="o_kanban_record_title">
                                     <field name="property_tag"/>
                                 </strong>
@@ -82,23 +59,7 @@
                                         <field name="service_expiry_date" widget="date"/>
                                     </span>
                                 </div>
-                                
-                                <div style="margin-top: 6px; font-size: 0.9em;">
-
-                                    
-                                    <span t-if="record.welcome_call_date.raw_value" class="text-muted">
-                                        <i class="fa fa-phone-square"/> Welcome call: 
-                                        <field name="welcome_call_date" widget="date"/>
-                                    </span>
-                                    <br t-if="record.service_expiry_date.raw_value &amp;&amp; record.welcome_call_date.raw_value"/>
-                                    
-                                    <span t-if="record.service_expiry_date.raw_value" class="text-muted">
-                                        <i class="fa fa-calendar-times-o"/> Service Expiry: 
-                                        <field name="service_expiry_date" widget="date"/>
-                                    </span>
-                                </div>
                             </div>
-                            
                             
                             <div class="o_kanban_footer">
                                 <div class="o_kanban_footer_left">
@@ -129,7 +90,6 @@
         <field name="arch" type="xml">
             <form string="Property Details" create="false" edit="false">
                 <sheet>
-                <sheet>
                     <div class="oe_title">
                         <h1><field name="property_tag" readonly="1"/></h1>
                     </div>
@@ -138,13 +98,9 @@
                             <field name="rm_user_id" readonly="1"/>
                             <field name="owner_name" readonly="1"/>
                             <field name="owner_phone" readonly="1"/>
-                            <field name="magicbricks_id" readonly="1"/>
-                            <field name="housing_id" readonly="1"/>
-                            <field name="ninety_nine_acres_id" readonly="1"/>
                         </group>
                         <group>
                             <field name="service_expiry_date_str" readonly="1" string="Service Expiry Date"/> 
-                            <field name="welcome_call_date" readonly="1"/>
                             <field name="welcome_call_date" readonly="1"/>
                         </group>
                     </group>
@@ -175,16 +131,6 @@
                                             class="btn-link" 
                                             attrs="{'invisible': [('suggested_lead_phone_whatsapp_url', '=', False)]}"/>
 
-    
-                                        <field name="suggested_lead_phone" readonly="1" string="Lead Phone"/>
-                                                                              
-                                        <button name="action_whatsapp_with_copy"
-                                            type="object"
-                                            icon="fa-whatsapp"
-                                            title="Chat on WhatsApp (and copy message)"
-                                            class="btn-link" 
-                                            attrs="{'invisible': [('suggested_lead_phone_whatsapp_url', '=', False)]}"/>
-
                                     <field name="contact_type" string="Lead Status" readonly="1"/>
                                     <field name="original_property_tag" readonly="1" string="Liked"/>
                                     <field name="original_property_similarity" readonly="1" string="Match (%)" />
@@ -192,14 +138,11 @@
                                     <button name="action_log_feedback" type="object"
                                             string="Feedback" icon="fa-pencil-square-o"
                                             class="btn-sm btn-primary"/>
-                                            string="Feedback" icon="fa-pencil-square-o"
-                                            class="btn-sm btn-primary"/>
                                 </list>
                             </field>
                         </page>
                     </notebook>
 
-                </sheet>
                 </sheet>
             </form>
         </field>
@@ -222,22 +165,11 @@
                         string="My Properties"
                         domain="[('rm_user_id', '=', uid)]" help="Show only properties assigned to you"/>
                 <filter name="filter_active"
-                <filter name="filter_active"
                         string="Active Only"
                         domain="[('is_active', '=', True)]" help="Show only properties marked as Active"/>
                 <filter name="filter_inactive"
-                <filter name="filter_inactive"
                         string="Inactive/Expired"
                         domain="[('is_active', '=', False)]" help="Show only properties marked as Inactive"/>
-                <filter name="filter_expired"
-                        string="Service Expired"
-                        domain="[('service_expiry_date', '&lt;', context_today().strftime('%Y-%m-%d'))]" 
-                        help="Show properties with expired service"/>
-                <filter name="filter_new_property"
-                        string="New Properties"
-                        domain="[('welcome_call_date', '&lt;=', context_today().strftime('%Y-%m-%d')), 
-                                ('welcome_call_date', '&gt;=', (context_today() - datetime.timedelta(days=3)).strftime('%Y-%m-%d'))]" 
-                        help="Show new properties with welcome call date in last 3 days"/>
                 <filter name="filter_expired"
                         string="Service Expired"
                         domain="[('service_expiry_date', '&lt;', context_today().strftime('%Y-%m-%d'))]" 
@@ -261,7 +193,6 @@
         <field name="res_model">property.inventory</field>
         <field name="view_mode">kanban,form</field>
         <field name="search_view_id" ref="view_property_inventory_search"/>
-        <field name="domain">[('rm_user_id', '=', uid), ('is_active', '=', True)]</field>
         <field name="domain">[('rm_user_id', '=', uid), ('is_active', '=', True)]</field>
         <field name="context">{
             'search_default_filter_active': 1,

@@ -15,16 +15,8 @@
         sequence="1"/>
 
     <menuitem
-        id="menu_new_property_bulk_parent"
-        name="New Property Bulk"
-        parent="menu_main_dashboard_root"
-        groups="cleardeals_dashboards.group_dashboard_manager"
-        sequence="1"/>
-
-    <menuitem
         id="menu_lead_routing_dashboard_item"
         name="Lead Routing"
-        parent="menu_new_property_bulk_parent"
         parent="menu_new_property_bulk_parent"
         action="action_active_lead_assignment_dashboard"
         groups="cleardeals_dashboards.group_dashboard_manager"
@@ -34,19 +26,9 @@
         id="menu_unassigned_properties_dashboard"
         name="Property Wise Analysis"
         parent="menu_new_property_bulk_parent"
-        parent="menu_new_property_bulk_parent"
         action="cleardeals_dashboards.action_property_performance_dashboard"
         groups="cleardeals_dashboards.group_dashboard_manager"
         sequence="2"/>
-
-    <menuitem
-        id="menu_lead_suggestion_dashboard"
-        name="Lead Suggestion Analysis"
-        parent="menu_main_dashboard_root"
-        action="action_lead_suggestion_dashboard"
-        groups="cleardeals_dashboards.group_dashboard_manager"
-        sequence="2"/>
-        
 
     <menuitem
         id="menu_lead_suggestion_dashboard"
