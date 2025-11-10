@@ -49,7 +49,7 @@ class PropertyListing(models.Model):
     carpet_plot_area = fields.Char(string="Carpet Plot Area")
 
     # 18 to 34. Financial and Service Details
-    service_call_date = fields.Date(string="Service Call Date", required=True)
+    service_call_date = fields.Date(string="Service Call Date")
     payment_package = fields.Char(string="Payment Package")
     form_number = fields.Char(string="Form Number")
     property_price = fields.Monetary(string="Property Price", currency_field='currency_id')
@@ -97,6 +97,7 @@ class PropertyListing(models.Model):
         """ Automated action to expire property listings based on service validity."""
         for prop in self.search([('property_status', '=', 'live')]):
             if prop.service_validity and prop.property_register_date:
-                expiry_date = fields.Date.add(prop.property_register_date, months=prop.service_validity)
+                # In property_listing.py, around line 100
+                expiry_date = fields.Date.add(prop.property_register_date, months=int(prop.service_validity))
                 if fields.Date.today() > expiry_date:
                     prop.property_status = 'expired'
