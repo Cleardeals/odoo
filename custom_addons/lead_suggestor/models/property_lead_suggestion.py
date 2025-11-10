@@ -40,7 +40,6 @@ class PropertyLeadSuggestion(models.Model):
         compute='_compute_suggested_lead_phone_html',
         store=False
     )
-    suggested_lead_phone_whatsapp_url = fields.Char(
     lead_name = fields.Char(string="Lead Name", readonly=True)
 
     original_property_tag = fields.Char(string="Original Property", readonly=True)
