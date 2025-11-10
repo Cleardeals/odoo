@@ -28,7 +28,6 @@
         # Views
         'views/property_inventory_views.xml',
         'views/suggestion_feedback_wizard_views.xml',
-        'views/suggestion_feedback_wizard_views.xml',
         'views/menus.xml',
         
 
