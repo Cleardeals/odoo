@@ -27,7 +27,6 @@ jobs:
             free -m  # Check memory
             cd ~/odoo-project || { echo "Error: odoo-project directory not found"; exit 1; }
             echo ">>> Pulling latest changes from Git..."
-            git stash 
             git pull origin main || { echo "Error: Git pull failed"; exit 1; }
             echo ">>> Rebuilding Odoo image..."
             docker-compose build odoo || { echo "Error: Docker build failed"; exit 1; }
