@@ -1,7 +1,7 @@
 {
     'name': "Lead Scoring",
     'version': '1.0',
-    'depends': ['base', 'web', 'mail', 'queue_job'], # 'crm' is NOT needed
+    'depends': ['base', 'web', 'mail'], # 'crm' is NOT needed
     'author': "Nirat Patel",
     'category': 'Sales',
     'description': "Manages ML-based lead scoring and CSV lead imports for RMs.",

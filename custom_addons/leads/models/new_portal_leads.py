@@ -12,7 +12,7 @@ import hashlib
 import time
 import re
 
-_logger = logging.getLogger(__name__)   
+_logger = logging.getLogger(__name__) 
 
 class NewPortalLead(models.Model):
     _name = 'leads.new'
@@ -21,7 +21,6 @@ class NewPortalLead(models.Model):
     _order = 'create_date desc'
 
     # Lead Fields
-
     name = fields.Char('Lead Name', required=True, index=True)
     phone = fields.Char('Phone Number', index=True)
     email = fields.Char('Email Address', index=True)   
@@ -31,7 +30,6 @@ class NewPortalLead(models.Model):
     raw_data = fields.Text('Raw Data Dump')
 
     # Processing and Assignment Fields
-
     state = fields.Selection([
         ('new', 'New'),
         ('assigned', 'Assigned'),
@@ -148,7 +146,7 @@ class NewPortalLead(models.Model):
     
     def _process_lead_logic(self):
         """
-        The slow job. This runs in the background via a queue job
+        This now runs in the same transaction as the cron job.
         """
         self.ensure_one()
         _logger.info(f"🔄 Processing lead {self.id}: {self.name} (state: {self.state})")
@@ -193,7 +191,7 @@ class NewPortalLead(models.Model):
     # Assigning Unassigned leads cron job
     @api.model
     def _cron_reprocess_unassigned_leads(self):
-        """ Called by the 4 hour cron to find and requeue leads
+        """ Called by the 4 hour cron to find and re-process leads
             that are still 'new' due to data lag.
         """
 
@@ -206,9 +204,15 @@ class NewPortalLead(models.Model):
         _logger.info(f"CRON: Found {len(leads_to_retry)} unassigned leads to reprocess.")
 
         for lead in leads_to_retry:
-            lead.with_delay(
-                description=f"RETRY: Processing portal lead ID {lead.id}: {lead.name}"
-            )._process_lead_logic()
+            # --- MODIFICATION ---
+            # Was: lead.with_delay(...)
+            _logger.info(f"CRON: Re-processing lead {lead.id} synchronously...")
+            try:
+                lead._process_lead_logic()
+            except Exception as e:
+                # This safety block ensures one bad lead doesn't stop the whole cron
+                _logger.error(f"CRON: Failed during synchronous re-process of lead {lead.id}: {e}", exc_info=True)
+            # --- END MODIFICATION ---
 
 
     def _api_fetch_99acres(self):
@@ -458,24 +462,32 @@ class NewPortalLead(models.Model):
                 # 2. Process the results
                 _logger.info(f"CRON: Found {len(leads)} leads from {portal_name} API.")
                 for lead in leads:
-                    # 3. Create the leads.new record
-                    lead_vals = {
-                        'name': lead.get('lead_name'),
-                        'phone': lead.get('lead_phone'),
-                        'email': lead.get('lead_email'),
-                        'project_name': lead.get('project'),
-                        'portal_name': portal_name,
-                        'portal_property_id': lead.get('property_code'),
-                        'raw_data': json.dumps(lead.get('raw_json') or lead, indent=2),
-                        'state': 'new',
-                    }
-                    new_lead = self.create_lead_if_not_duplicate(lead_vals)
+                    try:
+                        # 3. Create the leads.new record
+                        lead_vals = {
+                            'name': lead.get('lead_name'),
+                            'phone': lead.get('lead_phone'),
+                            'email': lead.get('lead_email'),
+                            'project_name': lead.get('project'),
+                            'portal_name': portal_name,
+                            'portal_property_id': lead.get('property_code'),
+                            'raw_data': json.dumps(lead.get('raw_json') or lead, indent=2),
+                            'state': 'new',
+                        }
+                        new_lead = self.create_lead_if_not_duplicate(lead_vals)
 
-                    # 4. Enqueue the processing job
-                    if new_lead:
-                        new_lead.with_delay(
-                            description = f"Processing {portal_name} Lead: {new_lead.name}"
-                        )._process_lead_logic()
+                        # 4. Process the lead immediately (synchronously)
+                        if new_lead:
+                            # --- MODIFICATION ---
+                            # Was: new_lead.with_delay(...)
+                            _logger.info(f"Lead {new_lead.id} created, processing synchronously...")
+                            new_lead._process_lead_logic()
+                            # --- END MODIFICATION ---
+                    
+                    except Exception as e:
+                        # This safety block ensures one bad lead doesn't stop the whole cron
+                        _logger.error(f"CRON: Failed to create/process lead from {portal_name}: {e}", exc_info=True)
+
 
             except Exception as e:
                 _logger.error(f"Failed to pull leads from {portal_name} API: {e}")

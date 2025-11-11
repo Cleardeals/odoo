@@ -61,11 +61,14 @@ class MagicBricksController(http.Controller):
             LeadModel = request.env['leads.new'].sudo()
             new_lead = LeadModel.create_lead_if_not_duplicate(lead_vals)
 
-            # 4. Enqueue the lead for processing via job queue
+            # 4. Process the lead synchronously (removed queue_job dependency)
             if new_lead:
-                new_lead.with_delay(
-                    description = f"Processing MagicBricks Lead: {new_lead.name}"
-                )._process_lead_logic()
+                try:
+                    new_lead._process_lead_logic()
+                    _logger.info(f"MagicBricks Lead processed successfully: {new_lead.name}")
+                except Exception as process_err:
+                    _logger.error(f"Failed to process MagicBricks lead {new_lead.name}: {process_err}")
+                    # Lead is created but processing failed - can be retried later
 
             # 5. send success response
             return Response("Success: Lead punched in the CRM", status=200, mimetype='text/plain')
@@ -73,4 +76,3 @@ class MagicBricksController(http.Controller):
         except Exception as e:
             _logger.error(f"MagicBricks Webhook Exception: {e}. Raw data: {data}")
             return Response(f"Failed to Push Lead: {str(e)}", status=500, mimetype='text/plain')
-            
