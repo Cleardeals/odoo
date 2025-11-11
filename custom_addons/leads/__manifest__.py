@@ -4,34 +4,27 @@
     'depends': ['base', 'web', 'mail'], # 'crm' is NOT needed
     'author': "Nirat Patel",
     'category': 'Sales',
-    'description': "Manages ML-based lead scoring and CSV lead imports for RMs.",
+    'description': "Manages ML-based lead scoring for RMs.",
+    # In /mnt/extra-addons/custom/leads/__manifest__.py
     'data': [
-        # Security (Load First)
         'security/security.xml',
         'security/ir.model.access.csv',
-
-        # Data
         'data/ir_config_parameter_data.xml',
         'data/lead_score_cron.xml',
-        'data/new_portal_lead_cron.xml',
-        'data/pull_leads_cron.xml',
 
-        # Wizard Views
+        # Defines the wizard's action first, as other views depend on it.
         'views/lead_score_bq_wizard_views.xml',
-        'views/lead_csv_import_wizard_views.xml', 
 
-        # Model Views
+        # Defines the main lead score views and actions, which use the wizard action.
         'views/lead_score_views.xml',
-        # NO, not here: 'views/whatsapp_response_views.xml',
+
+        # Loads all menu items last, as they depend on all the actions defined above.
+        'views/lead_score_menu.xml',
+
+        # Defines the views for the separate WhatsApp model.
+        'views/whatsapp_response_views.xml',
+
+        # Inherits from lead_score_views to add WhatsApp features.
         'views/whatsapp_response_inherit_views.xml',
-        
-
-        # Menu items (Load parent menu first)
-        'views/lead_score_menu.xml', # <-- MOVED UP. This defines the parent menu.
-        'views/new_portal_lead_views.xml',
-
-        # NOW load the child menu
-        'views/whatsapp_response_views.xml', # <-- NOW this will work.
     ],
 }
-

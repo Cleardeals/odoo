@@ -67,3 +67,4 @@ async function whatsappWithCopyAction(env, action) {
 // This registers our function with Odoo's client action registry
 // The tag 'whatsapp_with_copy' must match the 'tag' in your Python code.
 registry.category("actions").add("whatsapp_with_copy", whatsappWithCopyAction);
+
