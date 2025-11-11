@@ -15,7 +15,6 @@
                 
                 <templates>
                     <t t-name="kanban-box">
-                        
                         <div class="oe_kanban_global_click #{!selection_mode ? '' : 'o_kanban_selected'}">
                             
                             <div class="o_kanban_tags" style="margin-bottom: 8px;">
@@ -26,8 +25,8 @@
                                 </t>
                                 
                                 <t t-if="record.welcome_call_date.raw_value &amp;&amp; 
-                                         record.welcome_call_date.raw_value &lt;= new Date().toISOString().split('T')[0] &amp;&amp;
-                                         record.welcome_call_date.raw_value &gt;= new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]">
+                                            record.welcome_call_date.raw_value &lt;= new Date().toISOString().split('T')[0] &amp;&amp;
+                                            record.welcome_call_date.raw_value &gt;= new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]">
                                     <span class="badge" style="font-size: 0.85em; margin-left: 4px; background-color: #28a745; color: white;">
                                         <i class="fa fa-star"/> NEW PROPERTY
                                     </span>
@@ -46,8 +45,6 @@
                                 </div>
                                 
                                 <div style="margin-top: 6px; font-size: 0.9em;">
-
-                                    
                                     <span t-if="record.welcome_call_date.raw_value" class="text-muted">
                                         <i class="fa fa-phone-square"/> Welcome call: 
                                         <field name="welcome_call_date" widget="date"/>
@@ -70,8 +67,8 @@
                                 </div>
                                 <div class="o_kanban_footer_right">
                                     <span t-if="record.new_suggestion_count.value > 0"
-                                          class="badge badge-danger"
-                                          title="New Suggestions">
+                                            class="badge badge-danger"
+                                            title="New Suggestions">
                                         <i class="fa fa-star" aria-label="New"/>
                                         <t t-esc="record.new_suggestion_count.value"/> New
                                     </span>
@@ -98,6 +95,9 @@
                             <field name="rm_user_id" readonly="1"/>
                             <field name="owner_name" readonly="1"/>
                             <field name="owner_phone" readonly="1"/>
+                            <field name="magicbricks_id" readonly="1"/>
+                            <field name="housing_id" readonly="1"/>
+                            <field name="ninety_nine_acres_id" readonly="1"/>
                         </group>
                         <group>
                             <field name="service_expiry_date_str" readonly="1" string="Service Expiry Date"/> 
@@ -115,16 +115,16 @@
                             <field name="suggestion_ids" nolabel="1">
                                 <list editable="bottom" create="false" delete="false">
                                     <field name="status" widget="badge"
-                                           decoration-success="status == 'converted'"
-                                           decoration-warning="status in ('contacted', 'interested')"
-                                           decoration-danger="status == 'not_interested'"
-                                           decoration-info="status == 'new'"/>
+                                            decoration-success="status == 'converted'"
+                                            decoration-warning="status in ('contacted', 'interested')"
+                                            decoration-danger="status == 'not_interested'"
+                                            decoration-info="status == 'new'"/>
                                     <field name="generation_date" readonly="1"/>
                                     <field name="lead_name" readonly="1"/>
     
-                                        <field name="suggested_lead_phone" readonly="1" string="Lead Phone"/>
-                                                                              
-                                        <button name="action_whatsapp_with_copy"
+                                    <field name="suggested_lead_phone" readonly="1" string="Lead Phone"/>
+                                    
+                                    <button name="action_whatsapp_with_copy"
                                             type="object"
                                             icon="fa-whatsapp"
                                             title="Chat on WhatsApp (and copy message)"
@@ -142,7 +142,6 @@
                             </field>
                         </page>
                     </notebook>
-
                 </sheet>
             </form>
         </field>

@@ -22,18 +22,22 @@ class PropertyInventory(models.Model):
     rm_user_id = fields.Many2one('res.users', string="Assigned RM", readonly=True, index=True)
     service_expiry_date = fields.Date(string="Service Expiry Date", readonly=True, index=True)
     service_expiry_date_str = fields.Char(string="Expiry Date (Display)", readonly=True)
-
     welcome_call_date = fields.Date(string="Welcome Call Date", readonly=True, index=True)
     
     # Status field to track if property is active
     is_active = fields.Boolean(string="Is Active", default=True, readonly=True, index=True)
 
-    # --- NEW FIELDS ---
+    # --- Property Details ---
     bhk = fields.Char(string="BHK", readonly=True)
     location = fields.Char(string="Location", readonly=True)
     city = fields.Char(string="City", readonly=True)
     property_link = fields.Char(string="Property Link", readonly=True)
-    # ------------------
+
+    # --- Portal IDs ---
+    ninety_nine_acres_id = fields.Char(string="99acres ID", readonly=True, index=True)
+    housing_id = fields.Char(string="Housing.com ID", readonly=True, index=True)
+    magicbricks_id = fields.Char(string="Magicbricks ID", readonly=True, index=True)
+    olx_id = fields.Char(string="OLX ID", readonly=True, index=True)
 
     suggestion_ids = fields.One2many(
         'property.lead.suggestion',
@@ -102,8 +106,10 @@ class PropertyInventory(models.Model):
                     Assignee AS assigned_rm,
                     Service_Expiry_Date,
                     Property_Status,
-
-                    -- NEW FIELDS TO PULL FROM BQ --
+                    `99acres_ID` as ninety_nine_acres_id,
+                    SPLIT(CAST(Housing_ID AS STRING), '.')[OFFSET(0)] AS housing_id,
+                    SPLIT(CAST(Magicbricks_ID AS STRING), '.')[OFFSET(0)] AS magicbricks_id,
+                    SPLIT(CAST(OLX_ID AS STRING), '.')[OFFSET(0)] AS olx_id,
                     BHK,
                     Location,
                     City1 AS city,
@@ -140,13 +146,14 @@ class PropertyInventory(models.Model):
                 expiry_date,
                 welcome_call_date,
                 calculated_status,
-
-                -- NEW FIELDS TO SELECT --
+                ninety_nine_acres_id,
+                housing_id,
+                magicbricks_id,
+                olx_id,
                 BHK,
                 Location,
                 city,
                 Property_Link
-
             FROM PropertiesWithStatus
             WHERE calculated_status = 'Active'
             ORDER BY expiry_date ASC NULLS LAST
@@ -172,7 +179,7 @@ class PropertyInventory(models.Model):
             updated_count = 0
             skipped_null_date = 0
             missing_rm_count = 0
-            bq_active_tags = set() 
+            bq_active_tags = set()
 
             for row in results:
                 # Basic validation
@@ -199,7 +206,7 @@ class PropertyInventory(models.Model):
                                 rm_user_id = rm_user.id
                             else:
                                 _logger.warning(f"Property '{row.property_tag}': RM '{clean_rm_name}' not found in Odoo Users.")
-                                missing_rm_count += 1 
+                                missing_rm_count += 1
                     except Exception as user_search_err:
                         _logger.error(f"Error searching for RM user '{assigned_rm_name}': {user_search_err}")
 
@@ -213,7 +220,7 @@ class PropertyInventory(models.Model):
                     else:
                         service_expiry_date = row.expiry_date
                     
-                    if not service_expiry_date: # Double check after conversion
+                    if not service_expiry_date:  # Double check after conversion
                         _logger.warning(f"Property '{row.property_tag}': Failed to parse date '{row.Service_Expiry_Date}'")
                         skipped_null_date += 1
                         continue
@@ -221,7 +228,7 @@ class PropertyInventory(models.Model):
                     _logger.warning(f"Property '{row.property_tag}': Error converting expiry date: {date_err}")
                     continue
 
-                
+                # Parse welcome call date
                 welcome_call_date = None
                 try:
                     if row.welcome_call_date:
@@ -242,13 +249,15 @@ class PropertyInventory(models.Model):
                     'service_expiry_date': service_expiry_date,
                     'service_expiry_date_str': service_expiry_date_str,
                     'welcome_call_date': welcome_call_date,
-                    'is_active': True, # Mark as active since it came from the 'Active' BQ query
-
-                    # --- NEW FIELDS TO SAVE ---
+                    'is_active': True,  # Mark as active since it came from the 'Active' BQ query
                     'bhk': row.BHK if row.BHK else '',
                     'location': row.Location if row.Location else '',
                     'city': row.city if row.city else '',
                     'property_link': row.Property_Link if row.Property_Link else '',
+                    'ninety_nine_acres_id': row.ninety_nine_acres_id if row.ninety_nine_acres_id else False,
+                    'housing_id': row.housing_id if row.housing_id else False,
+                    'magicbricks_id': row.magicbricks_id if row.magicbricks_id else False,
+                    'olx_id': row.olx_id if row.olx_id else False
                 }
 
                 # --- Upsert Logic ---
@@ -274,7 +283,6 @@ class PropertyInventory(models.Model):
                     _logger.error(f"Database error processing property '{row.property_tag}': {db_err}")
                     self.env.cr.rollback()
                     continue
-            
             
             # ---  Deactivation step ---
             _logger.info("Deactivating properties that are no longer active in BigQuery...")
