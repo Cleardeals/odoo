@@ -18,11 +18,5 @@ __pycache__/
 ```
 hr_payroll_community/
 
-# Odoo runtime data - DO NOT COMMIT
 odoo-web-data/
-odoo-db-data/
-
-# SSL certificates - auto-generated
-letsencrypt/
-
 

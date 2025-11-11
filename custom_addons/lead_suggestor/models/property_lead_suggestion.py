@@ -28,6 +28,7 @@ class PropertyLeadSuggestion(models.Model):
         string="Property Tag"
     )
     
+    
     suggested_lead_phone = fields.Char(string="Lead Phone", readonly=True, required=True)
     suggested_lead_phone_whatsapp_url = fields.Char(
         string="WhatsApp URL",
@@ -205,6 +206,7 @@ class PropertyLeadSuggestion(models.Model):
                 'message_text': message_text,
             }
         }
+            
             
     def action_log_feedback(self):
         """

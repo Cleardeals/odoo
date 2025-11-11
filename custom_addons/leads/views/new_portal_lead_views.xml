@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_new_portal_lead_list" model="ir.ui.view">
+        <field name="name">leads.new.list</field>
+        <field name="model">leads.new</field>
+        <field name="arch" type="xml">
+            <list string="New Portal Leads" decoration-info="state=='new'" decoration-danger="state=='failed'" decoration-success="state=='assigned'">
+                <field name="create_date"/>
+                <field name="portal_name"/>
+                <field name="name"/>
+                <field name="phone"/>
+                <field name="portal_property_id"/>
+                <field name="property_id"/>
+                <field name="user_id"/>
+                <field name="state"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_new_portal_lead_form" model="ir.ui.view">
+        <field name="name">leads.new.form</field>
+        <field name="model">leads.new</field>
+        <field name="arch" type="xml">
+            <form string="New Portal Lead">
+                <header>
+                    <field name="state" widget="statusbar" statusbar_visible="new,assigned"/>
+                </header>
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="name"/>
+                            <field name="phone"/>
+                            <field name="email"/>
+                        </group>
+                        <group>
+                            <field name="portal_name" readonly="1"/>
+                            <field name="portal_property_id" readonly="1"/>
+                            <field name="create_date" readonly="1"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Assignment &amp; Processing">
+                            <group>
+                                <field name="user_id"/>
+                                <field name="property_id"/>
+                                <field name="process_notes" readonly="1"/>
+                            </group>
+                        </page>
+                        <page string="Raw Data (Debug)">
+                            <field name="raw_data" readonly="1" nolabel="1"/>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_new_portal_lead" model="ir.actions.act_window">
+        <field name="name">New Portal Leads</field>
+        <field name="res_model">leads.new</field>
+        <field name="view_mode">list,form</field>
+        <field name="help" type="html">
+          <p class="o_view_nocontent_smiling_face">
+            No new leads from portals... yet!
+          </p>
+        </field>
+    </record>
+
+    <menuitem id="menu_new_portal_lead"
+              name="New Portal Leads"
+              parent="leads.lead_score_menu_main" 
+              action="action_new_portal_lead"
+              sequence="10"
+              groups="leads.group_lead_score_manager"/>
+</odoo>
