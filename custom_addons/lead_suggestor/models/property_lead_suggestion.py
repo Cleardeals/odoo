@@ -60,6 +60,7 @@ class PropertyLeadSuggestion(models.Model):
         ('not_interested', 'Not Interested'),
         ('interested', 'Interested'), 
         ('converted', 'Converted'),
+        ('whatsapp_done', 'WhatsApp Done'),
         ('other', 'Other'),
     ], string="Status", default='new', index=True, required=True)
 
