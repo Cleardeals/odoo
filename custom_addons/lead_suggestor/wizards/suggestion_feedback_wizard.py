@@ -7,6 +7,7 @@ class SuggestionFeedbackWizard(models.TransientModel):
 
     status = fields.Selection([
         ('new', 'New'),
+        ('whatsapp_done', 'WhatsApp Done'),
         ('contacted', 'Contacted'),
         ('details_shared_of_property', 'Details Shared of Property'),
         ('not_interested', 'Not Interested'),
