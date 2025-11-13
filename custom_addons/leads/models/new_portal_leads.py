@@ -36,9 +36,94 @@ class NewPortalLead(models.Model):
         ('failed', 'Failed Assignment'),
     ], default='new', required=True, index=True, copy=False)
 
+    current_status = fields.Selection([
+        ('busy', 'Busy'),
+        ('lead', 'Lead'),
+        ('ringing', 'Ringing'),
+        ('call_back_later', 'Call Back Later'),
+        ('site_visit_scheduled', 'Site Visit Scheduled'),
+        ('option_not_matching_requirements', 'Option Not Matching Requirements'),
+        ('details_shared_of_property', 'Details Shared of Property'),
+        ('no_requirements', 'No Requirements'),
+        ('detail_shared_and_interested_for_site_visit', 'Detail Shared and Interested for Site Visit'),
+        ('switched_off', 'Switched Off'),
+        ('requirement_closed', 'Requirement Closed'),
+        ('property_sold_out', 'Property Sold Out'),
+        ('rescheduled', 'Rescheduled'),
+        ('budget_not_sufficient', 'Budget Not Sufficient'),
+        ('site_visit_done', 'Site Visit Done'),
+        ('number_not_in_use_wrong_number', 'Number Not in Use/Wrong Number'),
+        ('other', 'Other')
+    ], string='Current Status', default='lead', required=True)
+
+    remarks = fields.Text('Remarks')
+
+    site_visit_date = fields.Datetime(
+        string="Site Visit Scheduled On",
+        copy = False,
+        index = True,
+        tracking = True
+    )
+
+    first_contact_datetime = fields.Datetime(
+        string="First Contact On",
+        readonly=True,
+        copy=False,
+        tracking=True
+    )
+
     property_id = fields.Many2one('property.inventory', string='Related Property')
     user_id = fields.Many2one('res.users', string='Assigned RM', copy=False)
+
+    property_bhk = fields.Char(
+        related = 'property_id.bhk',
+        string = 'Property BHK',
+        readonly = True,
+        store=True
+    )
+
+    property_location = fields.Char(
+        related='property_id.location', 
+        string="Property Location", 
+        readonly=True, 
+        store=True
+    )
+
+    property_city = fields.Char(
+        related='property_id.city', 
+        string="Property City", 
+        readonly=True, 
+        store=True
+    )
+
+    property_owner_name = fields.Char(
+        related='property_id.owner_name', 
+        string="Property Owner", 
+        readonly=True,
+        store=True
+    )
+
+    property_link = fields.Char(
+        related='property_id.property_link',
+        string="Property Link",
+        readonly=True
+    )
+
     process_notes = fields.Text('Processing Notes')
+
+    phone_whatsapp_url = fields.Char(
+        string="WhatsApp URL",
+        compute='_compute_phone_whatsapp_url',
+        store=False
+    )
+
+    phone_whatsapp_html = fields.Html(
+        string="Phone",
+        compute='_compute_phone_whatsapp_url',
+        store=False
+    )
+    
+
 
     @api.model
     def _standardize_phone(self, phone_number):
@@ -61,7 +146,7 @@ class NewPortalLead(models.Model):
         
         _logger.warning(f"Phone number {phone_number} could not be standardized.")
         return numeric_phone  # Return as-is if it doesn't fit expected formats
-    
+   
     @api.model
     def create_lead_if_not_duplicate(self, lead_vals):
         """
@@ -100,7 +185,29 @@ class NewPortalLead(models.Model):
         else:
             # NOT A DUPLICATE
             return self.create(lead_vals)
+        
+    def write(self, vals):
+        """
+        Override write to automatically log the first contact datetime when an RM changes the 'current_status' away from lead for the first time."""
 
+        leads_to_stamp = self.env['leads.new']
+        first_contact_time = False
+        # 1. Check if current status is being changed to something other than the default lead
+        if 'current_status' in vals and vals['current_status'] != 'lead':
+            # 2. Find all leads in this batch, that are being contacted for the first time. 
+            lead_to_stamp = self.filtered(lambda r: not r.first_contact_datetime)
+
+            if lead_to_stamp:
+                first_contact_time = fields.Datetime.now()
+        
+        # Call the original super write() method
+        res = super(NewPortalLead, self).write(vals)
+
+        # After the orignal write is done, if we need to stamp the time, we do it in a separte safe write. This avoids recursing and is standard odoo pattern
+        if first_contact_time:
+            lead_to_stamp.write({'first_contact_datetime': first_contact_time})
+
+        return res
 
     def _find_property(self):
         """ Finds the synced property based on the portal name and the portal ID."""
@@ -478,11 +585,8 @@ class NewPortalLead(models.Model):
 
                         # 4. Process the lead immediately (synchronously)
                         if new_lead:
-                            # --- MODIFICATION ---
-                            # Was: new_lead.with_delay(...)
                             _logger.info(f"Lead {new_lead.id} created, processing synchronously...")
                             new_lead._process_lead_logic()
-                            # --- END MODIFICATION ---
                     
                     except Exception as e:
                         # This safety block ensures one bad lead doesn't stop the whole cron
@@ -491,3 +595,140 @@ class NewPortalLead(models.Model):
 
             except Exception as e:
                 _logger.error(f"Failed to pull leads from {portal_name} API: {e}")
+
+
+    @api.depends('phone')
+    def _compute_phone_whatsapp_url(self):
+        """
+        Generates a WhatsApp URL using whatsapp protocol, prepending 91 if a 10-digit number is found.
+        """
+
+        for rec in self:
+            if not rec.phone:
+                rec.phone_whtasapp_url = False
+                continue
+                
+            #1. Clear all non numeric characters
+            sane_phone = re.sub(r'\D', '', rec.phone)
+            number_to_use = False
+
+            if len(sane_phone) == 10:
+                number_to_use = f"91{sane_phone}"
+            elif len(sane_phone) == 12 and sane_phone.startswith('91'):
+                number_to_use = sane_phone
+            elif len(sane_phone) == 11 and sane_phone.startswith('0'):
+                number_to_use = f"91{sane_phone[1:]}"
+
+            if number_to_use:
+                rec.phone_whatsapp_url = f"whatsapp://send?phone={number_to_use}"
+            else:
+                rec.phone_whatsapp_url = False
+
+    @api.depends('phone', 'phone_whatsapp_url')
+    def _compute_phone_whatsapp_html(self):
+        """
+        Creates a simpel Whatsapp Link to open the desktop App
+        """
+
+        for rec in self:
+            phone_display = rec.phone or ''
+
+            if rec.phone_whatsapp_url:
+                whatsapp_url = rec.phone_whatsapp_url
+
+                # create a simple html link
+                rec.phone_whatsapp_html = \
+                    f'<a href="{whatsapp_url}" ' \
+                    f'title="Click to open WhatsApp" ' \
+                    f'style="text-decoration: none; cursor: pointer;">' \
+                    f'<i class="fa fa.whatsapp" style="color:green; font-size: 16px;"/> {phone_display}</a>'
+            else:
+                rec.phone_whatsapp_html = phone_display
+
+    # (Make sure 'import re' is at the top of your file)
+
+    def action_whatsapp_with_copy(self):
+        """
+        This action prepares the data and calls a Client Action
+        to handle the copying and link opening.
+        
+        [UPDATED to use the lead's FULL name]
+        """
+        self.ensure_one()
+        
+        # --- 1. Get WhatsApp URL ---
+        if not self.phone_whatsapp_url:
+            return
+        whatsapp_url = self.phone_whatsapp_url
+        
+        # --- 2. Gather All Template Variables (with fallbacks) ---
+        
+        # {{Name}}
+        # --- FIX: We now use the full name ---
+        lead_name = self.name or "there"
+        # (The line that caused the truncation has been removed)
+
+        # {{portal}}
+        portal_name = self.portal_name or "our portal" # Fallback
+
+        # Get Property Details
+        prop = self.property_id
+        
+        # {{BHK}}
+        prop_bhk = "property" # Default fallback
+        if prop and prop.bhk:
+            prop_bhk = prop.bhk
+            
+        # {{Location}} & City
+        prop_location = ""
+        prop_city = ""
+        prop_link = ""
+        if prop:
+            prop_location = prop.location or ""
+            prop_city = prop.city or ""
+            prop_link = prop.property_link or ""
+
+        # --- 3. Build the Location String (e.g., "Location, City") ---
+        
+        # Clean the location (remove "A-", "B-", etc.)
+        if prop_location:
+            prop_location = re.sub(r'^[A-Z]-', '', prop_location).strip()
+
+        location_parts = []
+        if prop_location:
+            location_parts.append(prop_location)
+        if prop_city:
+            location_parts.append(prop_city)
+            
+        location_city_str = ", ".join(filter(None, location_parts))
+        if not location_city_str:
+            location_city_str = "your area" # Final fallback
+
+        # --- 4. Build Your New Message (in parts) ---
+        
+        message_parts = [
+            f"Hello {lead_name},",
+            "", # Creates a blank line
+            f"We've received your requirement for a {prop_bhk} property in {location_city_str} through {portal_name}.",
+            "", # Blank line
+            "With cleardeals, you can purchase this at 0% brokerage.",
+        ]
+        
+        if prop_link:
+            message_parts.append(f"You can view the property here: {prop_link}")
+
+        message_parts.append("") # Blank line
+        message_parts.append("👉 Want to know more? Just type \"Hi\" to continue")
+
+        message_text = "\n".join(message_parts)
+
+        # --- 5. Return the Client Action ---
+        return {
+            'type': 'ir.actions.client',
+            'tag': 'whatsapp_with_copy', # This tag MUST match your JS file
+            'target': 'new',
+            'context': {
+                'whatsapp_url': whatsapp_url,
+                'message_text': message_text,
+            }
+        }

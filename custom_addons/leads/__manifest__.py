@@ -33,5 +33,12 @@
         # NOW load the child menu
         'views/whatsapp_response_views.xml', # <-- NOW this will work.
     ],
+
+    'assets': {
+        'web.assets_backend': [
+            'lead_suggestor/static/src/js/whatsapp_action.js',
+            'leads/static/src/js/leads_list_controller.js',
+        ],
+    },
 }
 

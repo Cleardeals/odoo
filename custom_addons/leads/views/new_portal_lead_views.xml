@@ -1,18 +1,73 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
+
+    <record id="view_new_portal_lead_search" model="ir.ui.view">
+        <field name="name">leads.new.search</field>
+        <field name="model">leads.new</field>
+        <field name="arch" type="xml">
+            <search string="Search New Portal Leads">
+                <field name="name" string="Lead Name"/>
+                <field name="phone"/>
+                <field name="user_id" string="RM"/>
+                <field name="portal_name"/>
+
+                <separator/>
+                
+                <filter string="Unassigned" name="unassigned"
+                        domain="[('user_id', '=', False)]"/>
+
+                <separator/>
+                
+                <filter string="New" name="filter_new" 
+                        domain="[('current_status', '=', 'lead')]"/>
+
+                
+                <separator/>
+                
+                <group expand="0" string="Group By">
+                    <filter string="Current Status" 
+                            name="group_by_current_status" 
+                            context="{'group_by': 'current_status'}"/>
+                            
+                    <filter string="RM" 
+                            name="group_by_rm" 
+                            context="{'group_by': 'user_id'}"/>
+                    <filter string="Main State" 
+                            name="group_by_state" 
+                            context="{'group_by': 'state'}"/>
+                    <filter string="Portal" 
+                            name="group_by_portal" 
+                            context="{'group_by': 'portal_name'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+
     <record id="view_new_portal_lead_list" model="ir.ui.view">
         <field name="name">leads.new.list</field>
         <field name="model">leads.new</field>
         <field name="arch" type="xml">
-            <list string="New Portal Leads" decoration-info="state=='new'" decoration-danger="state=='failed'" decoration-success="state=='assigned'">
+            <list string="New Portal Leads" 
+                    js_class="leads_new_list_controller"
+                    decoration-success="(state=='assigned' and current_status=='lead')" 
+                    decoration-info="current_status != 'lead'"
+                    decoration-danger="state=='new'">
+                
+                    
                 <field name="create_date"/>
                 <field name="portal_name"/>
                 <field name="name"/>
                 <field name="phone"/>
+                <button name="action_whatsapp_with_copy"
+                    type="object"
+                    icon="fa-whatsapp"
+                    title="Chat on WhatsApp (and copy message)"
+                    invisible="phone_whatsapp_url == False"/>
                 <field name="portal_property_id"/>
                 <field name="property_id"/>
                 <field name="user_id"/>
-                <field name="state"/>
+                <field name="current_status"/>
             </list>
         </field>
     </record>
@@ -23,13 +78,22 @@
         <field name="arch" type="xml">
             <form string="New Portal Lead">
                 <header>
-                    <field name="state" widget="statusbar" statusbar_visible="new,assigned"/>
+                    <field name="current_status" widget="statusbar" statusbar_visible="new,assigned"/>
                 </header>
                 <sheet>
                     <group>
                         <group>
                             <field name="name"/>
-                            <field name="phone"/>
+                            <label for="phone"/>
+                            <div class="d-flex align-items-center">
+                                <field name="phone" no_label="1" class="w-auto"/>
+                                <button name="action_whatsapp_with_copy"
+                                        type="object"
+                                        icon="fa-whatsapp"
+                                        title="Chat on WhatsApp (and copy message)"
+                                        class="btn-link ms-2" 
+                                        invisible="phone_whatsapp_url == False"/>
+                            </div>
                             <field name="email"/>
                         </group>
                         <group>
@@ -39,15 +103,23 @@
                         </group>
                     </group>
                     <notebook>
-                        <page string="Assignment &amp; Processing">
+                        <page string="Lead &amp; Property Details">
                             <group>
-                                <field name="user_id"/>
-                                <field name="property_id"/>
-                                <field name="process_notes" readonly="1"/>
+                                <group>
+                                    <field name="user_id"/>
+                                    <field name="property_id"/>
+                                    <field name = "current_status"/>
+                                    <field name="site_visit_date" 
+                                            invisible="current_status != 'site_visit_scheduled'"/>
+                                    <field name="remarks"/>
+                                </group>
+
+                                <group>
+                                    <field name="property_location"/>
+                                    <field name="property_link" widget="url"/>
+                                    <field name="property_bhk"/>
+                                </group>
                             </group>
-                        </page>
-                        <page string="Raw Data (Debug)">
-                            <field name="raw_data" readonly="1" nolabel="1"/>
                         </page>
                     </notebook>
                 </sheet>
@@ -71,5 +143,8 @@
               parent="leads.lead_score_menu_main" 
               action="action_new_portal_lead"
               sequence="10"
-              groups="leads.group_lead_score_manager"/>
+              groups="leads.group_lead_score_rm"/>
 </odoo>
+
+
+
