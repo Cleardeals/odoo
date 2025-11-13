@@ -146,7 +146,30 @@ class NewPortalLead(models.Model):
         
         _logger.warning(f"Phone number {phone_number} could not be standardized.")
         return numeric_phone  # Return as-is if it doesn't fit expected formats
-   
+    
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        # Create the new lead(s) first
+        new_leads = super(NewPortalLead, self).create(vals_list)
+        
+        # --- NOTIFICATION LOGIC (CORRECTED) ---
+        channel = "leads.new"
+        notification_type = "bus_notification"
+        message = {
+            'ids': new_leads.ids,
+            'model': 'leads.new',
+            'event': 'create'
+        }
+        
+      
+        # --- CORRECTED LINE ---
+        # Use _sendone() as the log helpfully suggested
+        self.env['bus.bus']._sendone(channel, notification_type, message)
+        # --- END CORRECTION ---
+        
+        return new_leads
+    
     @api.model
     def create_lead_if_not_duplicate(self, lead_vals):
         """
@@ -188,25 +211,40 @@ class NewPortalLead(models.Model):
         
     def write(self, vals):
         """
-        Override write to automatically log the first contact datetime when an RM changes the 'current_status' away from lead for the first time."""
-
+        Override write to automatically log 'first_contact_datetime'
+        AND to send a bus notification.
+        """
+        
+        # (Your existing logic for first_contact_datetime)
         leads_to_stamp = self.env['leads.new']
         first_contact_time = False
-        # 1. Check if current status is being changed to something other than the default lead
         if 'current_status' in vals and vals['current_status'] != 'lead':
-            # 2. Find all leads in this batch, that are being contacted for the first time. 
-            lead_to_stamp = self.filtered(lambda r: not r.first_contact_datetime)
-
-            if lead_to_stamp:
+            leads_to_stamp = self.filtered(lambda r: not r.first_contact_datetime)
+            if leads_to_stamp:
                 first_contact_time = fields.Datetime.now()
         
-        # Call the original super write() method
         res = super(NewPortalLead, self).write(vals)
-
-        # After the orignal write is done, if we need to stamp the time, we do it in a separte safe write. This avoids recursing and is standard odoo pattern
-        if first_contact_time:
-            lead_to_stamp.write({'first_contact_datetime': first_contact_time})
-
+        
+        if leads_to_stamp and first_contact_time:
+            leads_to_stamp.write({
+                'first_contact_datetime': first_contact_time
+            })
+            
+        # --- NOTIFICATION LOGIC (CORRECTED) ---
+        channel = "leads.new"
+        notification_type = "bus_notification"
+        message = {
+            'ids': self.ids,
+            'model': 'leads.new',
+            'event': 'write'
+        }
+    
+        
+        # --- CORRECTED LINE ---
+        # Use _sendone() as the log helpfully suggested
+        self.env['bus.bus']._sendone(channel, notification_type, message)
+        # --- END CORRECTION ---
+            
         return res
 
     def _find_property(self):
