@@ -7,3 +7,4 @@ access_lead_score_bq_wizard,lead.score.bq.wizard,model_lead_score_bq_wizard,lead
 access_lead_csv_import_wizard,access.lead.csv.import.wizard,model_lead_csv_import_wizard,leads.group_lead_score_manager,1,1,1,1
 access_message_wizard,access.message.wizard,model_message_wizard,base.group_user,1,1,1,1
 access_leads_new_manager,leads.new.manager,model_leads_new,leads.group_lead_score_manager,1,1,1,1
+access_leads_new_rm,leads.new.rm,model_leads_new,leads.group_lead_score_rm,1,1,1,1
