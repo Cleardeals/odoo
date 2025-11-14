@@ -65,6 +65,13 @@ class NewPortalLead(models.Model):
         tracking = True
     )
 
+    site_visit_date_only = fields.Date(
+        string="Site Visit Date (Main Property)",
+        compute='_compute_site_visit_date_only',
+        store=True, # Essential for filtering
+        readonly=True
+    )
+
     first_contact_datetime = fields.Datetime(
         string="First Contact On",
         readonly=True,
@@ -130,6 +137,19 @@ class NewPortalLead(models.Model):
         copy=False,
         index=True,
         help = "Tracks if this lead has been sent to the n8n webhook."
+    )
+
+    interest_ids = fields.One2many(
+        'lead.property.interest',
+        'lead_id',
+        string="Recommended Properies"
+    )
+
+    create_date_only = fields.Date(
+        string="Creation Date",
+        compute='_compute_create_date_only',
+        store=True, # 'store=True' is ESSENTIAL for it to be searchable
+        readonly=True
     )
     
 
@@ -840,3 +860,29 @@ class NewPortalLead(models.Model):
 
         except requests.exceptions.RequestException as e:
             _logger.error(f"Failed to send leads to n8n webhook: {str(e)}")
+
+
+    @api.depends('create_date')
+    def _compute_create_date_only(self):
+        """
+        Takes the full 'create_date' (Datetime) and stores
+        just the 'date' part for easy filtering.
+        """
+        for rec in self:
+            if rec.create_date:
+                rec.create_date_only = rec.create_date.date()
+            else:
+                rec.create_date_only = False
+
+
+    @api.depends('site_visit_date')
+    def _compute_site_visit_date_only(self):
+        """
+        Takes the 'site_visit_date' (Datetime) and stores
+        just the 'date' part for easy filtering.
+        """
+        for rec in self:
+            if rec.site_visit_date:
+                rec.site_visit_date_only = rec.site_visit_date.date()
+            else:
+                rec.site_visit_date_only = False

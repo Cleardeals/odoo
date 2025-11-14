@@ -30,7 +30,7 @@ export class LeadsNewListController extends ListController {
         }
 
         // Set auto-refresh interval (5 second)
-        const refreshInterval = 50000; // 5 second in milliseconds
+        const refreshInterval = 5000; // 5 second in milliseconds
         
         this.autoRefreshInterval = setInterval(() => {
             // Only refresh if component is not destroyed, view is visible and not in edit mode
