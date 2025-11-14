@@ -15,6 +15,7 @@
         'data/lead_score_cron.xml',
         'data/new_portal_lead_cron.xml',
         'data/pull_leads_cron.xml',
+        'data/webhook_cron.xml',
 
         # Wizard Views
         'views/lead_score_bq_wizard_views.xml',

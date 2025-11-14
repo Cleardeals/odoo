@@ -122,6 +122,15 @@ class NewPortalLead(models.Model):
         compute='_compute_phone_whatsapp_url',
         store=False
     )
+
+    # Field for webhook queue
+    is_webhook_sent = fields.Boolean(
+        string="Webhook Sent",
+        default=False,
+        copy=False,
+        index=True,
+        help = "Tracks if this lead has been sent to the n8n webhook."
+    )
     
 
 
@@ -770,3 +779,64 @@ class NewPortalLead(models.Model):
                 'message_text': message_text,
             }
         }
+    
+    @api.model
+    def _cron_send_new_lead_webhooks(self):
+        """
+        Called by a 1-minute cron.
+        Finds all leads that have not been sent to the webhook.
+        Sends them as a batch to n8n.
+        """
+
+        config = self.env['ir.config_parameter'].sudo()
+        webhook_url = config.get_param('n8n.new_lead_webhook_url')
+
+        if not webhook_url:
+            _logger.error("n8n.new_lead_webhook_url not set in system parameters.")
+            return
+        
+        # Find all unsent leads, limit to a safe batch size
+        leads_to_send = self.search([
+            ('is_webhook_sent', '=', False)
+        ], limit=100)
+
+        if not leads_to_send:
+            _logger.info("No new leads to send to n8n webhook")
+            return
+        
+        # This handles multiple leads
+        batch_payload = []
+        for lead in leads_to_send:
+            # Create a simple JSON object for each lead
+            lead_data = {
+                'lead_id': lead.id,
+                'name': lead.name,
+                'phone': lead.phone,
+                'portal_name': lead.portal_name,
+                'portal_property_id': lead.portal_property_id,
+                'property_id': lead.property_id.id,
+                'property_tag': lead.property_id.property_tag,  
+            }
+
+            batch_payload.append(lead_data)
+        
+        _logger.info(f"Sending {len(batch_payload)} new leads to n8n webhook...")
+        try:
+            # Send  the entire batch as one JSON list to n8n
+            headers = {'Content-Type': 'application/json'}
+            response = requests.post(
+                webhook_url,
+                data = json.dumps(batch_payload),
+                headers=headers,
+                timeout=10
+            )
+
+            # Check for a successful response
+            response.raise_for_status()
+
+            # If successfull, mark all leads as sent
+            leads_to_send.write({'is_webhook_sent': True})
+            _logger.info(f"Successfully sent {len(batch_payload)} leads to n8n webhook.")
+
+        except requests.exceptions.RequestException as e:
+            _logger.error(f"Failed to send leads to n8n webhook: {str(e)}")
