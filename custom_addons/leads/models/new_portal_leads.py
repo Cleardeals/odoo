@@ -806,13 +806,15 @@ class NewPortalLead(models.Model):
         Called by a 1-minute cron.
         Finds all leads that have not been sent to the webhook.
         Sends them as a batch to n8n.
+        
+        [UPDATED to include more property details]
         """
-
+        # Get your n8n webhook URL from Odoo's system parameters
         config = self.env['ir.config_parameter'].sudo()
         webhook_url = config.get_param('n8n.new_lead_webhook_url')
 
         if not webhook_url:
-            _logger.error("n8n.new_lead_webhook_url not set in system parameters.")
+            _logger.error("n8n.new_lead_webhook_url not set. Skipping webhook.")
             return
         
         # Find all unsent leads, limit to a safe batch size
@@ -824,25 +826,54 @@ class NewPortalLead(models.Model):
             _logger.info("No new leads to send to n8n webhook")
             return
         
-        # This handles multiple leads
         batch_payload = []
         for lead in leads_to_send:
-            # Create a simple JSON object for each lead
+            
+            # --- NEW: Get linked property and its details safely ---
+            prop = lead.property_id 
+            
+            prop_id = False
+            prop_tag = False
+            prop_bhk = False
+            prop_location = False
+            prop_city = False
+            prop_link = False
+
+            if prop: # Check if a property is linked
+                prop_id = prop.id
+                prop_tag = prop.property_tag
+                prop_bhk = prop.bhk
+                prop_location = prop.location
+                prop_city = prop.city
+                prop_link = prop.property_link
+            # --- END NEW LOGIC ---
+
+            # Create the JSON object for this lead
             lead_data = {
+                # Lead Info
                 'lead_id': lead.id,
                 'name': lead.name,
                 'phone': lead.phone,
-                'portal_name': lead.portal_name,
+                'portal_name': lead.portal_name, # This is the "Portal Source"
                 'portal_property_id': lead.portal_property_id,
-                'property_id': lead.property_id.id,
-                'property_tag': lead.property_id.property_tag,  
+                
+                # Property Info (now includes the new fields)
+                'property_id': prop_id,
+                'property_tag': prop_tag,
+                'property_bhk': prop_bhk,
+                'property_location': prop_location,
+                'property_city': prop_city,
+                'property_link': prop_link
             }
-
             batch_payload.append(lead_data)
         
+        if not batch_payload: # Should not happen if leads_to_send is not empty, but good to check
+             _logger.info("No leads to send after processing.")
+             return
+
         _logger.info(f"Sending {len(batch_payload)} new leads to n8n webhook...")
         try:
-            # Send  the entire batch as one JSON list to n8n
+            # Send the entire batch as one JSON list to n8n
             headers = {'Content-Type': 'application/json'}
             response = requests.post(
                 webhook_url,
@@ -854,7 +885,7 @@ class NewPortalLead(models.Model):
             # Check for a successful response
             response.raise_for_status()
 
-            # If successfull, mark all leads as sent
+            # If successful, mark all leads as sent
             leads_to_send.write({'is_webhook_sent': True})
             _logger.info(f"Successfully sent {len(batch_payload)} leads to n8n webhook.")
 

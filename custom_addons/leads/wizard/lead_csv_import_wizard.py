@@ -84,7 +84,7 @@ class LeadCsvImportWizard(models.TransientModel):
                     failed_rows.append(f"Row {row_num} ({lead_name}): Missing '{COLUMN_MAPPING['olx_id']}'.")
                     continue
                 
-                olx_id = olx_id.strip()
+                olx_id = olx_id.strip().strip("'")
 
                 # --- 2. Find Property (with Caching) ---
                 prop = property_cache.get(olx_id)
