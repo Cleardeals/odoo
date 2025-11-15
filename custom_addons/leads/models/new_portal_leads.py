@@ -807,7 +807,7 @@ class NewPortalLead(models.Model):
         Finds all leads that have not been sent to the webhook.
         Sends them as a batch to n8n.
         
-        [UPDATED to include more property details]
+        [UPDATED to include more property details and RM Name]
         """
         # Get your n8n webhook URL from Odoo's system parameters
         config = self.env['ir.config_parameter'].sudo()
@@ -829,7 +829,7 @@ class NewPortalLead(models.Model):
         batch_payload = []
         for lead in leads_to_send:
             
-            # --- NEW: Get linked property and its details safely ---
+            # --- Get linked property and its details safely ---
             prop = lead.property_id 
             
             prop_id = False
@@ -846,7 +846,9 @@ class NewPortalLead(models.Model):
                 prop_location = prop.location
                 prop_city = prop.city
                 prop_link = prop.property_link
-            # --- END NEW LOGIC ---
+            
+            # --- Get RM Name safely ---
+            rm_name = lead.user_id.name if lead.user_id else False
 
             # Create the JSON object for this lead
             lead_data = {
@@ -856,6 +858,7 @@ class NewPortalLead(models.Model):
                 'phone': lead.phone,
                 'portal_name': lead.portal_name, # This is the "Portal Source"
                 'portal_property_id': lead.portal_property_id,
+                'rm_name': rm_name, # <-- THIS IS THE NEW FIELD
                 
                 # Property Info (now includes the new fields)
                 'property_id': prop_id,
@@ -867,7 +870,7 @@ class NewPortalLead(models.Model):
             }
             batch_payload.append(lead_data)
         
-        if not batch_payload: # Should not happen if leads_to_send is not empty, but good to check
+        if not batch_payload:
              _logger.info("No leads to send after processing.")
              return
 
@@ -891,7 +894,6 @@ class NewPortalLead(models.Model):
 
         except requests.exceptions.RequestException as e:
             _logger.error(f"Failed to send leads to n8n webhook: {str(e)}")
-
 
     @api.depends('create_date')
     def _compute_create_date_only(self):
