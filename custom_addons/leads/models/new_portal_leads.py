@@ -65,6 +65,13 @@ class NewPortalLead(models.Model):
         tracking = True
     )
 
+    site_visit_date_only = fields.Date(
+        string="Site Visit Date (Main Property)",
+        compute='_compute_site_visit_date_only',
+        store=True, # Essential for filtering
+        readonly=True
+    )
+
     first_contact_datetime = fields.Datetime(
         string="First Contact On",
         readonly=True,
@@ -121,6 +128,28 @@ class NewPortalLead(models.Model):
         string="Phone",
         compute='_compute_phone_whatsapp_url',
         store=False
+    )
+
+    # Field for webhook queue
+    is_webhook_sent = fields.Boolean(
+        string="Webhook Sent",
+        default=False,
+        copy=False,
+        index=True,
+        help = "Tracks if this lead has been sent to the n8n webhook."
+    )
+
+    interest_ids = fields.One2many(
+        'lead.property.interest',
+        'lead_id',
+        string="Recommended Properies"
+    )
+
+    create_date_only = fields.Date(
+        string="Creation Date",
+        compute='_compute_create_date_only',
+        store=True, # 'store=True' is ESSENTIAL for it to be searchable
+        readonly=True
     )
     
 
@@ -770,3 +799,123 @@ class NewPortalLead(models.Model):
                 'message_text': message_text,
             }
         }
+    
+    @api.model
+    def _cron_send_new_lead_webhooks(self):
+        """
+        Called by a 1-minute cron.
+        Finds all leads that have not been sent to the webhook.
+        Sends them as a batch to n8n.
+        
+        [UPDATED to include more property details and RM Name]
+        """
+        # Get your n8n webhook URL from Odoo's system parameters
+        config = self.env['ir.config_parameter'].sudo()
+        webhook_url = config.get_param('n8n.new_lead_webhook_url')
+
+        if not webhook_url:
+            _logger.error("n8n.new_lead_webhook_url not set. Skipping webhook.")
+            return
+        
+        # Find all unsent leads, limit to a safe batch size
+        leads_to_send = self.search([
+            ('is_webhook_sent', '=', False)
+        ], limit=100)
+
+        if not leads_to_send:
+            _logger.info("No new leads to send to n8n webhook")
+            return
+        
+        batch_payload = []
+        for lead in leads_to_send:
+            
+            # --- Get linked property and its details safely ---
+            prop = lead.property_id 
+            
+            prop_id = False
+            prop_tag = False
+            prop_bhk = False
+            prop_location = False
+            prop_city = False
+            prop_link = False
+
+            if prop: # Check if a property is linked
+                prop_id = prop.id
+                prop_tag = prop.property_tag
+                prop_bhk = prop.bhk
+                prop_location = prop.location
+                prop_city = prop.city
+                prop_link = prop.property_link
+            
+            # --- Get RM Name safely ---
+            rm_name = lead.user_id.name if lead.user_id else False
+
+            # Create the JSON object for this lead
+            lead_data = {
+                # Lead Info
+                'lead_id': lead.id,
+                'name': lead.name,
+                'phone': lead.phone,
+                'portal_name': lead.portal_name, # This is the "Portal Source"
+                'portal_property_id': lead.portal_property_id,
+                'rm_name': rm_name, # <-- THIS IS THE NEW FIELD
+                
+                # Property Info (now includes the new fields)
+                'property_id': prop_id,
+                'property_tag': prop_tag,
+                'property_bhk': prop_bhk,
+                'property_location': prop_location,
+                'property_city': prop_city,
+                'property_link': prop_link
+            }
+            batch_payload.append(lead_data)
+        
+        if not batch_payload:
+             _logger.info("No leads to send after processing.")
+             return
+
+        _logger.info(f"Sending {len(batch_payload)} new leads to n8n webhook...")
+        try:
+            # Send the entire batch as one JSON list to n8n
+            headers = {'Content-Type': 'application/json'}
+            response = requests.post(
+                webhook_url,
+                data = json.dumps(batch_payload),
+                headers=headers,
+                timeout=10
+            )
+
+            # Check for a successful response
+            response.raise_for_status()
+
+            # If successful, mark all leads as sent
+            leads_to_send.write({'is_webhook_sent': True})
+            _logger.info(f"Successfully sent {len(batch_payload)} leads to n8n webhook.")
+
+        except requests.exceptions.RequestException as e:
+            _logger.error(f"Failed to send leads to n8n webhook: {str(e)}")
+
+    @api.depends('create_date')
+    def _compute_create_date_only(self):
+        """
+        Takes the full 'create_date' (Datetime) and stores
+        just the 'date' part for easy filtering.
+        """
+        for rec in self:
+            if rec.create_date:
+                rec.create_date_only = rec.create_date.date()
+            else:
+                rec.create_date_only = False
+
+
+    @api.depends('site_visit_date')
+    def _compute_site_visit_date_only(self):
+        """
+        Takes the 'site_visit_date' (Datetime) and stores
+        just the 'date' part for easy filtering.
+        """
+        for rec in self:
+            if rec.site_visit_date:
+                rec.site_visit_date_only = rec.site_visit_date.date()
+            else:
+                rec.site_visit_date_only = False
