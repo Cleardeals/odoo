@@ -1,10 +1,10 @@
 from odoo import models, fields, api
 import logging
-import xml.etree.ElementTree as ET
+# import xml.etree.ElementTree as ET  <-- REMOVED
 from datetime import timedelta
-import urllib.request
-import urllib.parse
-import urllib.error
+# import urllib.request  <-- REMOVED
+# import urllib.parse    <-- REMOVED
+# import urllib.error    <-- REMOVED
 import json
 import requests
 import hmac
@@ -152,7 +152,31 @@ class NewPortalLead(models.Model):
         readonly=True
     )
     
+    # --- Compute Methods ---
 
+    @api.depends('create_date')
+    def _compute_create_date_only(self):
+        """
+        Takes the full 'create_date' (Datetime) and stores
+        just the 'date' part for easy filtering.
+        """
+        for rec in self:
+            if rec.create_date:
+                rec.create_date_only = rec.create_date.date()
+            else:
+                rec.create_date_only = False
+
+    @api.depends('site_visit_date')
+    def _compute_site_visit_date_only(self):
+        """
+        Takes the 'site_visit_date' (Datetime) and stores
+        just the 'date' part for easy filtering.
+        """
+        for rec in self:
+            if rec.site_visit_date:
+                rec.site_visit_date_only = rec.site_visit_date.date()
+            else:
+                rec.site_visit_date_only = False
 
     @api.model
     def _standardize_phone(self, phone_number):
@@ -191,9 +215,7 @@ class NewPortalLead(models.Model):
             'event': 'create'
         }
         
-      
         # --- CORRECTED LINE ---
-        # Use _sendone() as the log helpfully suggested
         self.env['bus.bus']._sendone(channel, notification_type, message)
         # --- END CORRECTION ---
         
@@ -212,19 +234,16 @@ class NewPortalLead(models.Model):
 
         lead_vals['phone'] = phone_clean
 
-        # if we don't have a phone or propertyID, we can't check for duplocates, so we just create the lead
         if not phone_clean or not portal_prop_id:
             _logger.info("Cannot check for duplicate (missing phone/prop_id), creating lead.")
             return self.create(lead_vals)
         
-        # Look for an existing lead in the last 30 days
         time_limit = fields.Datetime.now() - timedelta(days=30)
         domain = [
             ('phone', '=', phone_clean),
             ('portal_property_id', '=', portal_prop_id),
             ('create_date', '>=', time_limit),
         ]
-        # Search the domain for any existing or duplicate leads
         existing_lead = self.search(domain, limit=1)
 
         if existing_lead:
@@ -235,7 +254,6 @@ class NewPortalLead(models.Model):
             )
             return None
         else:
-            # NOT A DUPLICATE
             return self.create(lead_vals)
         
     def write(self, vals):
@@ -244,7 +262,6 @@ class NewPortalLead(models.Model):
         AND to send a bus notification.
         """
         
-        # (Your existing logic for first_contact_datetime)
         leads_to_stamp = self.env['leads.new']
         first_contact_time = False
         if 'current_status' in vals and vals['current_status'] != 'lead':
@@ -268,13 +285,12 @@ class NewPortalLead(models.Model):
             'event': 'write'
         }
     
-        
-        # --- CORRECTED LINE ---
-        # Use _sendone() as the log helpfully suggested
         self.env['bus.bus']._sendone(channel, notification_type, message)
         # --- END CORRECTION ---
             
         return res
+
+    # --- Lead Processing & Assignment ---
 
     def _find_property(self):
         """ Finds the synced property based on the portal name and the portal ID."""
@@ -299,7 +315,6 @@ class NewPortalLead(models.Model):
             _logger.warning(f"Lead {self.id}: No field mapping for portal '{portal}'")
             return self.env['property.inventory']
         
-        # Build the dynamic domain
         domain = [
             (field_to_search, '=', portal_pid)
         ]
@@ -314,7 +329,6 @@ class NewPortalLead(models.Model):
         if property_id and property_id.rm_user_id:
             return property_id.rm_user_id
         
-        # Fallback: Assign to the administrator if no RM is found on the property
         _logger.warning(f"Property {property_id.property_tag} has no RM. Assigning to admin")
         return self.env.ref('base.user_admin')
     
@@ -330,11 +344,9 @@ class NewPortalLead(models.Model):
             return
         
         try:
-            # 1. Try to find the matching property
             property_rec = self._find_property()
             
             if not property_rec:
-                # Data Lag: Property not found
                 msg = f"Attempt {fields.Datetime.now()}: Property not found for {self.portal_name} ID: {self.portal_property_id}"
                 _logger.warning(f"⚠️ Lead {self.id}: {msg}")
                 self.process_notes = msg + "\n"
@@ -342,11 +354,9 @@ class NewPortalLead(models.Model):
             
             _logger.info(f"✅ Lead {self.id}: Found property {property_rec.property_tag} (ID: {property_rec.id})")
             
-            # 2. Try to find the correct RM
             rm_user = self._find_rm(property_rec)
             _logger.info(f"✅ Lead {self.id}: Found RM {rm_user.name} (ID: {rm_user.id})")
 
-            # 3. Success assign the lead.
             self.write({
                 'property_id': property_rec.id,
                 'user_id': rm_user.id,
@@ -362,13 +372,13 @@ class NewPortalLead(models.Model):
                 'process_notes': f"Processing failed with error: {str(e)}\n"
             })
 
-    # Assigning Unassigned leads cron job
+    # --- Cron Jobs ---
+
     @api.model
     def _cron_reprocess_unassigned_leads(self):
         """ Called by the 4 hour cron to find and re-process leads
             that are still 'new' due to data lag.
         """
-
         _logger.info("CRON: Starting re-process for unassigned leads...")
         domain = [
             ('state', '=', 'new'),
@@ -378,139 +388,19 @@ class NewPortalLead(models.Model):
         _logger.info(f"CRON: Found {len(leads_to_retry)} unassigned leads to reprocess.")
 
         for lead in leads_to_retry:
-            # --- MODIFICATION ---
-            # Was: lead.with_delay(...)
             _logger.info(f"CRON: Re-processing lead {lead.id} synchronously...")
             try:
                 lead._process_lead_logic()
             except Exception as e:
-                # This safety block ensures one bad lead doesn't stop the whole cron
                 _logger.error(f"CRON: Failed during synchronous re-process of lead {lead.id}: {e}", exc_info=True)
-            # --- END MODIFICATION ---
 
-
-    def _api_fetch_99acres(self):
-        """
-        Builds the XML, sends the POST request to 99acres, and returns a list of leads.
-        """
-        _logger.info("Attempting to fetch leads from 99acres API...")
-
-        API_URL = "https://www.99acres.com/99api/v1/getmy99Response/OeAuXClO43hwseaXEQ/uid/"
-        DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
-
-        # Get credentials from Odoo System Parameters
-        config = self.env['ir.config_parameter'].sudo()
-        username = config.get_param('99acres.api.username')
-        password = config.get_param('99acres.api.password')
-
-        if not username or not password:
-            _logger.error("CRITICAL: 99acres.api.username or .password not set in system parameters.")
-            return []
-        
-        # 2. Set time range: 20 minutes ago to now
-        now = fields.Datetime.now()
-        start_time = fields.Datetime.subtract(now, minutes=20)
-        start_date = start_time.strftime(DATE_FORMAT)
-        end_date = now.strftime(DATE_FORMAT)
-
-        # 3. Build the XML request body
-        xml_request = f"""<?xml version='1.0'?>
-        <query>
-            <user_name>{username}</user_name>
-            <pswd>{password}</pswd>
-            <start_date>{start_date}</start_date>
-            <end_date>{end_date}</end_date>
-        </query>"""
-
-        # 4. Build POST data using urllib
-        payload = {'xml': xml_request}
-        # Encode the payload into bytes
-        data = urllib.parse.urlencode(payload).encode('utf-8')
-
-        _logger.info(f"99acres: Requesting leads from {start_date} to {end_date}")
-
-        # 5. Make the API call 
-        try:
-            req = urllib.request.Request(API_URL, data=data, method='POST')
-
-            # Open the url
-            with urllib.request.urlopen(req, timeout=30) as response:
-                # Read and decode the response
-                response_body = response.read().decode('utf-8')
-
-                # Check for HTTP success
-                if response.status != 200:
-                    _logger.error(f"99acres HTTP Error: {response.status} | Response: {response_body}")
-                    return []
-                
-                # 6. Parse the XML response
-                return self._parse_99acres_response(response_body)
-
-        except urllib.error.HTTPError as e:
-            # Handle the HTTP Errors
-            _logger.error(f"99acres HTTPError: {e.code} - {e.reason}")
-            try:
-                # Try to read the error body
-                _logger.error(f"Response Body: {e.read().decode('utf-8')}")
-            except Exception:
-                pass
-        
-        except urllib.error.URLError as e:
-            # Handle other errors 
-            _logger.error(f"99acres URLError: {e.reason}")
-        except Exception as e:
-            _logger.error(f"Error Fetching 99acres leads: {e}")
-        
-        return []
     
-    def _parse_99acres_response(self, xml_string):
-        """
-        Parses the XML String and returns a list of lead dicitionaries.
-        """
-        _logger.info("Parsing 99acres response XML...")
-        leads_list = []
-        try:
-            root = ET.fromstring(xml_string)
+    # --- 99ACRES PULL METHOD (REMOVED) ---
+    # def _api_fetch_99acres(self): ...
+    # def _parse_99acres_response(self, xml_string): ...
 
-            # Check for API error
-            if root.get('ActionStatus') == 'False':
-                error_msg = root.findtext('.//Message', 'Unknown error')
-                _logger.error(f"99acres API Error: {error_msg}")
-                return []
-            
-            for resp in root.findall('Resp'):
-                try:
-                    qry_dtl = resp.find('QryDtl')
-                    cntct_dtl = resp.find('CntctDtl')
-                    if qry_dtl is None or cntct_dtl is None:
-                        _logger.warning("Skipping a Resp entry due to missing QryDtl or CntctDtl.")
-                        continue
-
-                    # Translate their field names to the keys our
-                    # _cron_pull_external_leads method expects.
-                    lead_data = {
-                        'lead_name': cntct_dtl.findtext('Name'),
-                        'lead_email': cntct_dtl.findtext('Email'),
-                        'lead_phone': cntct_dtl.findtext('Phone'),
-                        'project' : qry_dtl.findtext('CmpctLabl', 'N/A'),
-                        'property_code': qry_dtl.findtext('ProdId', 'N/A'),
-                        'raw_json': {
-                            'QueryInfo': qry_dtl.findtext('QryInfo', 'N/A'),
-                            'ReceivedOn': qry_dtl.findtext('RcvdOn', 'N/A'),
-                            'ResponseType': qry_dtl.findtext('ResType', 'N/A'),
-                        }
-                    }
-                    leads_list.append(lead_data)
-                except Exception as e:
-                    _logger.warning(f"Error parsing one 99acres lead: {str(e)}")
-                
-            _logger.info(f"99acres: Parsed {len(leads_list)} leads")
-            return leads_list 
-        
-        except ET.ParseError as e:
-            _logger.error(f"Failed to parse 99acres XML response: {e}")
-            return []
-        
+    
+    # --- HOUSING.COM PULL METHOD ---
     def _api_fetch_housing(self):
         """ 
         Fetches new leads from the Housing.com API using HMAC auth.
@@ -521,7 +411,6 @@ class NewPortalLead(models.Model):
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.212 Safari/537.36' 
         }
         
-        # 1. Get credentials from Odoo System Parameters
         config = self.env['ir.config_parameter'].sudo()
         api_key = config.get_param('housing.api.key')
         api_id = config.get_param('housing.api.id')
@@ -531,19 +420,16 @@ class NewPortalLead(models.Model):
             return []
 
         try:
-            # 2. Set time Paramters  20 minutes for 15 min cron
             end_time = int(time.time())
             start_time = end_time - (20 * 60)  # 20 minutes ago
             current_time_str = str(end_time)    
 
-            # 3. Generate hash(H)
             hash_h = hmac.new(
                 api_key.encode('utf-8'),
                 current_time_str.encode('utf-8'),
                 hashlib.sha256
             ).hexdigest()
 
-            # 4. Build request parameters
             params = {
                 'start_date': start_time,
                 'end_date': end_time,
@@ -553,13 +439,10 @@ class NewPortalLead(models.Model):
                 'per_page': 1000,
             }
 
-            # 5. make the API call
             response = requests.get(HOUSING_ENDPOINT, params=params, headers=HEADERS, timeout=30)
-            response.raise_for_status() # Raise HTTPError for bad responses
-
+            response.raise_for_status() 
             response_data = response.json() 
 
-            # 6. Check  the response
             if 'apiErrors' in response_data:
                 _logger.error(f"Housing.com API Errors: {json.dumps(response_data)}")
                 return []
@@ -569,7 +452,7 @@ class NewPortalLead(models.Model):
                 _logger.info(f'Housing.com: Found {len(raw_leads)} leads from API.')
                 return self._parse_housing_response(raw_leads)
             
-            _logger.info("Housing.com: API call successful, now new leads found.")
+            _logger.info("Housing.com: API call successful, no new leads found.")
             return []
         
         except requests.exceptions.HTTPError as e:
@@ -582,8 +465,8 @@ class NewPortalLead(models.Model):
 
     def _parse_housing_response(self, raw_leads):
         """
-        Parses thel list of raw lead objects from HOusing.com
-        asdn tranlates them into our standard dictionary format.
+        Parses the list of raw lead objects from Housing.com
+        and translates them into our standard dictionary format.
         """
         leads_list = []
         for lead in raw_leads:
@@ -604,7 +487,6 @@ class NewPortalLead(models.Model):
                     'raw_json': lead,
                 }
 
-                # Simple Validation
                 if not translated_lead['lead_phone']:
                     _logger.warning(f"Housing.com lead skipped due to missing phone: {json.dumps(lead)}")
                     continue
@@ -622,22 +504,19 @@ class NewPortalLead(models.Model):
         """
         Called by the 15 minutes cron to pull leads from all
         non-webhook portals and create leads.new records.
+        
+        --- UPDATED: 99acres has been removed ---
         """
         portal_mappers = {
-            '99acres': self._api_fetch_99acres,
             'Housing.com': self._api_fetch_housing,
         }
         
         for portal_name, fetch_method in portal_mappers.items():
             try:
-                # 1. Call the specific API fetch method
                 leads = fetch_method()
-
-                # 2. Process the results
                 _logger.info(f"CRON: Found {len(leads)} leads from {portal_name} API.")
                 for lead in leads:
                     try:
-                        # 3. Create the leads.new record
                         lead_vals = {
                             'name': lead.get('lead_name'),
                             'phone': lead.get('lead_phone'),
@@ -650,32 +529,29 @@ class NewPortalLead(models.Model):
                         }
                         new_lead = self.create_lead_if_not_duplicate(lead_vals)
 
-                        # 4. Process the lead immediately (synchronously)
                         if new_lead:
                             _logger.info(f"Lead {new_lead.id} created, processing synchronously...")
                             new_lead._process_lead_logic()
                     
                     except Exception as e:
-                        # This safety block ensures one bad lead doesn't stop the whole cron
                         _logger.error(f"CRON: Failed to create/process lead from {portal_name}: {e}", exc_info=True)
-
 
             except Exception as e:
                 _logger.error(f"Failed to pull leads from {portal_name} API: {e}")
 
+    
+    # --- WhatsApp Button Methods ---
 
     @api.depends('phone')
     def _compute_phone_whatsapp_url(self):
         """
         Generates a WhatsApp URL using whatsapp protocol, prepending 91 if a 10-digit number is found.
         """
-
         for rec in self:
             if not rec.phone:
-                rec.phone_whtasapp_url = False
+                rec.phone_whatsapp_url = False # <-- Fixed typo: phone_whtasapp_url -> phone_whatsapp_url
                 continue
                 
-            #1. Clear all non numeric characters
             sane_phone = re.sub(r'\D', '', rec.phone)
             number_to_use = False
 
@@ -694,111 +570,90 @@ class NewPortalLead(models.Model):
     @api.depends('phone', 'phone_whatsapp_url')
     def _compute_phone_whatsapp_html(self):
         """
-        Creates a simpel Whatsapp Link to open the desktop App
+        Creates a simple Whatsapp Link to open the desktop App
         """
-
         for rec in self:
             phone_display = rec.phone or ''
 
             if rec.phone_whatsapp_url:
                 whatsapp_url = rec.phone_whatsapp_url
-
-                # create a simple html link
+                
+                # --- Fixed typo: fa.whatsapp -> fa-whatsapp ---
                 rec.phone_whatsapp_html = \
                     f'<a href="{whatsapp_url}" ' \
                     f'title="Click to open WhatsApp" ' \
                     f'style="text-decoration: none; cursor: pointer;">' \
-                    f'<i class="fa fa.whatsapp" style="color:green; font-size: 16px;"/> {phone_display}</a>'
+                    f'<i class="fa fa-whatsapp" style="color:green; font-size: 16px;"/> {phone_display}</a>'
             else:
                 rec.phone_whatsapp_html = phone_display
 
-    # (Make sure 'import re' is at the top of your file)
-
+    
     def action_whatsapp_with_copy(self):
         """
         This action prepares the data and calls a Client Action
         to handle the copying and link opening.
-        
-        [UPDATED to use the lead's FULL name]
         """
         self.ensure_one()
         
-        # --- 1. Get WhatsApp URL ---
         if not self.phone_whatsapp_url:
             return
         whatsapp_url = self.phone_whatsapp_url
         
-        # --- 2. Gather All Template Variables (with fallbacks) ---
-        
-        # {{Name}}
-        # --- FIX: We now use the full name ---
         lead_name = self.name or "there"
-        # (The line that caused the truncation has been removed)
-
-        # {{portal}}
-        portal_name = self.portal_name or "our portal" # Fallback
+        portal_name = self.portal_name or "our portal"
 
         # Get Property Details
         prop = self.property_id
-        
-        # {{BHK}}
         prop_bhk = "property" # Default fallback
-        if prop and prop.bhk:
-            prop_bhk = prop.bhk
-            
-        # {{Location}} & City
         prop_location = ""
         prop_city = ""
         prop_link = ""
         if prop:
+            prop_bhk = prop.bhk or "property"
             prop_location = prop.location or ""
             prop_city = prop.city or ""
             prop_link = prop.property_link or ""
 
-        # --- 3. Build the Location String (e.g., "Location, City") ---
-        
-        # Clean the location (remove "A-", "B-", etc.)
+        # Build the Location String
         if prop_location:
             prop_location = re.sub(r'^[A-Z]-', '', prop_location).strip()
-
         location_parts = []
         if prop_location:
             location_parts.append(prop_location)
         if prop_city:
             location_parts.append(prop_city)
-            
         location_city_str = ", ".join(filter(None, location_parts))
         if not location_city_str:
-            location_city_str = "your area" # Final fallback
+            location_city_str = "your area"
 
-        # --- 4. Build Your New Message (in parts) ---
-        
+        # Build Your New Message
         message_parts = [
             f"Hello {lead_name},",
-            "", # Creates a blank line
+            "", 
             f"We've received your requirement for a {prop_bhk} property in {location_city_str} through {portal_name}.",
-            "", # Blank line
+            "",
             "With cleardeals, you can purchase this at 0% brokerage.",
         ]
         
         if prop_link:
             message_parts.append(f"You can view the property here: {prop_link}")
 
-        message_parts.append("") # Blank line
+        message_parts.append("")
         message_parts.append("👉 Want to know more? Just type \"Hi\" to continue")
-
         message_text = "\n".join(message_parts)
 
-        # --- 5. Return the Client Action ---
+        # Return the Client Action
         return {
             'type': 'ir.actions.client',
-            'tag': 'whatsapp_with_copy', # This tag MUST match your JS file
+            'tag': 'whatsapp_with_copy',
             'target': 'new',
             'context': {
                 'whatsapp_url': whatsapp_url,
                 'message_text': message_text,
             }
         }
+    
+    # --- n8n Webhook Cron ---
     
     @api.model
     def _cron_send_new_lead_webhooks(self):
@@ -809,7 +664,6 @@ class NewPortalLead(models.Model):
         
         [UPDATED to include more property details and RM Name]
         """
-        # Get your n8n webhook URL from Odoo's system parameters
         config = self.env['ir.config_parameter'].sudo()
         webhook_url = config.get_param('n8n.new_lead_webhook_url')
 
@@ -817,21 +671,18 @@ class NewPortalLead(models.Model):
             _logger.error("n8n.new_lead_webhook_url not set. Skipping webhook.")
             return
         
-        # Find all unsent leads, limit to a safe batch size
         leads_to_send = self.search([
             ('is_webhook_sent', '=', False)
         ], limit=100)
 
         if not leads_to_send:
-            _logger.info("No new leads to send to n8n webhook")
+            _logger.info("No new leads to send to n8gpn webhook") # <-- Fixed typo
             return
         
         batch_payload = []
         for lead in leads_to_send:
             
-            # --- Get linked property and its details safely ---
             prop = lead.property_id 
-            
             prop_id = False
             prop_tag = False
             prop_bhk = False
@@ -839,7 +690,7 @@ class NewPortalLead(models.Model):
             prop_city = False
             prop_link = False
 
-            if prop: # Check if a property is linked
+            if prop: 
                 prop_id = prop.id
                 prop_tag = prop.property_tag
                 prop_bhk = prop.bhk
@@ -847,20 +698,18 @@ class NewPortalLead(models.Model):
                 prop_city = prop.city
                 prop_link = prop.property_link
             
-            # --- Get RM Name safely ---
             rm_name = lead.user_id.name if lead.user_id else False
 
-            # Create the JSON object for this lead
             lead_data = {
                 # Lead Info
                 'lead_id': lead.id,
                 'name': lead.name,
                 'phone': lead.phone,
-                'portal_name': lead.portal_name, # This is the "Portal Source"
+                'portal_name': lead.portal_name,
                 'portal_property_id': lead.portal_property_id,
-                'rm_name': rm_name, # <-- THIS IS THE NEW FIELD
+                'rm_name': rm_name,
                 
-                # Property Info (now includes the new fields)
+                # Property Info
                 'property_id': prop_id,
                 'property_tag': prop_tag,
                 'property_bhk': prop_bhk,
@@ -876,7 +725,6 @@ class NewPortalLead(models.Model):
 
         _logger.info(f"Sending {len(batch_payload)} new leads to n8n webhook...")
         try:
-            # Send the entire batch as one JSON list to n8n
             headers = {'Content-Type': 'application/json'}
             response = requests.post(
                 webhook_url,
@@ -884,38 +732,9 @@ class NewPortalLead(models.Model):
                 headers=headers,
                 timeout=10
             )
-
-            # Check for a successful response
             response.raise_for_status()
-
-            # If successful, mark all leads as sent
             leads_to_send.write({'is_webhook_sent': True})
             _logger.info(f"Successfully sent {len(batch_payload)} leads to n8n webhook.")
 
         except requests.exceptions.RequestException as e:
             _logger.error(f"Failed to send leads to n8n webhook: {str(e)}")
-
-    @api.depends('create_date')
-    def _compute_create_date_only(self):
-        """
-        Takes the full 'create_date' (Datetime) and stores
-        just the 'date' part for easy filtering.
-        """
-        for rec in self:
-            if rec.create_date:
-                rec.create_date_only = rec.create_date.date()
-            else:
-                rec.create_date_only = False
-
-
-    @api.depends('site_visit_date')
-    def _compute_site_visit_date_only(self):
-        """
-        Takes the 'site_visit_date' (Datetime) and stores
-        just the 'date' part for easy filtering.
-        """
-        for rec in self:
-            if rec.site_visit_date:
-                rec.site_visit_date_only = rec.site_visit_date.date()
-            else:
-                rec.site_visit_date_only = False
