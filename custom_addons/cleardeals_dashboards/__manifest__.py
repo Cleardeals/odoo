@@ -15,6 +15,8 @@
         'views/lead_assignment_views.xml',
         'views/property_daily_stat_views.xml',
         'views/lead_suggestion_dashboard_views.xml',
+        'views/renewal_dashboard_views.xml',
+        'views/renewal_template_stats_views.xml',
         'views/menus.xml',
     ],
     'external_dependencies': {

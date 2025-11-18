@@ -9,7 +9,6 @@
             <field name="user_id" ref="base.user_root"/>
             <field name="interval_number">1</field>
             <field name="interval_type">days</field>
-            
             <field name="nextcall" eval="(DateTime.now() + relativedelta(hours=4)).strftime('%Y-%m-%d 04:00:00')" />
         </record>
 
@@ -22,6 +21,28 @@
             <field name="interval_number">1</field>
             <field name="interval_type">days</field>
             <field name="nextcall" eval="(DateTime.now() + relativedelta(hours=4, minutes=5)).strftime('%Y-%m-%d 04:05:00')" />
+        </record>
+
+        <record id="ir_cron_fetch_renewal_data" model="ir.cron">
+            <field name="name">Sync: Fetch Renewal Campaign Data</field>
+            <field name="model_id" ref="model_renewal_property_owner"/>
+            <field name="state">code</field>
+            <field name="code">model._cron_fetch_renewal_data()</field>
+            <field name="user_id" ref="base.user_root"/>
+            <field name="interval_number">1</field>
+            <field name="interval_type">days</field>
+            <field name="nextcall" eval="(DateTime.now() + relativedelta(hours=4, minutes=10)).strftime('%Y-%m-%d 04:10:00')" />
+        </record>
+
+        <record id="ir_cron_fetch_template_stats" model="ir.cron">
+            <field name="name">Sync: Fetch Template Performance Stats</field>
+            <field name="model_id" ref="model_renewal_property_owner"/>
+            <field name="state">code</field>
+            <field name="code">model._cron_fetch_template_stats()</field>
+            <field name="user_id" ref="base.user_root"/>
+            <field name="interval_number">1</field>
+            <field name="interval_type">days</field>
+            <field name="nextcall" eval="(DateTime.now() + relativedelta(hours=4, minutes=15)).strftime('%Y-%m-%d 04:15:00')" />
         </record>
 
     </data>
