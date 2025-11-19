@@ -54,5 +54,15 @@
             <field name="interval_type">days</field>
         </record>
 
+        <record id="ir_cron_lead_scoring_sync" model="ir.cron">
+            <field name="name">Sync: Lead Scoring Workflow Data</field>
+            <field name="model_id" ref="model_lead_scoring_lead"/>
+            <field name="state">code</field>
+            <field name="code">model._cron_sync_lead_scoring()</field>
+            <field name="user_id" ref="base.user_root"/>
+            <field name="interval_number">4</field>
+            <field name="interval_type">hours</field>
+        </record>
+
     </data>
 </odoo>

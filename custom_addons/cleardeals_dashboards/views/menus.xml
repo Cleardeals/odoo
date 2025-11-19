@@ -61,4 +61,20 @@
         groups="cleardeals_dashboards.group_dashboard_manager"
         sequence="2"/>
 
+    <menuitem
+        id="menu_lead_scoring_dashboard"
+        name="Lead Scoring Workflow"
+        parent="menu_main_dashboard_root"
+        action="action_lead_scoring_dashboard"
+        groups="cleardeals_dashboards.group_dashboard_manager"
+        sequence="4"/>
+
+        <menuitem
+        id="menu_lead_scoring_template_stats"
+        name="Template Stats"
+        parent="menu_lead_scoring_dashboard"
+        action="action_lead_scoring_template_stats"
+        groups="cleardeals_dashboards.group_dashboard_manager"
+        sequence="10"/>
+
 </odoo>

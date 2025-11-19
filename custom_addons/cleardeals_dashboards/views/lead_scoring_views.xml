@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- List View -->
+    <record id="view_lead_scoring_lead_list" model="ir.ui.view">
+        <field name="name">lead.scoring.lead.list</field>
+        <field name="model">lead.scoring.lead</field>
+        <field name="arch" type="xml">
+            <list string="Lead Scoring Workflow" decoration-success="has_replied==True" decoration-info="is_read==True">
+                <field name="last_activity" widget="datetime"/>
+                <field name="lead_name"/>
+                <field name="lead_phone"/>
+                
+                <!-- Cleaned Columns -->
+                <field name="property_tag"/>
+                
+                <field name="workflow_stage" widget="badge" 
+                       decoration-info="workflow_stage=='ringing'" 
+                       decoration-warning="workflow_stage=='detail_share_of_property'"/>
+                
+                <field name="last_response"/>
+                
+                <!-- Visual Funnel Icons -->
+                <field name="is_delivered" widget="boolean_toggle"/>
+                <field name="is_read" widget="boolean_toggle"/>
+                <field name="has_replied" widget="boolean_toggle"/>
+            </list>
+        </field>
+    </record>
+
+    <!-- Search View -->
+    <record id="view_lead_scoring_lead_search" model="ir.ui.view">
+        <field name="name">lead.scoring.lead.search</field>
+        <field name="model">lead.scoring.lead</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="lead_name"/>
+                <field name="lead_phone"/>
+                <field name="property_tag"/>
+                <field name="last_response"/>
+                
+                <filter string="Replied" name="replied" domain="[('has_replied', '=', True)]"/>
+                <filter string="Not Read" name="not_read" domain="[('is_read', '=', False)]"/>
+                
+                <!-- Specific Response Filters -->
+                <filter string="Interested (Visit)" name="visit" domain="[('last_response', 'ilike', 'visit')]"/>
+                <filter string="Call Back" name="callback" domain="[('last_response', 'ilike', 'call')]"/>
+                
+                <group expand="0" string="Group By">
+                    <filter string="Workflow Stage" name="group_by_stage" context="{'group_by': 'workflow_stage'}"/>
+                    <filter string="Date" name="group_by_date" context="{'group_by': 'last_activity:day'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <!-- Form View -->
+    <record id="view_lead_scoring_lead_form" model="ir.ui.view">
+        <field name="name">lead.scoring.lead.form</field>
+        <field name="model">lead.scoring.lead</field>
+        <field name="arch" type="xml">
+            <form create="false" edit="false">
+                <sheet>
+                    <div class="oe_title">
+                        <h1><field name="lead_name"/></h1>
+                        <h3><field name="lead_phone"/></h3>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="workflow_stage"/>
+                            <field name="last_activity"/>
+                            <!-- Hidden Internal Statuses as requested -->
+                        </group>
+                        <group>
+                            <field name="property_tag"/>
+                        </group>
+                    </group>
+                    
+                    <group string="Funnel Overview">
+                        <group>
+                             <field name="is_delivered"/>
+                             <field name="is_read"/>
+                             <field name="has_replied"/>
+                        </group>
+                        <group>
+                            <field name="last_response"/>
+                        </group>
+                    </group>
+
+                    <notebook>
+                        <page string="Workflow Analysis (Detailed Metrics)">
+                            <group col="4">
+                                <group string="1. Initial Triggers" colspan="2">
+                                    <field name="cnt_ringing"/>
+                                    <field name="cnt_details"/>
+                                    <field name="cnt_visit_reminder"/>
+                                    <field name="cnt_visit_feedback"/>
+                                </group>
+                                <group string="2. Visit Feedback Loop" colspan="2">
+                                    <field name="cnt_resp_visited"/>
+                                    <field name="cnt_resp_liked"/>
+                                    <field name="cnt_resp_call_rm_visit"/>
+                                    <field name="cnt_resp_reschedule"/>
+                                </group>
+                                <group string="3. Ringing/Busy Loop" colspan="2">
+                                    <field name="cnt_resp_call_back"/>
+                                    <field name="cnt_resp_convenient"/>
+                                </group>
+                                <group string="4. Details Shared Loop" colspan="2">
+                                    <field name="cnt_resp_schedule_visit"/>
+                                    <field name="cnt_resp_more_info"/>
+                                </group>
+                                <group string="5. General Support" colspan="2">
+                                    <field name="cnt_resp_going"/>
+                                    <field name="cnt_resp_assistance"/>
+                                </group>
+                            </group>
+                        </page>
+                        
+                        <page string="Raw Event History">
+                            <field name="event_ids" readonly="1">
+                                <list decoration-info="message_direction=='outbound'" decoration-success="message_direction=='inbound'">
+                                    <field name="event_timestamp"/>
+                                    <field name="message_direction"/>
+                                    <field name="event_type"/>
+                                    <field name="template_name" optional="show"/>
+                                    <field name="message_content"/>
+                                    <field name="failure_reason" optional="show" decoration-danger="failure_reason!=False"/>
+                                </list>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_lead_scoring_dashboard" model="ir.actions.act_window">
+        <field name="name">Lead Scoring Workflow</field>
+        <field name="res_model">lead.scoring.lead</field>
+        <field name="view_mode">list,form,pivot</field>
+        <field name="search_view_id" ref="view_lead_scoring_lead_search"/>
+        <field name="context">{'search_default_group_by_stage': 1}</field>
+    </record>
+</odoo>
