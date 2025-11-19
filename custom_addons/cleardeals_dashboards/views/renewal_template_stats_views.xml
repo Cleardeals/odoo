@@ -48,9 +48,8 @@
         <field name="arch" type="xml">
             <pivot string="Template Performance Pivot">
                 <field name="template_name" type="row"/>
-                <field name="date" type="col" interval="day"/>
-                <field name="delivery_rate" type="measure" widget="progressbar"/>
-                <field name="read_rate" type="measure" widget="progressbar"/>
+                <field name="delivery_rate" type="measure"/>
+                <field name="read_rate" type="measure"/>
             </pivot>
         </field>
     </record>

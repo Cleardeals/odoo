@@ -433,10 +433,9 @@ class RenewalPropertyOwner(models.Model):
                 
         _logger.info("Loaded %d new events (%s mode)", count, "full" if full else "incremental")
 
-    # ==================== TEMPLATE STATS (FIXED WITH PROPER JSON PARSING) ====================
+# ==================== TEMPLATE STATS ====================
     @api.model
     def _cron_fetch_template_stats(self, full=False, days=30):
-        """Scheduled action to fetch aggregated template performance from BigQuery."""
         _logger.info("Starting Bigquery data fetch for Template Stats (%s mode)...", "full" if full else "incremental")
 
         try:
@@ -447,22 +446,26 @@ class RenewalPropertyOwner(models.Model):
         
         where_date = "" if full else f"AND event_timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {days} DAY)"
         
-        # FIXED QUERY: Use double JSON parsing and message_id for correlation
+        # RESTORED YOUR WORKING EXTRACTION LOGIC + FIXED MATH
         stats_query = f"""
             WITH ParsedEvents AS (
                 SELECT
                     DATE(event_timestamp) AS event_date,
-                    -- Use message_id as primary correlation
+                    
+                    -- RESTORED: Fallback to message.id if correlation_id is missing
                     COALESCE(
                       correlation_id,
                       JSON_EXTRACT_SCALAR(raw_payload, '$.data.message.id')
                     ) AS correlation_id,
+                    
                     event_type,
-                    -- CRITICAL FIX: Double-parse JSON
+                    
+                    -- RESTORED: Your specific double-parsing for stringified JSON templates
                     JSON_EXTRACT_SCALAR(
                         JSON_EXTRACT_SCALAR(raw_payload, '$.data.message.raw_template'),
                         '$.name'
                     ) AS template_name,
+                    
                     JSON_EXTRACT_SCALAR(raw_payload, '$.type') AS payload_type
                 FROM
                     `{EVENT_LOG_TABLE_ID}`
@@ -479,41 +482,51 @@ class RenewalPropertyOwner(models.Model):
                 WHERE template_name IS NOT NULL
                   AND template_name != ''
                   AND correlation_id IS NOT NULL
-                  -- Only count actual template sends
+                  -- RESTORED: Only count initial sends as the denominator
                   AND payload_type = 'message_api_sent'
             )
             SELECT
                 s.event_date AS date,
                 s.template_name,
                 COUNT(DISTINCT s.correlation_id) AS total_sent,
-                COUNT(DISTINCT CASE WHEN e.event_type = 'status_delivered' THEN e.correlation_id ELSE NULL END) AS total_delivered,
-                COUNT(DISTINCT CASE WHEN e.event_type = 'status_read' THEN e.correlation_id ELSE NULL END) AS total_read,
-                COUNT(DISTINCT CASE WHEN e.event_type = 'status_failed' THEN e.correlation_id ELSE NULL END) AS total_failed
+                
+                -- FIXED MATH: Count as Delivered if 'status_delivered' OR 'status_read' exists
+                -- This fixes the >100% issue by ensuring Reads are included in Delivery count
+                COUNT(DISTINCT CASE 
+                    WHEN e.event_type IN ('status_delivered', 'status_read') THEN e.correlation_id 
+                    ELSE NULL 
+                END) AS total_delivered,
+                
+                COUNT(DISTINCT CASE 
+                    WHEN e.event_type = 'status_read' THEN e.correlation_id 
+                    ELSE NULL 
+                END) AS total_read,
+                
+                COUNT(DISTINCT CASE 
+                    WHEN e.event_type = 'status_failed' THEN e.correlation_id 
+                    ELSE NULL 
+                END) AS total_failed
             FROM SentMessages s
             LEFT JOIN ParsedEvents e
                 ON s.correlation_id = e.correlation_id
             GROUP BY
                 s.event_date, s.template_name
-            HAVING total_sent > 0
             ORDER BY
                 date DESC, template_name
         """
 
         _logger.info("Fetching template stats from BigQuery...")
         try:
-            query_job = client.query(stats_query)
-            results = query_job.result()
+            results = client.query(stats_query).result()
         except Exception as e:
             _logger.error(f"BigQuery template stats query failed: {e}")
             return
         
         StatsModel = self.env['renewal.template.stats'].sudo()
-        created_count = 0
-        updated_count = 0
+        count = 0
 
         for row in results:
-            if not row.template_name:
-                continue
+            if not row.template_name: continue
             vals = {
                 'date': row.date,
                 'template_name': row.template_name,
@@ -523,19 +536,12 @@ class RenewalPropertyOwner(models.Model):
                 'total_failed': row.total_failed,
             }
             try:
-                existing_record = StatsModel.search([
-                    ('date', '=', row.date),
-                    ('template_name', '=', row.template_name),
-                ], limit=1)
-
-                if existing_record:
-                    existing_record.write(vals)
-                    updated_count += 1
-                else:
-                    StatsModel.create(vals)
-                    created_count += 1
+                existing = StatsModel.search([('date', '=', row.date), ('template_name', '=', row.template_name)], limit=1)
+                if existing: existing.write(vals)
+                else: StatsModel.create(vals)
+                count += 1
             except Exception as e:
-                _logger.error(f"Error creating/updating RenewalTemplateStats for {row.template_name} on {row.date}: {e}")
+                _logger.error(f"Error creating/updating RenewalTemplateStats: {e}")
                 self.env.cr.rollback()
         
-        _logger.info(f"Template stats fetch complete. Created {created_count}, updated {updated_count}.")
+        _logger.info(f"Template stats fetch complete. Processed {count} records.")

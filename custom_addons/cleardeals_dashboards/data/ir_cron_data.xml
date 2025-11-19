@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
     <data>
+        <!-- 1. Existing: Active Lead Assignments (Daily) -->
         <record id="ir_cron_fetch_lead_assignments" model="ir.cron">
             <field name="name">Sync: Fetch Lead Assignments from BigQuery</field>
             <field name="model_id" ref="model_active_lead_assignment"/>
@@ -12,6 +13,7 @@
             <field name="nextcall" eval="(DateTime.now() + relativedelta(hours=4)).strftime('%Y-%m-%d 04:00:00')" />
         </record>
 
+        <!-- 2. Existing: Property Daily Stats (Daily) -->
         <record id="ir_cron_sync_property_stats" model="ir.cron">
             <field name="name">Sync: Property Daily Stats</field>
             <field name="model_id" ref="model_property_daily_stat"/>
@@ -23,26 +25,33 @@
             <field name="nextcall" eval="(DateTime.now() + relativedelta(hours=4, minutes=5)).strftime('%Y-%m-%d 04:05:00')" />
         </record>
 
+        <!-- 3. UPDATED: Renewal Campaign Data (Every 4 Hours) -->
         <record id="ir_cron_fetch_renewal_data" model="ir.cron">
             <field name="name">Sync: Fetch Renewal Campaign Data</field>
             <field name="model_id" ref="model_renewal_property_owner"/>
             <field name="state">code</field>
             <field name="code">model._cron_fetch_renewal_data()</field>
             <field name="user_id" ref="base.user_root"/>
-            <field name="interval_number">1</field>
-            <field name="interval_type">days</field>
-            <field name="nextcall" eval="(DateTime.now() + relativedelta(hours=4, minutes=10)).strftime('%Y-%m-%d 04:10:00')" />
+            
+            <!-- CHANGED: Run every 4 Hours -->
+            <field name="interval_number">4</field>
+            <field name="interval_type">hours</field>
+            
+            <field name="nextcall" eval="(DateTime.now() + relativedelta(minutes=10)).strftime('%Y-%m-%d %H:%M:%S')" />
         </record>
 
+        <!-- 4. DISABLED: Template Stats (Redundant) -->
+        <!-- We set active="False" because the cron above (#3) now calls this logic automatically. 
+             Keeping this active causes the "Concurrent Update" crash. -->
         <record id="ir_cron_fetch_template_stats" model="ir.cron">
             <field name="name">Sync: Fetch Template Performance Stats</field>
+            <field name="active" eval="False"/> 
             <field name="model_id" ref="model_renewal_property_owner"/>
             <field name="state">code</field>
             <field name="code">model._cron_fetch_template_stats()</field>
             <field name="user_id" ref="base.user_root"/>
             <field name="interval_number">1</field>
             <field name="interval_type">days</field>
-            <field name="nextcall" eval="(DateTime.now() + relativedelta(hours=4, minutes=15)).strftime('%Y-%m-%d 04:15:00')" />
         </record>
 
     </data>
