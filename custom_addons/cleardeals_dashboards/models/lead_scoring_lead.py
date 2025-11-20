@@ -2,7 +2,7 @@
 from odoo import models, fields, api, _
 from google.cloud import bigquery
 import logging
-import json
+from datetime import datetime
 
 _logger = logging.getLogger(__name__)
 
@@ -45,6 +45,14 @@ class LeadScoringLead(models.Model):
     last_response = fields.Char(string="Last Response", readonly=True)
     last_activity = fields.Datetime(string="Last Activity", index=True)
 
+    # --- SMART BUTTON AGGREGATES ---
+    total_outbound = fields.Integer(string="Msgs Sent", compute="_compute_metrics", store=True)
+    total_inbound = fields.Integer(string="Replies", compute="_compute_metrics", store=True)
+    total_failed = fields.Integer(string="Failures", compute="_compute_metrics", store=True)
+    
+    # --- TODAY'S CONTEXT ---
+    last_template_today = fields.Char(string="Last Template Sent Today", compute="_compute_today_context")
+
     # --- Detailed Template Tracking ---
     # 1. Initial Triggers
     cnt_ringing = fields.Integer(string="Sent: Ringing", compute="_compute_metrics", store=True)
@@ -57,10 +65,13 @@ class LeadScoringLead(models.Model):
     cnt_resp_liked = fields.Integer(string="Reply: Liked Property", compute="_compute_metrics", store=True)
     cnt_resp_call_rm_visit = fields.Integer(string="Reply: Call RM (Visit)", compute="_compute_metrics", store=True)
     cnt_resp_reschedule = fields.Integer(string="Reply: Need Reschedule", compute="_compute_metrics", store=True)
+    
     cnt_resp_call_back = fields.Integer(string="Reply: Call Me Back", compute="_compute_metrics", store=True)
     cnt_resp_convenient = fields.Integer(string="Reply: Pick Time", compute="_compute_metrics", store=True)
+    
     cnt_resp_schedule_visit = fields.Integer(string="Reply: Schedule Visit", compute="_compute_metrics", store=True)
     cnt_resp_more_info = fields.Integer(string="Reply: Need Info", compute="_compute_metrics", store=True)
+    
     cnt_resp_going = fields.Integer(string="Reply: Going for Visit", compute="_compute_metrics", store=True)
     cnt_resp_assistance = fields.Integer(string="Reply: Need Assistance", compute="_compute_metrics", store=True)
 
@@ -70,48 +81,83 @@ class LeadScoringLead(models.Model):
     _sql_constraints = [
         ('lead_phone_uniq', 'unique(lead_phone)', 'This lead already exists in the dashboard.')
     ]
+    
+    # Compute logic for Today's Template
+    def _compute_today_context(self):
+        today_start = fields.Datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        for lead in self:
+            last_event = lead.event_ids.filtered(
+                lambda e: e.message_direction == 'outbound' and e.event_timestamp >= today_start
+            ).sorted('event_timestamp', reverse=True)
+            
+            if last_event:
+                lead.last_template_today = last_event[0].template_name
+            else:
+                lead.last_template_today = "None Sent Today"
 
-    @api.depends('event_ids.event_type', 'event_ids.message_direction', 'event_ids.message_content', 'event_ids.template_name', 'event_ids.correlation_id')
+    @api.depends('event_ids.event_type', 'event_ids.message_direction', 'event_ids.template_name', 'event_ids.correlation_id', 'event_ids.event_timestamp')
     def _compute_metrics(self):
         for lead in self:
-            # Basic Funnel
-            lead.is_delivered = any(e.event_type in ('status_delivered', 'status_read') for e in lead.event_ids)
-            lead.is_read = any(e.event_type == 'status_read' for e in lead.event_ids)
-            
-            inbound = lead.event_ids.filtered(lambda e: e.message_direction == 'inbound')
-            lead.has_replied = bool(inbound)
-            
-            if inbound:
-                lead.last_response = inbound.sorted(key=lambda r: r.event_timestamp, reverse=True)[0].message_content
-            else:
-                lead.last_response = False
+            events = lead.event_ids.sorted('event_timestamp', reverse=True)
 
-            if lead.event_ids:
-                lead.last_activity = max(lead.event_ids.mapped('event_timestamp'))
-            else:
-                lead.last_activity = False
+            # --- Unique outbound template sends (one per correlation_id) ---
+            unique_outbound = {}
+            for e in events:
+                if e.message_direction == 'outbound' and e.correlation_id and e.correlation_id not in unique_outbound:
+                    unique_outbound[e.correlation_id] = e
 
-            # Detailed Metrics
-            outbound = lead.event_ids.filtered(lambda e: e.message_direction == 'outbound' and e.template_name)
-            
-            def count_unique_msgs(name):
-                events = outbound.filtered(lambda e: e.template_name == name)
-                return len(set(events.mapped('correlation_id')))
-            
-            lead.cnt_ringing = count_unique_msgs('ringing')
-            lead.cnt_details = count_unique_msgs('detail_share_of_property')
-            lead.cnt_visit_reminder = count_unique_msgs('site_visit_schedule_reminder')
-            lead.cnt_visit_feedback = count_unique_msgs('site_visit_schedule_after_visit')
-            lead.cnt_resp_visited = count_unique_msgs('site_visit_schedule_after_visit__successfully_visited')
-            lead.cnt_resp_liked = count_unique_msgs('site_visit_schedule_after_visit__successfully_visited_i_liked_the_property')
-            lead.cnt_resp_call_rm_visit = count_unique_msgs('site_visit_schedule_after_visit__successfully_visited_call_rm')
-            lead.cnt_resp_reschedule = count_unique_msgs('site_visit_schedule_after_visit_need_to_reschedule')
-            lead.cnt_resp_call_back = count_unique_msgs('ringing_call_me_back')
-            lead.cnt_resp_convenient = count_unique_msgs('ringing_pick_a_convenient_time')
-            lead.cnt_resp_schedule_visit = count_unique_msgs('detail_share_of_property_schedule_visit')
-            lead.cnt_resp_more_info = count_unique_msgs('detail_share_of_property_need_more_information')
-            lead.cnt_resp_going = count_unique_msgs('site_visit_schedule__going_for_the_visit')
-            lead.cnt_resp_assistance = count_unique_msgs('site_visit_schedule_need_assistance')
+            outbound_events = unique_outbound.values()
+            lead.total_outbound = len(outbound_events)
+
+            # --- Inbound & Failed ---
+            inbound_events = events.filtered(lambda e: e.message_direction == 'inbound')
+            failed_events = events.filtered(lambda e: e.event_type == 'status_failed')
+
+            lead.total_inbound = len(inbound_events)
+            lead.total_failed = len(failed_events)
+
+            # --- Funnel Booleans ---
+            lead.is_delivered = any(e.event_type in ('status_delivered', 'status_read') for e in events)
+            lead.is_read = any(e.event_type == 'status_read' for e in events)
+            lead.has_replied = bool(inbound_events)
+
+            lead.last_response = inbound_events[:1].message_content or False
+            lead.last_activity = events[:1].event_timestamp or False
+
+            # --- Detailed Template Counts (Unique per correlation_id) ---
+            def count_template(template_name):
+                return len([e for e in outbound_events if e.template_name == template_name])
+
+            lead.cnt_ringing = count_template('ringing')
+            lead.cnt_details = count_template('detail_share_of_property')
+            lead.cnt_visit_reminder = count_template('site_visit_schedule_reminder')
+            lead.cnt_visit_feedback = count_template('site_visit_schedule_after_visit')
+
+            # Response templates (these are also outbound — triggered by inbound reply)
+            lead.cnt_resp_visited = count_template('site_visit_schedule_after_visit__successfully_visited')
+            lead.cnt_resp_liked = count_template('site_visit_schedule_after_visit__successfully_visited_i_liked_the_property')
+            lead.cnt_resp_call_rm_visit = count_template('site_visit_schedule_after_visit__successfully_visited_call_rm')
+            lead.cnt_resp_reschedule = count_template('site_visit_schedule_after_visit_need_to_reschedule')
+            lead.cnt_resp_call_back = count_template('ringing_call_me_back')
+            lead.cnt_resp_convenient = count_template('ringing_pick_a_convenient_time')
+            lead.cnt_resp_schedule_visit = count_template('detail_share_of_property_schedule_visit')
+            lead.cnt_resp_more_info = count_template('detail_share_of_property_need_more_information')
+            lead.cnt_resp_going = count_template('site_visit_schedule__going_for_the_visit')
+            lead.cnt_resp_assistance = count_template('site_visit_schedule_need_assistance')
+    # ==================== SMART BUTTON ACTIONS (NEW) ====================
+
+    
+    def action_view_events(self):
+        self.ensure_one()
+        return self.env.ref('cleardeals_dashboards.action_lead_scoring_events_sent').read()[0]
+
+    def action_view_replies(self):
+        self.ensure_one()
+        return self.env.ref('cleardeals_dashboards.action_lead_scoring_events_replies').read()[0]
+
+    def action_view_failures(self):
+        self.ensure_one()
+        return self.env.ref('cleardeals_dashboards.action_lead_scoring_events_failed').read()[0]
 
     # ==================== CRON JOBS ====================
 
@@ -120,7 +166,7 @@ class LeadScoringLead(models.Model):
         _logger.info("Starting Lead Scoring Sync...")
         self._fetch_leads_from_triggers(days=30)
         self._fetch_lead_events(days=30)
-        self._cron_fetch_template_stats(days=30) # Also sync stats
+        self._cron_fetch_template_stats(days=30)
         _logger.info("Lead Scoring Sync Complete.")
 
     @api.model
@@ -252,41 +298,62 @@ class LeadScoringLead(models.Model):
 
     @api.model
     def _cron_fetch_template_stats(self, days=30):
-        """Fetches aggregated stats for Lead Scoring workflow."""
         _logger.info("Fetching Lead Scoring Template Stats...")
         client = bigquery.Client(project=BIGQUERY_PROJECT_ID)
         
         query = f"""
-            WITH ParsedEvents AS (
+            WITH AllEvents AS (
                 SELECT
                     DATE(event_timestamp) AS event_date,
                     COALESCE(correlation_id, JSON_VALUE(raw_payload, '$.data.message.id')) AS correlation_id,
+                    message_direction,
                     event_type,
                     COALESCE(
                         JSON_VALUE(raw_payload, '$.data.message.raw_template.name'),
                         JSON_VALUE(JSON_VALUE(raw_payload, '$.data.message.raw_template'), '$.name')
-                    ) AS template_name,
-                    JSON_VALUE(raw_payload, '$.type') AS payload_type
+                    ) AS template_name
                 FROM `{EVENT_LOG_TABLE_ID}`
-                WHERE message_direction = 'outbound'
-                  AND ingestion_timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {days} DAY)
+                WHERE ingestion_timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {days} DAY)
             ),
-            SentMessages AS (
-                SELECT DISTINCT event_date, template_name, correlation_id
-                FROM ParsedEvents
-                WHERE template_name IS NOT NULL AND correlation_id IS NOT NULL
-                  AND payload_type = 'message_api_sent'
+            TemplateMessages AS (
+                SELECT 
+                    correlation_id,
+                    ANY_VALUE(event_date) as send_date,
+                    ANY_VALUE(template_name) as template_name
+                FROM AllEvents
+                WHERE message_direction = 'outbound' 
+                  AND template_name IS NOT NULL
+                  AND correlation_id IS NOT NULL
+                GROUP BY correlation_id
+            ),
+            MessageStats AS (
+                SELECT
+                    tm.correlation_id,
+                    tm.send_date,
+                    tm.template_name,
+                    MAX(CASE WHEN ae.event_type IN ('status_delivered', 'status_read') THEN 1 ELSE 0 END) as is_delivered,
+                    MAX(CASE WHEN ae.event_type = 'status_read' THEN 1 ELSE 0 END) as is_read,
+                    MAX(CASE WHEN ae.event_type = 'status_failed' THEN 1 ELSE 0 END) as is_failed,
+                    MAX(CASE 
+                        WHEN ae.message_direction = 'inbound' THEN 1 
+                        WHEN ae.event_type = 'message_api_clicked' THEN 1
+                        ELSE 0 
+                    END) as is_clicked
+                FROM TemplateMessages tm
+                JOIN AllEvents ae ON tm.correlation_id = ae.correlation_id
+                GROUP BY 1, 2, 3
             )
             SELECT
-                s.event_date AS date,
-                s.template_name,
-                COUNT(DISTINCT s.correlation_id) AS total_sent,
-                COUNT(DISTINCT CASE WHEN e.event_type IN ('status_delivered', 'status_read') THEN e.correlation_id ELSE NULL END) AS total_delivered,
-                COUNT(DISTINCT CASE WHEN e.event_type = 'status_read' THEN e.correlation_id ELSE NULL END) AS total_read,
-                COUNT(DISTINCT CASE WHEN e.event_type = 'status_failed' THEN e.correlation_id ELSE NULL END) AS total_failed
-            FROM SentMessages s
-            LEFT JOIN ParsedEvents e ON s.correlation_id = e.correlation_id
+                send_date AS date,
+                template_name,
+                COUNT(*) AS total_sent,
+                SUM(is_delivered) AS total_delivered,
+                SUM(is_read) AS total_read,
+                SUM(is_clicked) AS total_clicked,
+                SUM(is_failed) AS total_failed
+            FROM MessageStats
             GROUP BY 1, 2
+            ORDER BY 1 DESC, 2
         """
         
         try:
@@ -304,6 +371,7 @@ class LeadScoringLead(models.Model):
                 'total_sent': row.total_sent,
                 'total_delivered': row.total_delivered,
                 'total_read': row.total_read,
+                'total_clicked': row.total_clicked,
                 'total_failed': row.total_failed
             }
             existing = Stats.search([('date', '=', row.date), ('template_name', '=', row.template_name)], limit=1)
