@@ -103,8 +103,8 @@
                             <field name="event_ids" readonly="1">
                                 <list default_order="event_timestamp desc">
                                     <field name="event_timestamp"/>
-                                    <field name="message_direction" widget="badge" decoration-info="event_type == 'status_read'"/>
-                                    <field name="event_type"/>
+                                    <field name="message_direction" widget="badge" decoration-info="event_type == 'status_read'" decoration-success="event_type == 'inbound_message'" decoration-danger="event_type == 'status_failed'"/>
+                                    <field name="event_type" widget="badge" decoration-info="event_type == 'status_read'" decoration-success="event_type == 'inbound_message'" decoration-danger="event_type == 'status_failed'"/>
                                     <field name="template_name"/>
                                     <field name="message_content" optional="show"/>
                                     <field name="failure_reason" optional="show"/>
