@@ -98,6 +98,7 @@
                             <field name="magicbricks_id" readonly="1"/>
                             <field name="housing_id" readonly="1"/>
                             <field name="ninety_nine_acres_id" readonly="1"/>
+                            <field name="olx_id" readonly="1"/>
                         </group>
                         <group>
                             <field name="service_expiry_date_str" readonly="1" string="Service Expiry Date"/> 

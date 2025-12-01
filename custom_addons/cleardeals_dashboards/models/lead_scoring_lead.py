@@ -2,6 +2,7 @@
 from odoo import models, fields, api, _
 from google.cloud import bigquery
 import logging
+import json
 from datetime import datetime
 
 _logger = logging.getLogger(__name__)
@@ -31,7 +32,7 @@ class LeadScoringLead(models.Model):
     # --- Workflow Status ---
     workflow_stage = fields.Selection([
         ('ringing', 'Ringing / Busy'),
-        ('detail_share_of_property', 'Details Shared'),
+        ('detail_shared_of_property_message', 'Details Shared'), # UPDATED
         ('site_visit_schedule_reminder', 'Site Visit Today'),
         ('site_visit_schedule_after_visit', 'Site Visit Yesterday'),
         ('other', 'Other')
@@ -53,27 +54,33 @@ class LeadScoringLead(models.Model):
     # --- TODAY'S CONTEXT ---
     last_template_today = fields.Char(string="Last Template Sent Today", compute="_compute_today_context")
 
-    # --- Detailed Template Tracking ---
+    # =========================================================
+    # GRANULAR TEMPLATE TRACKING (Updated for New Templates)
+    # =========================================================
+    
     # 1. Initial Triggers
     cnt_ringing = fields.Integer(string="Sent: Ringing", compute="_compute_metrics", store=True)
     cnt_details = fields.Integer(string="Sent: Details Shared", compute="_compute_metrics", store=True)
     cnt_visit_reminder = fields.Integer(string="Sent: Visit Reminder", compute="_compute_metrics", store=True)
     cnt_visit_feedback = fields.Integer(string="Sent: Visit Feedback", compute="_compute_metrics", store=True)
     
-    # 2. Response Handling
-    cnt_resp_visited = fields.Integer(string="Reply: Successfully Visited", compute="_compute_metrics", store=True)
+    # 2. Response Handling (Site Visit Today Flow)
+    cnt_resp_going_visit = fields.Integer(string="Reply: Going for Visit", compute="_compute_metrics", store=True)
+    cnt_resp_need_help = fields.Integer(string="Reply: Need Help", compute="_compute_metrics", store=True)
+
+    # 3. Response Handling (Site Visit Feedback Flow)
+    cnt_resp_visit_done = fields.Integer(string="Reply: Visit Done", compute="_compute_metrics", store=True)
     cnt_resp_liked = fields.Integer(string="Reply: Liked Property", compute="_compute_metrics", store=True)
-    cnt_resp_call_rm_visit = fields.Integer(string="Reply: Call RM (Visit)", compute="_compute_metrics", store=True)
-    cnt_resp_reschedule = fields.Integer(string="Reply: Need Reschedule", compute="_compute_metrics", store=True)
+    cnt_resp_call_expert = fields.Integer(string="Reply: Call Expert", compute="_compute_metrics", store=True)
+    cnt_resp_reschedule = fields.Integer(string="Reply: Reschedule", compute="_compute_metrics", store=True)
     
-    cnt_resp_call_back = fields.Integer(string="Reply: Call Me Back", compute="_compute_metrics", store=True)
-    cnt_resp_convenient = fields.Integer(string="Reply: Pick Time", compute="_compute_metrics", store=True)
+    # 4. Response Handling (Ringing Flow)
+    cnt_resp_abhi_call = fields.Integer(string="Reply: Abhi Call Kare", compute="_compute_metrics", store=True)
+    cnt_resp_slot_book = fields.Integer(string="Reply: Slot Book", compute="_compute_metrics", store=True)
     
-    cnt_resp_schedule_visit = fields.Integer(string="Reply: Schedule Visit", compute="_compute_metrics", store=True)
-    cnt_resp_more_info = fields.Integer(string="Reply: Need Info", compute="_compute_metrics", store=True)
-    
-    cnt_resp_going = fields.Integer(string="Reply: Going for Visit", compute="_compute_metrics", store=True)
-    cnt_resp_assistance = fields.Integer(string="Reply: Need Assistance", compute="_compute_metrics", store=True)
+    # 5. Response Handling (Details Shared Flow)
+    cnt_resp_schedule_now = fields.Integer(string="Reply: Schedule Now", compute="_compute_metrics", store=True)
+    cnt_resp_talk_expert = fields.Integer(string="Reply: Talk to Expert", compute="_compute_metrics", store=True)
 
     # --- Relations ---
     event_ids = fields.One2many('lead.scoring.event', 'lead_id', string="History")
@@ -95,84 +102,122 @@ class LeadScoringLead(models.Model):
             else:
                 lead.last_template_today = "None Sent Today"
 
-    @api.depends('event_ids.event_type', 'event_ids.message_direction', 'event_ids.template_name', 'event_ids.correlation_id', 'event_ids.event_timestamp')
+    @api.depends('event_ids.event_type', 'event_ids.message_direction', 'event_ids.message_content', 'event_ids.template_name', 'event_ids.correlation_id')
     def _compute_metrics(self):
         for lead in self:
-            events = lead.event_ids.sorted('event_timestamp', reverse=True)
+            # 1. Funnel Booleans
+            lead.is_delivered = any(e.event_type in ('status_delivered', 'status_read') for e in lead.event_ids)
+            lead.is_read = any(e.event_type == 'status_read' for e in lead.event_ids)
+            
+            inbound = lead.event_ids.filtered(lambda e: e.message_direction == 'inbound')
+            lead.has_replied = bool(inbound)
+            
+            if inbound:
+                lead.last_response = inbound.sorted(key=lambda r: r.event_timestamp, reverse=True)[0].message_content
+            else:
+                lead.last_response = False
 
-            # --- Unique outbound template sends (one per correlation_id) ---
-            unique_outbound = {}
-            for e in events:
-                if e.message_direction == 'outbound' and e.correlation_id and e.correlation_id not in unique_outbound:
-                    unique_outbound[e.correlation_id] = e
+            if lead.event_ids:
+                lead.last_activity = max(lead.event_ids.mapped('event_timestamp'))
+            else:
+                lead.last_activity = False
 
-            outbound_events = unique_outbound.values()
-            lead.total_outbound = len(outbound_events)
+            # 2. Smart Button Aggregates
+            lead.total_outbound = len(lead.event_ids.filtered(lambda e: e.message_direction == 'outbound'))
+            lead.total_inbound = len(inbound)
+            lead.total_failed = len(lead.event_ids.filtered(lambda e: e.event_type == 'status_failed'))
 
-            # --- Inbound & Failed ---
-            inbound_events = events.filtered(lambda e: e.message_direction == 'inbound')
-            failed_events = events.filtered(lambda e: e.event_type == 'status_failed')
+            # 3. Detailed Template Counting (Unique by Correlation ID)
+            outbound = lead.event_ids.filtered(lambda e: e.message_direction == 'outbound' and e.template_name)
+            
+            def count_unique_msgs(name):
+                events = outbound.filtered(lambda e: e.template_name == name)
+                return len(set(events.mapped('correlation_id')))
+            
+            # --- UPDATED MAPPING FOR NEW TEMPLATES ---
+            
+            # Triggers
+            lead.cnt_ringing = count_unique_msgs('ringing')
+            # Updated Detail Shared Template Name
+            lead.cnt_details = count_unique_msgs('detail_shared_of_property_message') 
+            lead.cnt_visit_reminder = count_unique_msgs('site_visit_schedule_reminder')
+            lead.cnt_visit_feedback = count_unique_msgs('site_visit_schedule_after_visit')
+            
+            # Replies - Visit Today
+            lead.cnt_resp_going_visit = count_unique_msgs('going_for_visit_today')
+            lead.cnt_resp_need_help = count_unique_msgs('need_help_for_site_visit_today')
 
-            lead.total_inbound = len(inbound_events)
-            lead.total_failed = len(failed_events)
+            # Replies - Visit Feedback
+            lead.cnt_resp_visit_done = count_unique_msgs('visit_done_response_after_site_visit')
+            lead.cnt_resp_liked = count_unique_msgs('liked_property_after_site_visit')
+            lead.cnt_resp_call_expert = count_unique_msgs('call_the_expert_after_site_vist')
+            lead.cnt_resp_reschedule = count_unique_msgs('reschedule_visit_response')
 
-            # --- Funnel Booleans ---
-            lead.is_delivered = any(e.event_type in ('status_delivered', 'status_read') for e in events)
-            lead.is_read = any(e.event_type == 'status_read' for e in events)
-            lead.has_replied = bool(inbound_events)
+            # Replies - Ringing
+            lead.cnt_resp_abhi_call = count_unique_msgs('ringing_abhi_call_kare')
+            lead.cnt_resp_slot_book = count_unique_msgs('ringing_slot_book_kare')
 
-            lead.last_response = inbound_events[:1].message_content or False
-            lead.last_activity = events[:1].event_timestamp or False
+            # Replies - Details Shared
+            lead.cnt_resp_schedule_now = count_unique_msgs('schedule_visit_now_response')
+            lead.cnt_resp_talk_expert = count_unique_msgs('talk_to_a_property_expert_response')
 
-            # --- Detailed Template Counts (Unique per correlation_id) ---
-            def count_template(template_name):
-                return len([e for e in outbound_events if e.template_name == template_name])
 
-            lead.cnt_ringing = count_template('ringing')
-            lead.cnt_details = count_template('detail_share_of_property')
-            lead.cnt_visit_reminder = count_template('site_visit_schedule_reminder')
-            lead.cnt_visit_feedback = count_template('site_visit_schedule_after_visit')
-
-            # Response templates (these are also outbound — triggered by inbound reply)
-            lead.cnt_resp_visited = count_template('site_visit_schedule_after_visit__successfully_visited')
-            lead.cnt_resp_liked = count_template('site_visit_schedule_after_visit__successfully_visited_i_liked_the_property')
-            lead.cnt_resp_call_rm_visit = count_template('site_visit_schedule_after_visit__successfully_visited_call_rm')
-            lead.cnt_resp_reschedule = count_template('site_visit_schedule_after_visit_need_to_reschedule')
-            lead.cnt_resp_call_back = count_template('ringing_call_me_back')
-            lead.cnt_resp_convenient = count_template('ringing_pick_a_convenient_time')
-            lead.cnt_resp_schedule_visit = count_template('detail_share_of_property_schedule_visit')
-            lead.cnt_resp_more_info = count_template('detail_share_of_property_need_more_information')
-            lead.cnt_resp_going = count_template('site_visit_schedule__going_for_the_visit')
-            lead.cnt_resp_assistance = count_template('site_visit_schedule_need_assistance')
-    # ==================== SMART BUTTON ACTIONS (NEW) ====================
-
+    # ==================== SMART BUTTON ACTIONS ====================
     
     def action_view_events(self):
         self.ensure_one()
-        return self.env.ref('cleardeals_dashboards.action_lead_scoring_events_sent').read()[0]
+        return {
+            'name': 'Messages Sent',
+            'type': 'ir.actions.act_window',
+            'res_model': 'lead.scoring.event',
+            'view_mode': 'list,form',
+            'domain': [('lead_id', '=', self.id), ('message_direction', '=', 'outbound')],
+            'context': {'default_lead_id': self.id}
+        }
 
     def action_view_replies(self):
         self.ensure_one()
-        return self.env.ref('cleardeals_dashboards.action_lead_scoring_events_replies').read()[0]
+        return {
+            'name': 'Replies',
+            'type': 'ir.actions.act_window',
+            'res_model': 'lead.scoring.event',
+            'view_mode': 'list,form',
+            'domain': [('lead_id', '=', self.id), ('message_direction', '=', 'inbound')],
+            'context': {'default_lead_id': self.id}
+        }
 
     def action_view_failures(self):
         self.ensure_one()
-        return self.env.ref('cleardeals_dashboards.action_lead_scoring_events_failed').read()[0]
+        return {
+            'name': 'Failed Messages',
+            'type': 'ir.actions.act_window',
+            'res_model': 'lead.scoring.event',
+            'view_mode': 'list,form',
+            'domain': [('lead_id', '=', self.id), ('event_type', '=', 'status_failed')],
+            'context': {'default_lead_id': self.id}
+        }
 
-    # ==================== CRON JOBS ====================
+    # ==================== CRON JOBS (UPDATED DAYS=5) ====================
 
     @api.model
     def _cron_sync_lead_scoring(self):
-        _logger.info("Starting Lead Scoring Sync...")
-        self._fetch_leads_from_triggers(days=30)
-        self._fetch_lead_events(days=30)
-        self._cron_fetch_template_stats(days=30)
+        _logger.info("Starting Lead Scoring Sync (New Templates)...")
+        self._fetch_leads_from_triggers(days=5)
+        self._fetch_lead_events(days=5)
+        self._cron_fetch_template_stats(days=5)
         _logger.info("Lead Scoring Sync Complete.")
 
     @api.model
-    def _fetch_leads_from_triggers(self, days=30):
+    def _fetch_leads_from_triggers(self, days=5):
         client = bigquery.Client(project=BIGQUERY_PROJECT_ID)
-        templates = ['ringing', 'detail_share_of_property', 'site_visit_schedule_reminder', 'site_visit_schedule_after_visit']
+        
+        # UPDATED TRIGGERS LIST
+        templates = [
+            'ringing', 
+            'detail_shared_of_property_message', 
+            'site_visit_schedule_reminder', 
+            'site_visit_schedule_after_visit'
+        ]
         templates_sql = ", ".join(f"'{t}'" for t in templates)
 
         query = f"""
@@ -241,7 +286,7 @@ class LeadScoringLead(models.Model):
         _logger.info(f"Synced {count} new leads.")
 
     @api.model
-    def _fetch_lead_events(self, days=30):
+    def _fetch_lead_events(self, days=5):
         leads = self.search([])
         if not leads: return
         phone_map = {}
@@ -297,7 +342,7 @@ class LeadScoringLead(models.Model):
                 pass
 
     @api.model
-    def _cron_fetch_template_stats(self, days=30):
+    def _cron_fetch_template_stats(self, days=5):
         _logger.info("Fetching Lead Scoring Template Stats...")
         client = bigquery.Client(project=BIGQUERY_PROJECT_ID)
         

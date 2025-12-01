@@ -11,7 +11,9 @@
                 <field name="property_tag"/>
                 <field name="workflow_stage" widget="badge" 
                        decoration-info="workflow_stage=='ringing'" 
-                       decoration-warning="workflow_stage=='detail_share_of_property'"/>
+                       decoration-primary="workflow_stage=='detail_shared_of_property_message'"
+                       decoration-success="workflow_stage=='site_visit_schedule_reminder'"
+                       decoration-warning="workflow_stage=='site_visit_schedule_after_visit'"/>
                 <field name="last_response"/>
                 <field name="is_delivered" widget="boolean_toggle"/>
                 <field name="is_read" widget="boolean_toggle"/>
@@ -75,7 +77,10 @@
                         </group>
                         <group>
                             <field name="workflow_stage" widget="badge" readonly="1"
-                                options="{'terminology': {'ringing': 'warning', 'detail_share_of_property': 'info', 'site_visit_schedule_reminder': 'success', 'site_visit_schedule_after_visit': 'danger'}}"/>
+                                   decoration-info="workflow_stage=='ringing'" 
+                                   decoration-primary="workflow_stage=='detail_shared_of_property_message'"
+                                   decoration-success="workflow_stage=='site_visit_schedule_reminder'"
+                                   decoration-warning="workflow_stage=='site_visit_schedule_after_visit'"/>
                             <field name="predicted_score" readonly="1"/>
                             <field name="current_status" readonly="1"/>
                             <field name="last_activity" widget="remaining_days" readonly="1"/>
@@ -99,6 +104,44 @@
                             </group>
                         </page>
 
+                        <page string="Template Analytics">
+                            <group string="Trigger Volumes (Sent)">
+                                <group>
+                                    <field name="cnt_ringing" widget="integer" string="Ringing"/>
+                                    <field name="cnt_details" widget="integer" string="Details Shared"/>
+                                </group>
+                                <group>
+                                    <field name="cnt_visit_reminder" widget="integer" string="Visit Reminder"/>
+                                    <field name="cnt_visit_feedback" widget="integer" string="Visit Feedback"/>
+                                </group>
+                            </group>
+
+                            <separator string="Response Breakdown by Stage"/>
+
+                            <group>
+                                <group string="Ringing Responses">
+                                    <field name="cnt_resp_abhi_call"/>
+                                    <field name="cnt_resp_slot_book"/>
+                                </group>
+                                <group string="Details Shared Responses">
+                                    <field name="cnt_resp_schedule_now"/>
+                                    <field name="cnt_resp_talk_expert"/>
+                                </group>
+                            </group>
+                            <group>
+                                <group string="Visit Today Responses">
+                                    <field name="cnt_resp_going_visit"/>
+                                    <field name="cnt_resp_need_help"/>
+                                </group>
+                                <group string="Visit Feedback Responses">
+                                    <field name="cnt_resp_visit_done"/>
+                                    <field name="cnt_resp_liked"/>
+                                    <field name="cnt_resp_call_expert"/>
+                                    <field name="cnt_resp_reschedule"/>
+                                </group>
+                            </group>
+                        </page>
+
                         <page string="Raw Event History">
                             <field name="event_ids" readonly="1">
                                 <list default_order="event_timestamp desc">
@@ -110,31 +153,6 @@
                                     <field name="failure_reason" optional="show"/>
                                 </list>
                             </field>
-                        </page>
-
-                        <page string="Template Analytics">
-                            <group colspan="4" col="4">
-                                <group string="Triggers Sent">
-                                    <field name="cnt_ringing" widget="integer"/>
-                                    <field name="cnt_details" widget="integer"/>
-                                    <field name="cnt_visit_reminder" widget="integer"/>
-                                    <field name="cnt_visit_feedback" widget="integer"/>
-                                </group>
-                                <group string="Visit Feedback Replies">
-                                    <field name="cnt_resp_visited"/>
-                                    <field name="cnt_resp_liked"/>
-                                    <field name="cnt_resp_call_rm_visit"/>
-                                    <field name="cnt_resp_reschedule"/>
-                                </group>
-                                <group string="Ringing Loop Replies">
-                                    <field name="cnt_resp_call_back"/>
-                                    <field name="cnt_resp_convenient"/>
-                                </group>
-                                <group string="Details Shared Replies">
-                                    <field name="cnt_resp_schedule_visit"/>
-                                    <field name="cnt_resp_more_info"/>
-                                </group>
-                            </group>
                         </page>
                     </notebook>
                 </sheet>
