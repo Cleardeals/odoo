@@ -122,23 +122,29 @@ class LeadScoringLead(models.Model):
             else:
                 lead.last_activity = False
 
-            # 2. Smart Button Aggregates
-            lead.total_outbound = len(lead.event_ids.filtered(lambda e: e.message_direction == 'outbound'))
+            # 2. Smart Button Aggregates - FIXED: Only count actual sent messages
+            outbound_sent = lead.event_ids.filtered(
+                lambda e: e.message_direction == 'outbound' and e.event_type in ('status_sent', 'message_sent')
+            )
+            lead.total_outbound = len(set(outbound_sent.mapped('correlation_id')))
             lead.total_inbound = len(inbound)
-            lead.total_failed = len(lead.event_ids.filtered(lambda e: e.event_type == 'status_failed'))
+            lead.total_failed = len(set(lead.event_ids.filtered(
+                lambda e: e.event_type == 'status_failed'
+            ).mapped('correlation_id')))
 
-            # 3. Detailed Template Counting (Unique by Correlation ID)
-            outbound = lead.event_ids.filtered(lambda e: e.message_direction == 'outbound' and e.template_name)
+            # 3. Detailed Template Counting - FIXED: Only count initial send events
+            outbound = lead.event_ids.filtered(
+                lambda e: e.message_direction == 'outbound' 
+                and e.template_name 
+                and e.event_type in ('status_sent', 'message_sent')
+            )
             
             def count_unique_msgs(name):
                 events = outbound.filtered(lambda e: e.template_name == name)
                 return len(set(events.mapped('correlation_id')))
             
-            # --- UPDATED MAPPING FOR NEW TEMPLATES ---
-            
             # Triggers
             lead.cnt_ringing = count_unique_msgs('ringing')
-            # Updated Detail Shared Template Name
             lead.cnt_details = count_unique_msgs('detail_shared_of_property_message') 
             lead.cnt_visit_reminder = count_unique_msgs('site_visit_schedule_reminder')
             lead.cnt_visit_feedback = count_unique_msgs('site_visit_schedule_after_visit')
@@ -161,8 +167,7 @@ class LeadScoringLead(models.Model):
             lead.cnt_resp_schedule_now = count_unique_msgs('schedule_visit_now_response')
             lead.cnt_resp_talk_expert = count_unique_msgs('talk_to_a_property_expert_response')
 
-
-    # ==================== SMART BUTTON ACTIONS ====================
+        # ==================== SMART BUTTON ACTIONS ====================
     
     def action_view_events(self):
         self.ensure_one()
