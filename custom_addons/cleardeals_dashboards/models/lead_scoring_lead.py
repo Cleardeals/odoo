@@ -207,13 +207,13 @@ class LeadScoringLead(models.Model):
     @api.model
     def _cron_sync_lead_scoring(self):
         _logger.info("Starting Lead Scoring Sync (New Templates)...")
-        self._fetch_leads_from_triggers(days=5)
-        self._fetch_lead_events(days=5)
-        self._cron_fetch_template_stats(days=5)
+        self._fetch_leads_from_triggers(days=7)
+        self._fetch_lead_events(days=7)
+        self._cron_fetch_template_stats(days=7)
         _logger.info("Lead Scoring Sync Complete.")
 
     @api.model
-    def _fetch_leads_from_triggers(self, days=5):
+    def _fetch_leads_from_triggers(self, days=7):
         client = bigquery.Client(project=BIGQUERY_PROJECT_ID)
         
         # UPDATED TRIGGERS LIST
@@ -291,7 +291,7 @@ class LeadScoringLead(models.Model):
         _logger.info(f"Synced {count} new leads.")
 
     @api.model
-    def _fetch_lead_events(self, days=5):
+    def _fetch_lead_events(self, days=7):
         leads = self.search([])
         if not leads: return
         phone_map = {}
@@ -347,7 +347,7 @@ class LeadScoringLead(models.Model):
                 pass
 
     @api.model
-    def _cron_fetch_template_stats(self, days=5):
+    def _cron_fetch_template_stats(self, days=7):
         _logger.info("Fetching Lead Scoring Template Stats...")
         client = bigquery.Client(project=BIGQUERY_PROJECT_ID)
         
