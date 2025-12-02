@@ -32,6 +32,14 @@
         groups="cleardeals_dashboards.group_dashboard_manager"
         sequence="2"/>
 
+    <menuitem
+        id="menu_active_template_stats"
+        name="Template Performance"
+        parent="menu_new_property_bulk_parent"
+        action="action_active_template_stats"
+        groups="cleardeals_dashboards.group_dashboard_manager"
+        sequence="5"/>
+
     <!-- 2. LEAD SUGGESTION -->
     <menuitem
         id="menu_lead_suggestion_dashboard"
@@ -40,6 +48,8 @@
         action="action_lead_suggestion_dashboard"
         groups="cleardeals_dashboards.group_dashboard_manager"
         sequence="2"/>
+
+    
         
     <!-- 3. RENEWAL CAMPAIGN (Folder) -->
     <menuitem

@@ -8,3 +8,4 @@ from . import renewal_property_owner
 from . import lead_scoring_event
 from . import lead_scoring_template_stats
 from . import lead_scoring_lead
+from . import active_template_stats 
