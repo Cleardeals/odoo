@@ -1,19 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
     <data>
-        <!-- Form view for the CSV import wizard -->
         <record id="view_lead_csv_import_wizard_form" model="ir.ui.view">
             <field name="name">lead.csv.import.wizard.form</field>
             <field name="model">lead.csv.import.wizard</field>
             <field name="arch" type="xml">
                 <form>
+                    <div class="alert alert-info" role="alert">
+                        <strong>Batch Upload:</strong> You can select multiple <b>.csv</b> or <b>.xlsx</b> files at once.
+                    </div>
                     <group>
-                        <field name="file_data" filename="filename" widget="binary"/>
-                        <field name="filename" invisible="1"/>
+                        <field name="file_ids" widget="many2many_binary" string="Select Files" options="{'accepted_file_extensions': '.csv, .xlsx'}"/>
                     </group>
                     <footer>
-                        <button name="import_leads_from_csv"
-                                string="Import"
+                        <button name="import_leads"
+                                string="Import All Files"
                                 type="object"
                                 class="oe_highlight"/>
                         <button string="Cancel" class="btn-secondary" special="cancel"/>
@@ -22,15 +23,13 @@
             </field>
         </record>
 
-        <!-- Action to open the CSV import wizard -->
         <record id="action_open_lead_csv_import_wizard" model="ir.actions.act_window">
-            <field name="name">Import Leads (CSV)</field>
+            <field name="name">Batch Import Leads</field>
             <field name="res_model">lead.csv.import.wizard</field>
             <field name="view_mode">form</field>
             <field name="target">new</field>
         </record>
 
-        <!-- Form view for the error/message wizard -->
         <record id="view_message_wizard_form" model="ir.ui.view">
             <field name="name">message.wizard.form</field>
             <field name="model">message.wizard</field>
@@ -43,7 +42,5 @@
                 </form>
             </field>
         </record>
-
     </data>
 </odoo>
-

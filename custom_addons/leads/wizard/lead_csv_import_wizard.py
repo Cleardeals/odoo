@@ -1,172 +1,214 @@
 import base64
 import csv
-from io import StringIO
+import io
+import logging
+
+try:
+    import openpyxl
+except ImportError:
+    openpyxl = None
+
 from odoo import models, fields, api, _
 from odoo.exceptions import UserError
-import logging
 
 _logger = logging.getLogger(__name__)
 
-class LeadCsvImportWizard(models.TransientModel):
+class LeadImportWizard(models.TransientModel):
     _name = 'lead.csv.import.wizard'
-    _description = 'Lead CSV Import Wizard'
+    _description = 'Lead Import Wizard (Multi-File)'
 
-    file_data = fields.Binary(string='CSV File', required=True)
-    filename = fields.Char(string='File Name')
+    # CHANGED: Replaced single file field with Many2many to ir.attachment
+    file_ids = fields.Many2many(
+        'ir.attachment', 
+        string='Upload Files',
+        help='Upload one or more .csv or .xlsx files'
+    )
 
-    def import_leads_from_csv(self):
+    def import_leads(self):
         """
-        [RECONFIGURED FOR OLX IMPORTS]
-        [UPDATED to skip blank lines]
+        Iterates through all uploaded files and processes them.
         """
-        if not self.file_data:
-            raise UserError(_('Please upload a CSV file.'))
+        if not self.file_ids:
+            raise UserError(_('Please upload at least one file.'))
 
-        # --- Column Mapping (matches your CSV) ---
+        # Global counters for the batch
+        total_imported = 0
+        all_failed_rows = []
+        
+        # Cache properties to avoid repeated DB lookups across files
+        property_cache = {}
+        
+        LeadsNew = self.env['leads.new']
+        PropertyInv = self.env['property.inventory']
+
         COLUMN_MAPPING = {
             'name': 'Name',
             'phone': 'Phone Number',
             'email': 'Email Id',
             'olx_id': 'Inventory ID'
         }
-        # --- End Configuration ---
 
-        try:
-            # --- Encoding Fallback ---
-            decoded_data = base64.b64decode(self.file_data)
+        # --- LOOP THROUGH EACH FILE ---
+        for attachment in self.file_ids:
+            filename = attachment.name.lower()
+            file_label = f"[{attachment.name}]" # Used for error messages
+            
+            _logger.info(f"Processing file: {filename}")
+
             try:
-                data = decoded_data.decode('utf-8')
-            except UnicodeDecodeError:
-                _logger.warning("CSV file is not UTF-8, falling back to 'latin-1' encoding.")
-                data = decoded_data.decode('latin-1')
-            
-            csv_data = StringIO(data, newline='')
-            reader = csv.DictReader(csv_data) 
-            
-        except Exception as e:
-            raise UserError(_("Failed to read file. Please ensure it's a valid CSV. Error: %s") % str(e))
-
-        imported_count = 0
-        failed_rows = []
-        property_cache = {}
-        
-        LeadsNew = self.env['leads.new']
-        PropertyInv = self.env['property.inventory']
-
-        for index, row in enumerate(reader):
-            row_num = index + 2 
-            
-            if not any(row.values()):
+                decoded_data = base64.b64decode(attachment.datas)
+            except Exception as e:
+                all_failed_rows.append(f"{file_label} Critical: Could not decode file. {str(e)}")
                 continue
-            
-            # --- THIS IS THE FIX ---
-            # Create a new dictionary where all keys (headers) are stripped of whitespace.
-            # This fixes " Phone Number" vs "Phone Number"
-            clean_row = {key.strip(): value for key, value in row.items() if key}
-            # --- END FIX ---
 
-            # --- Use the new 'clean_row' mapping to get data ---
-            lead_name = clean_row.get(COLUMN_MAPPING['name'])
-            lead_phone = clean_row.get(COLUMN_MAPPING['phone'])
-            lead_email = clean_row.get(COLUMN_MAPPING['email'])
-            olx_id = clean_row.get(COLUMN_MAPPING['olx_id'])
-            # --- END OF CHANGES ---
+            rows_to_process = []
 
+            # --- 1. PARSE FILE (Excel vs CSV) ---
             try:
-                # --- 1. Validation ---
-                if not lead_name:
-                    failed_rows.append(f"Row {row_num}: Missing '{COLUMN_MAPPING['name']}'.")
-                    continue
-                if not lead_phone:
-                    failed_rows.append(f"Row {row_num} ({lead_name}): Missing '{COLUMN_MAPPING['phone']}'.")
-                    continue
-                if not olx_id:
-                    failed_rows.append(f"Row {row_num} ({lead_name}): Missing '{COLUMN_MAPPING['olx_id']}'.")
-                    continue
-                
-                olx_id = olx_id.strip().strip("'")
-
-                # --- 2. Find Property (with Caching) ---
-                prop = property_cache.get(olx_id)
-                if not prop:
-                    prop = PropertyInv.search([('olx_id', '=', olx_id)], limit=1)
-                    if prop:
-                        property_cache[olx_id] = prop
+                if filename.endswith('.xlsx'):
+                    if not openpyxl:
+                        raise UserError(_("The library 'openpyxl' is missing."))
                     
-                if not prop:
-                    failed_rows.append(f"Row {row_num} ({lead_name}): Property not found for Inventory ID (OLX ID) '{olx_id}'.")
-                    continue
+                    wb = openpyxl.load_workbook(filename=io.BytesIO(decoded_data), read_only=True, data_only=True)
+                    ws = wb.active
+                    all_rows = list(ws.iter_rows(values_only=True))
+                    
+                    if not all_rows:
+                        all_failed_rows.append(f"{file_label} Warning: File is empty.")
+                        continue
 
-                # --- 3. Find RM from Property ---
-                rm_user = prop.rm_user_id
-                if not rm_user:
-                    failed_rows.append(f"Row {row_num} ({lead_name}): Property '{prop.name}' is not assigned to an RM.")
-                    continue
+                    headers = [str(h).strip() if h is not None else '' for h in all_rows[0]]
 
-                # --- 4. Prepare 'leads.new' Values ---
-                create_vals = {
-                    'name': lead_name,
-                    'phone': lead_phone,
-                    'email': lead_email if lead_email != 'null' else False, # Handle 'null' text
-                    'portal_name': 'OLX',
-                    'portal_property_id': olx_id,
-                    'property_id': prop.id,
-                    'user_id': rm_user.id,
-                    'state': 'assigned',
-                    'current_status': 'lead',
-                    'raw_data': str(row)
-                }
+                    for row_values in all_rows[1:]:
+                        if not any(row_values): continue
+                        row_dict = dict(zip(headers, row_values))
+                        rows_to_process.append(row_dict)
 
-                # --- 5. Create Lead (using your existing duplicate check) ---
-                new_lead = LeadsNew.create_lead_if_not_duplicate(create_vals)
-                
-                if new_lead:
-                    imported_count += 1
+                elif filename.endswith('.csv'):
+                    try:
+                        data_str = decoded_data.decode('utf-8')
+                    except UnicodeDecodeError:
+                        data_str = decoded_data.decode('latin-1')
+                    
+                    csv_file = io.StringIO(data_str, newline='')
+                    reader = csv.DictReader(csv_file)
+                    reader.fieldnames = [name.strip() for name in reader.fieldnames] if reader.fieldnames else []
+                    
+                    for row in reader:
+                        if any(row.values()):
+                            rows_to_process.append(row)
                 else:
-                    failed_rows.append(f"Row {row_num} ({lead_name}): Duplicate lead detected (phone + property).")
+                    all_failed_rows.append(f"{file_label} Skipped: Unsupported file format.")
+                    continue
 
             except Exception as e:
-                failed_rows.append(f"Row {row_num} ({lead_name}): Failed to import. Error: {str(e)}")
+                all_failed_rows.append(f"{file_label} Critical Error parsing file: {str(e)}")
+                continue
 
-        # --- Provide a summary ---
-        if not failed_rows:
-            message = _("Successfully imported %d leads.") % imported_count
-            
-            # Using the message wizard from your original code
-            message_wizard = self.env['message.wizard'].create({'message': message})
-            return {
-                'name': _('Import Successful'),
-                'type': 'ir.actions.act_window',
-                'res_model': 'message.wizard',
-                'view_mode': 'form',
-                'res_id': message_wizard.id,
-                'target': 'new',
-            }
+            # --- 2. PROCESS ROWS FOR THIS FILE ---
+            for index, row in enumerate(rows_to_process):
+                row_num = index + 2
+                
+                # Helper to get values safely
+                clean_row = {str(k).strip(): v for k, v in row.items() if k}
+                def get_val(key):
+                    val = clean_row.get(key)
+                    return str(val).strip() if val is not None else False
 
-        error_details = "\n".join(failed_rows)
-        if imported_count > 0:
-            message = _("Import complete. Successfully imported %d leads.\n\nFailed Rows:\n%s") % (imported_count, error_details)
-            title = _('Partial Import')
+                lead_name = get_val(COLUMN_MAPPING['name'])
+                lead_phone = get_val(COLUMN_MAPPING['phone'])
+                lead_email = get_val(COLUMN_MAPPING['email'])
+                olx_id = get_val(COLUMN_MAPPING['olx_id'])
+
+                if lead_phone and lead_phone.endswith('.0'):
+                    lead_phone = lead_phone[:-2]
+
+                # Validation
+                if not lead_name:
+                    all_failed_rows.append(f"{file_label} Row {row_num}: Missing Name.")
+                    continue
+                if not lead_phone:
+                    all_failed_rows.append(f"{file_label} Row {row_num}: Missing Phone.")
+                    continue
+
+                if olx_id: olx_id = olx_id.strip("'")
+
+                try:
+                    # Logic: New Lead (Unassigned) vs Assigned
+                    state = 'new'
+                    property_id = False
+                    user_id = False
+                    process_notes = ""
+
+                    if olx_id:
+                        prop = property_cache.get(olx_id)
+                        if not prop:
+                            prop = PropertyInv.search([('olx_id', '=', olx_id)], limit=1)
+                            if prop: property_cache[olx_id] = prop
+                        
+                        if prop:
+                            property_id = prop.id
+                            if prop.rm_user_id:
+                                user_id = prop.rm_user_id.id
+                                state = 'assigned'
+                                process_notes = f"Source: {attachment.name}. Assigned to {prop.rm_user_id.name}."
+                            else:
+                                state = 'new'
+                                process_notes = f"Source: {attachment.name}. Matched Property {prop.name}, no RM."
+                        else:
+                            state = 'new'
+                            process_notes = f"Source: {attachment.name}. Property ID '{olx_id}' not found."
+                    else:
+                        state = 'new'
+                        process_notes = f"Source: {attachment.name}. No Inventory ID."
+
+                    # Create Lead
+                    create_vals = {
+                        'name': lead_name,
+                        'phone': lead_phone,
+                        'email': lead_email if lead_email and lead_email.lower() != 'null' else False,
+                        'portal_name': 'OLX',
+                        'portal_property_id': olx_id,
+                        'property_id': property_id,
+                        'user_id': user_id,
+                        'state': state,
+                        'current_status': 'lead',
+                        'process_notes': process_notes,
+                        'raw_data': str(clean_row)
+                    }
+
+                    new_lead = LeadsNew.create_lead_if_not_duplicate(create_vals)
+                    
+                    if new_lead:
+                        total_imported += 1
+                    else:
+                        # Optional: Log duplicates if you want to see them in the report
+                        # all_failed_rows.append(f"{file_label} Row {row_num}: Duplicate Lead.")
+                        pass
+
+                except Exception as e:
+                    all_failed_rows.append(f"{file_label} Row {row_num}: System Error: {str(e)}")
+
+        # --- FINAL SUMMARY REPORT ---
+        error_details = "\n".join(all_failed_rows)
+        
+        if total_imported > 0:
+            message = f"Batch Complete! Successfully imported {total_imported} leads from {len(self.file_ids)} file(s)."
+            if all_failed_rows:
+                message += f"\n\nWarnings/Errors:\n{error_details}"
         else:
-            message = _("Import complete. No leads were imported successfully.\n\nFailed Rows:\n%s") % (error_details)
-            title = _('Import Failed')
+            message = f"Batch Complete. No leads were imported.\n\nErrors:\n{error_details}"
 
-        message_wizard = self.env['message.wizard'].create({'message': message})
         return {
-            'name': title,
+            'name': 'Batch Import Result',
             'type': 'ir.actions.act_window',
             'res_model': 'message.wizard',
             'view_mode': 'form',
-            'res_id': message_wizard.id,
+            'res_id': self.env['message.wizard'].create({'message': message}).id,
             'target': 'new',
         }
 
 class MessageWizard(models.TransientModel):
-    """
-    A simple transient model to display a message to the user.
-    """
     _name = 'message.wizard'
     _description = 'Message Wizard'
-
-    # This is the field your XML view <field name="message".../> needs
     message = fields.Text(string="Message", readonly=True)

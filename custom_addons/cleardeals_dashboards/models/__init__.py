@@ -5,3 +5,6 @@ from . import renewal_lead_assignment
 from . import renewal_interakt_event
 from . import renewal_template_stats
 from . import renewal_property_owner
+from . import lead_scoring_event
+from . import lead_scoring_template_stats
+from . import lead_scoring_lead

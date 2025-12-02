@@ -12,16 +12,16 @@ class WhatsAppResponse(models.Model):
     # Original fields
     number = fields.Char(string='Phone Number', required=True)
     response = fields.Selection([
-        ('going_for_visit', 'Going for Visit'),
-        ('need_assistance', 'Need Assistance'),
-        ('need_to_reschedule', 'Need to Reschedule'),
-        ('liked_the_property', 'Liked the Property'),
-        ('pick_a_convenient_time', 'Pick a Convenient Time'),
-        ('successfully_visited', 'Successfully Visited'),
-        ('schedule_a_visit', 'Schedule a Visit'),
-        ('need_more_information', 'Need More Information'),
-        ('call_rm', 'Call RM'),
-        ('call_me_back', 'Call Me Back'),
+        ('yes_going_for_visit', 'Yes, going for the visit'),
+        ('need_help', 'Need Help'),
+        ('yes_visit_done', 'Yes, Visit done'),
+        ('yes_liked_the_property', 'Yes, Liked the Property'),
+        ('call_the_expert', 'Call the Expert'),
+        ('no_reschedule_visit', 'No, Reschedule visit'),
+        ('abhi_call_kare', 'Abhi Call Kare'),
+        ('slot_book_kre', 'Slot book kre'),
+        ('schedule_visit_now', 'Schedule Visit Now'),
+        ('talk_to_a_property_expert', 'Talk to a Property Expert'),
         ('generic_response', 'Generic Response')
     ], string='Response', required=True)
 

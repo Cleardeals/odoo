@@ -17,6 +17,8 @@
         'views/lead_suggestion_dashboard_views.xml',
         'views/renewal_dashboard_views.xml',
         'views/renewal_template_stats_views.xml',
+        'views/lead_scoring_views.xml',
+        'views/lead_scoring_stats_views.xml',
         'views/menus.xml',
     ],
     'external_dependencies': {
