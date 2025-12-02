@@ -157,19 +157,30 @@
                 <field name="rm_user_id" string="Assigned RM"/>
                 <field name="owner_name" string="Owner Name"/>
                 <field name="owner_phone" string="Owner Phone"/>
+                
                 <separator/>
+                
                 <filter name="filter_new_suggestions"
                         string="With New Suggestions"
                         domain="[('new_suggestion_count', '>', 0)]"/>
+                
+                <separator/>
+
                 <filter name="filter_my_properties"
                         string="My Properties"
-                        domain="[('rm_user_id', '=', uid)]" help="Show only properties assigned to you"/>
+                        domain="[('rm_user_id', '=', uid)]" 
+                        help="Show only properties assigned to you"/>
+
+                <separator/>
+
                 <filter name="filter_active"
                         string="Active Only"
-                        domain="[('is_active', '=', True)]" help="Show only properties marked as Active"/>
+                        domain="[('is_active', '=', True)]" 
+                        help="Show only properties marked as Active"/>
                 <filter name="filter_inactive"
                         string="Inactive/Expired"
-                        domain="[('is_active', '=', False)]" help="Show only properties marked as Inactive"/>
+                        domain="[('is_active', '=', False)]" 
+                        help="Show only properties marked as Inactive"/>
                 <filter name="filter_expired"
                         string="Service Expired"
                         domain="[('service_expiry_date', '&lt;', context_today().strftime('%Y-%m-%d'))]" 
@@ -179,7 +190,9 @@
                         domain="[('welcome_call_date', '&lt;=', context_today().strftime('%Y-%m-%d')), 
                                 ('welcome_call_date', '&gt;=', (context_today() - datetime.timedelta(days=3)).strftime('%Y-%m-%d'))]" 
                         help="Show new properties with welcome call date in last 3 days"/>
+                
                 <separator/>
+                
                 <group expand="0" string="Group By">
                     <filter string="Assigned RM" name="group_by_rm" context="{'group_by': 'rm_user_id'}"/>
                     <filter string="Is Active" name="group_by_active" context="{'group_by': 'is_active'}"/>
@@ -187,7 +200,7 @@
             </search>
         </field>
     </record>
-
+    
     <record id="action_property_inventory_rm" model="ir.actions.act_window">
         <field name="name">My Property Suggestions</field>
         <field name="res_model">property.inventory</field>
