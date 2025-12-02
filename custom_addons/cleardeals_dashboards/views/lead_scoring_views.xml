@@ -33,8 +33,23 @@
                 <field name="last_response"/>
                 
                 <filter string="Replied" name="replied" domain="[('has_replied', '=', True)]"/>
-                <filter string="Not Read" name="not_read" domain="[('is_read', '=', False)]"/>
-                <filter string="High Score (>0.8)" name="high_score" domain="[('predicted_score', '>=', 0.8)]"/>
+                <filter string="Left At Read" name="left_at_read" domain="[('is_read', '=', True), ('has_replied', '=', False)]"/>
+                <filter string="Not Read" name="not_read" domain="[('is_read', '=', False), ('is_delivered', '=', True)]"/>
+                <filter string="Failed" name="failed" domain="[('is_delivered', '=', False)]"/>
+                
+                <separator/>
+                
+                <filter string="Today" name="today" 
+                        domain="[('last_activity', '&gt;=', context_today().strftime('%Y-%m-%d'))]"/>
+                
+                <filter string="Yesterday" name="yesterday" 
+                        domain="[('last_activity', '&gt;=', (context_today() - datetime.timedelta(days=1)).strftime('%Y-%m-%d')), ('last_activity', '&lt;', context_today().strftime('%Y-%m-%d'))]"/>
+                
+                <filter string="Last 7 Days" name="week" 
+                        domain="[('last_activity', '&gt;=', (context_today() - datetime.timedelta(days=7)).strftime('%Y-%m-%d'))]"/>
+                
+                <filter string="This Month" name="month" 
+                        domain="[('last_activity', '&gt;=', context_today().strftime('%Y-%m-01'))]"/>
                 
                 <group expand="0" string="Group By">
                     <filter string="Workflow Stage" name="group_by_stage" context="{'group_by': 'workflow_stage'}"/>
@@ -236,6 +251,6 @@
         <field name="res_model">lead.scoring.lead</field>
         <field name="view_mode">list,form,pivot</field>
         <field name="search_view_id" ref="view_lead_scoring_lead_search"/>
-        <field name="context">{'search_default_group_by_stage': 1}</field>
+        <field name="context">{'search_default_group_by_stage': 1, 'search_default_today': 1}</field>
     </record>
 </odoo>
