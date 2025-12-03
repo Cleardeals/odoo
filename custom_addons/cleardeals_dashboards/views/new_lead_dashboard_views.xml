@@ -1,0 +1,114 @@
+<odoo>
+    <record id="view_new_lead_event_list_embedded" model="ir.ui.view">
+        <field name="name">leads.new.event.list.embedded</field>
+        <field name="model">leads.new.event</field>
+        <field name="arch" type="xml">
+            <list decoration-danger="event_type=='failed'" decoration-muted="message_direction=='inbound'">
+                <field name="event_timestamp"/>
+                <field name="message_direction"/>
+                <field name="event_type"/>
+                <field name="template_name" optional="show"/>
+                <field name="message_content" optional="hide"/>
+                <field name="failure_reason" optional="hide"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_dashboard_search" model="ir.ui.view">
+        <field name="name">leads.new.dashboard.search</field>
+        <field name="model">leads.new.dashboard</field>
+        <field name="arch" type="xml">
+            <search string="KPI Search">
+                <field name="lead_name"/>
+                <field name="lead_phone"/>
+                <filter string="Created Today" name="today" domain="[('create_date', '&gt;=', context_today().strftime('%Y-%m-%d'))]"/>
+                <filter string="Last 7 Days" name="week" domain="[('create_date', '&gt;=', (context_today() - datetime.timedelta(days=7)).strftime('%Y-%m-%d'))]"/>
+                <filter string="WhatsApp Read" name="wa_read" domain="[('is_read', '=', True)]"/>
+                <filter string="Customer Replied" name="wa_reply" domain="[('has_replied', '=', True)]"/>
+                <group expand="1" string="Group By">
+                    <filter string="Assigned RM" name="group_rm" context="{'group_by':'assigned_rm'}"/>
+                    <filter string="Current Status" name="group_status" context="{'group_by':'current_status'}"/>
+                    <filter string="Portal" name="group_portal" context="{'group_by':'portal_name'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="view_dashboard_list" model="ir.ui.view">
+        <field name="name">leads.new.dashboard.list</field>
+        <field name="model">leads.new.dashboard</field>
+        <field name="arch" type="xml">
+            <list string="New Lead Dashboard">
+                <field name="create_date"/>
+                <field name="lead_name"/>
+                <field name="lead_phone"/>
+                <field name="assigned_rm"/>
+                <field name="current_status"/>
+                <field name="is_read"/>
+                <field name="has_replied"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_dashboard_graph" model="ir.ui.view">
+        <field name="name">leads.new.dashboard.graph</field>
+        <field name="model">leads.new.dashboard</field>
+        <field name="arch" type="xml">
+            <graph string="Workflow Overview" type="bar" stacked="True" sample="1">
+                <field name="current_status" type="row"/>
+                <field name="assigned_rm" type="row"/>
+            </graph>
+        </field>
+    </record>
+
+    <record id="view_dashboard_pivot" model="ir.ui.view">
+        <field name="name">leads.new.dashboard.pivot</field>
+        <field name="model">leads.new.dashboard</field>
+        <field name="arch" type="xml">
+            <pivot string="Workflow Analysis" sample="1">
+                <field name="assigned_rm" type="row"/>
+                <field name="current_status" type="col"/>
+                
+                <field name="cnt_initial_msg" type="measure"/>
+                <field name="cnt_reply_plan_visit" type="measure"/>
+            </pivot>
+        </field>
+    </record>
+
+    <record id="view_dashboard_form" model="ir.ui.view">
+        <field name="name">leads.new.dashboard.form</field>
+        <field name="model">leads.new.dashboard</field>
+        <field name="arch" type="xml">
+            <form string="Lead Analytics">
+                <sheet>
+                    <group>
+                        <group string="Lead Info">
+                            <field name="lead_id"/>
+                            <field name="assigned_rm"/>
+                            <field name="current_status"/>
+                        </group>
+                        <group string="WhatsApp KPIs">
+                            <field name="is_delivered"/>
+                            <field name="is_read"/>
+                            <field name="has_replied"/>
+                            <field name="last_event_date"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="History / Events">
+                            <field name="event_ids" readonly="1"/>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_new_leads_dashboard" model="ir.actions.act_window">
+        <field name="name">Workflow Dashboard</field>
+        <field name="res_model">leads.new.dashboard</field>
+        <field name="view_mode">graph,pivot,list,form</field>
+        <field name="search_view_id" ref="view_dashboard_search"/>
+        <field name="context">{'search_default_today': 1, 'search_default_group_rm': 1}</field>
+    </record>
+</odoo>

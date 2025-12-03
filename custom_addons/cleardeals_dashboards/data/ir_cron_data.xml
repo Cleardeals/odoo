@@ -74,5 +74,15 @@
             <field name="interval_type">hours</field>
         </record>
 
+        <record id="ir_cron_new_leads_dashboard_sync" model="ir.cron">
+            <field name="name">Sync: New Portal Leads Dashboard</field>
+            <field name="model_id" ref="model_leads_new_dashboard"/>
+            <field name="state">code</field>
+            <field name="code">model._cron_sync_new_leads_dashboard()</field>
+            <field name="user_id" ref="base.user_root"/>
+            <field name="interval_number">4</field>
+            <field name="interval_type">hours</field>
+        </record>
+
     </data>
 </odoo>

@@ -100,4 +100,28 @@
         groups="cleardeals_dashboards.group_dashboard_manager"
         sequence="2"/>
 
+
+    <menuitem
+        id="menu_new_leads_root"
+        name="New Portal Leads"
+        parent="menu_main_dashboard_root"
+        groups="cleardeals_dashboards.group_dashboard_manager"
+        sequence="5"/>
+
+    <menuitem
+        id="menu_new_leads_dashboard"
+        name="Leads Analysis"
+        parent="menu_new_leads_root"
+        action="action_new_leads_dashboard"
+        groups="cleardeals_dashboards.group_dashboard_manager"
+        sequence="1"/>
+
+    <menuitem
+        id="menu_new_leads_templates"
+        name="Template Stats"
+        parent="menu_new_leads_root"
+        action="action_leads_new_template_stats"
+        groups="cleardeals_dashboards.group_dashboard_manager"
+        sequence="2"/>
+
 </odoo>

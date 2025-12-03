@@ -20,6 +20,8 @@
         'views/renewal_template_stats_views.xml',
         'views/lead_scoring_views.xml',
         'views/lead_scoring_stats_views.xml',
+        'views/new_lead_dashboard_views.xml',
+        'views/new_lead_template_stats_views.xml',
         'views/menus.xml',
     ],
     'external_dependencies': {

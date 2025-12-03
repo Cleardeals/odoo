@@ -5,7 +5,7 @@
         <field name="name">active.template.stats.list</field>
         <field name="model">active.template.stats</field>
         <field name="arch" type="xml">
-            <list string="Template Performance" create="false" edit="false" decoration-danger="delivery_rate &lt; 50">
+            <list string="Template Performance" create="false" edit="false" delete="true" decoration-danger="delivery_rate &lt; 50">
                 <field name="date"/>
                 <field name="template_name"/>
                 <field name="total_sent" sum="Total Sent"/>

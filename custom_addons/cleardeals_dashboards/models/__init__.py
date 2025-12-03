@@ -9,3 +9,6 @@ from . import lead_scoring_event
 from . import lead_scoring_template_stats
 from . import lead_scoring_lead
 from . import active_template_stats 
+from . import new_lead_event
+from . import new_lead_template_stats
+from . import new_lead_dashboard

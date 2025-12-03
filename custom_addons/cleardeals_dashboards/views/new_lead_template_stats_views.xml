@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_leads_new_template_stats_list" model="ir.ui.view">
+        <field name="name">leads.new.template.stats.list</field>
+        <field name="model">leads.new.template.stats</field>
+        <field name="arch" type="xml">
+            <list string="New Lead Template Stats" create="false" edit="false">
+                <field name="date"/>
+                <field name="template_name"/>
+                <field name="total_sent" sum="Total Sent"/>
+                <field name="total_delivered" sum="Total Delivered"/>
+                <field name="total_read" sum="Total Read"/>
+                <field name="total_clicked" sum="Total Clicked"/>
+                <field name="delivery_rate" widget="progressbar"/>
+                <field name="read_rate" widget="progressbar"/>
+                <field name="click_rate" widget="progressbar"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_leads_new_template_stats_search" model="ir.ui.view">
+        <field name="name">leads.new.template.stats.search</field>
+        <field name="model">leads.new.template.stats</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="template_name"/>
+                <filter string="Today" name="today" domain="[('date', '=', context_today())]"/>
+                <group expand="0" string="Group By">
+                    <filter string="Template" name="group_by_template" context="{'group_by': 'template_name'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_leads_new_template_stats" model="ir.actions.act_window">
+        <field name="name">New Lead Templates</field>
+        <field name="res_model">leads.new.template.stats</field>
+        <field name="view_mode">list,pivot,graph</field>
+    </record>
+</odoo>

@@ -10,4 +10,7 @@ access_renewal_template_stats_manager,renewal.template.stats dashboard manager,m
 access_lead_scoring_lead_user,lead.scoring.lead,model_lead_scoring_lead,base.group_user,1,1,1,1
 access_lead_scoring_event_user,lead.scoring.event,model_lead_scoring_event,base.group_user,1,1,1,1
 access_lead_scoring_template_stats_user,lead.scoring.template.stats,model_lead_scoring_template_stats,base.group_user,1,1,1,1
-access_active_template_stats_user,active.template.stats,model_active_template_stats,base.group_user,1,0,0,0
+access_active_template_stats_user,active.template.stats,model_active_template_stats,base.group_user,1,1,1,1
+access_leads_new_dashboard_user,leads.new.dashboard,model_leads_new_dashboard,base.group_user,1,1,1,1
+access_leads_new_event_user,leads.new.event,model_leads_new_event,base.group_user,1,1,1,1
+access_leads_new_template_stats_user,leads.new.template.stats,model_leads_new_template_stats,base.group_user,1,1,1,1
