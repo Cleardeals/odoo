@@ -175,7 +175,8 @@
         <field name="context">
             {
                 'search_default_created_today': 1, 
-                'search_default_group_rm': 1
+                'search_default_group_rm': 1,
+                'pivot_measures': ['__count'],
             }
         </field>
     </record>
