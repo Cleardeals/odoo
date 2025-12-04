@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
+
     <record id="view_leads_new_template_stats_list" model="ir.ui.view">
         <field name="name">leads.new.template.stats.list</field>
         <field name="model">leads.new.template.stats</field>
@@ -24,17 +25,47 @@
         <field name="arch" type="xml">
             <search>
                 <field name="template_name"/>
+                <field name="date"/>
+
                 <filter string="Today" name="today" domain="[('date', '=', context_today())]"/>
+                <filter string="Yesterday" name="yesterday" domain="[('date', '=', (context_today() - relativedelta(days=1)).strftime('%Y-%m-%d'))]"/>
+                <filter string="Last 7 Days" name="last_week" domain="[('date', '&gt;=', (context_today() - relativedelta(days=7)).strftime('%Y-%m-%d'))]"/>
+                
+                <separator/>
+                
                 <group expand="0" string="Group By">
                     <filter string="Template" name="group_by_template" context="{'group_by': 'template_name'}"/>
+                    <filter string="Date" name="group_by_date" context="{'group_by': 'date:day'}"/>
                 </group>
             </search>
+        </field>
+    </record>
+
+    <record id="view_leads_new_template_stats_pivot" model="ir.ui.view">
+        <field name="name">leads.new.template.stats.pivot</field>
+        <field name="model">leads.new.template.stats</field>
+        <field name="arch" type="xml">
+            <pivot string="Template Stats" disable_linking="True" sample="1">
+                <field name="template_name" type="row"/>
+                
+                <field name="total_sent" type="measure"/>
+                <field name="total_delivered" type="measure"/>
+                <field name="total_read" type="measure"/>
+                <field name="total_clicked" type="measure"/>
+            </pivot>
         </field>
     </record>
 
     <record id="action_leads_new_template_stats" model="ir.actions.act_window">
         <field name="name">New Lead Templates</field>
         <field name="res_model">leads.new.template.stats</field>
-        <field name="view_mode">list,pivot,graph</field>
+        <field name="view_mode">pivot,list,graph</field>
+        <field name="context">{
+            'search_default_group_by_template': 1,
+            'search_default_today': 1,
+            'pivot_measures': ['total_sent', 'total_delivered', 'total_read', 'total_clicked', 'delivery_rate', 'read_rate', 'click_rate'],
+            'pivot_row_groupby': ['template_name'],
+        }</field>
     </record>
+
 </odoo>
