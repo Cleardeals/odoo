@@ -207,9 +207,9 @@ class LeadScoringLead(models.Model):
     @api.model
     def _cron_sync_lead_scoring(self):
         _logger.info("Starting Lead Scoring Sync (New Templates)...")
-        self._fetch_leads_from_triggers(days=60)
-        self._fetch_lead_events(days=60)
-        self._cron_fetch_template_stats(days=60)
+        self._fetch_leads_from_triggers(days=7)
+        self._fetch_lead_events(days=7)
+        self._cron_fetch_template_stats(days=7)
         _logger.info("Lead Scoring Sync Complete.")
 
     @api.model
@@ -347,8 +347,8 @@ class LeadScoringLead(models.Model):
                 pass
 
     @api.model
-    def cron_fetch_template_stats(self, days=7):
-        _logger.info("Fetching New Lead Template Stats...")
+    def _cron_fetch_template_stats(self, days=7):
+        _logger.info("Fetching Lead Scoring Template Stats...")
         client = bigquery.Client(project=BIGQUERY_PROJECT_ID)
         
         query = f"""
@@ -364,11 +364,6 @@ class LeadScoringLead(models.Model):
                     ) AS template_name
                 FROM `{EVENT_LOG_TABLE_ID}`
                 WHERE ingestion_timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {days} DAY)
-                -- Filter out the Bad Sell Lead Data --
-                AND COALESCE(
-                        JSON_VALUE(raw_payload, '$.data.message.raw_template.name'),
-                        JSON_VALUE(JSON_VALUE(raw_payload, '$.data.message.raw_template'), '$.name')
-                    ) NOT IN ('sell_lead_template', 'sell_lead_yes_response', 'sell_lead_no_response')
             ),
             TemplateMessages AS (
                 SELECT 
@@ -377,8 +372,8 @@ class LeadScoringLead(models.Model):
                     ANY_VALUE(template_name) as template_name
                 FROM AllEvents
                 WHERE message_direction = 'outbound' 
-                AND template_name IS NOT NULL
-                AND correlation_id IS NOT NULL
+                  AND template_name IS NOT NULL
+                  AND correlation_id IS NOT NULL
                 GROUP BY correlation_id
             ),
             MessageStats AS (
@@ -386,25 +381,14 @@ class LeadScoringLead(models.Model):
                     tm.correlation_id,
                     tm.send_date,
                     tm.template_name,
-                    -- Status Checks
                     MAX(CASE WHEN ae.event_type IN ('status_delivered', 'status_read') THEN 1 ELSE 0 END) as is_delivered,
                     MAX(CASE WHEN ae.event_type = 'status_read' THEN 1 ELSE 0 END) as is_read,
                     MAX(CASE WHEN ae.event_type = 'status_failed' THEN 1 ELSE 0 END) as is_failed,
-                    
-                    -- CLICK LOGIC: Match the working reference - any inbound message OR explicit click event
                     MAX(CASE 
                         WHEN ae.message_direction = 'inbound' THEN 1 
                         WHEN ae.event_type = 'message_api_clicked' THEN 1
                         ELSE 0 
-                    END) as is_clicked,
-                    
-                    -- REPLY LOGIC: Same as clicks (since button clicks also create inbound messages)
-                    MAX(CASE 
-                        WHEN ae.message_direction = 'inbound' THEN 1 
-                        WHEN ae.event_type = 'message_api_clicked' THEN 1
-                        ELSE 0 
-                    END) as is_replied
-
+                    END) as is_clicked
                 FROM TemplateMessages tm
                 JOIN AllEvents ae ON tm.correlation_id = ae.correlation_id
                 GROUP BY 1, 2, 3
@@ -416,7 +400,6 @@ class LeadScoringLead(models.Model):
                 SUM(is_delivered) AS total_delivered,
                 SUM(is_read) AS total_read,
                 SUM(is_clicked) AS total_clicked,
-                SUM(is_replied) AS total_replied,
                 SUM(is_failed) AS total_failed
             FROM MessageStats
             GROUP BY 1, 2
@@ -424,18 +407,14 @@ class LeadScoringLead(models.Model):
         """
         
         try:
-            results = list(client.query(query).result())  # IMPORTANT: Convert to list
+            results = client.query(query).result()
         except Exception as e:
             _logger.error(f"Template Stats Query Failed: {e}")
             return
 
-        Stats = self.env['leads.new.template.stats'].sudo()
-        updated_count = 0
-        created_count = 0
-        
+        Stats = self.env['lead.scoring.template.stats'].sudo()
         for row in results:
             if not row.template_name: continue
-            
             vals = {
                 'date': row.date,
                 'template_name': row.template_name,
@@ -443,16 +422,10 @@ class LeadScoringLead(models.Model):
                 'total_delivered': row.total_delivered,
                 'total_read': row.total_read,
                 'total_clicked': row.total_clicked,
-                'total_replied': row.total_replied,
                 'total_failed': row.total_failed
             }
-            
             existing = Stats.search([('date', '=', row.date), ('template_name', '=', row.template_name)], limit=1)
             if existing:
                 existing.write(vals)
-                updated_count += 1
             else:
                 Stats.create(vals)
-                created_count += 1
-        
-        _logger.info(f"Template stats complete: {created_count} created, {updated_count} updated")
