@@ -676,7 +676,7 @@ class NewPortalLead(models.Model):
         ], limit=100)
 
         if not leads_to_send:
-            _logger.info("No new leads to send to n8gpn webhook") # <-- Fixed typo
+            _logger.info("No new leads to send to n8n webhook") # <-- Fixed typo
             return
         
         batch_payload = []

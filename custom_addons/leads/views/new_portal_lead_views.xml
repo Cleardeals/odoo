@@ -9,6 +9,9 @@
                 <field name="name" string="Lead Name"/>
                 <field name="phone"/>
                 <field name="user_id" string="RM"/>
+                <field name="property_location"/>
+                <field name="property_bhk"/>
+                <field name="property_city"/>
                 <field name="portal_name"/>
                 <field name="current_status"/>
                 <separator/>

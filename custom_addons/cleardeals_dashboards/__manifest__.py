@@ -13,12 +13,15 @@
         'data/ir_cron_data.xml',
 
         'views/lead_assignment_views.xml',
+        'views/active_template_stats_views.xml',
         'views/property_daily_stat_views.xml',
         'views/lead_suggestion_dashboard_views.xml',
         'views/renewal_dashboard_views.xml',
         'views/renewal_template_stats_views.xml',
         'views/lead_scoring_views.xml',
         'views/lead_scoring_stats_views.xml',
+        'views/new_lead_dashboard_views.xml',
+        'views/new_lead_template_stats_views.xml',
         'views/menus.xml',
     ],
     'external_dependencies': {
