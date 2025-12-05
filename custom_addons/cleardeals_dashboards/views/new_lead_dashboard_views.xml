@@ -27,16 +27,16 @@
                 
                 <separator/>
                 <filter string="Created: Today" name="created_today" 
-                        domain="[('create_date', '&gt;=', context_today().strftime('%Y-%m-%d 00:00:00')), ('create_date', '&lt;=', context_today().strftime('%Y-%m-%d 23:59:59'))]"/>
+                        domain="[('lead_create_date_only', '=', context_today())]"/>
                 
                 <filter string="Created: Yesterday" name="created_yesterday" 
-                        domain="[('create_date', '&gt;=', (context_today() - relativedelta(days=1)).strftime('%Y-%m-%d 00:00:00')), ('create_date', '&lt;=', (context_today() - relativedelta(days=1)).strftime('%Y-%m-%d 23:59:59'))]"/>
+                        domain="[('lead_create_date_only', '=', (context_today() - relativedelta(days=1)))]"/>
                 
                 <filter string="Created: This Week" name="created_this_week" 
-                        domain="[('create_date', '&gt;=', (context_today() - relativedelta(weeks=1, weekday=0)).strftime('%Y-%m-%d')), ('create_date', '&lt;=', (context_today() + relativedelta(weeks=0, weekday=6)).strftime('%Y-%m-%d'))]"/>
+                        domain="[('lead_create_date_only', '&gt;=', (context_today() - relativedelta(weeks=1, weekday=0))), ('lead_create_date_only', '&lt;=', (context_today() + relativedelta(weeks=0, weekday=6)))]"/>
                 
                 <filter string="Created: This Month" name="created_this_month" 
-                        domain="[('create_date', '&gt;=', (context_today() + relativedelta(day=1)).strftime('%Y-%m-%d')), ('create_date', '&lt;=', (context_today() + relativedelta(months=1, day=1, days=-1)).strftime('%Y-%m-%d'))]"/>
+                        domain="[('lead_create_date_only', '&gt;=', (context_today() + relativedelta(day=1))), ('lead_create_date_only', '&lt;=', (context_today() + relativedelta(months=1, day=1, days=-1)))]"/>
 
                 <separator/>
                 <filter string="Unassigned" name="unassigned" domain="[('is_unassigned', '=', True)]"/>
@@ -47,6 +47,7 @@
                     <filter string="Assigned RM" name="group_rm" context="{'group_by':'assigned_rm'}"/>
                     <filter string="Current Status" name="group_status" context="{'group_by':'current_status'}"/>
                     <filter string="Portal Source" name="group_portal" context="{'group_by':'portal_name'}"/>
+                    <filter string="Creation Date (IST)" name="group_date" context="{'group_by':'lead_create_date_only'}"/>
                 </group>
             </search>
         </field>
@@ -61,7 +62,7 @@
                   decoration-success="has_replied"
                   decoration-muted="not is_delivered">
                 
-                <field name="create_date" widget="datetime" optional="show"/>
+                <field name="lead_create_date" widget="datetime" optional="show" string="Created On"/>
                 <field name="lead_name"/>
                 <field name="lead_phone" optional="show"/>
                 <field name="portal_name" optional="hide"/>
@@ -76,7 +77,6 @@
 
                 <field name="cnt_initial_msg" string="Engag" optional="hide"/>
                 <field name="cnt_unassigned_msg" string="Unassg." optional="hide"/>
-                
                 
                 <field name="last_event_date" widget="datetime" optional="show"/>
                 
@@ -97,7 +97,7 @@
 
                     <group>
                         <group string="Lead Info">
-                            <field name="create_date" readonly="1"/>
+                            <field name="lead_create_date" readonly="1"/>
                             <field name="portal_name" readonly="1"/>
                             <field name="assigned_rm" widget="many2one_avatar_user" readonly="1"/>
                             <field name="current_status" widget="badge" readonly="1"/>
@@ -145,7 +145,7 @@
         <field name="model">leads.new.dashboard</field>
         <field name="arch" type="xml">
             <graph string="Workflow Overview" type="bar" stacked="True" sample="1">
-                <field name="create_date" interval="day"/>
+                <field name="lead_create_date_only" interval="day"/>
                 <field name="assigned_rm"/>
                 <field name="cnt_initial_msg" type="measure"/>
             </graph>
