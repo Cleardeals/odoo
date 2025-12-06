@@ -376,7 +376,8 @@ class NewLeadDashboard(models.Model):
                 SELECT DISTINCT
                     COALESCE(correlation_id, JSON_VALUE(raw_payload, '$.data.message.id')) AS msg_id,
                     conversation_id,
-                    DATE(event_timestamp) AS event_date,
+                    -- Convert UTC to IST (UTC+5:30) for date calculation
+                    DATE(DATETIME(event_timestamp, 'Asia/Kolkata')) AS event_date,
                     event_timestamp AS sent_timestamp,
                     COALESCE(
                         JSON_VALUE(raw_payload, '$.data.message.raw_template.name'),
@@ -384,6 +385,7 @@ class NewLeadDashboard(models.Model):
                         'Unknown Template' 
                     ) AS template_name
                 FROM `{EVENT_LOG_TABLE_ID}`
+                -- Use IST timezone for the time window calculation
                 WHERE event_timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {days_int} DAY)
                 AND message_direction = 'outbound'
                 AND event_type = 'status_sent'
