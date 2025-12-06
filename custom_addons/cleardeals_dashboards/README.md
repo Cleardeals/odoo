@@ -1,7 +1,7 @@
 # ClearDeals Dashboards (`cleardeals_dashboards`)
 
 **Version:** 1.0.0
-**Dependencies:** `base`, `google_spreadsheet` (or external `google-cloud-bigquery` lib)
+**Dependencies:** `base`, `google-cloud-bigquery` lib
 **Maintainers:** Engineering Team
 
 ---

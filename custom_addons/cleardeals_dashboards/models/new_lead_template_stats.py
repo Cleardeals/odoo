@@ -15,7 +15,13 @@ class NewLeadTemplateStats(models.Model):
     total_read = fields.Integer(string="Total Read", readonly=True)
     total_failed = fields.Integer(string="Total Failed", readonly=True)
     
-    # --- NEW FIELDS (Added to match Lead Scoring) ---
+    # --- NEW FIELDS: Pending ---
+    # Pending = Sent - (Delivered + Failed)
+    total_pending = fields.Integer(string="Total Pending", readonly=True)
+    # Stores comma-separated list of phone numbers
+    pending_phone_numbers = fields.Text(string="Pending Numbers", readonly=True, help="Phone numbers that have not yet received a delivery receipt.")
+
+    # --- Activity Metrics ---
     total_clicked = fields.Integer(string="Total Clicked", readonly=True) 
     total_replied = fields.Integer(string="Total Replied", readonly=True)
 
@@ -47,7 +53,7 @@ class NewLeadTemplateStats(models.Model):
             else:
                 record.read_rate = 0.0
 
-            # 3. Click Rate = Clicked / Read (Matching your reference logic)
+            # 3. Click Rate = Clicked / Read
             if record.total_read > 0:
                 val = (record.total_clicked / record.total_read) * 100
                 record.click_rate = min(val, 100.0)
