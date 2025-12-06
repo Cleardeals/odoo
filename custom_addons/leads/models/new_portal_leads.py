@@ -8,6 +8,7 @@ from datetime import timedelta
 import json
 import requests
 import hmac
+import pytz
 import hashlib
 import time
 import re
@@ -157,12 +158,18 @@ class NewPortalLead(models.Model):
     @api.depends('create_date')
     def _compute_create_date_only(self):
         """
-        Takes the full 'create_date' (Datetime) and stores
-        just the 'date' part for easy filtering.
+        Converts the UTC 'create_date' to IST before extracting the Date.
+        This ensures 2:00 AM IST is recorded as 'Today', not 'Yesterday'.
         """
+        ist_timezone = pytz.timezone('Asia/Kolkata')
         for rec in self:
             if rec.create_date:
-                rec.create_date_only = rec.create_date.date()
+                # 1. Convert UTC timestamp to IST
+                utc_time = rec.create_date.replace(tzinfo=pytz.UTC)
+                ist_time = utc_time.astimezone(ist_timezone)
+                
+                # 2. Extract the Date from the IST time
+                rec.create_date_only = ist_time.date()
             else:
                 rec.create_date_only = False
 

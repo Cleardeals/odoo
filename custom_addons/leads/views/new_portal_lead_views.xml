@@ -1,11 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
 
-   <record id="view_new_portal_lead_search" model="ir.ui.view">
+    <!-- ================================================ -->
+    <!--  SEARCH VIEW – TIMEZONE-SAFE (uses create_date_only) -->
+    <!-- ================================================ -->
+    <record id="leads_new_view_search" model="ir.ui.view">
         <field name="name">leads.new.search</field>
         <field name="model">leads.new</field>
         <field name="arch" type="xml">
             <search string="Search New Portal Leads">
+
                 <field name="name" string="Lead Name"/>
                 <field name="phone"/>
                 <field name="user_id" string="RM"/>
@@ -14,67 +18,64 @@
                 <field name="property_city"/>
                 <field name="portal_name"/>
                 <field name="current_status"/>
+
                 <separator/>
-                
-                <filter string="Pending Leads Today" 
-                        name="my_new_leads_today"
-                        domain="[
-                                 ('create_date', '>=', context_today()), 
-                                 ('current_status', '=', 'lead')]"
-                        help="Shows leads assigned to you today that are still in the 'Lead' status."/>
 
+                <filter string="Created: Today"
+                        name="created_today"
+                        domain="[('create_date_only', '=', context_today())]"/>
 
-                <filter string="All Leads Today" 
-                        name="my_new_leads_today"
-                        domain="[
-                                 ('create_date', '>=', context_today())]"
-                        help="Shows leads assigned to you today that are still in the 'Lead' status."/>
-                
-                <filter string="Unassigned" name="unassigned"
+                <filter string="Created: Yesterday"
+                        name="created_yesterday"
+                        domain="[('create_date_only', '=', context_today() - datetime.timedelta(days=1))]"/>
+
+                <filter string="Created: This Week"
+                        name="created_this_week"
+                        domain="[('create_date_only', '>=', context_today() - datetime.timedelta(days=context_today().weekday())),
+                                 ('create_date_only', '&lt;=', context_today())]"/>
+
+                <filter string="Created: This Month"
+                        name="created_this_month"
+                        domain="[('create_date_only', '>=', time.strftime('%Y-%m-01')),
+                                 ('create_date_only', '&lt;=', context_today())]"/>
+
+                <separator/>
+
+                <filter string="My Leads Created Today"
+                        name="my_leads_today"
+                        domain="[('user_id', '=', uid), ('create_date_only', '=', context_today())]"/>
+
+                <filter string="Pending Leads Today"
+                        name="pending_leads_today"
+                        domain="[('user_id', '=', uid),
+                                 ('create_date_only', '=', context_today()),
+                                 ('current_status', '=', 'lead')]"/>
+
+                <filter string="Unassigned"
+                        name="unassigned"
                         domain="[('user_id', '=', False)]"/>
-                <separator/>
-                
-                <filter string="Created Today" 
-                        name="created_today" 
-                        domain="[('create_date', '>=', context_today())]"/>
-                        
-                <filter string="Created This Week" 
-                        name="created_week" 
-                        domain="[('create_date', '>=', (context_today() - datetime.timedelta(days=context_today().weekday())).strftime('%Y-%m-%d'))]"/>
-                        
-                <filter string="Created This Month" 
-                        name="created_month" 
-                        domain="[('create_date', '>=', context_today().strftime('%Y-%m-01'))]"/>
-                        
+
                 <separator/>
 
-                <filter string="Site Visits Today" 
+                <filter string="Site Visits Today"
                         name="site_visits_today"
-                        domain="['|', 
-                                    ('site_visit_date_only', '=', context_today()), 
-                                    ('interest_ids.site_visit_date_only', '=', context_today())
+                        domain="['|',
+                                 ('site_visit_date_only', '=', context_today()),
+                                 ('interest_ids.site_visit_date_only', '=', context_today())
                                 ]"
-                        help="Shows all leads with a Primary OR Recommended site visit scheduled for today."/>
-                
-                <group expand="0" string="Group By">
-                    <filter string="Current Status" 
-                            name="group_by_current_status" 
-                            context="{'group_by': 'current_status'}"/>
-                    <filter string="RM" 
-                            name="group_by_rm" 
-                            context="{'group_by': 'user_id'}"/>
-                    <filter string="Main State" 
-                            name="group_by_state" 
-                            context="{'group_by': 'state'}"/>
-                    
-                    <filter string="Creation Date" 
-                            name="group_by_create_date" 
-                            context="{'group_by': 'create_date:day'}"/>
-                            
-                    <filter string="Portal" 
-                            name="group_by_portal" 
-                            context="{'group_by': 'portal_name'}"/>
+                        help="Primary or recommended property site visit scheduled for today (IST)"/>
+
+                <separator/>
+
+                <group expand="1" string="Group By">
+                    <filter string="Current Status" name="groupby_status" context="{'group_by': 'current_status'}"/>
+                    <filter string="RM"             name="groupby_user"   context="{'group_by': 'user_id'}"/>
+                    <filter string="Main State"     name="groupby_state"  context="{'group_by': 'state'}"/>
+                    <filter string="Portal"         name="groupby_portal" context="{'group_by': 'portal_name'}"/>
+                    <filter string="Creation Date"  name="groupby_date"   context="{'group_by': 'create_date_only'}"/>
+                    <filter string="Site Visit Date" name="groupby_visit" context="{'group_by': 'site_visit_date_only'}"/>
                 </group>
+
             </search>
         </field>
     </record>
