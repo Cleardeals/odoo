@@ -28,28 +28,32 @@
 
                 <filter string="Created: Yesterday"
                         name="created_yesterday"
-                        domain="[('create_date_only', '=', context_today() - datetime.timedelta(days=1))]"/>
+                        domain="[('create_date_only', '=', (context_today() - datetime.timedelta(days=1)).strftime('%Y-%m-%d'))]"/>
 
-                <filter string="Created: This Week"
-                        name="created_this_week"
-                        domain="[('create_date_only', '>=', context_today() - datetime.timedelta(days=context_today().weekday())),
-                                 ('create_date_only', '&lt;=', context_today())]"/>
+                <filter string="Created: Last 7 Days"
+                        name="created_last_7_days"
+                        domain="[('create_date_only', '&gt;=', (context_today() - datetime.timedelta(days=6)).strftime('%Y-%m-%d')),
+                                 ('create_date_only', '&lt;=', context_today().strftime('%Y-%m-%d'))]"/>
 
                 <filter string="Created: This Month"
                         name="created_this_month"
-                        domain="[('create_date_only', '>=', time.strftime('%Y-%m-01')),
-                                 ('create_date_only', '&lt;=', context_today())]"/>
+                        domain="[('create_date_only', '&gt;=', context_today().strftime('%Y-%m-01')),
+                                 ('create_date_only', '&lt;=', context_today().strftime('%Y-%m-%d'))]"/>
+
+                <filter string="Created: Last 30 Days"
+                        name="created_last_30_days"
+                        domain="[('create_date_only', '&gt;=', (context_today() - datetime.timedelta(days=29)).strftime('%Y-%m-%d')),
+                                 ('create_date_only', '&lt;=', context_today().strftime('%Y-%m-%d'))]"/>
 
                 <separator/>
 
-                <filter string="My Leads Created Today"
+                <filter string="Leads Created Today"
                         name="my_leads_today"
                         domain="[('create_date_only', '=', context_today())]"/>
 
                 <filter string="Pending Leads Today"
                         name="pending_leads_today"
-                        domain="[
-                                 ('create_date_only', '=', context_today()),
+                        domain="[('create_date_only', '=', context_today()),
                                  ('current_status', '=', 'lead')]"/>
 
                 <filter string="Unassigned"
