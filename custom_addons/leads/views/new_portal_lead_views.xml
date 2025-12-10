@@ -47,10 +47,9 @@
 
                 <separator/>
 
-                <filter string="My Leads Created Today"
+                <filter string="Leads Created Today"
                         name="my_leads_today"
-                        domain="[('create_date_only', '=', context_today()),
-                                 ('user_id', '=', uid)]"/>
+                        domain="[('create_date_only', '=', context_today())]"/>
 
                 <filter string="Pending Leads Today"
                         name="pending_leads_today"
