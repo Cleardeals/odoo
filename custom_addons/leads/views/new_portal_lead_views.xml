@@ -44,11 +44,11 @@
 
                 <filter string="My Leads Created Today"
                         name="my_leads_today"
-                        domain="[('user_id', '=', uid), ('create_date_only', '=', context_today())]"/>
+                        domain="[('create_date_only', '=', context_today())]"/>
 
                 <filter string="Pending Leads Today"
                         name="pending_leads_today"
-                        domain="[('user_id', '=', uid),
+                        domain="[
                                  ('create_date_only', '=', context_today()),
                                  ('current_status', '=', 'lead')]"/>
 
