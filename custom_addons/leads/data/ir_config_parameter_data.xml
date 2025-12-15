@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+        <record id="bq_project_id" model="ir.config_parameter">
+            <field name="key">google.bq.project_id</field>
+            <field name="value">cleardeals-459513</field>
+        </record>
+
+    </data>
+</odoo>

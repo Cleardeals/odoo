@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- List View -->
+    <record id="view_active_template_stats_list" model="ir.ui.view">
+        <field name="name">active.template.stats.list</field>
+        <field name="model">active.template.stats</field>
+        <field name="arch" type="xml">
+            <list string="Template Performance" create="false" edit="false" delete="true" decoration-danger="delivery_rate &lt; 50">
+                <field name="date"/>
+                <field name="template_name"/>
+                <field name="total_sent" sum="Total Sent"/>
+                <field name="count_delivered" sum="Delivered"/>
+                <field name="count_read" sum="Read"/>
+                <field name="count_clicked" sum="Clicked"/>
+                <field name="count_failed" sum="Failed"/>
+                
+                <field name="delivery_rate" widget="progressbar"/>
+                <field name="read_rate" widget="progressbar"/>
+                <field name="click_rate" widget="progressbar"/>
+                <field name="engagement_rate" widget="progressbar" optional="hide"/>
+            </list>
+        </field>
+    </record>
+
+    <!-- Search View -->
+    <record id="view_active_template_stats_search" model="ir.ui.view">
+        <field name="name">active.template.stats.search</field>
+        <field name="model">active.template.stats</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="template_name"/>
+                <filter string="Today" name="today" domain="[('date', '=', context_today())]"/>
+                <filter string="Last 7 Days" name="last_7_days" domain="[('date', '&gt;=', (context_today() - relativedelta(days=7)).strftime('%Y-%m-%d'))]"/>
+                
+                <group expand="0" string="Group By">
+                    <filter string="Template" name="group_by_template" context="{'group_by': 'template_name'}"/>
+                    <filter string="Date" name="group_by_date" context="{'group_by': 'date'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <!-- Pivot View -->
+    <record id="view_active_template_stats_pivot" model="ir.ui.view">
+        <field name="name">active.template.stats.pivot</field>
+        <field name="model">active.template.stats</field>
+        <field name="arch" type="xml">
+            <pivot string="Template Analysis" sample="1">
+                <field name="template_name" type="row"/>
+                <field name="delivery_rate" type="measure"/>
+                <field name="read_rate" type="measure"/>
+                <field name="click_rate" type="measure"/>
+            </pivot>
+        </field>
+    </record>
+
+    <!-- Graph View -->
+    <record id="view_active_template_stats_graph" model="ir.ui.view">
+        <field name="name">active.template.stats.graph</field>
+        <field name="model">active.template.stats</field>
+        <field name="arch" type="xml">
+            <graph string="Template Performance" type="bar">
+                <field name="template_name" type="col"/>
+                <field name="read_rate" type="measure"/>
+            </graph>
+        </field>
+    </record>
+
+    <!-- Action -->
+    <record id="action_active_template_stats" model="ir.actions.act_window">
+        <field name="name">Template Performance</field>
+        <field name="res_model">active.template.stats</field>
+        <field name="view_mode">list,pivot,graph</field>
+        <field name="context">{'search_default_group_by_template': 1}</field>
+    </record>
+</odoo>

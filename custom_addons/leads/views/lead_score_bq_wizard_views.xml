@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="lead_score_bq_wizard_view_form" model="ir.ui.view">
+        <field name="name">lead.score.bq.wizard.form</field>
+        <field name="model">lead.score.bq.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Fetch Leads from BigQuery">
+                <group>
+                    <div invisible="state != 'init'">
+                        <p class="oe_grey">
+                            Click the "Fetch from BigQuery" button to import and update leads from the configured BigQuery table.
+                            <br/>
+                            This process may take a few minutes depending on the number of records.
+                        </p>
+                    </div>
+                    <div invisible="state != 'done'">
+                        <p><strong>Import from BigQuery completed successfully</strong></p>
+                        <group>
+                            <field name="leads_created" readonly="1"/>
+                            <field name="leads_updated" readonly="1"/>
+                        </group>
+                    </div>
+                </group>
+                <footer>
+                    <button name="action_fetch_from_bigquery"
+                            string="Fetch from BigQuery"
+                            type="object"
+                            class="btn-primary"
+                            invisible="state != 'init'"
+                            data-hotkey="q"/>
+                    <button string="Cancel"
+                            class="btn-secondary"
+                            special="cancel"
+                            data-hotkey="z"/>
+                </footer>
+                <field name="state" invisible="1"/>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_open_lead_score_bq_wizard" model="ir.actions.act_window">
+        <field name="name">Import Leads from BigQuery</field>
+        <field name="res_model">lead.score.bq.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Launch the BigQuery Import
+            </p>
+            <p>
+                This tool will connect to Google BigQuery to create new leads and update existing ones in Odoo.
+            </p>
+        </field>
+    </record>
+</odoo>

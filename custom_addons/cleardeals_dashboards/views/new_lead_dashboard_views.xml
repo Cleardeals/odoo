@@ -1,0 +1,184 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_new_lead_event_list_embedded" model="ir.ui.view">
+        <field name="name">leads.new.event.list.embedded</field>
+        <field name="model">leads.new.event</field>
+        <field name="arch" type="xml">
+            <list decoration-danger="event_type=='failed'" decoration-muted="message_direction=='inbound'" decoration-info="message_direction=='outbound'">
+                <field name="event_timestamp"/>
+                <field name="message_direction" widget="badge" decoration-info="message_direction=='outbound'" decoration-warning="message_direction=='inbound'"/>
+                <field name="event_type" widget="badge" decoration-success="event_type in ('status_read', 'status_delivered')" decoration-danger="event_type=='status_failed'"/>
+                <field name="template_name" optional="show"/>
+                <field name="message_content" optional="show"/>
+                <field name="failure_reason" optional="hide"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_dashboard_search" model="ir.ui.view">
+        <field name="name">leads.new.dashboard.search</field>
+        <field name="model">leads.new.dashboard</field>
+        <field name="arch" type="xml">
+            <search string="New Lead Search">
+                <field name="lead_name"/>
+                <field name="lead_phone"/>
+                <field name="portal_name"/>
+                
+                <separator/>
+                <filter string="Created: Today" name="created_today" 
+                        domain="[('lead_create_date_only', '=', context_today())]"/>
+                
+                <filter string="Created: Yesterday" name="created_yesterday" 
+                        domain="[('lead_create_date_only', '=', (context_today() - relativedelta(days=1)))]"/>
+                
+                <filter string="Created: This Week" name="created_this_week" 
+                        domain="[('lead_create_date_only', '&gt;=', (context_today() - relativedelta(weeks=1, weekday=0))), ('lead_create_date_only', '&lt;=', (context_today() + relativedelta(weeks=0, weekday=6)))]"/>
+                
+                <filter string="Created: This Month" name="created_this_month" 
+                        domain="[('lead_create_date_only', '&gt;=', (context_today() + relativedelta(day=1))), ('lead_create_date_only', '&lt;=', (context_today() + relativedelta(months=1, day=1, days=-1)))]"/>
+
+                <separator/>
+                <filter string="Unassigned" name="unassigned" domain="[('is_unassigned', '=', True)]"/>
+                <filter string="Replied" name="has_replied" domain="[('has_replied', '=', True)]"/>
+                <filter string="Read" name="is_read" domain="[('is_read', '=', True)]"/>
+                
+                <group expand="0" string="Group By">
+                    <filter string="Assigned RM" name="group_rm" context="{'group_by':'assigned_rm'}"/>
+                    <filter string="Current Status" name="group_status" context="{'group_by':'current_status'}"/>
+                    <filter string="Portal Source" name="group_portal" context="{'group_by':'portal_name'}"/>
+                    <filter string="Creation Date (IST)" name="group_date" context="{'group_by':'lead_create_date_only'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="view_dashboard_list" model="ir.ui.view">
+        <field name="name">leads.new.dashboard.list</field>
+        <field name="model">leads.new.dashboard</field>
+        <field name="arch" type="xml">
+            <list string="New Lead Dashboard" create="false" edit="false"
+                  decoration-danger="is_unassigned"
+                  decoration-success="has_replied"
+                  decoration-muted="not is_delivered">
+                
+                <field name="lead_create_date" widget="datetime" optional="show" string="Created On"/>
+                <field name="lead_name"/>
+                <field name="lead_phone" optional="show"/>
+                <field name="portal_name" optional="hide"/>
+                <field name="assigned_rm" widget="many2one_avatar_user"/>
+                <field name="current_status" widget="badge" 
+                       decoration-success="current_status == 'assigned'" 
+                       decoration-warning="current_status == 'new'"/>
+                
+                <field name="is_delivered" widget="boolean_toggle" optional="show"/>
+                <field name="is_read" widget="boolean_toggle" optional="show"/>
+                <field name="has_replied" widget="boolean_toggle" optional="show"/>
+
+                <field name="cnt_initial_msg" string="Engag" optional="hide"/>
+                <field name="cnt_unassigned_msg" string="Unassg." optional="hide"/>
+                
+                <field name="last_event_date" widget="datetime" optional="show"/>
+                
+            </list>
+        </field>
+    </record>
+
+    <record id="view_dashboard_form" model="ir.ui.view">
+        <field name="name">leads.new.dashboard.form</field>
+        <field name="model">leads.new.dashboard</field>
+        <field name="arch" type="xml">
+            <form string="Lead Analytics" create="false" edit="false">
+                <sheet>
+                    <div class="oe_title">
+                        <h1><field name="lead_name" readonly="1"/></h1>
+                        <h3><field name="lead_phone" readonly="1"/></h3>
+                    </div>
+
+                    <group>
+                        <group string="Lead Info">
+                            <field name="lead_create_date" readonly="1"/>
+                            <field name="portal_name" readonly="1"/>
+                            <field name="assigned_rm" widget="many2one_avatar_user" readonly="1"/>
+                            <field name="current_status" widget="badge" readonly="1"/>
+                            <field name="is_unassigned" widget="boolean_toggle" readonly="1"/>
+                        </group>
+                        
+                        <group string="Engagement Status">
+                            <field name="is_contacted" widget="boolean_toggle"/>
+                            <field name="is_delivered" widget="boolean_toggle"/>
+                            <field name="is_read" widget="boolean_toggle"/>
+                            <field name="has_replied" widget="boolean_toggle" decoration-success="has_replied"/>
+                            <field name="last_event_date"/>
+                        </group>
+                    </group>
+
+                    <notebook>
+                        <page string="Message Analytics">
+                            <group>
+                                <group string="Outbound Traffic">
+                                    <field name="cnt_initial_msg"/>
+                                    <field name="cnt_unassigned_msg"/>
+                                </group>
+                                <group string="Inbound Replies (Intents)">
+                                    <field name="cnt_reply_call_now"/>
+                                    <field name="cnt_reply_chat_wa"/>
+                                    <field name="cnt_reply_plan_visit"/>
+                                    <field name="cnt_reply_similar"/>
+                                    <field name="cnt_reply_call_opts"/>
+                                    <field name="cnt_reply_send_wa"/>
+                                </group>
+                            </group>
+                        </page>
+
+                        <page string="History / Events">
+                            <field name="event_ids" readonly="1" context="{'tree_view_ref': 'cleardeals_dashboards.view_new_lead_event_list_embedded'}"/>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_dashboard_graph" model="ir.ui.view">
+        <field name="name">leads.new.dashboard.graph</field>
+        <field name="model">leads.new.dashboard</field>
+        <field name="arch" type="xml">
+            <graph string="Workflow Overview" type="bar" stacked="True" sample="1">
+                <field name="lead_create_date_only" interval="day"/>
+                <field name="assigned_rm"/>
+                <field name="__count" type="measure"/>
+            </graph>
+        </field>
+    </record>
+
+    <record id="view_dashboard_pivot" model="ir.ui.view">
+        <field name="name">leads.new.dashboard.pivot</field>
+        <field name="model">leads.new.dashboard</field>
+        <field name="arch" type="xml">
+            <pivot string="Workflow Analysis" sample="1">
+                <field name="assigned_rm" type="row"/>
+                <field name="current_status" type="col"/>
+                
+                <field name="cnt_initial_msg" type="measure"/>
+                <field name="cnt_reply_plan_visit" type="measure"/>
+                <field name="cnt_reply_call_now" type="measure"/>
+            </pivot>
+        </field>
+    </record>
+
+    <record id="action_new_leads_dashboard" model="ir.actions.act_window">
+        <field name="name">New Leads Dashboard</field>
+        <field name="res_model">leads.new.dashboard</field>
+        <field name="view_mode">list,form,pivot,graph</field>
+        <field name="search_view_id" ref="view_dashboard_search"/>
+        <field name="context">
+            {
+                'search_default_created_today': 1, 
+                'search_default_group_rm': 1,
+                'pivot_measures': ['__count'],
+            }
+        </field>
+    </record>
+
+</odoo>

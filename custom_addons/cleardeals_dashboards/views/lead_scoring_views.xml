@@ -1,0 +1,256 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_lead_scoring_lead_list" model="ir.ui.view">
+        <field name="name">lead.scoring.lead.list</field>
+        <field name="model">lead.scoring.lead</field>
+        <field name="arch" type="xml">
+            <list string="Lead Scoring Workflow" decoration-success="has_replied==True" decoration-info="is_read==True">
+                <field name="last_activity" widget="datetime"/>
+                <field name="lead_name"/>
+                <field name="lead_phone"/>
+                <field name="property_tag"/>
+                <field name="workflow_stage" widget="badge" 
+                       decoration-info="workflow_stage=='ringing'" 
+                       decoration-primary="workflow_stage=='detail_shared_of_property_message'"
+                       decoration-success="workflow_stage=='site_visit_schedule_reminder'"
+                       decoration-warning="workflow_stage=='site_visit_schedule_after_visit'"/>
+                <field name="last_response"/>
+                <field name="is_delivered" widget="boolean_toggle"/>
+                <field name="is_read" widget="boolean_toggle"/>
+                <field name="has_replied" widget="boolean_toggle"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_lead_scoring_lead_search" model="ir.ui.view">
+        <field name="name">lead.scoring.lead.search</field>
+        <field name="model">lead.scoring.lead</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="lead_name"/>
+                <field name="lead_phone"/>
+                <field name="property_tag"/>
+                <field name="last_response"/>
+                
+                <filter string="Replied" name="replied" domain="[('has_replied', '=', True)]"/>
+                <filter string="Left At Read" name="left_at_read" domain="[('is_read', '=', True), ('has_replied', '=', False)]"/>
+                <filter string="Not Read" name="not_read" domain="[('is_read', '=', False), ('is_delivered', '=', True)]"/>
+                <filter string="Failed" name="failed" domain="[('is_delivered', '=', False)]"/>
+                
+                <separator/>
+                
+                <filter string="Today" name="today" 
+                        domain="[('last_activity', '&gt;=', context_today().strftime('%Y-%m-%d'))]"/>
+                
+                <filter string="Yesterday" name="yesterday" 
+                        domain="[('last_activity', '&gt;=', (context_today() - datetime.timedelta(days=1)).strftime('%Y-%m-%d')), ('last_activity', '&lt;', context_today().strftime('%Y-%m-%d'))]"/>
+                
+                <filter string="Last 7 Days" name="week" 
+                        domain="[('last_activity', '&gt;=', (context_today() - datetime.timedelta(days=7)).strftime('%Y-%m-%d'))]"/>
+                
+                <filter string="This Month" name="month" 
+                        domain="[('last_activity', '&gt;=', context_today().strftime('%Y-%m-01'))]"/>
+                
+                <group expand="0" string="Group By">
+                    <filter string="Workflow Stage" name="group_by_stage" context="{'group_by': 'workflow_stage'}"/>
+                    <filter string="Date" name="group_by_date" context="{'group_by': 'last_activity:day'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="view_lead_scoring_lead_form" model="ir.ui.view">
+        <field name="name">lead.scoring.lead.form</field>
+        <field name="model">lead.scoring.lead</field>
+        <field name="arch" type="xml">
+            <form create="false" edit="false" delete="false">
+                <header>
+                    <button name="action_view_events" type="object" string="Sent Messages" class="oe_highlight"/>
+                    <button name="action_view_replies" type="object" string="Replies" class="oe_highlight"/>
+                    <button name="action_view_failures" type="object" string="Failed" class="oe_highlight"/>
+                </header>
+
+                <sheet>
+                    <div class="oe_button_box">
+                        <button class="oe_stat_button" type="object" name="action_view_events" icon="fa-paper-plane">
+                            <field name="total_outbound" widget="statinfo" string="Sent"/>
+                        </button>
+                        <button class="oe_stat_button" type="object" name="action_view_replies" icon="fa-reply">
+                            <field name="total_inbound" widget="statinfo" string="Replies"/>
+                        </button>
+                        <button class="oe_stat_button" type="object" name="action_view_failures" icon="fa-exclamation-triangle">
+                            <field name="total_failed" widget="statinfo" string="Failed"/>
+                        </button>
+                    </div>
+
+                    <group>
+                        <group>
+                            <field name="lead_name" readonly="1"/>
+                            <field name="lead_phone" readonly="1"/>
+                            <field name="assigned_rm" readonly="1"/>
+                            <field name="property_tag" readonly="1"/>
+                        </group>
+                        <group>
+                            <field name="workflow_stage" widget="badge" readonly="1"
+                                   decoration-info="workflow_stage=='ringing'" 
+                                   decoration-primary="workflow_stage=='detail_shared_of_property_message'"
+                                   decoration-success="workflow_stage=='site_visit_schedule_reminder'"
+                                   decoration-warning="workflow_stage=='site_visit_schedule_after_visit'"/>
+                            <field name="predicted_score" readonly="1"/>
+                            <field name="current_status" readonly="1"/>
+                            <field name="last_activity" widget="remaining_days" readonly="1"/>
+                        </group>
+                    </group>
+
+                    <group string="Today's Context" class="mt16">
+                        <field name="last_template_today" widget="badge" 
+                            decoration-success="last_template_today != 'None Sent Today'" 
+                            decoration-muted="last_template_today == 'None Sent Today'"
+                            readonly="1"/>
+                    </group>
+
+                    <notebook>
+                        <page string="Funnel Overview">
+                            <group>
+                                <field name="is_delivered" widget="boolean_toggle"/>
+                                <field name="is_read" widget="boolean_toggle"/>
+                                <field name="has_replied" widget="boolean_toggle"/>
+                                <field name="last_response" placeholder="No reply yet"/>
+                            </group>
+                        </page>
+
+                        <page string="Template Analytics">
+                            <group string="Trigger Volumes (Sent)">
+                                <group>
+                                    <field name="cnt_ringing" widget="integer" string="Ringing"/>
+                                    <field name="cnt_details" widget="integer" string="Details Shared"/>
+                                </group>
+                                <group>
+                                    <field name="cnt_visit_reminder" widget="integer" string="Visit Reminder"/>
+                                    <field name="cnt_visit_feedback" widget="integer" string="Visit Feedback"/>
+                                </group>
+                            </group>
+
+                            <separator string="Response Breakdown by Stage"/>
+
+                            <group>
+                                <group string="Ringing Responses">
+                                    <field name="cnt_resp_abhi_call"/>
+                                    <field name="cnt_resp_slot_book"/>
+                                </group>
+                                <group string="Details Shared Responses">
+                                    <field name="cnt_resp_schedule_now"/>
+                                    <field name="cnt_resp_talk_expert"/>
+                                </group>
+                            </group>
+                            <group>
+                                <group string="Visit Today Responses">
+                                    <field name="cnt_resp_going_visit"/>
+                                    <field name="cnt_resp_need_help"/>
+                                </group>
+                                <group string="Visit Feedback Responses">
+                                    <field name="cnt_resp_visit_done"/>
+                                    <field name="cnt_resp_liked"/>
+                                    <field name="cnt_resp_call_expert"/>
+                                    <field name="cnt_resp_reschedule"/>
+                                </group>
+                            </group>
+                        </page>
+
+                        <page string="Raw Event History">
+                            <field name="event_ids" readonly="1">
+                                <list default_order="event_timestamp desc">
+                                    <field name="event_timestamp"/>
+                                    <field name="message_direction" widget="badge" decoration-info="event_type == 'status_read'" decoration-success="event_type == 'inbound_message'" decoration-danger="event_type == 'status_failed'"/>
+                                    <field name="event_type" widget="badge" decoration-info="event_type == 'status_read'" decoration-success="event_type == 'inbound_message'" decoration-danger="event_type == 'status_failed'"/>
+                                    <field name="template_name"/>
+                                    <field name="message_content" optional="show"/>
+                                    <field name="failure_reason" optional="show"/>
+                                </list>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_lead_scoring_event_list_sent" model="ir.ui.view">
+        <field name="name">lead.scoring.event.list.sent</field>
+        <field name="model">lead.scoring.event</field>
+        <field name="arch" type="xml">
+            <list default_order="event_timestamp desc" create="false" edit="false" delete="false"
+                  decoration-warning="final_status == 'delivered'" decoration-info="final_status == 'sent'">
+                <field name="event_timestamp" string="Sent At"/>
+                <field name="template_name" string="Template"/>
+                <field name="final_status" widget="badge"/>
+                <field name="message_content" optional="show"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_lead_scoring_event_list_replies" model="ir.ui.view">
+        <field name="name">lead.scoring.event.list.replies</field>
+        <field name="model">lead.scoring.event</field>
+        <field name="arch" type="xml">
+            <list default_order="event_timestamp desc" create="false" edit="false" delete="false" decoration-success="message_direction=='inbound'">
+                <field name="event_timestamp" string="Received At"/>
+                <field name="message_content" string="Customer Reply"/>
+                <field name="template_name" string="Context (Last Template)"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_lead_scoring_event_list_failed" model="ir.ui.view">
+        <field name="name">lead.scoring.event.list.failed</field>
+        <field name="model">lead.scoring.event</field>
+        <field name="arch" type="xml">
+            <list default_order="event_timestamp desc" create="false" edit="false" delete="false" decoration-danger="event_type=='status_failed'">
+                <field name="event_timestamp" string="Time"/>
+                <field name="template_name"/>
+                <field name="failure_reason"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="action_lead_scoring_events_sent" model="ir.actions.act_window">
+        <field name="name">Messages Sent</field>
+        <field name="res_model">lead.scoring.event</field>
+        <field name="view_mode">list,form</field>
+        <field name="domain">[('lead_id', '=', active_id), ('message_direction', '=', 'outbound'), ('event_type', '=', 'status_sent')]</field>
+        <field name="context">{'default_lead_id': active_id}</field>
+        <field name="view_ids" eval="[(5, 0, 0), 
+            (0, 0, {'view_mode': 'list', 'view_id': ref('view_lead_scoring_event_list_sent')}), 
+            (0, 0, {'view_mode': 'form', 'view_id': False})]"/> 
+    </record>
+
+    <record id="action_lead_scoring_events_replies" model="ir.actions.act_window">
+        <field name="name">Replies Received</field>
+        <field name="res_model">lead.scoring.event</field>
+        <field name="view_mode">list,form</field>
+        <field name="domain">[('lead_id', '=', active_id), ('message_direction', '=', 'inbound')]</field>
+        <field name="context">{'default_lead_id': active_id}</field>
+        <field name="view_ids" eval="[(5, 0, 0), 
+            (0, 0, {'view_mode': 'list', 'view_id': ref('view_lead_scoring_event_list_replies')}), 
+            (0, 0, {'view_mode': 'form', 'view_id': False})]"/>
+    </record>
+
+    <record id="action_lead_scoring_events_failed" model="ir.actions.act_window">
+        <field name="name">Failed Messages</field>
+        <field name="res_model">lead.scoring.event</field>
+        <field name="view_mode">list,form</field>
+        <field name="domain">[('lead_id', '=', active_id), ('event_type', '=', 'status_failed')]</field>
+        <field name="context">{'default_lead_id': active_id}</field>
+        <field name="view_ids" eval="[(5, 0, 0), 
+            (0, 0, {'view_mode': 'list', 'view_id': ref('view_lead_scoring_event_list_failed')}), 
+            (0, 0, {'view_mode': 'form', 'view_id': False})]"/>
+    </record>
+
+    <record id="action_lead_scoring_dashboard" model="ir.actions.act_window">
+        <field name="name">Lead Scoring Workflow</field>
+        <field name="res_model">lead.scoring.lead</field>
+        <field name="view_mode">list,form,pivot</field>
+        <field name="search_view_id" ref="view_lead_scoring_lead_search"/>
+        <field name="context">{'search_default_group_by_stage': 1, 'search_default_today': 1}</field>
+    </record>
+</odoo>

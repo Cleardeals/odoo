@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_leads_new_template_stats_list" model="ir.ui.view">
+        <field name="name">leads.new.template.stats.list</field>
+        <field name="model">leads.new.template.stats</field>
+        <field name="arch" type="xml">
+            <list string="New Lead Template Stats" create="false" edit="false">
+                <field name="date"/>
+                <field name="template_name"/>
+                
+                <field name="total_sent" sum="Total Sent"/>
+                <field name="total_delivered" sum="Total Delivered"/>
+                <field name="total_read" sum="Total Read"/>
+                <field name="total_replied" sum="Total Replied"/>
+                <field name="total_clicked" sum="Total Clicked"/>
+                
+                <field name="total_failed" sum="Total Failed" optional="show"/>
+                <field name="total_pending" sum="Total Pending" decoration-danger="total_pending &gt; 0" decoration-bf="total_pending &gt; 0"/>
+                
+                <field name="delivery_rate" widget="progressbar"/>
+                <field name="read_rate" widget="progressbar"/>
+                <field name="reply_rate" widget="progressbar"/>
+                <field name="click_rate" widget="progressbar" optional="hide"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_leads_new_template_stats_form" model="ir.ui.view">
+        <field name="name">leads.new.template.stats.form</field>
+        <field name="model">leads.new.template.stats</field>
+        <field name="arch" type="xml">
+            <form string="Template Statistics" create="false" edit="false">
+                <sheet>
+                    <div class="oe_title">
+                        <h1><field name="template_name"/></h1>
+                        <h3><field name="date"/></h3>
+                    </div>
+                    <group>
+                        <group string="Volume">
+                            <field name="total_sent"/>
+                            <field name="total_delivered"/>
+                            <field name="total_pending" decoration-danger="total_pending &gt; 0"/>
+                            <field name="total_failed"/>
+                        </group>
+                        <group string="Engagement">
+                            <field name="total_read"/>
+                            <field name="total_replied"/>
+                            <field name="total_clicked"/>
+                        </group>
+                    </group>
+                    <group string="Performance Rates">
+                        <group>
+                            <field name="delivery_rate" widget="progressbar"/>
+                            <field name="read_rate" widget="progressbar"/>
+                        </group>
+                        <group>
+                            <field name="reply_rate" widget="progressbar"/>
+                            <field name="click_rate" widget="progressbar"/>
+                        </group>
+                    </group>
+                    
+                    <notebook invisible="total_pending == 0">
+                        <page string="Pending Phone Numbers">
+                            <field name="pending_phone_numbers" readonly="1" nolabel="1"/>
+                            <p class="text-muted">
+                                * These numbers were sent but have not yet returned a Delivered, Read, or Failed status.
+                            </p>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_leads_new_template_stats_search" model="ir.ui.view">
+        <field name="name">leads.new.template.stats.search</field>
+        <field name="model">leads.new.template.stats</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="template_name"/>
+                <field name="date"/>
+
+                <filter string="Today" name="today" domain="[('date', '=', context_today())]"/>
+                <filter string="Yesterday" name="yesterday" domain="[('date', '=', (context_today() - relativedelta(days=1)).strftime('%Y-%m-%d'))]"/>
+                <filter string="Last 7 Days" name="last_week" domain="[('date', '&gt;=', (context_today() - relativedelta(days=7)).strftime('%Y-%m-%d'))]"/>
+                
+                <separator/>
+                <filter string="Has Pending" name="has_pending" domain="[('total_pending', '&gt;', 0)]"/>
+                
+                <group expand="0" string="Group By">
+                    <filter string="Template" name="group_by_template" context="{'group_by': 'template_name'}"/>
+                    <filter string="Date" name="group_by_date" context="{'group_by': 'date:day'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="view_leads_new_template_stats_pivot" model="ir.ui.view">
+        <field name="name">leads.new.template.stats.pivot</field>
+        <field name="model">leads.new.template.stats</field>
+        <field name="arch" type="xml">
+            <pivot string="Template Stats" disable_linking="True" sample="1">
+                <field name="template_name" type="row"/>
+                
+                <field name="total_sent" type="measure"/>
+                <field name="total_delivered" type="measure"/>
+                <field name="total_pending" type="measure"/> <field name="total_read" type="measure"/>
+                <field name="total_replied" type="measure"/> <field name="total_clicked" type="measure"/>
+                <field name="total_failed" type="measure"/> </pivot>
+        </field>
+    </record>
+
+    <record id="action_leads_new_template_stats" model="ir.actions.act_window">
+        <field name="name">New Lead Templates</field>
+        <field name="res_model">leads.new.template.stats</field>
+        <field name="view_mode">pivot,list,form,graph</field>
+        <field name="context">{
+            'search_default_group_by_template': 1,
+            'search_default_today': 1,
+            'pivot_measures': ['total_sent', 'total_delivered', 'total_pending', 'total_read', 'total_replied'],
+            'pivot_row_groupby': ['template_name'],
+        }</field>
+    </record>
+
+</odoo>

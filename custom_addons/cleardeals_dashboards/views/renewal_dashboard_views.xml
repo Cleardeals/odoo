@@ -1,0 +1,201 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_renewal_property_owner_list" model="ir.ui.view">
+        <field name="name">renewal.property.owner.list</field>
+        <field name="model">renewal.property.owner</field>
+        <field name="arch" type="xml">
+            <list string="Renewal Dashboard" create="false" edit="true" 
+                  decoration-success="overall_status=='renewed'" 
+                  decoration-info="overall_status=='active'" 
+                  decoration-muted="overall_status=='passive'" 
+                  decoration-warning="overall_status=='engaged'" 
+                  decoration-danger="overall_status=='not_interested' or overall_status=='failed'">
+                
+                <field name="last_activity_date" widget="datetime"/>
+                <field name="owner_name" optional="show"/>
+                <field name="owner_phone" optional="show"/>
+                <field name="expired_property_tag"/>
+                <field name="overall_status" widget="badge"/>
+                <field name="renewal_response" widget="badge" decoration-success="renewal_response=='renewed' or renewal_response=='interested'" decoration-danger="renewal_response=='not_interested'"/>
+                <field name="total_leads_sent"/>
+                <field name="total_leads_delivered"/>
+                <field name="total_leads_read"/>
+                <field name="total_leads_clicked"/>
+                <field name="total_details_shared"/>
+                <field name="delivery_rate" widget="progressbar" optional="show"/>
+                <field name="read_rate" widget="progressbar" optional="show"/>
+                <field name="click_rate" widget="progressbar" optional="show"/>
+
+                <header>
+                    <button name="action_purge_all_renewal_data"
+                            type="object"
+                            string="Delete All Renewal Data"
+                            groups="base.group_system"
+                            confirm="This will PERMANENTLY delete ALL owners, assignments and events. Continue?"
+                            class="btn-danger"/>
+
+                    <button name="action_full_backfill_renewal_data"
+                            type="object"
+                            string="Full Backfill from BigQuery"
+                            groups="base.group_system"
+                            class="btn-primary"/>
+                </header>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_renewal_property_owner_form" model="ir.ui.view">
+        <field name="name">renewal.property.owner.form</field>
+        <field name="model">renewal.property.owner</field>
+        <field name="arch" type="xml">
+            <form string="Property Owner" create="false" edit="true">
+                <sheet>
+                    <div class="oe_title">
+                        <h1><field name="owner_name" readonly="1"/></h1>
+                        <h3><field name="expired_property_tag" readonly="1"/></h3>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="owner_phone" readonly="1"/>
+                            <field name="overall_status" widget="badge" readonly="1"/>
+                        </group>
+                        <group>
+                            <field name="renewal_response" widget="radio"/>
+                        </group>
+                    </group>
+                    
+                    <notebook>
+                        <page string="Dashboard Metrics">
+                            <group>
+                                <group string="Funnel Metrics">
+                                    <field name="total_leads_sent"/>
+                                    <field name="total_leads_delivered"/>
+                                    <field name="total_leads_read"/>
+                                    <field name="total_leads_clicked"/>
+                                    <field name="total_details_shared"/>
+                                </group>
+                                <group string="Engagement Rates">
+                                    <field name="delivery_rate" widget="progressbar"/>
+                                    <field name="read_rate" widget="progressbar"/>
+                                    <field name="click_rate" widget="progressbar"/>
+                                </group>
+                                <group string="Activity">
+                                    <field name="last_activity_date"/>
+                                    <field name="last_message_sent"/>
+                                    <field name="last_message_read"/>
+                                    <field name="last_button_clicked"/>
+                                </group>
+                                <group string="Renewal Pitch">
+                                    <field name="renewal_request_sent"/>
+                                    <field name="renewal_request_date"/>
+                                </group>
+                            </group>
+                        </page>
+                        <page string="Lead Assignments (Log)">
+                            <field name="assignment_ids" readonly="1">
+                                <list>
+                                    <field name="assignment_timestamp"/>
+                                    <field name="lead_name"/>
+                                    <field name="lead_phone"/>
+                                    <field name="assignment_id"/>
+                                </list>
+                            </field>
+                        </page>
+                        <page string="Interakt Event (Log)">
+                            <field name="event_ids" readonly="1">
+                                <list decoration-info="message_direction=='outbound'" decoration-muted="message_direction=='inbound'">
+                                    <field name="event_timestamp"/>
+                                    <field name="message_direction"/>
+                                    <field name="event_type"/>
+                                    <field name="template_name"/>
+                                    <field name="message_content" decoration-success="message_content=='See Lead Information' or message_content=='Renew My Service'" decoration-danger="message_content=='Not Interested'"/>
+                                    <field name="failure_reason"/>
+                                </list>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_renewal_property_owner_search" model="ir.ui.view">
+        <field name="name">renewal.property.owner.search</field>
+        <field name="model">renewal.property.owner</field>
+        <field name="arch" type="xml">
+            <search string="Search Owners">
+                <field name="owner_name"/>
+                <field name="owner_phone"/>
+                <field name="expired_property_tag"/>
+                
+                <separator/>
+                <filter string="Lead Assigned: Today" name="assigned_today" 
+                        domain="[('assignment_ids.assignment_timestamp', '&gt;=', context_today().strftime('%Y-%m-%d 00:00:00')), ('assignment_ids.assignment_timestamp', '&lt;=', context_today().strftime('%Y-%m-%d 23:59:59'))]"/>
+                
+                <filter string="Lead Assigned: Yesterday" name="assigned_yesterday" 
+                        domain="[('assignment_ids.assignment_timestamp', '&gt;=', (context_today() - relativedelta(days=1)).strftime('%Y-%m-%d 00:00:00')), ('assignment_ids.assignment_timestamp', '&lt;=', (context_today() - relativedelta(days=1)).strftime('%Y-%m-%d 23:59:59'))]"/>
+                
+                <filter string="Lead Assigned: This Week" name="assigned_this_week" 
+                        domain="[('assignment_ids.assignment_timestamp', '&gt;=', (context_today() - relativedelta(weeks=1, weekday=0)).strftime('%Y-%m-%d')), ('assignment_ids.assignment_timestamp', '&lt;=', (context_today() + relativedelta(weeks=0, weekday=6)).strftime('%Y-%m-%d'))]"/>
+                
+                <filter string="Lead Assigned: This Month" name="assigned_this_month" 
+                        domain="[('assignment_ids.assignment_timestamp', '&gt;=', (context_today() + relativedelta(day=1)).strftime('%Y-%m-%d')), ('assignment_ids.assignment_timestamp', '&lt;=', (context_today() + relativedelta(months=1, day=1, days=-1)).strftime('%Y-%m-%d'))]"/>
+                
+                <filter string="Lead Assigned: This Year" name="assigned_this_year" 
+                        domain="[('assignment_ids.assignment_timestamp', '&gt;=', (context_today() + relativedelta(month=1, day=1)).strftime('%Y-%m-%d')), ('assignment_ids.assignment_timestamp', '&lt;=', (context_today() + relativedelta(month=12, day=31)).strftime('%Y-%m-%d'))]"/>
+
+                <separator/>
+                <filter string="Last Activity: Today" name="last_activity_today" 
+                        domain="[('last_activity_date', '&gt;=', context_today().strftime('%Y-%m-%d 00:00:00')), ('last_activity_date', '&lt;=', context_today().strftime('%Y-%m-%d 23:59:59'))]"/>
+                
+                <separator/>
+                <filter string="Renewed" name="renewed" domain="[('renewal_response', '=', 'renewed')]"/>
+                <filter string="Active (Clicked)" name="active" domain="[('overall_status', '=', 'active')]"/>
+                <filter string="Not Interested" name="not_interested" domain="[('overall_status', '=', 'not_interested')]"/>
+                
+                <group expand="0" string="Group By">
+                    <filter string="Overall Status" name="group_by_status" context="{'group_by': 'overall_status'}"/>
+                    <filter string="Renewal Response" name="group_by_renewal_response" context="{'group_by': 'renewal_response'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="view_renewal_property_owner_pivot" model="ir.ui.view">
+        <field name="name">renewal.property.owner.pivot</field>
+        <field name="model">renewal.property.owner</field>
+        <field name="arch" type="xml">
+            <pivot string="Renewal Analysis">
+                <field name="overall_status" type="row"/>
+                <field name="renewal_response" type="col"/>
+                <field name="total_leads_sent" type="measure"/>
+            </pivot>
+        </field>
+    </record>
+    
+    <record id="view_renewal_property_owner_graph" model="ir.ui.view">
+        <field name="name">renewal.property.owner.graph</field>
+        <field name="model">renewal.property.owner</field>
+        <field name="arch" type="xml">
+            <graph string="Renewal Funnel" type="bar">
+                <field name="overall_status" type="row"/>
+                <field name="total_leads_sent" type="measure"/>
+            </graph>
+        </field>
+    </record>
+
+    <record id="action_renewal_dashboard" model="ir.actions.act_window">
+        <field name="name">Renewal Dashboard</field>
+        <field name="res_model">renewal.property.owner</field>
+        <field name="view_mode">list,form,pivot,graph</field>
+        <field name="search_view_id" ref="view_renewal_property_owner_search"/>
+        <field name="context">
+            {
+                'search_default_group_by_status': 1,
+                'search_default_assigned_today': 1
+            }
+        </field>
+    </record>
+
+</odoo>

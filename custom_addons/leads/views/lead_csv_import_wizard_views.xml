@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+        <record id="view_lead_csv_import_wizard_form" model="ir.ui.view">
+            <field name="name">lead.csv.import.wizard.form</field>
+            <field name="model">lead.csv.import.wizard</field>
+            <field name="arch" type="xml">
+                <form>
+                    <div class="alert alert-info" role="alert">
+                        <strong>Batch Upload:</strong> You can select multiple <b>.csv</b> or <b>.xlsx</b> files at once.
+                    </div>
+                    <group>
+                        <field name="file_ids" widget="many2many_binary" string="Select Files" options="{'accepted_file_extensions': '.csv, .xlsx'}"/>
+                    </group>
+                    <footer>
+                        <button name="import_leads"
+                                string="Import All Files"
+                                type="object"
+                                class="oe_highlight"/>
+                        <button string="Cancel" class="btn-secondary" special="cancel"/>
+                    </footer>
+                </form>
+            </field>
+        </record>
+
+        <record id="action_open_lead_csv_import_wizard" model="ir.actions.act_window">
+            <field name="name">Batch Import Leads</field>
+            <field name="res_model">lead.csv.import.wizard</field>
+            <field name="view_mode">form</field>
+            <field name="target">new</field>
+        </record>
+
+        <record id="view_message_wizard_form" model="ir.ui.view">
+            <field name="name">message.wizard.form</field>
+            <field name="model">message.wizard</field>
+            <field name="arch" type="xml">
+                <form>
+                    <field name="message" widget="text_pre" readonly="1"/>
+                    <footer>
+                        <button string="Close" class="btn-primary" special="cancel"/>
+                    </footer>
+                </form>
+            </field>
+        </record>
+    </data>
+</odoo>

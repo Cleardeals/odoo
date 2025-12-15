@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    
+
+    <record id="action_property_performance_dashboard" model="ir.actions.act_window">
+        <field name="name">Property Performance</field>
+        <field name="res_model">property.daily.stat</field>
+        <field name="view_mode">pivot,kanban,graph,list</field>
+        <field name="search_view_id" ref="view_property_daily_stat_search"/>
+        <field name="context">{
+            'search_default_group_by_status': 1,
+            'pivot_measures': ['__count']
+        }</field>
+    </record>
+    
+    <record id="view_property_daily_stat_kanban" model="ir.ui.view">
+        <field name="name">property.daily.stat.kanban</field>
+        <field name="model">property.daily.stat</field>
+        <field name="arch" type="xml">
+            <kanban default_group_by="assignment_status" quick_create="false" class="o_kanban_small_column">
+                <!-- Add fields to be used in aggregates or progress bar -->
+                <field name="assignment_count"/>
+                <field name="assignment_status"/>
+                
+                <!-- This progress bar gives a quick visual -->
+                <progressbar field="assignment_status" colors='{"assigned": "success", "unassigned": "danger"}'/>
+                
+                <templates>
+                    <!-- 
+                      This defines the template for each card.
+                      The log warning about 'kanban-box' is ok, this still works.
+                    -->
+                    <t t-name="kanban-box">
+                        <div class="oe_kanban_global_click card">
+                            <div class="card-body">
+                                <strong><field name="property_tag"/></strong>
+                                <div><field name="date" widget="date"/></div>
+                            </div>
+                            <div class="card-footer d-flex justify-content-between">
+                                <span><field name="assignment_count"/> Assignments</span>
+                            </div>
+                        </div>
+                    </t>
+                </templates>
+            </kanban>
+        </field>
+    </record>
+    
+
+    <record id="view_property_daily_stat_pivot" model="ir.ui.view">
+        <field name="name">property.daily.stat.pivot</field>
+        <field name="model">property.daily.stat</field>
+        <field name="arch" type="xml">
+            <pivot string="Property Performance">
+                <field name="property_tag" type="row"/>
+                <field name="date" type="col" interval="month"/>
+                <field name="assignment_count" type="measure"/>
+            </pivot>
+        </field>
+    </record>
+    
+    <record id="view_property_daily_stat_graph" model="ir.ui.view">
+        <field name="name">property.daily.stat.graph</field>
+        <field name="model">property.daily.stat</field>
+        <field name="arch" type="xml">
+            <graph string="Property Performance" type="bar">
+                <field name="property_tag" type="row"/>
+                <field name="assignment_count" type="measure"/>
+            </graph>
+        </field>
+    </record>
+
+    <record id="view_property_daily_stat_list" model="ir.ui.view">
+        <field name="name">property.daily.stat.list</field>
+        <field name="model">property.daily.stat</field>
+        <field name="arch" type="xml">
+            <list>
+                <field name="date"/>
+                <field name="property_tag"/>
+                <field name="assignment_count"/>
+                <field name="assignment_status"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_property_daily_stat_search" model="ir.ui.view">
+        <field name="name">property.daily.stat.search</field>
+        <field name="model">property.daily.stat</field>
+        <field name="arch" type="xml">
+            <search string="Search Property Stats">
+                <field name="property_tag"/>
+                <separator/>
+                <filter string="Unassigned (0 Leads)" name="unassigned" domain="[('assignment_status', '=', 'unassigned')]"/>
+                <filter string="Assigned (1+ Leads)" name="assigned" domain="[('assignment_status', '=', 'assigned')]"/>
+                <separator/>
+                <!-- 
+                  These date filters will work for the kanban, pivot, graph, and list views.
+                  They now control your KPIs in the kanban view.
+                -->
+                <filter string="Today" name="today" domain="[('date', '=', context_today())]"/>
+                <filter string="This Week" name="this_week" domain="[('date', '&gt;=', (context_today() - relativedelta(weeks=1, weekday=0)).strftime('%Y-%m-%d')), ('date', '&lt;=', (context_today() + relativedelta(weeks=0, weekday=6)).strftime('%Y-%m-%d'))]"/>
+                <filter string="This Month" name="this_month" domain="[('date', '&gt;=', (context_today() - relativedelta(day=1)).strftime('%Y-%m-%d'))]"/>
+                <filter string="This Quarter" name="this_quarter" domain="[('date', '&gt;=', (context_today() - relativedelta(months=(context_today().month-1)%3, day=1)).strftime('%Y-%m-%d'))]"/>
+                <filter string="Last 90 Days" name="last_90_days" domain="[('date', '&gt;=', (context_today() - relativedelta(days=90)).strftime('%Y-%m-%d'))]"/>
+                <separator/>
+                <group expand="0" string="Group By">
+                    <filter string="Property" name="group_by_property" context="{'group_by': 'property_tag'}"/>
+                    <filter string="Date" name="group_by_date" context="{'group_by': 'date:day'}"/>
+                    <filter string="Assignment Status" name="group_by_status" context="{'group_by': 'assignment_status'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+</odoo>

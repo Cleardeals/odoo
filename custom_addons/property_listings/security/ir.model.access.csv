@@ -1,0 +1,6 @@
+id,name,model_id/id,group_id/id,perm_read,perm_write,perm_create,perm_unlink
+access_property_listing_rm,property.listing.rm,model_property_listing,property_listings.group_property_listings_rm,1,0,0,0
+access_property_listing_manager,property.listing.manager,model_property_listing,property_listings.group_property_listings_manager,1,1,1,1
+access_res_city_user,res.city.user,model_res_city,base.group_user,1,1,1,1
+access_res_location_user,res.location.user,model_res_location,base.group_user,1,1,1,1
+access_property_import_wizard,property.import.wizard,model_property_import_wizard,base.group_user,1,1,1,1

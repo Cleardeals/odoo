@@ -1,0 +1,16 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_active_lead_assignment_manager,active.lead.assignment dashboard manager,model_active_lead_assignment,cleardeals_dashboards.group_dashboard_manager,1,0,0,0
+access_property_daily_stat_manager,property.daily.stat dashboard manager,model_property_daily_stat,cleardeals_dashboards.group_dashboard_manager,1,0,0,0
+access_property_inventory_dashboard_manager,property.inventory dashboard manager,lead_suggestor.model_property_inventory,cleardeals_dashboards.group_dashboard_manager,1,0,0,0
+access_property_lead_suggestion_dashboard_manager,property.lead.suggestion dashboard manager,lead_suggestor.model_property_lead_suggestion,cleardeals_dashboards.group_dashboard_manager,1,0,0,0
+access_renewal_property_owner_manager,renewal.property.owner dashboard manager,model_renewal_property_owner,cleardeals_dashboards.group_dashboard_manager,1,1,0,0
+access_renewal_lead_assignment_manager,renewal.lead.assignment dashboard manager,model_renewal_lead_assignment,cleardeals_dashboards.group_dashboard_manager,1,0,0,0
+access_renewal_interakt_event_manager,renewal.interakt.event dashboard manager,model_renewal_interakt_event,cleardeals_dashboards.group_dashboard_manager,1,0,0,0
+access_renewal_template_stats_manager,renewal.template.stats dashboard manager,model_renewal_template_stats,cleardeals_dashboards.group_dashboard_manager,1,0,0,0
+access_lead_scoring_lead_user,lead.scoring.lead,model_lead_scoring_lead,base.group_user,1,1,1,1
+access_lead_scoring_event_user,lead.scoring.event,model_lead_scoring_event,base.group_user,1,1,1,1
+access_lead_scoring_template_stats_user,lead.scoring.template.stats,model_lead_scoring_template_stats,base.group_user,1,1,1,1
+access_active_template_stats_user,active.template.stats,model_active_template_stats,base.group_user,1,1,1,1
+access_leads_new_dashboard_user,leads.new.dashboard,model_leads_new_dashboard,base.group_user,1,1,1,1
+access_leads_new_event_user,leads.new.event,model_leads_new_event,base.group_user,1,1,1,1
+access_leads_new_template_stats_user,leads.new.template.stats,model_leads_new_template_stats,base.group_user,1,1,1,1

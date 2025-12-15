@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <menuitem 
+        id="menu_rm_prospector_root"
+        name="Lead Suggestor"
+        web_icon="rm_property_prospector,static/description/icon.png"
+        groups="group_property_prospector_rm"
+        sequence="6"/>
+    
+
+    <menuitem
+        id="menu_rm_prospector_dashboard"
+        name="My Property Suggestions"
+        parent="menu_rm_prospector_root"
+        action="action_property_inventory_rm"
+        sequence="10"/>
+
+    <menuitem
+        id="menu_rm_prospector_manager_dashboard"
+        name="All Property Suggestions"
+        parent="menu_rm_prospector_root"
+        action="action_property_inventory_manager"
+        groups="group_property_prospector_manager"
+        sequence="20"/>
+</odoo>
+

@@ -1,0 +1,3 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_renewal_message_rm,renewal.message.rm,model_renewal_message,property_renewal.group_renewal_rm,1,1,0,0
+access_renewal_message_manager,renewal.message.manager,model_renewal_message,property_renewal.group_renewal_manager,1,1,1,1

@@ -1,0 +1,84 @@
+<odoo>
+    <data>
+        <record id="renewal_message_tree_view" model="ir.ui.view">
+            <field name="name">renewal.message.tree</field>
+            <field name="model">renewal.message</field>
+            <field name="arch" type="xml">
+                <list string="Renewal Messages" 
+                      decoration-success ="event_type == 'wants_renewal'"
+                      decoration-danger ="event_type == 'not_interested_in_seeing_lead' or event_type == 'no_rm_support'"
+                      decoration-info = "event_type == 'clicked_see_lead'">
+                    
+                    <field name='event_timestamp'/>
+                    <field name='property_id'/>
+                    <field name='owner_name'/>
+                    <field name='owner_phone'/>
+                    <field name="event_type"/>
+                    <field name='assigned_rm_id'/>
+                </list>
+            </field>
+        </record>
+
+        <record id="renewal_message_form_view" model="ir.ui.view">
+            <field name="name">renewal.message.form</field>
+            <field name="model">renewal.message</field>
+            <field name="arch" type="xml">
+                <form string="Renewal Message">
+                    <sheet>
+                        <group>
+                            <field name='property_tag' colspan="2"/>
+                        </group>
+                        <group>
+                            <group>
+                                <field name='property_id' readonly="1" force_save="1"/>
+                                <field name="owner_name" readonly="1" force_save="1"/>
+                                <field name="owner_phone" readonly="1" force_save="1"/>
+                                <field name="event_type"/>
+                            </group>
+                            <group>
+                                <field name='assigned_rm_id' readonly="1" force_save="1"/>
+                                <field name='event_timestamp'/>
+                                <field name="event_type" widget="badge"/>
+                                <field name='state' widget='badge'/>
+                            </group>
+                        </group>
+                    </sheet>
+                </form>
+            </field>
+        </record>
+
+        <record id="renewal_message_search_view" model="ir.ui.view">
+            <field name="name">renewal.message.search</field>
+            <field name="model">renewal.message</field>
+            <field name="arch" type="xml">
+                <search string="Search Renewal Messages">
+                    <filter string="Wants Renewal" name="wants_renewal" domain="[('event_type', '=', 'wants_renewal')]"/>
+                    <filter string="Not Interested" name="not_interested" domain="[('event_type', '=', 'not_interested_in_seeing_lead')]"/>
+                    <filter string="Don't want RM Support" name="no_rm_support" domain="[('event_type', '=', 'no_rm_support')]"/>
+                    <filter string="Clicked to See Lead" name="clicked_see_lead" domain="[('event_type', '=', 'clicked_see_lead')]"/>
+                    <separator/>
+                    <field name="property_id"/>
+                    <field name="assigned_rm_id"/>
+                    <group expand="0" string="Group By">
+                        <filter string="Property" name="group_by_property" context="{'group_by':'property_id'}"/>
+                        <filter string="Assigned RM" name="group_by_assigned_rm" context="{'group_by':'assigned_rm_id'}"/>
+                        <filter string="Owner Action" name="group_by_event_type" context="{'group_by':'event_type'}"/>
+                    </group>
+                </search>
+            </field>
+        </record>
+
+        <record id="action_renewal_message" model="ir.actions.act_window">
+            <field name="name">Renewal Conversations</field>
+            <field name="res_model">renewal.message</field>
+            <field name="view_mode">list,form</field>
+            <field name="search_view_id" ref="renewal_message_search_view"/>
+            <field name="help" type="html">
+                <p class="o_view_nocontent_smiling_face">
+                    No renewal messages found.
+                </p>
+            </field>
+        </record>
+    
+    </data>
+</odoo>
