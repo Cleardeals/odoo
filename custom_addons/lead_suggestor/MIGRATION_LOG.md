@@ -41,3 +41,7 @@
 - **[FIX]** Removed outer `oe_kanban_global_click` div wrapper as the `card` system handles the container automatically.
 
 
+### Views (`property_inventory_views.xml`)
+- **[FIX]** Form View: Replaced `service_expiry_date_str` (Char) with `service_expiry_date` (Date).
+- **[FIX]** Form View: Added `widget="date"` to both `service_expiry_date` and `welcome_call_date` to enforce consistent numerical formatting.
+

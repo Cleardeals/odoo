@@ -16,7 +16,6 @@ class PropertyLeadSuggestion(models.Model):
     _rec_name = 'suggested_lead_phone'
 
     # --- SQL Constraints (Odoo 19 Style) ---
-    # Starts with underscore -> Validation Passed
     _prop_lead_uniq = models.Constraint(
         'UNIQUE(property_inventory_id, suggested_lead_phone)',
         message='This lead is already a suggestion for this property.'
@@ -59,7 +58,15 @@ class PropertyLeadSuggestion(models.Model):
         aggregator="avg"  
     )
     contact_type = fields.Char(string="Lead's Current Status", readonly=True)
+
+    # --- Date Fields ---
     generation_date = fields.Date(string="Suggested On", readonly=True, default=fields.Date.context_today)
+
+    # [FIX] Computed Display Field for strict DD/MM/YYYY format
+    generation_date_display = fields.Char(
+        string="Suggested On", 
+        compute='_compute_generation_date_display'
+    )
 
     # --- RM Feedback Fields ---
     status = fields.Selection([
@@ -74,6 +81,12 @@ class PropertyLeadSuggestion(models.Model):
     ], string="Status", default='new', index=True, required=True)
 
     rm_feedback = fields.Text(string="RM Feedback")
+
+    @api.depends('generation_date')
+    def _compute_generation_date_display(self):
+        """Forces date to display as DD/MM/YYYY"""
+        for rec in self:
+            rec.generation_date_display = rec.generation_date.strftime('%d/%m/%Y') if rec.generation_date else ''
 
     @api.depends('suggested_lead_phone')
     def _compute_suggested_lead_phone_whatsapp_url(self):

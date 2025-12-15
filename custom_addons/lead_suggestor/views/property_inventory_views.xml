@@ -11,7 +11,9 @@
                 <field name="suggestion_count"/>
                 <field name="new_suggestion_count"/>
                 <field name="service_expiry_date"/>
-                <field name="welcome_call_date"/> 
+                <field name="welcome_call_date"/>
+                <field name="service_expiry_date_display"/>
+                <field name="welcome_call_date_display"/>
                 
                 <templates>
                     <t t-name="card">
@@ -45,13 +47,13 @@
                             <div style="margin-top: 6px; font-size: 0.9em;">
                                 <span t-if="record.welcome_call_date.raw_value" class="text-muted">
                                     <i class="fa fa-phone-square"/> Welcome call: 
-                                    <field name="welcome_call_date" widget="date"/>
+                                    <field name="welcome_call_date_display"/>
                                 </span>
                                 <br t-if="record.service_expiry_date.raw_value &amp;&amp; record.welcome_call_date.raw_value"/>
                                 
                                 <span t-if="record.service_expiry_date.raw_value" class="text-muted">
                                     <i class="fa fa-calendar-times-o"/> Service Expiry: 
-                                    <field name="service_expiry_date" widget="date"/>
+                                    <field name="service_expiry_date_display"/>
                                 </span>
                             </div>
                         </main>
@@ -98,8 +100,11 @@
                             <field name="olx_id" readonly="1"/>
                         </group>
                         <group>
-                            <field name="service_expiry_date_str" readonly="1" string="Service Expiry Date"/> 
-                            <field name="welcome_call_date" readonly="1"/>
+                            <field name="service_expiry_date_display" string="Service Expiry Date"/>
+                            <field name="welcome_call_date_display" string="Welcome Call Date"/>
+                            
+                            <field name="service_expiry_date" invisible="1"/>
+                            <field name="welcome_call_date" invisible="1"/>
                         </group>
                     </group>
                     <group class="oe_subtotal_footer oe_right" colspan="2" name="suggestion_summary">
@@ -117,7 +122,9 @@
                                             decoration-warning="status in ('contacted', 'interested')"
                                             decoration-danger="status == 'not_interested'"
                                             decoration-info="status == 'new'"/>
-                                    <field name="generation_date" readonly="1"/>
+                                            
+                                    <field name="generation_date_display" readonly="1"/>
+                                    
                                     <field name="lead_name" readonly="1"/>
     
                                     <field name="suggested_lead_phone" readonly="1" string="Lead Phone"/>

@@ -26,10 +26,24 @@ class PropertyInventory(models.Model):
     owner_name = fields.Char(string="Owner Name", readonly=True)
     owner_phone = fields.Char(string="Owner Phone", readonly=True)
     rm_user_id = fields.Many2one('res.users', string="Assigned RM", readonly=True, index=True)
+    
+    # --- Real Date Fields (For Logic & Sorting) ---
     service_expiry_date = fields.Date(string="Service Expiry Date", readonly=True, index=True)
-    service_expiry_date_str = fields.Char(string="Expiry Date (Display)", readonly=True)
     welcome_call_date = fields.Date(string="Welcome Call Date", readonly=True, index=True)
     
+    # --- Computed Display Fields (For UI Formatting DD/MM/YYYY) ---
+    service_expiry_date_display = fields.Char(
+        string="Service Expiry Date", 
+        compute='_compute_date_displays'
+    )
+    welcome_call_date_display = fields.Char(
+        string="Welcome Call Date", 
+        compute='_compute_date_displays'
+    )
+
+    # Legacy field from BQ, kept if needed, but display logic moved to computed fields
+    service_expiry_date_str = fields.Char(string="Expiry Date (Original)", readonly=True)
+
     # Status field to track if property is active
     is_active = fields.Boolean(string="Is Active", default=True, readonly=True, index=True)
 
@@ -69,14 +83,20 @@ class PropertyInventory(models.Model):
             prop.suggestion_count = len(prop.suggestion_ids)
             prop.new_suggestion_count = len(prop.suggestion_ids.filtered(lambda s: s.status == 'new'))
 
+    @api.depends('service_expiry_date', 'welcome_call_date')
+    def _compute_date_displays(self):
+        """
+        Formats dates strictly as DD/MM/YYYY for display purposes.
+        This overrides Odoo's default locale formatting (e.g. 'Dec 14').
+        """
+        for rec in self:
+            rec.service_expiry_date_display = rec.service_expiry_date.strftime('%d/%m/%Y') if rec.service_expiry_date else ''
+            rec.welcome_call_date_display = rec.welcome_call_date.strftime('%d/%m/%Y') if rec.welcome_call_date else ''
+
     @api.model
     def _cron_sync_properties(self):
         """
         Cron Job: Syncs ACTIVE properties from BigQuery Customer_Data.
-        1. Gets LATEST record for each Tag (deduplication by Created_Date DESC)
-        2. Calculates status: Sold/Expired/Active
-        3. Syncs properties with status = 'Active' using an UPSERT strategy.
-        4. Deactivates properties in Odoo that are no longer 'Active' in BigQuery.
         """
         _logger.info("Starting ACTIVE Property Inventory sync from BigQuery Customer_Data...")
         
@@ -88,7 +108,6 @@ class PropertyInventory(models.Model):
 
         query = f"""
             WITH LatestPropertyData AS (
-                -- Step 1: Deduplicate - Get the LATEST record for each Tag
                 SELECT
                     *,
                     ROW_NUMBER() OVER(
@@ -100,7 +119,6 @@ class PropertyInventory(models.Model):
                 WHERE Tag IS NOT NULL AND TRIM(Tag) != ''
             ),
             PropertiesWithStatus AS (
-                -- Step 2: Calculate status based on Property_Status and Service_Expiry_Date
                 SELECT
                     Tag AS property_tag,
                     REGEXP_EXTRACT(Name, r'(?:Mr\\.|Mrs\\.|Dr\\.)\\s?([A-Za-z\\s]+)') AS owner_name,
@@ -117,12 +135,10 @@ class PropertyInventory(models.Model):
                     City1 AS city,
                     Property_Link,
                     
-                    -- Parse expiry date with both formats
                     COALESCE(
                         SAFE.PARSE_DATE('%d/%m/%Y', Service_Expiry_Date),
                         SAFE.PARSE_DATE('%d-%m-%Y', Service_Expiry_Date)
                     ) as expiry_date,
-                    -- Parse welcome call date with both formats
                     COALESCE(
                         SAFE.PARSE_DATE('%d/%m/%Y', Welcome_Call_Date),
                         SAFE.PARSE_DATE('%d-%m-%Y', Welcome_Call_Date)
@@ -136,9 +152,8 @@ class PropertyInventory(models.Model):
                         ELSE 'Active'
                     END AS calculated_status
                 FROM LatestPropertyData
-                WHERE rn = 1  -- Only the latest record per Tag
+                WHERE rn = 1
             )
-            -- Step 3: Select ONLY Active properties
             SELECT
                 property_tag,
                 owner_name,
@@ -169,14 +184,11 @@ class PropertyInventory(models.Model):
             
             Users = self.env['res.users']
             
-            # --- Fetch all existing properties for comparison ---
             _logger.info("Fetching existing properties from Odoo...")
             existing_props = self.search_read([], ['property_tag', 'is_active'])
-            # Create a map for quick lookup: {'TAG-123': {'id': 1, 'is_active': True}, ...}
             existing_props_map = {prop['property_tag']: prop for prop in existing_props}
             _logger.info(f"Found {len(existing_props_map)} existing properties in Odoo.")
             
-            # --- Counters ---
             created_count = 0
             updated_count = 0
             skipped_null_date = 0
@@ -184,11 +196,9 @@ class PropertyInventory(models.Model):
             bq_active_tags = set()
 
             for row in results:
-                # Basic validation
                 if not row.property_tag:
                     continue
                 
-                # Add to set of active tags
                 bq_active_tags.add(row.property_tag)
 
                 if row.expiry_date is None:
@@ -196,7 +206,6 @@ class PropertyInventory(models.Model):
                     _logger.debug(f"Skipping '{row.property_tag}': NULL expiry_date despite Active status")
                     continue
 
-                # Find the Odoo user for the RM (Assignee)
                 rm_user_id = False
                 assigned_rm_name = row.assigned_rm
                 if assigned_rm_name:
@@ -212,7 +221,6 @@ class PropertyInventory(models.Model):
                     except Exception as user_search_err:
                         _logger.error(f"Error searching for RM user '{assigned_rm_name}': {user_search_err}")
 
-                # Parse expiry date
                 service_expiry_date = None
                 service_expiry_date_str = row.Service_Expiry_Date if row.Service_Expiry_Date else ''
                 
@@ -222,7 +230,7 @@ class PropertyInventory(models.Model):
                     else:
                         service_expiry_date = row.expiry_date
                     
-                    if not service_expiry_date:  # Double check after conversion
+                    if not service_expiry_date:
                         _logger.warning(f"Property '{row.property_tag}': Failed to parse date '{row.Service_Expiry_Date}'")
                         skipped_null_date += 1
                         continue
@@ -230,7 +238,6 @@ class PropertyInventory(models.Model):
                     _logger.warning(f"Property '{row.property_tag}': Error converting expiry date: {date_err}")
                     continue
 
-                # Parse welcome call date
                 welcome_call_date = None
                 try:
                     if row.welcome_call_date:
@@ -242,7 +249,6 @@ class PropertyInventory(models.Model):
                     _logger.warning(f"Property '{row.property_tag}': Error converting welcome call date: {welcome_date_err}")
                     welcome_call_date = None
 
-                # Prepare values for creation/update
                 vals = {
                     'property_tag': row.property_tag,
                     'owner_name': row.owner_name if row.owner_name else '',
@@ -251,7 +257,7 @@ class PropertyInventory(models.Model):
                     'service_expiry_date': service_expiry_date,
                     'service_expiry_date_str': service_expiry_date_str,
                     'welcome_call_date': welcome_call_date,
-                    'is_active': True,  # Mark as active since it came from the 'Active' BQ query
+                    'is_active': True,
                     'bhk': row.BHK if row.BHK else '',
                     'location': row.Location if row.Location else '',
                     'city': row.city if row.city else '',
@@ -262,22 +268,18 @@ class PropertyInventory(models.Model):
                     'olx_id': row.olx_id if row.olx_id else False
                 }
 
-                # --- Upsert Logic ---
                 existing_prop_data = existing_props_map.get(row.property_tag)
                 
                 try:
                     if existing_prop_data:
-                        # UPDATE existing property
                         prop_id = existing_prop_data['id']
                         prop_record = self.browse(prop_id)
                         prop_record.write(vals)
                         updated_count += 1
                     else:
-                        # CREATE new property
                         self.create(vals)
                         created_count += 1
                 
-                    # Commit periodically to avoid long transactions 
                     if (created_count + updated_count) % 100 == 0:
                         self.env.cr.commit()
                 
@@ -286,7 +288,6 @@ class PropertyInventory(models.Model):
                     self.env.cr.rollback()
                     continue
             
-            # ---  Deactivation step ---
             _logger.info("Deactivating properties that are no longer active in BigQuery...")
             tags_in_odoo = set(existing_props_map.keys())
             tags_to_deactivate = tags_in_odoo - bq_active_tags
@@ -296,7 +297,6 @@ class PropertyInventory(models.Model):
                 prop_ids_to_deactivate = []
                 for tag in tags_to_deactivate:
                     prop_data = existing_props_map[tag]
-                    # Only deactivate if it's currently marked active
                     if prop_data['is_active']:
                         prop_ids_to_deactivate.append(prop_data['id'])
                 
@@ -310,7 +310,6 @@ class PropertyInventory(models.Model):
                         _logger.error(f"Error deactivating properties: {deactivation_err}")
                         self.env.cr.rollback()
 
-            # --- Final Summary ---
             _logger.info(f"")
             _logger.info(f"========== Property Inventory Sync Summary ==========")
             _logger.info(f"  Total records fetched from BQ: {len(results)}")
@@ -323,7 +322,6 @@ class PropertyInventory(models.Model):
                 _logger.warning(f"  Missing RM assignments (warnings): {missing_rm_count}")
             _logger.info(f"=====================================================")
             
-            # Final commit
             self.env.cr.commit()
 
         except Exception as e:
@@ -336,7 +334,6 @@ class PropertyInventory(models.Model):
     def _cron_cleanup_expired_properties(self):
         """
         Separate cron job to mark properties as inactive if they've expired.
-        Run this daily to check expiry dates.
         """
         _logger.info("Starting cleanup of expired properties...")
         try:
