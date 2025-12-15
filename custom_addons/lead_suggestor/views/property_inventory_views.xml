@@ -14,67 +14,64 @@
                 <field name="welcome_call_date"/> 
                 
                 <templates>
-                    <t t-name="kanban-box">
-                        <div class="oe_kanban_global_click #{!selection_mode ? '' : 'o_kanban_selected'}">
+                    <t t-name="card">
+                        <div class="o_kanban_tags" style="margin-bottom: 8px;">
+                            <t t-if="record.service_expiry_date.raw_value &amp;&amp; record.service_expiry_date.raw_value &lt; new Date().toISOString().split('T')[0]">
+                                <span class="badge" style="font-size: 0.85em; background-color: #dc3545; color: white;">
+                                    <i class="fa fa-exclamation-triangle"/> SERVICE EXPIRED
+                                </span>
+                            </t>
                             
-                            <div class="o_kanban_tags" style="margin-bottom: 8px;">
-                                <t t-if="record.service_expiry_date.raw_value &amp;&amp; record.service_expiry_date.raw_value &lt; new Date().toISOString().split('T')[0]">
-                                    <span class="badge" style="font-size: 0.85em; background-color: #dc3545; color: white;">
-                                        <i class="fa fa-exclamation-triangle"/> SERVICE EXPIRED
-                                    </span>
-                                </t>
-                                
-                                <t t-if="record.welcome_call_date.raw_value &amp;&amp; 
-                                            record.welcome_call_date.raw_value &lt;= new Date().toISOString().split('T')[0] &amp;&amp;
-                                            record.welcome_call_date.raw_value &gt;= new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]">
-                                    <span class="badge" style="font-size: 0.85em; margin-left: 4px; background-color: #28a745; color: white;">
-                                        <i class="fa fa-star"/> NEW PROPERTY
-                                    </span>
-                                </t>
-                            </div>
-                            
-                            <div class="oe_kanban_details">
-                                <strong class="o_kanban_record_title">
-                                    <field name="property_tag"/>
-                                </strong>
-                                <div class="text-muted o_kanban_record_subtitle">
-                                    <span t-if="record.rm_user_id.value">
-                                        <i class="fa fa-user ml-1" aria-label="RM"/>
-                                        <t t-esc="record.rm_user_id.value"/>
-                                    </span>
-                                </div>
-                                
-                                <div style="margin-top: 6px; font-size: 0.9em;">
-                                    <span t-if="record.welcome_call_date.raw_value" class="text-muted">
-                                        <i class="fa fa-phone-square"/> Welcome call: 
-                                        <field name="welcome_call_date" widget="date"/>
-                                    </span>
-                                    <br t-if="record.service_expiry_date.raw_value &amp;&amp; record.welcome_call_date.raw_value"/>
-                                    
-                                    <span t-if="record.service_expiry_date.raw_value" class="text-muted">
-                                        <i class="fa fa-calendar-times-o"/> Service Expiry: 
-                                        <field name="service_expiry_date" widget="date"/>
-                                    </span>
-                                </div>
-                            </div>
-                            
-                            <div class="o_kanban_footer">
-                                <div class="o_kanban_footer_left">
-                                    <span class="text-muted">
-                                        <i class="fa fa-users" aria-label="Total Suggestions"/>
-                                        <t t-esc="record.suggestion_count.value"/> Total
-                                    </span>
-                                </div>
-                                <div class="o_kanban_footer_right">
-                                    <span t-if="record.new_suggestion_count.value > 0"
-                                            class="badge badge-danger"
-                                            title="New Suggestions">
-                                        <i class="fa fa-star" aria-label="New"/>
-                                        <t t-esc="record.new_suggestion_count.value"/> New
-                                    </span>
-                                </div>
-                            </div>
+                            <t t-if="record.welcome_call_date.raw_value &amp;&amp; 
+                                        record.welcome_call_date.raw_value &lt;= new Date().toISOString().split('T')[0] &amp;&amp;
+                                        record.welcome_call_date.raw_value &gt;= new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]">
+                                <span class="badge" style="font-size: 0.85em; margin-left: 4px; background-color: #28a745; color: white;">
+                                    <i class="fa fa-star"/> NEW PROPERTY
+                                </span>
+                            </t>
                         </div>
+                        
+                        <main class="oe_kanban_details">
+                            <strong class="o_kanban_record_title">
+                                <field name="property_tag"/>
+                            </strong>
+                            <div class="text-muted o_kanban_record_subtitle">
+                                <span t-if="record.rm_user_id.value">
+                                    <i class="fa fa-user ml-1" aria-label="RM"/>
+                                    <t t-esc="record.rm_user_id.value"/>
+                                </span>
+                            </div>
+                            
+                            <div style="margin-top: 6px; font-size: 0.9em;">
+                                <span t-if="record.welcome_call_date.raw_value" class="text-muted">
+                                    <i class="fa fa-phone-square"/> Welcome call: 
+                                    <field name="welcome_call_date" widget="date"/>
+                                </span>
+                                <br t-if="record.service_expiry_date.raw_value &amp;&amp; record.welcome_call_date.raw_value"/>
+                                
+                                <span t-if="record.service_expiry_date.raw_value" class="text-muted">
+                                    <i class="fa fa-calendar-times-o"/> Service Expiry: 
+                                    <field name="service_expiry_date" widget="date"/>
+                                </span>
+                            </div>
+                        </main>
+                        
+                        <footer class="o_kanban_footer">
+                            <div class="o_kanban_footer_left">
+                                <span class="text-muted">
+                                    <i class="fa fa-users" aria-label="Total Suggestions"/>
+                                    <t t-esc="record.suggestion_count.value"/> Total
+                                </span>
+                            </div>
+                            <div class="o_kanban_footer_right">
+                                <span t-if="record.new_suggestion_count.value > 0"
+                                        class="badge badge-danger"
+                                        title="New Suggestions">
+                                    <i class="fa fa-star" aria-label="New"/>
+                                    <t t-esc="record.new_suggestion_count.value"/> New
+                                </span>
+                            </div>
+                        </footer>
                     </t>
                 </templates>
             </kanban>
@@ -130,7 +127,9 @@
                                             icon="fa-whatsapp"
                                             title="Chat on WhatsApp (and copy message)"
                                             class="btn-link" 
-                                            attrs="{'invisible': [('suggested_lead_phone_whatsapp_url', '=', False)]}"/>
+                                            invisible="suggested_lead_phone_whatsapp_url == False"/>
+
+                                    <field name="suggested_lead_phone_whatsapp_url" invisible="1"/>
 
                                     <field name="contact_type" string="Lead Status" readonly="1"/>
                                     <field name="original_property_tag" readonly="1" string="Liked"/>
@@ -193,10 +192,8 @@
                 
                 <separator/>
                 
-                <group expand="0" string="Group By">
-                    <filter string="Assigned RM" name="group_by_rm" context="{'group_by': 'rm_user_id'}"/>
-                    <filter string="Is Active" name="group_by_active" context="{'group_by': 'is_active'}"/>
-                </group>
+                <filter string="Assigned RM" name="group_by_rm" context="{'group_by': 'rm_user_id'}"/>
+                <filter string="Is Active" name="group_by_active" context="{'group_by': 'is_active'}"/>
             </search>
         </field>
     </record>

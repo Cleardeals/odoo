@@ -16,6 +16,12 @@ class PropertyInventory(models.Model):
     _order = 'service_expiry_date asc, property_tag'
     _rec_name = 'property_tag'
 
+    # --- SQL Constraints (Odoo 19 Style) ---
+    _property_tag_uniq = models.Constraint(
+        'UNIQUE(property_tag)',
+        message='Property Tag must be unique.'
+    )
+
     property_tag = fields.Char(string="Property Tag", readonly=True, index=True, required=True)
     owner_name = fields.Char(string="Owner Name", readonly=True)
     owner_phone = fields.Char(string="Owner Phone", readonly=True)
@@ -55,10 +61,6 @@ class PropertyInventory(models.Model):
         compute='_compute_suggestion_counts',
         store=True
     )
-
-    _sql_constraints = [
-        ('property_tag_uniq', 'unique(property_tag)', 'Property Tag must be unique.')
-    ]
 
     @api.depends('suggestion_ids', 'suggestion_ids.status')
     def _compute_suggestion_counts(self):

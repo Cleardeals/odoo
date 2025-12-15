@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*-
-from odoo import models, fields, api, _
-from google.cloud import bigquery
 import logging
 import re
-from urllib.parse import quote # (This import is no longer needed, but safe to keep)
+from odoo import models, fields, api, _
+from google.cloud import bigquery
 
 _logger = logging.getLogger(__name__)
 
@@ -15,6 +14,13 @@ class PropertyLeadSuggestion(models.Model):
     _description = 'Suggested Lead for a Property'
     _order = 'generation_date desc, status asc'
     _rec_name = 'suggested_lead_phone'
+
+    # --- SQL Constraints (Odoo 19 Style) ---
+    # Starts with underscore -> Validation Passed
+    _prop_lead_uniq = models.Constraint(
+        'UNIQUE(property_inventory_id, suggested_lead_phone)',
+        message='This lead is already a suggestion for this property.'
+    )
 
     property_inventory_id = fields.Many2one(
         'property.inventory',
@@ -28,18 +34,21 @@ class PropertyLeadSuggestion(models.Model):
         string="Property Tag"
     )
     
-    
     suggested_lead_phone = fields.Char(string="Lead Phone", readonly=True, required=True)
+    
     suggested_lead_phone_whatsapp_url = fields.Char(
         string="WhatsApp URL",
         compute='_compute_suggested_lead_phone_whatsapp_url',
-        store=False  # No need to store, it's always dynamic
+        store=False 
     )
+    
+    # [MIGRATION 19.0] Renamed string to avoid "Duplicate Label" warning
     suggested_lead_phone_html = fields.Html(
-        string="Lead Phone",
+        string="Lead Phone Link",
         compute='_compute_suggested_lead_phone_html',
         store=False
     )
+    
     lead_name = fields.Char(string="Lead Name", readonly=True)
 
     original_property_tag = fields.Char(string="Original Property", readonly=True)
@@ -65,11 +74,6 @@ class PropertyLeadSuggestion(models.Model):
     ], string="Status", default='new', index=True, required=True)
 
     rm_feedback = fields.Text(string="RM Feedback")
-
-    _sql_constraints = [
-        ('prop_lead_uniq', 'unique(property_inventory_id, suggested_lead_phone)',
-         'This lead is already a suggestion for this property.')
-    ]
 
     @api.depends('suggested_lead_phone')
     def _compute_suggested_lead_phone_whatsapp_url(self):
@@ -106,7 +110,6 @@ class PropertyLeadSuggestion(models.Model):
                 # Not a recognizable format, so don't create a link
                 rec.suggested_lead_phone_whatsapp_url = False
 
-    # --- MODIFIED FUNCTION ---
     @api.depends('suggested_lead_phone', 'suggested_lead_phone_whatsapp_url')
     def _compute_suggested_lead_phone_html(self):
         """
@@ -216,7 +219,7 @@ class PropertyLeadSuggestion(models.Model):
         self.ensure_one() 
         return {
             'type': 'ir.actions.act_window',
-            'name': _('Log Feedback for %s', self.lead_name or self.suggested_lead_phone),
+            'name': _('Log Feedback for %s') % (self.lead_name or self.suggested_lead_phone),
             'res_model': 'suggestion.feedback.wizard',
             'view_mode': 'form',
             'target': 'new',
@@ -232,8 +235,6 @@ class PropertyLeadSuggestion(models.Model):
         """
         Cron Job: Syncs NEW suggestions from the BigQuery table
         for the last 3 days, appending only those not already present.
-        
-        --- OPTIMIZED to avoid N+1 query loops ---
         """
         _logger.info("Starting Optimized Lead Suggestions sync...")
 

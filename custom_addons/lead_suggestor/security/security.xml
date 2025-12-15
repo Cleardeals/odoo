@@ -2,17 +2,14 @@
 <odoo>
     <data noupdate="1">
         
-        <!-- Application Category -->
         <record id="module_category_property_prospector" model="ir.module.category">
             <field name="name">Lead Suggestor</field>
             <field name="description">User access levels for the Lead Suggestor module</field>
             <field name="sequence">21</field>
         </record>
         
-        <!-- RM User Group -->
         <record id="group_property_prospector_rm" model="res.groups">
             <field name="name">RM User</field>
-            <field name="category_id" ref="module_category_property_prospector"/>
             <field name="implied_ids" eval="[(4, ref('base.group_user'))]"/>
             <field name="comment">
                 User can access the "Property Prospector" dashboard to see
@@ -20,11 +17,8 @@
             </field>
         </record>
 
-        <!-- NEW: Manager Group -->
         <record id="group_property_prospector_manager" model="res.groups">
             <field name="name">Manager</field>
-            <field name="category_id" ref="module_category_property_prospector"/>
-            <!-- A Manager is also an RM User -->
             <field name="implied_ids" eval="[(4, ref('group_property_prospector_rm'))]"/> 
             <field name="comment">
                 User can access and manage all records in the
@@ -34,4 +28,3 @@
 
     </data>
 </odoo>
-
