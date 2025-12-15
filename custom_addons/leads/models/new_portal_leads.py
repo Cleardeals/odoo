@@ -143,7 +143,16 @@ class NewPortalLead(models.Model):
     interest_ids = fields.One2many(
         'lead.property.interest',
         'lead_id',
-        string="Recommended Properies"
+        string="Recommended Properies",
+        store = True
+    )
+
+    all_associated_properties = fields.Many2many(
+        'property.inventory',
+        string="All Associated Properties",
+        compute='_compute_all_associated_properties',
+        store=True,
+        help="Includes both the primary and recommended properties."
     )
 
     create_date_only = fields.Date(
@@ -154,6 +163,20 @@ class NewPortalLead(models.Model):
     )
     
     # --- Compute Methods ---
+
+    @api.depends('property_id', 'interest_ids.property_id')
+    def _compute_all_associated_properties(self):
+        """
+        Combines the primary property and all recommended properties
+        into a single Many2many field for easy access.
+        """
+        for lead in self:
+            properties = lead.property_id
+
+            if lead.interest_ids:
+                properties |= lead.interest_ids.mapped('property_id')
+                
+            lead.all_associated_properties = properties
 
     @api.depends('create_date')
     def _compute_create_date_only(self):
@@ -342,6 +365,7 @@ class NewPortalLead(models.Model):
     def _process_lead_logic(self):
         """
         This now runs in the same transaction as the cron job.
+        Updated: If Property is not found, assigns to 'Naresh Rojiya'
         """
         self.ensure_one()
         _logger.info(f"🔄 Processing lead {self.id}: {self.name} (state: {self.state})")
@@ -352,24 +376,36 @@ class NewPortalLead(models.Model):
         
         try:
             property_rec = self._find_property()
+            rm_user = False
+            notes = ""
+
+            if property_rec:
+                _logger.info(f"✅ Lead {self.id}: Found property {property_rec.property_tag} (ID: {property_rec.id})")
+                rm_user = self._find_rm(property_rec)
+                _logger.info(f"✅ Lead {self.id}: Found RM {rm_user.name} (ID: {rm_user.id})")
+                notes = f"Successfully assigned to RM {rm_user.name} for property {property_rec.property_tag}.\n"
             
             if not property_rec:
-                msg = f"Attempt {fields.Datetime.now()}: Property not found for {self.portal_name} ID: {self.portal_property_id}"
-                _logger.warning(f"⚠️ Lead {self.id}: {msg}")
-                self.process_notes = msg + "\n"
-                return
-            
-            _logger.info(f"✅ Lead {self.id}: Found property {property_rec.property_tag} (ID: {property_rec.id})")
-            
-            rm_user = self._find_rm(property_rec)
-            _logger.info(f"✅ Lead {self.id}: Found RM {rm_user.name} (ID: {rm_user.id})")
+                msg = f"Property not found for {self.portal_name} ID: {self.portal_property_id}"
+                _logger.warning(f"⚠️ Lead {self.id}: {msg}. Attempting to assign to default RM.")
+
+                rm_user = self.env['res.users'].search([('name', 'ilike', 'Naresh Rojiya')], limit=1)
+
+                if not rm_user:
+                    # Safety Fallback: If Naresh is not found in the system, assign to Admin to prevent error
+                    _logger.error("User 'Naresh Rojiya' not found. Assigning to Administrator.")
+                    rm_user = self.env.ref('base.user_admin')
+
+                notes = f"{msg}\nAssigned to Default RM: {rm_user.name}.\n"
+
 
             self.write({
-                'property_id': property_rec.id,
+                'property_id': property_rec.id if property_rec else False,
                 'user_id': rm_user.id,
                 'state': 'assigned',
-                'process_notes': f"Successfully assigned to RM {rm_user.name} for property {property_rec.property_tag}.\n"
+                'process_notes': notes
             })
+
             _logger.info(f"🎉 Lead {self.id}: Successfully assigned to {rm_user.name} for property {property_rec.property_tag}")
 
         except Exception as e:

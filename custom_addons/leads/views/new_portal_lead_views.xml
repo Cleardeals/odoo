@@ -4,7 +4,7 @@
     <!-- ================================================ -->
     <!--  SEARCH VIEW – TIMEZONE-SAFE (uses create_date_only) -->
     <!-- ================================================ -->
-    <record id="leads_new_view_search" model="ir.ui.view">
+<record id="leads_new_view_search" model="ir.ui.view">
         <field name="name">leads.new.search</field>
         <field name="model">leads.new</field>
         <field name="arch" type="xml">
@@ -14,7 +14,10 @@
                 <field name="phone"/>
                 <field name="user_id" string="RM"/>
                 <field name="property_location"/>
-                <field name="property_id"/>
+                
+                <field name="all_associated_properties" string="Property (Primary or Recommended)"/>
+                
+                <field name="property_id" string="Primary Property Only"/>
                 <field name="property_bhk"/>
                 <field name="property_city"/>
                 <field name="portal_name"/>
@@ -75,6 +78,11 @@
                 <group expand="1" string="Group By">
                     <filter string="Current Status" name="groupby_status" context="{'group_by': 'current_status'}"/>
                     <filter string="RM"             name="groupby_user"   context="{'group_by': 'user_id'}"/>
+                    
+                    <filter string="Property (All Associated)" 
+                            name="groupby_all_props" 
+                            context="{'group_by': 'all_associated_properties'}"/>
+                            
                     <filter string="Main State"     name="groupby_state"  context="{'group_by': 'state'}"/>
                     <filter string="Portal"         name="groupby_portal" context="{'group_by': 'portal_name'}"/>
                     <filter string="Creation Date"  name="groupby_date"   context="{'group_by': 'create_date_only'}"/>
