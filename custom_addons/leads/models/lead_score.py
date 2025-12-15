@@ -116,9 +116,7 @@ class LeadScore(models.Model):
         string='WhatsApp Responses ID'
     )
 
-
-
-        # You probably also have a field for the count, make sure it's there
+    # You probably also have a field for the count, make sure it's there
     whatsapp_response_count = fields.Integer(
         compute='_compute_whatsapp_response_count', 
         string='Response Count'
@@ -171,4 +169,3 @@ class LeadScore(models.Model):
             ('next_follow_up_date', '<=', today)
         ])
         leads_to_update._compute_is_actionable_today()
-

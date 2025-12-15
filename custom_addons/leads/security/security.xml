@@ -9,12 +9,10 @@
 
         <record id="group_lead_score_rm" model="res.groups">
             <field name="name">Lead RM</field>
-            <field name="category_id" ref="module_category_lead_scoring"/>
-        </record>
+            </record>
 
         <record id="group_lead_score_manager" model="res.groups">
             <field name="name">Lead Manager</field>
-            <field name="category_id" ref="module_category_lead_scoring"/>
             <field name="implied_ids" eval="[(4, ref('group_lead_score_rm'))]"/>
         </record>
 
@@ -47,7 +45,8 @@
         </record>
 
         <record id="rule_leads_new_rm_see_own_or_unassigned" model="ir.rule">
-            <field name="name">New Leads: RM See Own</field> <field name="model_id" ref="model_leads_new"/>
+            <field name="name">New Leads: RM See Own</field> 
+            <field name="model_id" ref="model_leads_new"/>
             <field name="groups" eval="[(4, ref('leads.group_lead_score_rm'))]"/>
             <field name="domain_force">[('user_id', '=', user.id)]</field>
         </record>

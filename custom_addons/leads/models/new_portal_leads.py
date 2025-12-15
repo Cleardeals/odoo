@@ -127,7 +127,7 @@ class NewPortalLead(models.Model):
 
     phone_whatsapp_html = fields.Html(
         string="Phone",
-        compute='_compute_phone_whatsapp_url',
+        compute='_compute_phone_whatsapp_html',
         store=False
     )
 

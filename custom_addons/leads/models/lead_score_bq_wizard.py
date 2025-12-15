@@ -1,6 +1,6 @@
 import logging
 from google.cloud import bigquery
-from odoo import fields, models
+from odoo import fields, models, api
 from odoo.exceptions import UserError
 from datetime import datetime
 
@@ -29,6 +29,7 @@ class LeadScoreBqWizard(models.TransientModel):
         
         try:
             client = bigquery.Client(project=project_id)
+            # Test connection
             client.list_datasets(max_results=1) 
             _logger.info("Successfully connected to BigQuery project %s.", project_id)
         except Exception as e:
@@ -41,7 +42,8 @@ class LeadScoreBqWizard(models.TransientModel):
         """
         
         try:
-            results = client.query(query).result()
+            query_job = client.query(query)
+            results = query_job.result()
             _logger.info("Fetched %s rows from BigQuery.", results.total_rows)
         except Exception as e:
             raise UserError(f"Failed to execute query: {str(e)}")
@@ -112,8 +114,7 @@ class LeadScoreBqWizard(models.TransientModel):
                     unmatched_rms.add(rm_name)
                     _logger.warning("Assigned RM '%s' not found for lead %s", rm_name, phone)
             
-            # The site_visit_date is now handled conditionally inside the update logic,
-            # so we prepare the value but don't add it to 'vals' just yet.
+            # The site_visit_date is now handled conditionally inside the update logic
             site_visit_date_obj = None
             site_visit_str = row.get('site_visit_date')
             if site_visit_str:
@@ -133,7 +134,7 @@ class LeadScoreBqWizard(models.TransientModel):
 
                 # --- UPDATED LOGIC FOR HANDLING EXISTING LEADS ---
 
-                # 1. (NEW) If status is site visit scheduled/rescheduled, check for date mismatch.
+                # 1. If status is site visit scheduled/rescheduled, check for date mismatch.
                 if existing_lead.current_status in ['site_visit_scheduled', 'rescheduled']:
                     odoo_date = existing_lead.site_visit_scheduled_date
                     
@@ -146,7 +147,6 @@ class LeadScoreBqWizard(models.TransientModel):
                         continue # Skip entire update, preserving Odoo data
 
                 # 2. If status is 'rescheduled', skip data update but "touch" the record.
-                # This acts as a fallback if the date check above didn't apply.
                 if existing_lead.current_status == 'rescheduled':
                     existing_lead.write({})
                     _logger.info(f"Skipping update for {phone}: Odoo status is 'rescheduled'.")

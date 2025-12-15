@@ -11,6 +11,8 @@ class WhatsAppResponse(models.Model):
 
     # Original fields
     number = fields.Char(string='Phone Number', required=True)
+    
+    # [FIX] Logic: Ensure these keys match the list in _compute_response_type
     response = fields.Selection([
         ('yes_going_for_visit', 'Yes, going for the visit'),
         ('need_help', 'Need Help'),
@@ -39,6 +41,7 @@ class WhatsAppResponse(models.Model):
         ('positive', 'Positive'),
         ('neutral', 'Neutral')
     ], string='Response Type', compute='_compute_response_type', store=True)
+    
     response_date = fields.Datetime(string='Response Date', default=fields.Datetime.now)
     is_processed = fields.Boolean(string='Processed', default=False)
     notes = fields.Text(string='Notes')
@@ -48,7 +51,6 @@ class WhatsAppResponse(models.Model):
         """Auto-fill fields based on selected lead."""
         if self.lead_id:
             self.number = self.lead_id.standardized_phone
-            # Other fields are auto-filled via 'related' attributes (e.g., project_name, assigned_rm_id)
 
     @api.model_create_multi
     def create(self, vals_list):
@@ -68,8 +70,17 @@ class WhatsAppResponse(models.Model):
 
     @api.depends('response')
     def _compute_response_type(self):
-        """Categorize responses as positive, negative, or neutral."""
-        positive_responses = ['yes_interested', 'liked_the_property', 'going_for_visit', 'successfully_visited', 'schedule_a_visit']
+        """
+        Categorize responses as positive or neutral.
+        [FIX] Updated list to match actual Selection keys defined above.
+        """
+        positive_responses = [
+            'yes_going_for_visit', 
+            'yes_visit_done', 
+            'yes_liked_the_property', 
+            'slot_book_kre', 
+            'schedule_visit_now'
+        ]
 
         for record in self:
             if record.response in positive_responses:
@@ -82,10 +93,7 @@ class WhatsAppResponse(models.Model):
         for record in self:
             record.is_processed = True
 
-    def name_get(self):
-        """Custom display name for records."""
-        result = []
+    # [MIGRATION 19.0] Replaced name_get with _compute_display_name
+    def _compute_display_name(self):
         for record in self:
-            name = f"Response from {record.lead_name}"
-            result.append((record.id, name))
-        return result
+            record.display_name = f"Response from {record.lead_name or 'Unknown'}"

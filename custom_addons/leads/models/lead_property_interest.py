@@ -6,6 +6,13 @@ class LeadPropertyInterest(models.Model):
     _description = "Lead Recommended Property Interests"
     _order = "create_date desc"
 
+
+    # [MIGRATION 19.0] Replaced legacy _sql_constraints with models.Constraint
+    _lead_prop_uniq = models.Constraint(
+        'UNIQUE(lead_id, property_id)',
+        message='This property is already linked to the lead.'
+    )
+
     lead_id = fields.Many2one('leads.new', string="Lead", ondelete="cascade", required=True)
     property_id = fields.Many2one('property.inventory', string="Property", required=True)
 
@@ -57,10 +64,6 @@ class LeadPropertyInterest(models.Model):
         related='property_id.location',
         readonly=True
     )
-
-    _sql_constraints = [
-        ('lead_prop_uniq', 'unique(lead_id, property_id)', 'This property is already linked to the lead.')
-    ]
 
 
     @api.depends('site_visit_date')

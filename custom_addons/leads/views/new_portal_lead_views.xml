@@ -1,22 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
 
-    <!-- ================================================ -->
-    <!--  SEARCH VIEW – TIMEZONE-SAFE (uses create_date_only) -->
-    <!-- ================================================ -->
-<record id="leads_new_view_search" model="ir.ui.view">
+    <record id="leads_new_view_search" model="ir.ui.view">
         <field name="name">leads.new.search</field>
         <field name="model">leads.new</field>
         <field name="arch" type="xml">
             <search string="Search New Portal Leads">
-
                 <field name="name" string="Lead Name"/>
                 <field name="phone"/>
                 <field name="user_id" string="RM"/>
                 <field name="property_location"/>
                 
                 <field name="all_associated_properties" string="Property (Primary or Recommended)"/>
-                
                 <field name="property_id" string="Primary Property Only"/>
                 <field name="property_bhk"/>
                 <field name="property_city"/>
@@ -75,24 +70,21 @@
 
                 <separator/>
 
-                <group expand="1" string="Group By">
-                    <filter string="Current Status" name="groupby_status" context="{'group_by': 'current_status'}"/>
-                    <filter string="RM"             name="groupby_user"   context="{'group_by': 'user_id'}"/>
-                    
-                    <filter string="Property (All Associated)" 
-                            name="groupby_all_props" 
-                            context="{'group_by': 'all_associated_properties'}"/>
-                            
-                    <filter string="Main State"     name="groupby_state"  context="{'group_by': 'state'}"/>
-                    <filter string="Portal"         name="groupby_portal" context="{'group_by': 'portal_name'}"/>
-                    <filter string="Creation Date"  name="groupby_date"   context="{'group_by': 'create_date_only'}"/>
-                    <filter string="Site Visit Date" name="groupby_visit" context="{'group_by': 'site_visit_date_only'}"/>
-                </group>
+                <filter string="Current Status" name="groupby_status" context="{'group_by': 'current_status'}"/>
+                <filter string="RM"             name="groupby_user"   context="{'group_by': 'user_id'}"/>
+                
+                <filter string="Property (All Associated)" 
+                        name="groupby_all_props" 
+                        context="{'group_by': 'all_associated_properties'}"/>
+                        
+                <filter string="Main State"     name="groupby_state"  context="{'group_by': 'state'}"/>
+                <filter string="Portal"         name="groupby_portal" context="{'group_by': 'portal_name'}"/>
+                <filter string="Creation Date"  name="groupby_date"   context="{'group_by': 'create_date_only'}"/>
+                <filter string="Site Visit Date" name="groupby_visit" context="{'group_by': 'site_visit_date_only'}"/>
 
             </search>
         </field>
     </record>
-
 
     <record id="view_new_portal_lead_list" model="ir.ui.view">
         <field name="name">leads.new.list</field>
@@ -104,7 +96,6 @@
                     decoration-info="current_status != 'lead'"
                     decoration-danger="state=='new'">
                 
-                    
                 <field name="create_date"/>
                 <field name="portal_name"/>
                 <field name="name"/>
