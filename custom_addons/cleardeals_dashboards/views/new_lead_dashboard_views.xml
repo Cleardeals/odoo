@@ -147,7 +147,7 @@
             <graph string="Workflow Overview" type="bar" stacked="True" sample="1">
                 <field name="lead_create_date_only" interval="day"/>
                 <field name="assigned_rm"/>
-                <field name="cnt_initial_msg" type="measure"/>
+                <field name="__count" type="measure"/>
             </graph>
         </field>
     </record>
