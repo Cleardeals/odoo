@@ -46,7 +46,7 @@ class TestPortalLeadCRUD(PortalLeadTestCase):
         self.assertEqual(lead.property_bhk, '3 BHK')
         self.assertEqual(lead.property_location, 'Test Location')
         self.assertEqual(lead.property_city, 'Test City')
-        self.assertEqual(lead.property_link, 'https://test.com/property/TEST-PROP-001')
+        self.assertEqual(lead.property_link, self.test_property.property_link)
 
     
     def test_05_compute_create_date_only(self):
