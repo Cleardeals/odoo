@@ -51,7 +51,7 @@
                             <div class="text-muted"><field name="assigned_rm_id"/></div>
                             <div t-if="record.next_follow_up_date.raw_value" class="text-muted">
                                 <i class="fa fa-calendar" title="Follow-up Date"/>
-                                <field name="next_follow_up_date"/>
+                                <field name="next_follow_up_date" widget="date"/>
                             </div>
                             <div t-if="record.is_actionable_today.raw_value" class="mt-1">
                                 <span class="badge badge-warning">Action Required</span>
@@ -85,13 +85,16 @@
                 <field name="current_status"/>
                 <field name="project_name"/>
                 <field name="assigned_rm_id"/>
-                <field name="site_visit_scheduled_date"/>
+                
+                <field name="site_visit_scheduled_date" widget="date" options="{'numeric': true}"/>
+                
                 <field name="whatsapp_response_count" string="Responses"/>
                 <field name="is_actionable_today" string="Action Required" 
                        widget="boolean_toggle" 
                        readonly="1"
                        decoration-warning="is_actionable_today == True"/>
-                <field name="write_date" string="Last Updated"/> 
+                
+                <field name="write_date" string="Last Updated" widget="datetime"/> 
             </list>
         </field>
     </record>
@@ -117,9 +120,12 @@
                         </group>
                         <group>
                             <field name="current_status"/>
-                            <field name="next_follow_up_date"/>
+                            
+                            <field name="next_follow_up_date" options="{'numeric': true}"/>
+                            
                             <field name="is_actionable_today" invisible="1"/>
-                            <field name="site_visit_scheduled_date"/>
+                            
+                            <field name="site_visit_scheduled_date" options="{'numeric': true}"/>
                         </group>
                     </group>
                     <notebook>
