@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from odoo import models, fields, api, _
 from datetime import datetime, time
 
@@ -17,8 +18,18 @@ class RenewalTemplateStats(models.Model):
     total_failed = fields.Integer(string="Total Failed", readonly=True)
 
     # --- Computed Rates ---
-    delivery_rate = fields.Float(string="Delivery Rate %", compute="_compute_rates", store=True, group_operator="avg")
-    read_rate = fields.Float(string="Read Rate %", compute="_compute_rates", store=True, group_operator="avg")
+    delivery_rate = fields.Float(
+        string="Delivery Rate %", 
+        compute="_compute_rates", 
+        store=True, 
+        group_operator="avg"
+    )
+    read_rate = fields.Float(
+        string="Read Rate %", 
+        compute="_compute_rates", 
+        store=True, 
+        group_operator="avg"
+    )
 
     _sql_constraints = [
         ('date_template_uniq', 'unique(date, template_name)',
@@ -29,7 +40,7 @@ class RenewalTemplateStats(models.Model):
     def _compute_rates(self):
         """Calculates the delivery and read rates."""
         for record in self:
-            # Fixed Formula: Delivered / Total Sent
+            # Delivery Rate: Delivered / Total Sent
             if record.total_sent > 0:
                 record.delivery_rate = (record.total_delivered / record.total_sent) * 100
             else:

@@ -1,10 +1,11 @@
+# -*- coding: utf-8 -*-
 from odoo import models, fields, api, _
 
 class PropertyLeadSuggestion(models.Model):
     """
-    Inherit the lead.suggestion model to add a stored, related field for RM. THis makes the dashboard grouping faster and easier.
+    Inherit the lead.suggestion model to add a stored, related field for RM.
+    This makes dashboard grouping faster and easier in Odoo 19.
     """
-
     _inherit = 'property.lead.suggestion'
 
     rm_user_id = fields.Many2one(
@@ -14,4 +15,3 @@ class PropertyLeadSuggestion(models.Model):
         readonly=True,
         index=True
     )
-

@@ -1,5 +1,5 @@
+# -*- coding: utf-8 -*-
 from odoo import models, fields, api
-
 
 class RenewalLeadAssignment(models.Model):
     _name = "renewal.lead.assignment"
@@ -16,5 +16,3 @@ class RenewalLeadAssignment(models.Model):
     _sql_constraints = [
         ('assignment_id_uniq', 'unique(assignment_id)', 'This assignment ID already exists.')
     ]
-
-

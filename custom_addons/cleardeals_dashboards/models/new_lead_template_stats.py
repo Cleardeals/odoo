@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from odoo import models, fields, api, _
 
 class NewLeadTemplateStats(models.Model):
@@ -19,17 +20,41 @@ class NewLeadTemplateStats(models.Model):
     # Pending = Sent - (Delivered + Failed)
     total_pending = fields.Integer(string="Total Pending", readonly=True)
     # Stores comma-separated list of phone numbers
-    pending_phone_numbers = fields.Text(string="Pending Numbers", readonly=True, help="Phone numbers that have not yet received a delivery receipt.")
+    pending_phone_numbers = fields.Text(
+        string="Pending Numbers", 
+        readonly=True, 
+        help="Phone numbers that have not yet received a delivery receipt."
+    )
 
     # --- Activity Metrics ---
     total_clicked = fields.Integer(string="Total Clicked", readonly=True) 
     total_replied = fields.Integer(string="Total Replied", readonly=True)
 
     # --- Computed Rates ---
-    delivery_rate = fields.Float(string="Delivery Rate %", compute="_compute_rates", store=True, group_operator="avg")
-    read_rate = fields.Float(string="Read Rate %", compute="_compute_rates", store=True, group_operator="avg")
-    click_rate = fields.Float(string="Click Rate %", compute="_compute_rates", store=True, group_operator="avg")
-    reply_rate = fields.Float(string="Reply Rate %", compute="_compute_rates", store=True, group_operator="avg")
+    delivery_rate = fields.Float(
+        string="Delivery Rate %", 
+        compute="_compute_rates", 
+        store=True, 
+        group_operator="avg"
+    )
+    read_rate = fields.Float(
+        string="Read Rate %", 
+        compute="_compute_rates", 
+        store=True, 
+        group_operator="avg"
+    )
+    click_rate = fields.Float(
+        string="Click Rate %", 
+        compute="_compute_rates", 
+        store=True, 
+        group_operator="avg"
+    )
+    reply_rate = fields.Float(
+        string="Reply Rate %", 
+        compute="_compute_rates", 
+        store=True, 
+        group_operator="avg"
+    )
 
     _sql_constraints = [
         ('date_tmpl_uniq_new', 'unique(date, template_name)',

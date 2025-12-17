@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from odoo import models, fields
 
 class NewLeadEvent(models.Model):
@@ -6,7 +7,13 @@ class NewLeadEvent(models.Model):
     _order = "event_timestamp desc"
 
     # Link back to Dashboard
-    dashboard_id = fields.Many2one('leads.new.dashboard', string="Dashboard Lead", required=True, ondelete='cascade')
+    dashboard_id = fields.Many2one(
+        'leads.new.dashboard', 
+        string="Dashboard Lead", 
+        required=True, 
+        ondelete='cascade',
+        index=True
+    )
     
     event_id = fields.Char(string="Event ID", required=True, index=True)
     correlation_id = fields.Char(string="Correlation ID", index=True) 
@@ -15,7 +22,11 @@ class NewLeadEvent(models.Model):
     event_timestamp = fields.Datetime(string="Timestamp")
     
     event_type = fields.Char(string="Type")
-    message_direction = fields.Selection([('inbound', 'Inbound'), ('outbound', 'Outbound')])
+    message_direction = fields.Selection([
+        ('inbound', 'Inbound'), 
+        ('outbound', 'Outbound')
+    ], string="Direction")
+    
     message_content = fields.Text(string="Content")
     
     # We populate this from BigQuery SQL directly

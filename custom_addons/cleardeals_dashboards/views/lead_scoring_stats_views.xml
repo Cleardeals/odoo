@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
-    <!-- List View -->
     <record id="view_lead_scoring_template_stats_list" model="ir.ui.view">
         <field name="name">lead.scoring.template.stats.list</field>
         <field name="model">lead.scoring.template.stats</field>
@@ -20,7 +19,6 @@
         </field>
     </record>
 
-    <!-- Search View -->
     <record id="view_lead_scoring_template_stats_search" model="ir.ui.view">
         <field name="name">lead.scoring.template.stats.search</field>
         <field name="model">lead.scoring.template.stats</field>
@@ -36,14 +34,12 @@
         </field>
     </record>
 
-    <!-- Pivot View (Added) -->
     <record id="view_lead_scoring_template_stats_pivot" model="ir.ui.view">
         <field name="name">lead.scoring.template.stats.pivot</field>
         <field name="model">lead.scoring.template.stats</field>
         <field name="arch" type="xml">
             <pivot string="Template Performance Pivot">
                 <field name="template_name" type="row"/>
-                <!-- No x-axis by default, as requested previously -->
                 <field name="delivery_rate" type="measure"/>
                 <field name="read_rate" type="measure"/>
                 <field name="click_rate" type="measure"/>
@@ -51,7 +47,6 @@
         </field>
     </record>
 
-    <!-- Graph View (Added) -->
     <record id="view_lead_scoring_template_stats_graph" model="ir.ui.view">
         <field name="name">lead.scoring.template.stats.graph</field>
         <field name="model">lead.scoring.template.stats</field>
@@ -65,7 +60,6 @@
         </field>
     </record>
 
-    <!-- Action Window -->
     <record id="action_lead_scoring_template_stats" model="ir.actions.act_window">
         <field name="name">Lead Scoring Templates</field>
         <field name="res_model">lead.scoring.template.stats</field>

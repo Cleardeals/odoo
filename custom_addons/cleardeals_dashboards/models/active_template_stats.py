@@ -1,9 +1,14 @@
 # -*- coding: utf-8 -*-
-from odoo import models, fields, api, _
-from google.cloud import bigquery
 import logging
+from odoo import models, fields, api, _
 
 _logger = logging.getLogger(__name__)
+
+try:
+    from google.cloud import bigquery
+except ImportError:
+    bigquery = None
+    _logger.warning("google-cloud-bigquery library not found.")
 
 BIGQUERY_PROJECT_ID = 'cleardeals-459513'
 EVENT_LOG_TABLE_ID = "active_to_active.nurture_event_log"
@@ -38,6 +43,10 @@ class ActiveTemplateStats(models.Model):
     @api.model
     def _cron_fetch_active_template_stats(self, days=27):
         """Fetches template performance for Active-to-Active workflow."""
+        if not bigquery:
+            _logger.error("Google Cloud BigQuery library is not installed.")
+            return
+
         _logger.info("Starting Active Template Stats Sync...")
         
         try:
@@ -111,8 +120,14 @@ class ActiveTemplateStats(models.Model):
         count = 0
         Stats = self.sudo()
         
+        # Prefetch likely existing records for performance (Optimization)
+        # We can't fetch everything if the table is huge, but usually stats tables are small (Rows = Days * Templates)
+        existing_recs = Stats.search_read([], ['date', 'template_name'])
+        existing_map = {(r['date'], r['template_name']): r['id'] for r in existing_recs}
+
         for row in results:
-            if not row.template_name: continue
+            if not row.template_name: 
+                continue
             
             vals = {
                 'date': row.sent_date,
@@ -128,16 +143,16 @@ class ActiveTemplateStats(models.Model):
                 'engagement_rate': row.engagement_rate or 0.0
             }
             
-            # Update existing or create new
-            existing = Stats.search([
-                ('date', '=', row.sent_date), 
-                ('template_name', '=', row.template_name)
-            ], limit=1)
-            
-            if existing:
-                existing.write(vals)
+            key = (row.sent_date, row.template_name)
+            record_id = existing_map.get(key)
+
+            if record_id:
+                Stats.browse(record_id).write(vals)
             else:
-                Stats.create(vals)
+                new_rec = Stats.create(vals)
+                # Update map in case duplicate rows come from BQ (unlikely with Group By)
+                existing_map[key] = new_rec.id
+            
             count += 1
             
         _logger.info(f"Active Template Stats Sync Complete. Processed {count} records.")

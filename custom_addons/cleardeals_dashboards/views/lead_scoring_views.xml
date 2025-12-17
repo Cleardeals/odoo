@@ -217,7 +217,7 @@
         <field name="name">Messages Sent</field>
         <field name="res_model">lead.scoring.event</field>
         <field name="view_mode">list,form</field>
-        <field name="domain">[('lead_id', '=', active_id), ('message_direction', '=', 'outbound'), ('event_type', '=', 'status_sent')]</field>
+        <field name="domain">[('lead_id', '=', active_id), ('message_direction', '=', 'outbound')]</field>
         <field name="context">{'default_lead_id': active_id}</field>
         <field name="view_ids" eval="[(5, 0, 0), 
             (0, 0, {'view_mode': 'list', 'view_id': ref('view_lead_scoring_event_list_sent')}), 

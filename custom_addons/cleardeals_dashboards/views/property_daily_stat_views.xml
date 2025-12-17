@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
     
-
     <record id="action_property_performance_dashboard" model="ir.actions.act_window">
         <field name="name">Property Performance</field>
         <field name="res_model">property.daily.stat</field>
@@ -18,18 +17,12 @@
         <field name="model">property.daily.stat</field>
         <field name="arch" type="xml">
             <kanban default_group_by="assignment_status" quick_create="false" class="o_kanban_small_column">
-                <!-- Add fields to be used in aggregates or progress bar -->
                 <field name="assignment_count"/>
                 <field name="assignment_status"/>
                 
-                <!-- This progress bar gives a quick visual -->
                 <progressbar field="assignment_status" colors='{"assigned": "success", "unassigned": "danger"}'/>
                 
                 <templates>
-                    <!-- 
-                      This defines the template for each card.
-                      The log warning about 'kanban-box' is ok, this still works.
-                    -->
                     <t t-name="kanban-box">
                         <div class="oe_kanban_global_click card">
                             <div class="card-body">
@@ -46,7 +39,6 @@
         </field>
     </record>
     
-
     <record id="view_property_daily_stat_pivot" model="ir.ui.view">
         <field name="name">property.daily.stat.pivot</field>
         <field name="model">property.daily.stat</field>
@@ -93,10 +85,7 @@
                 <filter string="Unassigned (0 Leads)" name="unassigned" domain="[('assignment_status', '=', 'unassigned')]"/>
                 <filter string="Assigned (1+ Leads)" name="assigned" domain="[('assignment_status', '=', 'assigned')]"/>
                 <separator/>
-                <!-- 
-                  These date filters will work for the kanban, pivot, graph, and list views.
-                  They now control your KPIs in the kanban view.
-                -->
+                
                 <filter string="Today" name="today" domain="[('date', '=', context_today())]"/>
                 <filter string="This Week" name="this_week" domain="[('date', '&gt;=', (context_today() - relativedelta(weeks=1, weekday=0)).strftime('%Y-%m-%d')), ('date', '&lt;=', (context_today() + relativedelta(weeks=0, weekday=6)).strftime('%Y-%m-%d'))]"/>
                 <filter string="This Month" name="this_month" domain="[('date', '&gt;=', (context_today() - relativedelta(day=1)).strftime('%Y-%m-%d'))]"/>

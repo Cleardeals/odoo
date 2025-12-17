@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
-    <!-- List View -->
     <record id="view_active_template_stats_list" model="ir.ui.view">
         <field name="name">active.template.stats.list</field>
         <field name="model">active.template.stats</field>
@@ -22,7 +21,6 @@
         </field>
     </record>
 
-    <!-- Search View -->
     <record id="view_active_template_stats_search" model="ir.ui.view">
         <field name="name">active.template.stats.search</field>
         <field name="model">active.template.stats</field>
@@ -40,7 +38,6 @@
         </field>
     </record>
 
-    <!-- Pivot View -->
     <record id="view_active_template_stats_pivot" model="ir.ui.view">
         <field name="name">active.template.stats.pivot</field>
         <field name="model">active.template.stats</field>
@@ -54,7 +51,6 @@
         </field>
     </record>
 
-    <!-- Graph View -->
     <record id="view_active_template_stats_graph" model="ir.ui.view">
         <field name="name">active.template.stats.graph</field>
         <field name="model">active.template.stats</field>
@@ -66,7 +62,6 @@
         </field>
     </record>
 
-    <!-- Action -->
     <record id="action_active_template_stats" model="ir.actions.act_window">
         <field name="name">Template Performance</field>
         <field name="res_model">active.template.stats</field>

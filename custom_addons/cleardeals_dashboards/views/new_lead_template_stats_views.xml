@@ -105,9 +105,12 @@
                 
                 <field name="total_sent" type="measure"/>
                 <field name="total_delivered" type="measure"/>
-                <field name="total_pending" type="measure"/> <field name="total_read" type="measure"/>
-                <field name="total_replied" type="measure"/> <field name="total_clicked" type="measure"/>
-                <field name="total_failed" type="measure"/> </pivot>
+                <field name="total_pending" type="measure"/> 
+                <field name="total_read" type="measure"/>
+                <field name="total_replied" type="measure"/> 
+                <field name="total_clicked" type="measure"/>
+                <field name="total_failed" type="measure"/> 
+            </pivot>
         </field>
     </record>
 
