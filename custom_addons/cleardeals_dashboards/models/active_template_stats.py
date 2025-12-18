@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
-import logging
 from odoo import models, fields, api, _
+import logging
 
-_logger = logging.getLogger(__name__)
-
+# [MIGRATION] Safe import for external dependency
 try:
     from google.cloud import bigquery
 except ImportError:
     bigquery = None
-    _logger.warning("google-cloud-bigquery library not found.")
+
+_logger = logging.getLogger(__name__)
 
 BIGQUERY_PROJECT_ID = 'cleardeals-459513'
 EVENT_LOG_TABLE_ID = "active_to_active.nurture_event_log"
@@ -29,22 +29,23 @@ class ActiveTemplateStats(models.Model):
     count_read = fields.Integer(string="Read", readonly=True)
     count_clicked = fields.Integer(string="Clicked", readonly=True)
     
-    # --- Rates (Pre-calculated in BQ) ---
-    delivery_rate = fields.Float(string="Delivery Rate %", readonly=True, group_operator="avg")
-    read_rate = fields.Float(string="Read Rate %", readonly=True, group_operator="avg")
-    click_rate = fields.Float(string="Click Rate %", readonly=True, group_operator="avg")
-    engagement_rate = fields.Float(string="Engagement Rate %", readonly=True, group_operator="avg")
+    # [FIX] Replaced group_operator="avg" with aggregator="avg"
+    delivery_rate = fields.Float(string="Delivery Rate %", readonly=True, aggregator="avg")
+    read_rate = fields.Float(string="Read Rate %", readonly=True, aggregator="avg")
+    click_rate = fields.Float(string="Click Rate %", readonly=True, aggregator="avg")
+    engagement_rate = fields.Float(string="Engagement Rate %", readonly=True, aggregator="avg")
 
-    _sql_constraints = [
-        ('date_template_uniq', 'unique(date, template_name)',
-         'The statistics for this template on this date already exist.')
-    ]
+    # [FIX] Converted to models.UniqueConstraint
+    _date_template_uniq = models.Constraint(
+        'UNIQUE(date, template_name)',
+        message='The statistics for this template on this date already exist.'
+    )
 
     @api.model
     def _cron_fetch_active_template_stats(self, days=27):
         """Fetches template performance for Active-to-Active workflow."""
         if not bigquery:
-            _logger.error("Google Cloud BigQuery library is not installed.")
+            _logger.error("Google Cloud BigQuery library not installed.")
             return
 
         _logger.info("Starting Active Template Stats Sync...")
@@ -120,14 +121,8 @@ class ActiveTemplateStats(models.Model):
         count = 0
         Stats = self.sudo()
         
-        # Prefetch likely existing records for performance (Optimization)
-        # We can't fetch everything if the table is huge, but usually stats tables are small (Rows = Days * Templates)
-        existing_recs = Stats.search_read([], ['date', 'template_name'])
-        existing_map = {(r['date'], r['template_name']): r['id'] for r in existing_recs}
-
         for row in results:
-            if not row.template_name: 
-                continue
+            if not row.template_name: continue
             
             vals = {
                 'date': row.sent_date,
@@ -143,16 +138,16 @@ class ActiveTemplateStats(models.Model):
                 'engagement_rate': row.engagement_rate or 0.0
             }
             
-            key = (row.sent_date, row.template_name)
-            record_id = existing_map.get(key)
-
-            if record_id:
-                Stats.browse(record_id).write(vals)
-            else:
-                new_rec = Stats.create(vals)
-                # Update map in case duplicate rows come from BQ (unlikely with Group By)
-                existing_map[key] = new_rec.id
+            # Update existing or create new
+            existing = Stats.search([
+                ('date', '=', row.sent_date), 
+                ('template_name', '=', row.template_name)
+            ], limit=1)
             
+            if existing:
+                existing.write(vals)
+            else:
+                Stats.create(vals)
             count += 1
             
         _logger.info(f"Active Template Stats Sync Complete. Processed {count} records.")

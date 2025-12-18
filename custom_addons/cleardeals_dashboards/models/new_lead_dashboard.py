@@ -1,25 +1,26 @@
-# -*- coding: utf-8 -*-
-import logging
 from odoo import models, fields, api, _
+import logging
 from datetime import timedelta
+import json
 
-_logger = logging.getLogger(__name__)
-
-# Handle external dependency gracefully
+# [MIGRATION] Safe import for external dependency
 try:
     from google.cloud import bigquery
 except ImportError:
     bigquery = None
-    _logger.warning("google-cloud-bigquery library not found. New Lead Dashboard syncs will fail.")
+
+_logger = logging.getLogger(__name__)
 
 BIGQUERY_PROJECT_ID = 'cleardeals-459513'
 EVENT_LOG_TABLE_ID = "New_Lead_Workflow.lead_event_log"
+
 
 def bq_timestamp_to_odoo(dt):
     """Convert BigQuery timestamp to Odoo datetime (removing timezone info)"""
     if dt is None:
         return False
     return dt.replace(tzinfo=None) if hasattr(dt, 'tzinfo') and dt.tzinfo else dt
+
 
 class NewLeadDashboard(models.Model):
     _name = "leads.new.dashboard"
@@ -35,7 +36,6 @@ class NewLeadDashboard(models.Model):
     lead_phone = fields.Char(related='lead_id.phone', store=True)
     portal_name = fields.Char(related='lead_id.portal_name', store=True)
     assigned_rm = fields.Many2one(related="lead_id.user_id", store=True)
-    
     lead_create_date = fields.Datetime(
         related="lead_id.create_date", 
         store=True, 
@@ -56,7 +56,6 @@ class NewLeadDashboard(models.Model):
     has_replied = fields.Boolean(string="Replied", compute="_compute_metrics", store=True)
     last_event_date = fields.Datetime(string="Last Event", compute="_compute_metrics", store=True)
 
-    # --- Detailed Template Counts ---
     cnt_initial_msg = fields.Integer(string="Sent: Engagement", compute="_compute_metrics", store=True)
     cnt_unassigned_msg = fields.Integer(string="Sent: Unassigned", compute="_compute_metrics", store=True)
     cnt_reply_plan_visit = fields.Integer(string="Reply: Plan Visit", compute="_compute_metrics", store=True)
@@ -69,14 +68,14 @@ class NewLeadDashboard(models.Model):
     # --- Relationship ---
     event_ids = fields.One2many('leads.new.event', 'dashboard_id', string="History")
 
-    _sql_constraints = [
-        ('lead_uniq', 'unique(lead_id)', 'This lead dashboard record already exists.')
-    ]
+    _lead_uniq = models.Constraint(
+        'UNIQUE(lead_id)',
+        message='This lead dashboard record already exists.'
+    )
 
     @api.depends('assigned_rm')
     def _compute_flags(self):
         for rec in self:
-            # Assuming ID 1 is Admin/System or specific unassigned user
             rec.is_unassigned = not rec.assigned_rm or rec.assigned_rm.id == 1
 
     @api.depends('event_ids.template_name', 'event_ids.message_direction', 
@@ -112,11 +111,11 @@ class NewLeadDashboard(models.Model):
     # =============== CRON JOBS ===============
     @api.model
     def _cron_sync_new_leads_dashboard(self):
+        _logger.info('🔄 Starting New Leads Dashboard Sync...')
         if not bigquery:
-            _logger.error("Google Cloud BigQuery library is not installed.")
+            _logger.error("Google Cloud BigQuery library not installed.")
             return
 
-        _logger.info('🔄 Starting New Leads Dashboard Sync...')
         days = 60
         self._sync_leads_from_source(days=days)
         self.fetch_bq_events(days=days)
@@ -134,7 +133,6 @@ class NewLeadDashboard(models.Model):
             
         existing_dash = self.search([('lead_id', 'in', recent_leads.ids)])
         existing_lead_ids = existing_dash.mapped('lead_id.id')
-        
         leads_to_create = [l for l in recent_leads if l.id not in existing_lead_ids]
         
         if leads_to_create:
@@ -143,6 +141,9 @@ class NewLeadDashboard(models.Model):
             _logger.info(f"✅ Added {len(vals_list)} new leads to dashboard.")
         else:
             _logger.info(f"All {len(recent_leads)} leads already exist in dashboard")
+
+
+            
 
     def fetch_bq_events(self, days=5):
         _logger.info(f"Starting Dashboard Sync: Fetching BQ events for the last {days} days...")
@@ -192,22 +193,18 @@ class NewLeadDashboard(models.Model):
         vals_list = []
         
         # Optimization: Fetch all event_ids present in Odoo to save memory
-        # We assume event_id is unique globally
-        # Fetching potentially massive list of existing IDs might be slow if table is huge.
-        # Better approach: check existence per dashboard or handle integrity error.
-        # For now, let's keep your logic but make it safe.
-        
-        results_list = list(results) # Materialize to iterate twice if needed
-        if not results_list: return
+        bq_event_ids = [str(r.event_id) for r in results]
+        if not bq_event_ids: return
 
-        bq_event_ids = [str(r.event_id) for r in results_list]
-        
         # Search existing events to prevent duplicates
-        # Limiting to relevant dashboards could help performance
         existing_records = Event.search([('event_id', 'in', bq_event_ids)])
+        # Create a "Composite Key" set: (dashboard_id, event_id)
         existing_keys = set((r.dashboard_id.id, r.event_id) for r in existing_records)
         
-        for row in results_list:
+        # Reset iterator
+        results = client.query(query).result()
+
+        for row in results:
             raw_bq_phone = str(row.conversation_id)
             if raw_bq_phone.endswith('.0'): raw_bq_phone = raw_bq_phone[:-2]
             clean_bq_phone = ''.join(filter(str.isdigit, raw_bq_phone))[-10:]
@@ -241,14 +238,10 @@ class NewLeadDashboard(models.Model):
     def cron_fetch_template_stats(self, days=7):
         """Fetch template statistics from BigQuery with timezone awareness"""
         _logger.info("📊 Fetching New Lead Template Stats...")
-        try:
-            client = bigquery.Client(project=BIGQUERY_PROJECT_ID)
-        except Exception:
-            return
+        client = bigquery.Client(project=BIGQUERY_PROJECT_ID)
         
         days_int = int(days)
 
-        # ... (Query Logic Remains Same - Standard SQL) ...
         query = f"""
             WITH SentMessages AS (
                 SELECT DISTINCT
@@ -260,7 +253,7 @@ class NewLeadDashboard(models.Model):
                     -- Convert UTC to IST (UTC+5:30) for date calculation
                     DATE(DATETIME(event_timestamp, 'Asia/Kolkata')) AS event_date,
                     event_timestamp AS sent_timestamp,
-                    -- Extract template name
+                    -- Extract template name - raw_template is a JSON string that needs parsing
                     COALESCE(
                         JSON_EXTRACT_SCALAR(
                             JSON_EXTRACT_SCALAR(raw_payload, '$.data.message.raw_template'),
@@ -269,6 +262,7 @@ class NewLeadDashboard(models.Model):
                         'Unknown Template'
                     ) AS template_name
                 FROM `{EVENT_LOG_TABLE_ID}`
+                -- Use IST timezone for the time window calculation
                 WHERE event_timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {days_int} DAY)
                     AND message_direction = 'outbound'
                     AND event_type = 'status_sent'
@@ -312,10 +306,12 @@ class NewLeadDashboard(models.Model):
                     sm.event_date,
                     sm.template_name,
                     sm.msg_id,
-                    sm.conversation_id,
+                    sm.conversation_id,  -- Passed through for Pending list
+                    -- Status flags
                     MAX(CASE WHEN ms.event_type IN ('status_delivered', 'status_read') THEN 1 ELSE 0 END) as is_delivered,
                     MAX(CASE WHEN ms.event_type = 'status_read' THEN 1 ELSE 0 END) as is_read,
                     MAX(CASE WHEN ms.event_type = 'status_failed' THEN 1 ELSE 0 END) as is_failed,
+                    -- Activity flags
                     MAX(CASE WHEN ce.msg_id IS NOT NULL THEN 1 ELSE 0 END) as is_clicked,
                     MAX(CASE WHEN ir.msg_id IS NOT NULL THEN 1 ELSE 0 END) as is_replied
                 FROM FilteredSentMessages sm
@@ -333,7 +329,9 @@ class NewLeadDashboard(models.Model):
                 SUM(is_clicked) AS total_clicked,
                 SUM(is_replied) AS total_replied,
                 SUM(is_failed) AS total_failed,
+                -- Calculate Pending: Not delivered AND Not failed
                 SUM(CASE WHEN is_delivered = 0 AND is_failed = 0 THEN 1 ELSE 0 END) as total_pending,
+                -- Aggregate Phone Numbers for Pending messages
                 STRING_AGG(DISTINCT CASE WHEN is_delivered = 0 AND is_failed = 0 THEN conversation_id END, ', ') as pending_numbers
             FROM AggregatedStats
             GROUP BY 1, 2
@@ -353,6 +351,8 @@ class NewLeadDashboard(models.Model):
         Stats = self.env['leads.new.template.stats'].sudo()
         updated_count = 0
         created_count = 0
+        
+        # Calculate totals for logging
         total_sent_all = 0
         total_pending_all = 0
 
@@ -369,6 +369,7 @@ class NewLeadDashboard(models.Model):
                 'total_clicked': row.total_clicked,
                 'total_replied': row.total_replied,
                 'total_failed': row.total_failed,
+                # New Fields
                 'total_pending': row.total_pending,
                 'pending_phone_numbers': row.pending_numbers or ''
             }

@@ -1,28 +1,29 @@
 # -*- coding: utf-8 -*-
-import logging
-import json
 from odoo import models, fields, api, _
 from odoo.exceptions import UserError
+import logging
+import json
 
-_logger = logging.getLogger(__name__)
-
-# Handle external dependency gracefully
+# [MIGRATION] Safe import for external dependency
 try:
     from google.cloud import bigquery
 except ImportError:
     bigquery = None
-    _logger.warning("google-cloud-bigquery library not found. Renewal Dashboard syncs will fail.")
+
+_logger = logging.getLogger(__name__)
 
 BIGQUERY_PROJECT_ID = 'cleardeals-459513'
 ASSIGNMENT_TABLE_ID = "Property_Matching.Routed_Lead_Assignments"
 EVENT_LOG_TABLE_ID = "Property_Matching.Interakt_Event_Log"
 CUSTOMER_DATA_TABLE_ID = "cleardeals_dataset.Customer_Data"
 
+
 def bq_timestamp_to_odoo(dt):
     """Convert BigQuery aware UTC timestamp -> Odoo naive UTC datetime"""
     if dt is None:
         return False
     return dt.replace(tzinfo=None) if hasattr(dt, 'tzinfo') and dt.tzinfo else dt
+
 
 class RenewalPropertyOwner(models.Model):
     _name = "renewal.property.owner"
@@ -44,10 +45,10 @@ class RenewalPropertyOwner(models.Model):
     total_failures = fields.Integer(string="Total Failures", compute="_compute_metrics", store=True)
     total_not_interested = fields.Integer(string="Total Not Interested", compute="_compute_metrics", store=True)
 
-    # --- Engagement Rates ---
-    delivery_rate = fields.Float(string="Delivery Rate %", compute="_compute_rates", store=True, group_operator="avg")
-    read_rate = fields.Float(string="Read Rate %", compute="_compute_rates", store=True, group_operator="avg")
-    click_rate = fields.Float(string="Click Rate %", compute="_compute_rates", store=True, group_operator="avg")
+   # [FIX] Updated aggregator
+    delivery_rate = fields.Float(string="Delivery Rate %", compute="_compute_rates", store=True, aggregator="avg")
+    read_rate = fields.Float(string="Read Rate %", compute="_compute_rates", store=True, aggregator="avg")
+    click_rate = fields.Float(string="Click Rate %", compute="_compute_rates", store=True, aggregator="avg")
 
     # --- Owner Response Status ---
     overall_status = fields.Selection([
@@ -79,43 +80,39 @@ class RenewalPropertyOwner(models.Model):
     assignment_ids = fields.One2many('renewal.lead.assignment', 'owner_id', string="Lead Assignments")
     event_ids = fields.One2many('renewal.interakt.event', 'owner_id', string="Interakt Events")
 
-    _sql_constraints = [
-        ('property_tag_uniq', 'unique(expired_property_tag)',
-         'This property tag already exists in the campaign.')
-    ]
-    
+    # [FIX] New Odoo 19 Constraint Syntax
+    _property_tag_uniq = models.Constraint(
+        'UNIQUE(expired_property_tag)',
+        message='This property tag already exists in the campaign.'
+    )
     # ==================== COMPUTE METHODS ====================
     
-    @api.depends('assignment_ids', 'event_ids.event_type', 'event_ids.template_name', 
-                 'event_ids.correlation_id', 'event_ids.message_direction', 'event_ids.message_content')
+    @api.depends('assignment_ids', 'event_ids.event_type', 'event_ids.template_name', 'event_ids.correlation_id',
+                 'event_ids.message_direction', 'event_ids.message_content')
     def _compute_metrics(self):
         for owner in self:
             owner.total_leads_sent = len(owner.assignment_ids)
 
-            events = owner.event_ids
-            teaser_events = events.filtered(lambda e: e.template_name == 'daily_lead_teaser')
-            
-            # Using set to count unique correlation_ids (messages)
-            delivered = {e.correlation_id for e in teaser_events if e.event_type == 'status_delivered' and e.correlation_id}
-            read = {e.correlation_id for e in teaser_events if e.event_type == 'status_read' and e.correlation_id}
-            failed = {e.correlation_id for e in teaser_events if e.event_type == 'status_failed' and e.correlation_id}
+            teaser = owner.event_ids.filtered(lambda e: e.template_name == 'daily_lead_teaser')
+            delivered = {c for c in teaser.filtered(lambda e: e.event_type == 'status_delivered').mapped('correlation_id') if c}
+            read = {c for c in teaser.filtered(lambda e: e.event_type == 'status_read').mapped('correlation_id') if c}
+            failed = {c for c in teaser.filtered(lambda e: e.event_type == 'status_failed').mapped('correlation_id') if c}
 
             owner.total_leads_delivered = len(delivered)
             owner.total_leads_read = len(read)
             owner.total_failures = len(failed)
 
-            inbound_clicks = events.filtered(lambda e: e.message_direction == 'inbound' and e.message_content)
+            inbound_clicks = owner.event_ids.filtered(lambda e: e.message_direction == 'inbound' and e.message_content)
             
-            clicks = {e.correlation_id for e in inbound_clicks if 'see lead information' in (e.message_content or '').lower() and e.correlation_id}
+            clicks = {e.correlation_id for e in inbound_clicks.filtered(lambda e: 'see lead information' in (e.message_content or '').lower()) if e.correlation_id}
             owner.total_leads_clicked = len(clicks)
 
-            not_int = {e.correlation_id for e in inbound_clicks if 'not interested' in (e.message_content or '').lower() and e.correlation_id}
+            not_int = {e.correlation_id for e in inbound_clicks.filtered(lambda e: 'not interested' in (e.message_content or '').lower()) if e.correlation_id}
             owner.total_not_interested = len(not_int)
 
-            details_events = events.filtered(
+            details = {c for c in owner.event_ids.filtered(
                 lambda e: e.template_name == 'full_lead_details' and e.event_type in ('status_sent', 'status_delivered', 'status_read')
-            )
-            details = {e.correlation_id for e in details_events if e.correlation_id}
+            ).mapped('correlation_id') if c}
             owner.total_details_shared = len(details)
 
     @api.depends('total_leads_sent', 'total_leads_delivered', 'total_leads_read', 'total_leads_clicked')
@@ -125,8 +122,7 @@ class RenewalPropertyOwner(models.Model):
             owner.read_rate = (owner.total_leads_read / owner.total_leads_delivered * 100) if owner.total_leads_delivered else 0.0
             owner.click_rate = (owner.total_leads_clicked / owner.total_leads_read * 100) if owner.total_leads_read else 0.0
 
-    @api.depends('event_ids.event_timestamp', 'event_ids.event_type', 
-                 'event_ids.message_direction', 'event_ids.message_content')
+    @api.depends('event_ids.event_timestamp', 'event_ids.event_type', 'event_ids.message_direction', 'event_ids.message_content')
     def _compute_last_activity(self):
         for owner in self:
             all_events = owner.event_ids
@@ -156,8 +152,14 @@ class RenewalPropertyOwner(models.Model):
             owner.renewal_request_sent = bool(pitch_events)
             owner.renewal_request_date = max(pitch_events.mapped('event_timestamp'), default=False)
 
-    @api.depends('renewal_response', 'total_not_interested', 'total_leads_clicked', 
-                 'total_leads_read', 'total_leads_delivered', 'total_failures')
+    @api.depends(
+        'renewal_response',
+        'total_not_interested',
+        'total_leads_clicked',
+        'total_leads_read',
+        'total_leads_delivered',
+        'total_failures'
+    )
     def _compute_overall_status(self):
         for owner in self:
             if owner.renewal_response == "renewed":
@@ -187,22 +189,17 @@ class RenewalPropertyOwner(models.Model):
         self.env['renewal.template.stats'].sudo().search([]).unlink()
         self.sudo().search([]).unlink()
         
-        return {
-            'type': 'ir.actions.client', 
-            'tag': 'display_notification',
-            'params': {
-                'title': 'All Data Purged', 
-                'message': 'All renewal dashboard data has been deleted.', 
-                'type': 'danger', 
-                'sticky': True
-            }
-        }
+        return {'type': 'ir.actions.client', 'tag': 'display_notification',
+                'params': {'title': 'All Data Purged', 'message': 'All renewal dashboard data has been deleted.', 'type': 'danger', 'sticky': True}}
 
     def action_full_backfill_renewal_data(self):
         """ONE-TIME: Pull ALL historical data from BigQuery (Unlimited time window)"""
         if not self.env.is_admin():
             raise UserError(_("Only administrators can run full backfill!"))
         
+        if not bigquery:
+            raise UserError(_("Google Cloud BigQuery library not installed."))
+
         _logger.warning("=== FULL RENEWAL BACKFILL STARTED BY %s ===", self.env.user.name)
         
         # 1. Fetch ALL assignments ever
@@ -216,44 +213,33 @@ class RenewalPropertyOwner(models.Model):
         self._cron_fetch_template_stats(full=True)
         
         _logger.warning("=== FULL BACKFILL COMPLETED – %d owners loaded ===", len(owners))
-        return {
-            'type': 'ir.actions.client', 
-            'tag': 'display_notification',
-            'params': {
-                'title': 'Backfill Complete', 
-                'message': f'Full backfill complete! Loaded {len(owners)} owners.', 
-                'type': 'success', 
-                'sticky': True
-            }
-        }
+        return {'type': 'ir.actions.client', 'tag': 'display_notification',
+                'params': {'title': 'Backfill Complete', 'message': f'Full backfill complete! Loaded {len(owners)} owners.', 'type': 'success', 'sticky': True}}
 
     # ==================== DAILY CRON (incremental) ====================
     @api.model
     def _cron_fetch_renewal_data(self):
         """Scheduled action for daily incremental sync."""
+        _logger.info("Daily incremental renewal sync started...")
         if not bigquery:
-            _logger.error("Google Cloud BigQuery library is not installed.")
+            _logger.error("Google Cloud BigQuery library not installed.")
             return
 
-        _logger.info("Daily incremental renewal sync started...")
         self._fetch_assignments_base(full=False, days=30)
         owners = self.sudo().search([]) 
         self._fetch_events_base(owners, full=False, days=30)
         self._cron_fetch_template_stats(full=False, days=30)
         _logger.info("Daily renewal sync completed.")
 
-    # ==================== ASSIGNMENTS ====================
+    # ==================== ASSIGNMENTS (FIXED) ====================
     @api.model
     def _fetch_assignments_base(self, full=False, days=30):
         """Fetches new lead assignments and creates/updates owners and assignments"""
-        try:
-            client = bigquery.Client(project=BIGQUERY_PROJECT_ID)
-        except Exception as e:
-            _logger.error(f"Failed to create BQ client: {e}")
-            return
+        client = bigquery.Client(project=BIGQUERY_PROJECT_ID)
         
         where = "" if full else f"WHERE TIMESTAMP(assignment_timestamp) >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {days} DAY)"
         
+        # FIXED QUERY: Properly handle tags, filter "Not Filled", extract last 10 digits
         query = f"""
             WITH ValidAssignments AS (
               SELECT 
@@ -272,6 +258,7 @@ class RenewalPropertyOwner(models.Model):
               FROM ValidAssignments
               WHERE routed_to_expired_property_tag IS NOT NULL
                 AND routed_to_expired_property_tag != ''
+                -- CRITICAL: Exclude "Not Filled" tags (case insensitive)
                 AND LOWER(canonical_tag) NOT LIKE '%not filled%'
                 AND LOWER(canonical_tag) NOT LIKE '%notfilled%'
             ),
@@ -280,6 +267,7 @@ class RenewalPropertyOwner(models.Model):
                 Tag, 
                 Phone, 
                 Name,
+                Service_Expiry_Date,
                 ROW_NUMBER() OVER(PARTITION BY Tag ORDER BY Service_Expiry_Date DESC) AS rn
               FROM `{CUSTOMER_DATA_TABLE_ID}`
             )
@@ -290,7 +278,9 @@ class RenewalPropertyOwner(models.Model):
               fa.routed_to_expired_property_tag,
               fa.canonical_tag,
               fa.assignment_timestamp,
+              -- Extract last 10 digits from phone (remove +91 prefix and any non-digits)
               RIGHT(REGEXP_REPLACE(cd.Phone, r'[^0-9]', ''), 10) AS owner_phone,
+              -- Clean owner name (remove titles like Mr., Mrs., Dr.)
               TRIM(COALESCE(
                 REGEXP_EXTRACT(cd.Name, r'(?:Mr\\.|Mrs\\.|Dr\\.)\\s*(.+)$'),
                 cd.Name,
@@ -328,13 +318,13 @@ class RenewalPropertyOwner(models.Model):
                     owner = OwnerModel.create({
                         'owner_name': row.owner_name or "Unknown Owner",
                         'owner_phone': row.owner_phone or False, 
-                        'expired_property_tag': row.canonical_tag
+                        'expired_property_tag': row.canonical_tag  # Store canonical tag
                     })
                     owners_created += 1
                 except Exception as e:
                     _logger.error(f"Failed to create RenewalPropertyOwner for tag {row.canonical_tag}: {e}")
-                    # Skip assignment creation if owner creation fails
-                    continue 
+                    self.env.cr.rollback()
+                    continue
             
             # Check if assignment already exists
             exists = AssignmentModel.search_count([('assignment_id', '=', row.assignment_id)])
@@ -350,10 +340,11 @@ class RenewalPropertyOwner(models.Model):
                     assigns_created += 1
                 except Exception as e:
                     _logger.error(f"Failed to create RenewalLeadAssignment {row.assignment_id}: {e}")
+                    self.env.cr.rollback()
         
         _logger.info(f"Assignments sync complete. Created {owners_created} owners, {assigns_created} assignments.")
 
-    # ==================== EVENTS ====================
+    # ==================== EVENTS (FIXED WITH PROPER JSON PARSING) ====================
     @api.model
     def _fetch_events_base(self, owners, full=False, days=30):
         """Fetches Interakt events and updates renewal_response field based on clicks"""
@@ -367,7 +358,7 @@ class RenewalPropertyOwner(models.Model):
                 clean = ''.join(filter(str.isdigit, o.owner_phone))[-10:]
                 if len(clean) == 10:
                     phone_map[clean] = o 
-                
+        
         if not phone_map: 
             _logger.warning("No valid owner phone numbers found to fetch events.")
             return
@@ -375,6 +366,7 @@ class RenewalPropertyOwner(models.Model):
         phones = ", ".join(f"'{p}'" for p in phone_map.keys())
         where_date = "" if full else f"AND ingestion_timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {days} DAY)"
 
+        # FIXED QUERY: Extract template_name using DOUBLE JSON parsing
         query = f"""
             SELECT 
               event_id, 
@@ -387,15 +379,21 @@ class RenewalPropertyOwner(models.Model):
               message_content, 
               failure_reason, 
               raw_payload,
+              -- CRITICAL FIX: Double-parse JSON to extract template name
+              -- First extract the string, then parse that string to get 'name'
               JSON_EXTRACT_SCALAR(
                 JSON_EXTRACT_SCALAR(raw_payload, '$.data.message.raw_template'),
                 '$.name'
               ) AS template_name,
+              -- Also get message ID for better correlation
               JSON_EXTRACT_SCALAR(raw_payload, '$.data.message.id') AS message_id
             FROM `{EVENT_LOG_TABLE_ID}`
             WHERE RIGHT(conversation_id, 10) IN ({phones})
               {where_date}
         """
+        
+        EventModel = self.env['renewal.interakt.event'].sudo()
+        count = 0
         
         _logger.info("Fetching Interakt events (%s mode)...", "full" if full else f"{days} days")
         
@@ -406,9 +404,6 @@ class RenewalPropertyOwner(models.Model):
         except Exception as e:
             _logger.error(f"BigQuery event query failed: {e}")
             return
-        
-        EventModel = self.env['renewal.interakt.event'].sudo()
-        count = 0
         
         for row in results:
             phone10 = str(row.conversation_id)[-10:]
@@ -424,7 +419,7 @@ class RenewalPropertyOwner(models.Model):
                 event = EventModel.create({
                     'owner_id': owner.id,
                     'event_id': row.event_id,
-                    'correlation_id': row.correlation_id or row.message_id,
+                    'correlation_id': row.correlation_id or row.message_id,  # Fallback to message_id
                     'conversation_id': row.conversation_id,
                     'event_timestamp': bq_timestamp_to_odoo(row.event_timestamp),
                     'ingestion_timestamp': bq_timestamp_to_odoo(row.ingestion_timestamp),
@@ -446,6 +441,7 @@ class RenewalPropertyOwner(models.Model):
                 count += 1
             except Exception as e:
                 _logger.error(f"Event create failed for event {row.event_id}: {e}")
+                self.env.cr.rollback()
                 
         _logger.info("Loaded %d new events (%s mode)", count, "full" if full else "incremental")
 
@@ -462,22 +458,31 @@ class RenewalPropertyOwner(models.Model):
         
         where_date = "" if full else f"AND event_timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {days} DAY)"
         
+        # RESTORED YOUR WORKING EXTRACTION LOGIC + FIXED MATH
         stats_query = f"""
             WITH ParsedEvents AS (
                 SELECT
                     DATE(event_timestamp) AS event_date,
+                    
+                    -- RESTORED: Fallback to message.id if correlation_id is missing
                     COALESCE(
                       correlation_id,
                       JSON_EXTRACT_SCALAR(raw_payload, '$.data.message.id')
                     ) AS correlation_id,
+                    
                     event_type,
+                    
+                    -- RESTORED: Your specific double-parsing for stringified JSON templates
                     JSON_EXTRACT_SCALAR(
                         JSON_EXTRACT_SCALAR(raw_payload, '$.data.message.raw_template'),
                         '$.name'
                     ) AS template_name,
+                    
                     JSON_EXTRACT_SCALAR(raw_payload, '$.type') AS payload_type
-                FROM `{EVENT_LOG_TABLE_ID}`
-                WHERE message_direction = 'outbound'
+                FROM
+                    `{EVENT_LOG_TABLE_ID}`
+                WHERE
+                    message_direction = 'outbound'
                     {where_date}
             ),
             SentMessages AS (
@@ -489,20 +494,37 @@ class RenewalPropertyOwner(models.Model):
                 WHERE template_name IS NOT NULL
                   AND template_name != ''
                   AND correlation_id IS NOT NULL
+                  -- RESTORED: Only count initial sends as the denominator
                   AND payload_type = 'message_api_sent'
             )
             SELECT
                 s.event_date AS date,
                 s.template_name,
                 COUNT(DISTINCT s.correlation_id) AS total_sent,
-                COUNT(DISTINCT CASE WHEN e.event_type IN ('status_delivered', 'status_read') THEN e.correlation_id ELSE NULL END) AS total_delivered,
-                COUNT(DISTINCT CASE WHEN e.event_type = 'status_read' THEN e.correlation_id ELSE NULL END) AS total_read,
-                COUNT(DISTINCT CASE WHEN e.event_type = 'status_failed' THEN e.correlation_id ELSE NULL END) AS total_failed
+                
+                -- FIXED MATH: Count as Delivered if 'status_delivered' OR 'status_read' exists
+                -- This fixes the >100% issue by ensuring Reads are included in Delivery count
+                COUNT(DISTINCT CASE 
+                    WHEN e.event_type IN ('status_delivered', 'status_read') THEN e.correlation_id 
+                    ELSE NULL 
+                END) AS total_delivered,
+                
+                COUNT(DISTINCT CASE 
+                    WHEN e.event_type = 'status_read' THEN e.correlation_id 
+                    ELSE NULL 
+                END) AS total_read,
+                
+                COUNT(DISTINCT CASE 
+                    WHEN e.event_type = 'status_failed' THEN e.correlation_id 
+                    ELSE NULL 
+                END) AS total_failed
             FROM SentMessages s
             LEFT JOIN ParsedEvents e
                 ON s.correlation_id = e.correlation_id
-            GROUP BY s.event_date, s.template_name
-            ORDER BY date DESC, template_name
+            GROUP BY
+                s.event_date, s.template_name
+            ORDER BY
+                date DESC, template_name
         """
 
         _logger.info("Fetching template stats from BigQuery...")
@@ -527,10 +549,8 @@ class RenewalPropertyOwner(models.Model):
             }
             try:
                 existing = StatsModel.search([('date', '=', row.date), ('template_name', '=', row.template_name)], limit=1)
-                if existing: 
-                    existing.write(vals)
-                else: 
-                    StatsModel.create(vals)
+                if existing: existing.write(vals)
+                else: StatsModel.create(vals)
                 count += 1
             except Exception as e:
                 _logger.error(f"Error creating/updating RenewalTemplateStats: {e}")

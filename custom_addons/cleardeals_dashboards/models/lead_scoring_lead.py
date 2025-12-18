@@ -1,22 +1,22 @@
 # -*- coding: utf-8 -*-
-import logging
 from odoo import models, fields, api, _
+import logging
+import json
+from datetime import datetime
 
-_logger = logging.getLogger(__name__)
-
-# Handle external dependency gracefully
+# [MIGRATION] Safe import for external dependency
 try:
     from google.cloud import bigquery
 except ImportError:
     bigquery = None
-    _logger.warning("google-cloud-bigquery library not found. Lead Scoring syncs will fail.")
+
+_logger = logging.getLogger(__name__)
 
 BIGQUERY_PROJECT_ID = 'cleardeals-459513'
 EVENT_LOG_TABLE_ID = "lead_scoring.interakt_events"
 LEAD_SOURCE_TABLE_ID = "lead_scoring.daily_scored_leads_final" 
 
 def bq_timestamp_to_odoo(dt):
-    """Helper to strip timezone for Odoo Datetime fields."""
     if dt is None: return False
     return dt.replace(tzinfo=None) if hasattr(dt, 'tzinfo') and dt.tzinfo else dt
 
@@ -37,7 +37,7 @@ class LeadScoringLead(models.Model):
     # --- Workflow Status ---
     workflow_stage = fields.Selection([
         ('ringing', 'Ringing / Busy'),
-        ('detail_shared_of_property_message', 'Details Shared'),
+        ('detail_shared_of_property_message', 'Details Shared'), # UPDATED
         ('site_visit_schedule_reminder', 'Site Visit Today'),
         ('site_visit_schedule_after_visit', 'Site Visit Yesterday'),
         ('other', 'Other')
@@ -60,7 +60,7 @@ class LeadScoringLead(models.Model):
     last_template_today = fields.Char(string="Last Template Sent Today", compute="_compute_today_context")
 
     # =========================================================
-    # GRANULAR TEMPLATE TRACKING
+    # GRANULAR TEMPLATE TRACKING (Updated for New Templates)
     # =========================================================
     
     # 1. Initial Triggers
@@ -90,12 +90,13 @@ class LeadScoringLead(models.Model):
     # --- Relations ---
     event_ids = fields.One2many('lead.scoring.event', 'lead_id', string="History")
 
-    _sql_constraints = [
-        ('lead_phone_uniq', 'unique(lead_phone)', 'This lead already exists in the dashboard.')
-    ]
+    _lead_phone_uniq = models.Constraint(
+        'UNIQUE(lead_phone)',
+        message='This lead already exists in the dashboard.'
+    )
     
+    # Compute logic for Today's Template
     def _compute_today_context(self):
-        """Identifies the last template sent *today*."""
         today_start = fields.Datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
         for lead in self:
             last_event = lead.event_ids.filtered(
@@ -107,18 +108,14 @@ class LeadScoringLead(models.Model):
             else:
                 lead.last_template_today = "None Sent Today"
 
-    @api.depends('event_ids.event_type', 'event_ids.message_direction', 
-                 'event_ids.message_content', 'event_ids.template_name', 
-                 'event_ids.correlation_id')
+    @api.depends('event_ids.event_type', 'event_ids.message_direction', 'event_ids.message_content', 'event_ids.template_name', 'event_ids.correlation_id')
     def _compute_metrics(self):
         for lead in self:
-            events = lead.event_ids
-            
             # 1. Funnel Booleans
-            lead.is_delivered = any(e.event_type in ('status_delivered', 'status_read') for e in events)
-            lead.is_read = any(e.event_type == 'status_read' for e in events)
+            lead.is_delivered = any(e.event_type in ('status_delivered', 'status_read') for e in lead.event_ids)
+            lead.is_read = any(e.event_type == 'status_read' for e in lead.event_ids)
             
-            inbound = events.filtered(lambda e: e.message_direction == 'inbound')
+            inbound = lead.event_ids.filtered(lambda e: e.message_direction == 'inbound')
             lead.has_replied = bool(inbound)
             
             if inbound:
@@ -126,36 +123,31 @@ class LeadScoringLead(models.Model):
             else:
                 lead.last_response = False
 
-            if events:
-                lead.last_activity = max(events.mapped('event_timestamp'))
+            if lead.event_ids:
+                lead.last_activity = max(lead.event_ids.mapped('event_timestamp'))
             else:
                 lead.last_activity = False
 
-            # 2. Smart Button Aggregates
-            # Only count actual sent messages (sent to API)
-            outbound_sent = events.filtered(
+            # 2. Smart Button Aggregates - FIXED: Only count actual sent messages
+            outbound_sent = lead.event_ids.filtered(
                 lambda e: e.message_direction == 'outbound' and e.event_type in ('status_sent', 'message_sent')
             )
             lead.total_outbound = len(set(outbound_sent.mapped('correlation_id')))
             lead.total_inbound = len(inbound)
-            
-            # Failed count
-            lead.total_failed = len(set(events.filtered(
+            lead.total_failed = len(set(lead.event_ids.filtered(
                 lambda e: e.event_type == 'status_failed'
             ).mapped('correlation_id')))
 
-            # 3. Detailed Template Counting
-            outbound_templates = events.filtered(
+            # 3. Detailed Template Counting - FIXED: Only count initial send events
+            outbound = lead.event_ids.filtered(
                 lambda e: e.message_direction == 'outbound' 
                 and e.template_name 
                 and e.event_type in ('status_sent', 'message_sent')
             )
             
-            # Helper to count unique messages by template name
             def count_unique_msgs(name):
-                # Filter in Python (fast for small recordsets per lead)
-                matched = outbound_templates.filtered(lambda e: e.template_name == name)
-                return len(set(matched.mapped('correlation_id')))
+                events = outbound.filtered(lambda e: e.template_name == name)
+                return len(set(events.mapped('correlation_id')))
             
             # Triggers
             lead.cnt_ringing = count_unique_msgs('ringing')
@@ -181,7 +173,7 @@ class LeadScoringLead(models.Model):
             lead.cnt_resp_schedule_now = count_unique_msgs('schedule_visit_now_response')
             lead.cnt_resp_talk_expert = count_unique_msgs('talk_to_a_property_expert_response')
 
-    # ==================== SMART BUTTON ACTIONS ====================
+        # ==================== SMART BUTTON ACTIONS ====================
     
     def action_view_events(self):
         self.ensure_one()
@@ -216,15 +208,15 @@ class LeadScoringLead(models.Model):
             'context': {'default_lead_id': self.id}
         }
 
-    # ==================== CRON JOBS ====================
+    # ==================== CRON JOBS (UPDATED DAYS=5) ====================
 
     @api.model
     def _cron_sync_lead_scoring(self):
-        if not bigquery:
-            _logger.error("Google Cloud BigQuery library is not installed.")
-            return
-            
         _logger.info("Starting Lead Scoring Sync (New Templates)...")
+        if not bigquery:
+            _logger.error("Google Cloud BigQuery library not installed.")
+            return
+
         self._fetch_leads_from_triggers(days=7)
         self._fetch_lead_events(days=7)
         self._cron_fetch_template_stats(days=7)
@@ -232,12 +224,9 @@ class LeadScoringLead(models.Model):
 
     @api.model
     def _fetch_leads_from_triggers(self, days=7):
-        try:
-            client = bigquery.Client(project=BIGQUERY_PROJECT_ID)
-        except Exception as e:
-            _logger.error(f"Failed to create BQ client: {e}")
-            return
+        client = bigquery.Client(project=BIGQUERY_PROJECT_ID)
         
+        # UPDATED TRIGGERS LIST
         templates = [
             'ringing', 
             'detail_shared_of_property_message', 
@@ -289,12 +278,8 @@ class LeadScoringLead(models.Model):
 
         count = 0
         for row in results:
-            # Extract last 10 digits
-            phone_str = str(row.lead_phone)
-            phone_clean = ''.join(filter(str.isdigit, phone_str))[-10:]
-            
+            phone_clean = ''.join(filter(str.isdigit, str(row.lead_phone)))[-10:]
             lead = self.search([('lead_phone', 'like', f'%{phone_clean}')], limit=1)
-            
             vals = {
                 'lead_name': row.lead_name,
                 'assigned_rm': row.assigned_rm,
@@ -312,24 +297,18 @@ class LeadScoringLead(models.Model):
                     self.create(vals)
                     count += 1
                 except Exception:
-                    continue # Skip duplicates or errors
-                    
+                    continue
         _logger.info(f"Synced {count} new leads.")
 
     @api.model
     def _fetch_lead_events(self, days=7):
         leads = self.search([])
         if not leads: return
-        
         phone_map = {}
         for l in leads:
-            if not l.lead_phone: continue
             clean = ''.join(filter(str.isdigit, l.lead_phone))[-10:]
             if len(clean) == 10: phone_map[clean] = l
-            
         if not phone_map: return
-        
-        # BQ requires string literals
         phones_list = ", ".join(f"'{p}'" for p in phone_map.keys())
         
         query = f"""
@@ -348,22 +327,18 @@ class LeadScoringLead(models.Model):
               AND ingestion_timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {days} DAY)
         """
         
+        Event = self.env['lead.scoring.event'].sudo()
         try:
             results = bigquery.Client(project=BIGQUERY_PROJECT_ID).query(query).result()
         except Exception as e:
             _logger.error(f"Event Fetch Error: {e}")
             return
 
-        Event = self.env['lead.scoring.event'].sudo()
-        
         for row in results:
             phone10 = str(row.conversation_id)[-10:]
             lead = phone_map.get(phone10)
             if not lead: continue
-            
-            # Check exist (Consider caching existing event IDs for speed)
-            if Event.search_count([('event_id', '=', row.event_id)]): 
-                continue
+            if Event.search_count([('event_id', '=', row.event_id)]): continue
             
             try:
                 Event.create({
@@ -384,10 +359,7 @@ class LeadScoringLead(models.Model):
     @api.model
     def _cron_fetch_template_stats(self, days=7):
         _logger.info("Fetching Lead Scoring Template Stats...")
-        try:
-            client = bigquery.Client(project=BIGQUERY_PROJECT_ID)
-        except Exception:
-            return
+        client = bigquery.Client(project=BIGQUERY_PROJECT_ID)
         
         query = f"""
             WITH AllEvents AS (

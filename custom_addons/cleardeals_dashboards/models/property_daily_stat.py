@@ -1,16 +1,14 @@
-# -*- coding: utf-8 -*-
-import logging
 from odoo import models, fields, api, _
 from odoo.exceptions import UserError
+import logging
 
-_logger = logging.getLogger(__name__)
-
-# Handle external dependency gracefully
+# [MIGRATION] Safe import for external dependency
 try:
     from google.cloud import bigquery
 except ImportError:
     bigquery = None
-    _logger.warning("google-cloud-bigquery library not found. Property Daily Stats sync will fail.")
+
+_logger = logging.getLogger(__name__)
 
 # CONFIG
 BIGQUERY_PROJECT_ID = "cleardeals-459513"
@@ -46,10 +44,12 @@ class PropertyDailyStat(models.Model):
                 rec.assignment_status = 'unassigned'
             else:
                 rec.assignment_status = 'assigned'
-
-    _sql_constraints = [
-        ('property_date_uniq', 'unique(property_tag, date)', 'Property Tag + Date must be unique.')
-    ]
+    
+    # [FIX] Converted to models.UniqueConstraint
+    _property_date_uniq = models.Constraint(
+        'UNIQUE(property_tag, date)',
+        message='Property Tag + Date must be unique.'
+    )
 
     @api.model
     def _cron_sync_daily_stats(self):
@@ -57,18 +57,20 @@ class PropertyDailyStat(models.Model):
         Syncs property stats from BigQuery.
         Joins the daily eligibility log with daily assignment counts.
         """
-        if not bigquery:
-            _logger.error("Google Cloud BigQuery library is not installed.")
-            return
-
         _logger.info("Starting Property Daily Stat sync from BigQuery...")
         
+        if not bigquery:
+            _logger.error("Google Cloud BigQuery library not installed.")
+            return
+
         try:
             client = bigquery.Client(project=BIGQUERY_PROJECT_ID)
         except Exception as e:
             _logger.error(f"Failed to create BigQuery client: {e}")
             raise UserError(_(f"Failed to authenticate with BigQuery. Check server logs. Error: {e}"))
 
+        # This is the new, powerful query.
+        # It joins the daily log with a daily count of assignments.
         query = f"""
             WITH DailyAssignments AS (
                 -- First, count assignments per property, per day
@@ -111,10 +113,9 @@ class PropertyDailyStat(models.Model):
                 existing = self.search([
                     ('property_tag', '=', row.property_tag),
                     ('date', '=', row.eligible_date)
-                ], limit=1)
-                
+                ])
                 if existing:
-                    existing.write(vals) 
+                    existing.write(vals) # Update count if it changed
                 else:
                     self.create(vals)
                 synced_count += 1
@@ -127,20 +128,16 @@ class PropertyDailyStat(models.Model):
 
     @api.model
     def _get_kpi_total_assignments(self, domain=None):
-        """KPI: Total assignments. Respects the filters from the search view."""
+        """KPI: Total assignments. This KPI respects the filters from the search view."""
         final_domain = domain or []
 
-        # [MIGRATION] Replaced read_group with _read_group in Odoo 19
-        # Though read_group might still work for simple cases, _read_group is preferred.
-        # But for simple aggregation, self.read_group is still safer if you aren't sure about 19.0 breaking changes.
-        # Let's stick to read_group for now as it's backward compatible usually, 
-        # or use search_read if you want strict future-proofing (but slower).
-        
-        # Odoo 18+ syntax for _read_group:
-        result = self._read_group(final_domain, aggregates=['assignment_count:sum'])
-        # result is like [[sum_value]]
-        value = result[0][0] if result else 0
-        
+        read_data = self.read_group(
+            final_domain,
+            ['assignment_count:sum'],
+            []
+        )
+
+        value = read_data[0]['assignment_count'] if read_data else 0
         return {
             'value': f"{value:,.0f}",
             'tooltip': _("Total assignments in the selected period")
@@ -148,12 +145,14 @@ class PropertyDailyStat(models.Model):
     
     @api.model
     def _get_kpi_unassigned_days(self, domain=None):
-        """KPI: Total unassigned properties"""
+        """
+        KPI: Total unassigned properties
+        """
         final_domain = domain or []
         final_domain.extend([('assignment_status', '=', 'unassigned')])
         count = self.search_count(final_domain)
         return {
-            'value': f"{count:,.0f}",
+            'value': f"{count:,.0f}", # Format with commas
             'tooltip': _("Total property-days with 0 assignments in the selected period")
         }
 
@@ -169,6 +168,6 @@ class PropertyDailyStat(models.Model):
             ('assignment_status', '=', 'unassigned')
         ])
         return {
-            'value': f"{count:,.0f}",
+            'value': f"{count:,.0f}", # Format with commas
             'tooltip': _("Total properties with 0 assignments today")
         }

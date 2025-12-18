@@ -5,7 +5,7 @@
         <field name="model">active.template.stats</field>
         <field name="arch" type="xml">
             <list string="Template Performance" create="false" edit="false" delete="true" decoration-danger="delivery_rate &lt; 50">
-                <field name="date"/>
+                <field name="date" options="{'numeric': true}"/>
                 <field name="template_name"/>
                 <field name="total_sent" sum="Total Sent"/>
                 <field name="count_delivered" sum="Delivered"/>
@@ -30,10 +30,9 @@
                 <filter string="Today" name="today" domain="[('date', '=', context_today())]"/>
                 <filter string="Last 7 Days" name="last_7_days" domain="[('date', '&gt;=', (context_today() - relativedelta(days=7)).strftime('%Y-%m-%d'))]"/>
                 
-                <group expand="0" string="Group By">
-                    <filter string="Template" name="group_by_template" context="{'group_by': 'template_name'}"/>
-                    <filter string="Date" name="group_by_date" context="{'group_by': 'date'}"/>
-                </group>
+                <separator/>
+                <filter string="Template" name="group_by_template" context="{'group_by': 'template_name'}"/>
+                <filter string="Date" name="group_by_date" context="{'group_by': 'date'}"/>
             </search>
         </field>
     </record>

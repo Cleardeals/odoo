@@ -6,7 +6,7 @@
         <field name="model">renewal.template.stats</field>
         <field name="arch" type="xml">
             <list string="Template Performance" create="false" edit="false">
-                <field name="date"/>
+                <field name="date" options="{'numeric': true}"/>
                 <field name="template_name"/>
                 <field name="total_sent" sum="Total Sent"/>
                 <field name="total_delivered" sum="Total Delivered"/>
@@ -34,10 +34,10 @@
                 <filter string="Today" name="today" domain="[('date', '=', context_today())]"/>
                 <filter string="This Week" name="this_week" domain="[('date', '&gt;=', (context_today() - relativedelta(weeks=1, weekday=0)).strftime('%Y-%m-%d')), ('date', '&lt;=', (context_today() + relativedelta(weeks=0, weekday=6)).strftime('%Y-%m-%d'))]"/>
                 <filter string="This Month" name="this_month" domain="[('date', '&gt;=', (context_today() - relativedelta(day=1)).strftime('%Y-%m-%d')), ('date', '&lt;=', (context_today() + relativedelta(day=31)).strftime('%Y-%m-%d'))]"/>
-                <group expand="0" string="Group By">
-                    <filter string="Template" name="group_by_template" context="{'group_by': 'template_name'}"/>
-                    <filter string="Date" name="group_by_date" context="{'group_by': 'date'}"/>
-                </group>
+                
+                <separator/>
+                <filter string="Template" name="group_by_template" context="{'group_by': 'template_name'}"/>
+                <filter string="Date" name="group_by_date" context="{'group_by': 'date'}"/>
             </search>
         </field>
     </record>

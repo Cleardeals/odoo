@@ -20,15 +20,14 @@
                 <filter string="Suggested Today" name="today" domain="[('generation_date', '=', context_today())]"/>
                 <filter string="Suggested This Week" name="this_week" domain="[('generation_date', '&gt;=', (context_today() - relativedelta(weeks=1, weekday=0)).strftime('%Y-%m-%d')), ('generation_date', '&lt;=', (context_today() + relativedelta(weeks=0, weekday=6)).strftime('%Y-%m-%d'))]"/>
                 <filter string="Suggested This Month" name="this_month" domain="[('generation_date', '&gt;=', (context_today() - relativedelta(day=1)).strftime('%Y-%m-%d'))]"/>
+                
                 <separator/>
-                <group expand="0" string="Group By">
-                    <filter string="Assigned RM" name="group_by_rm" context="{'group_by': 'rm_user_id'}"/>
-                    <filter string="Property" name="group_by_property" context="{'group_by': 'property_tag'}"/>
-                    <filter string="Status" name="group_by_status" context="{'group_by': 'status'}"/>
-                    <separator/>
-                    <filter string="Generation Date: Day" name="group_by_date_day" context="{'group_by': 'generation_date:day'}"/>
-                    <filter string="Generation Date: Month" name="group_by_date_month" context="{'group_by': 'generation_date:month'}"/>
-                </group>
+                <filter string="Assigned RM" name="group_by_rm" context="{'group_by': 'rm_user_id'}"/>
+                <filter string="Property" name="group_by_property" context="{'group_by': 'property_tag'}"/>
+                <filter string="Status" name="group_by_status" context="{'group_by': 'status'}"/>
+                <separator/>
+                <filter string="Generation Date: Day" name="group_by_date_day" context="{'group_by': 'generation_date:day'}"/>
+                <filter string="Generation Date: Month" name="group_by_date_month" context="{'group_by': 'generation_date:month'}"/>
             </search>
         </field>
     </record>
@@ -61,7 +60,7 @@
         <field name="model">property.lead.suggestion</field>
         <field name="arch" type="xml">
             <list string="Suggestions" create="false" edit="false">
-                <field name="generation_date"/>
+                <field name="generation_date" options="{'numeric': true}"/>
                 <field name="rm_user_id"/>
                 <field name="property_tag"/>
                 <field name="lead_name"/>

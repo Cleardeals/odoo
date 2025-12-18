@@ -12,7 +12,7 @@
                   decoration-warning="overall_status=='engaged'" 
                   decoration-danger="overall_status=='not_interested' or overall_status=='failed'">
                 
-                <field name="last_activity_date" widget="datetime"/>
+                <field name="last_activity_date" widget="datetime" options="{'numeric': true}"/>
                 <field name="owner_name" optional="show"/>
                 <field name="owner_phone" optional="show"/>
                 <field name="expired_property_tag"/>
@@ -81,21 +81,21 @@
                                     <field name="click_rate" widget="progressbar"/>
                                 </group>
                                 <group string="Activity">
-                                    <field name="last_activity_date"/>
-                                    <field name="last_message_sent"/>
-                                    <field name="last_message_read"/>
-                                    <field name="last_button_clicked"/>
+                                    <field name="last_activity_date" options="{'numeric': true}"/>
+                                    <field name="last_message_sent" options="{'numeric': true}"/>
+                                    <field name="last_message_read" options="{'numeric': true}"/>
+                                    <field name="last_button_clicked" options="{'numeric': true}"/>
                                 </group>
                                 <group string="Renewal Pitch">
                                     <field name="renewal_request_sent"/>
-                                    <field name="renewal_request_date"/>
+                                    <field name="renewal_request_date" options="{'numeric': true}"/>
                                 </group>
                             </group>
                         </page>
                         <page string="Lead Assignments (Log)">
                             <field name="assignment_ids" readonly="1">
                                 <list>
-                                    <field name="assignment_timestamp"/>
+                                    <field name="assignment_timestamp" options="{'numeric': true}"/>
                                     <field name="lead_name"/>
                                     <field name="lead_phone"/>
                                     <field name="assignment_id"/>
@@ -105,7 +105,7 @@
                         <page string="Interakt Event (Log)">
                             <field name="event_ids" readonly="1">
                                 <list decoration-info="message_direction=='outbound'" decoration-muted="message_direction=='inbound'">
-                                    <field name="event_timestamp"/>
+                                    <field name="event_timestamp" options="{'numeric': true}"/>
                                     <field name="message_direction"/>
                                     <field name="event_type"/>
                                     <field name="template_name"/>
@@ -154,10 +154,9 @@
                 <filter string="Active (Clicked)" name="active" domain="[('overall_status', '=', 'active')]"/>
                 <filter string="Not Interested" name="not_interested" domain="[('overall_status', '=', 'not_interested')]"/>
                 
-                <group expand="0" string="Group By">
-                    <filter string="Overall Status" name="group_by_status" context="{'group_by': 'overall_status'}"/>
-                    <filter string="Renewal Response" name="group_by_renewal_response" context="{'group_by': 'renewal_response'}"/>
-                </group>
+                <separator/>
+                <filter string="Overall Status" name="group_by_status" context="{'group_by': 'overall_status'}"/>
+                <filter string="Renewal Response" name="group_by_renewal_response" context="{'group_by': 'renewal_response'}"/>
             </search>
         </field>
     </record>

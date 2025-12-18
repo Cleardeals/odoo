@@ -5,15 +5,15 @@
         <field name="model">lead.scoring.lead</field>
         <field name="arch" type="xml">
             <list string="Lead Scoring Workflow" decoration-success="has_replied==True" decoration-info="is_read==True">
-                <field name="last_activity" widget="datetime"/>
+                <field name="last_activity" widget="datetime" options="{'numeric': true}"/>
                 <field name="lead_name"/>
                 <field name="lead_phone"/>
                 <field name="property_tag"/>
                 <field name="workflow_stage" widget="badge" 
-                       decoration-info="workflow_stage=='ringing'" 
-                       decoration-primary="workflow_stage=='detail_shared_of_property_message'"
-                       decoration-success="workflow_stage=='site_visit_schedule_reminder'"
-                       decoration-warning="workflow_stage=='site_visit_schedule_after_visit'"/>
+                        decoration-info="workflow_stage=='ringing'" 
+                        decoration-primary="workflow_stage=='detail_shared_of_property_message'"
+                        decoration-success="workflow_stage=='site_visit_schedule_reminder'"
+                        decoration-warning="workflow_stage=='site_visit_schedule_after_visit'"/>
                 <field name="last_response"/>
                 <field name="is_delivered" widget="boolean_toggle"/>
                 <field name="is_read" widget="boolean_toggle"/>
@@ -51,10 +51,9 @@
                 <filter string="This Month" name="month" 
                         domain="[('last_activity', '&gt;=', context_today().strftime('%Y-%m-01'))]"/>
                 
-                <group expand="0" string="Group By">
-                    <filter string="Workflow Stage" name="group_by_stage" context="{'group_by': 'workflow_stage'}"/>
-                    <filter string="Date" name="group_by_date" context="{'group_by': 'last_activity:day'}"/>
-                </group>
+                <separator/>
+                <filter string="Workflow Stage" name="group_by_stage" context="{'group_by': 'workflow_stage'}"/>
+                <filter string="Date" name="group_by_date" context="{'group_by': 'last_activity:day'}"/>
             </search>
         </field>
     </record>
@@ -160,7 +159,7 @@
                         <page string="Raw Event History">
                             <field name="event_ids" readonly="1">
                                 <list default_order="event_timestamp desc">
-                                    <field name="event_timestamp"/>
+                                    <field name="event_timestamp" options="{'numeric': true}"/>
                                     <field name="message_direction" widget="badge" decoration-info="event_type == 'status_read'" decoration-success="event_type == 'inbound_message'" decoration-danger="event_type == 'status_failed'"/>
                                     <field name="event_type" widget="badge" decoration-info="event_type == 'status_read'" decoration-success="event_type == 'inbound_message'" decoration-danger="event_type == 'status_failed'"/>
                                     <field name="template_name"/>
@@ -181,7 +180,7 @@
         <field name="arch" type="xml">
             <list default_order="event_timestamp desc" create="false" edit="false" delete="false"
                   decoration-warning="final_status == 'delivered'" decoration-info="final_status == 'sent'">
-                <field name="event_timestamp" string="Sent At"/>
+                <field name="event_timestamp" string="Sent At" options="{'numeric': true}"/>
                 <field name="template_name" string="Template"/>
                 <field name="final_status" widget="badge"/>
                 <field name="message_content" optional="show"/>
@@ -194,7 +193,7 @@
         <field name="model">lead.scoring.event</field>
         <field name="arch" type="xml">
             <list default_order="event_timestamp desc" create="false" edit="false" delete="false" decoration-success="message_direction=='inbound'">
-                <field name="event_timestamp" string="Received At"/>
+                <field name="event_timestamp" string="Received At" options="{'numeric': true}"/>
                 <field name="message_content" string="Customer Reply"/>
                 <field name="template_name" string="Context (Last Template)"/>
             </list>
@@ -206,7 +205,7 @@
         <field name="model">lead.scoring.event</field>
         <field name="arch" type="xml">
             <list default_order="event_timestamp desc" create="false" edit="false" delete="false" decoration-danger="event_type=='status_failed'">
-                <field name="event_timestamp" string="Time"/>
+                <field name="event_timestamp" string="Time" options="{'numeric': true}"/>
                 <field name="template_name"/>
                 <field name="failure_reason"/>
             </list>
@@ -217,7 +216,7 @@
         <field name="name">Messages Sent</field>
         <field name="res_model">lead.scoring.event</field>
         <field name="view_mode">list,form</field>
-        <field name="domain">[('lead_id', '=', active_id), ('message_direction', '=', 'outbound')]</field>
+        <field name="domain">[('lead_id', '=', active_id), ('message_direction', '=', 'outbound'), ('event_type', '=', 'status_sent')]</field>
         <field name="context">{'default_lead_id': active_id}</field>
         <field name="view_ids" eval="[(5, 0, 0), 
             (0, 0, {'view_mode': 'list', 'view_id': ref('view_lead_scoring_event_list_sent')}), 

@@ -6,7 +6,7 @@
         <field name="model">leads.new.template.stats</field>
         <field name="arch" type="xml">
             <list string="New Lead Template Stats" create="false" edit="false">
-                <field name="date"/>
+                <field name="date" options="{'numeric': true}"/>
                 <field name="template_name"/>
                 
                 <field name="total_sent" sum="Total Sent"/>
@@ -88,10 +88,9 @@
                 <separator/>
                 <filter string="Has Pending" name="has_pending" domain="[('total_pending', '&gt;', 0)]"/>
                 
-                <group expand="0" string="Group By">
-                    <filter string="Template" name="group_by_template" context="{'group_by': 'template_name'}"/>
-                    <filter string="Date" name="group_by_date" context="{'group_by': 'date:day'}"/>
-                </group>
+                <separator/>
+                <filter string="Template" name="group_by_template" context="{'group_by': 'template_name'}"/>
+                <filter string="Date" name="group_by_date" context="{'group_by': 'date:day'}"/>
             </search>
         </field>
     </record>

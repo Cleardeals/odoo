@@ -46,6 +46,8 @@
         groups="cleardeals_dashboards.group_dashboard_manager"
         sequence="2"/>
 
+    
+        
     <menuitem
         id="menu_renewal_dashboard_root"
         name="Renewal Campaign"
@@ -91,6 +93,7 @@
         action="action_lead_scoring_template_stats"
         groups="cleardeals_dashboards.group_dashboard_manager"
         sequence="2"/>
+
 
     <menuitem
         id="menu_new_leads_root"

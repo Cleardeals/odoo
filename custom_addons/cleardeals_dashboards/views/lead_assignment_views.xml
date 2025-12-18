@@ -10,7 +10,7 @@
                 <field name="lead_phone"/>
                 <field name="assigned_property_tag"/>
                 <field name="original_property_tag"/>
-                <field name="assignment_date"/>
+                <field name="assignment_date" options="{'numeric': true}"/>
             </list>
         </field>
     </record>
@@ -30,18 +30,17 @@
                 <filter string="This Month" name="this_month" domain="[('assignment_date', '&gt;=', (context_today() - relativedelta(day=1)).strftime('%Y-%m-%d')), ('assignment_date', '&lt;=', (context_today() + relativedelta(day=31)).strftime('%Y-%m-%d'))]"/>
                 <filter string="This Quarter" name="this_quarter" domain="[('assignment_date', '&gt;=', (context_today() - relativedelta(months=(context_today().month-1)%3, day=1)).strftime('%Y-%m-%d')), ('assignment_date', '&lt;=', (context_today() + relativedelta(months=(2-((context_today().month-1)%3)), day=31)).strftime('%Y-%m-%d'))]"/>
                 <filter string="This Year" name="this_year" domain="[('assignment_date', '&gt;=', (context_today() - relativedelta(month=1, day=1)).strftime('%Y-%m-%d')), ('assignment_date', '&lt;=', (context_today() + relativedelta(month=12, day=31)).strftime('%Y-%m-%d'))]"/>
+                
                 <separator/>
-                <group expand="0" string="Group By">
-                    <filter string="Lead Name" name="group_by_lead" context="{'group_by': 'lead_name'}"/>
-                    <filter string="Assigned Property" name="group_by_assigned_property" context="{'group_by': 'assigned_property_tag'}"/>
-                    <filter string="Original Property" name="group_by_original_property" context="{'group_by': 'original_property_tag'}"/>
-                    <separator/>
-                    <filter string="Assignment Date: Day" name="group_by_assignment_date_day" context="{'group_by': 'assignment_date:day'}"/>
-                    <filter string="Assignment Date: Month" name="group_by_assignment_date_month" context="{'group_by': 'assignment_date:month'}"/>
-                    <filter string="Assignment Date: Year" name="group_by_assignment_date_year" context="{'group_by': 'assignment_date:year'}"/>
-                </group>
+                <filter string="Lead Name" name="group_by_lead" context="{'group_by': 'lead_name'}"/>
+                <filter string="Assigned Property" name="group_by_assigned_property" context="{'group_by': 'assigned_property_tag'}"/>
+                <filter string="Original Property" name="group_by_original_property" context="{'group_by': 'original_property_tag'}"/>
+                <separator/>
+                <filter string="Assignment Date: Day" name="group_by_assignment_date_day" context="{'group_by': 'assignment_date:day'}"/>
+                <filter string="Assignment Date: Month" name="group_by_assignment_date_month" context="{'group_by': 'assignment_date:month'}"/>
+                <filter string="Assignment Date: Year" name="group_by_assignment_date_year" context="{'group_by': 'assignment_date:year'}"/>
             </search>
-        </field>     
+        </field>      
     </record>
 
     <record id="view_active_lead_assignment_graph" model="ir.ui.view">
