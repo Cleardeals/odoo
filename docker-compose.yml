@@ -1,0 +1,76 @@
+version: '3.8'
+services:
+  # 1. The Traefik Reverse Proxy
+  traefik:
+    image: traefik:v2.10
+    container_name: traefik
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+      - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
+      - "--certificatesresolvers.myresolver.acme.email=cdgcphub@gmail.com"
+      - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8080:8080"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "./letsencrypt:/letsencrypt"
+    networks:
+      - web
+    restart: unless-stopped
+
+  # 2. Your Database Service
+  db:
+    image: postgres:17
+    environment:
+      - POSTGRES_DB=postgres
+      - POSTGRES_PASSWORD=odoo
+      - POSTGRES_USER=odoo
+    volumes:
+      - ./odoo-db-data:/var/lib/postgresql/data
+    networks:
+      - web
+    restart: unless-stopped
+
+  # 3. Your Odoo 19 Service
+  odoo:
+    build: .
+    depends_on:
+      - db
+    volumes:
+      # CHANGED: Mapping single config file from root to the default Odoo location
+      - ./odoo.conf:/etc/odoo/odoo.conf
+      - ./odoo-web-data:/var/lib/odoo
+      - ./custom_addons:/mnt/extra-addons/custom
+    networks:
+      - web
+    environment:
+      - ODOO_PROXY=True
+      - WEB_BASE_URL=https://odoo.cleardeals.xyz
+    labels:
+      - "traefik.enable=true"
+      # --- Main Odoo Router ---
+      # Ensure DNS for this domain points to the NEW VM IP
+      - "traefik.http.routers.odoo.rule=Host(`odoo.cleardeals.xyz`)"
+      - "traefik.http.routers.odoo.entrypoints=websecure"
+      - "traefik.http.routers.odoo.tls.certresolver=myresolver"
+      - "traefik.http.routers.odoo.service=odoo-service"
+      - "traefik.http.services.odoo-service.loadbalancer.server.port=8069"
+      # --- Longpolling Router ---
+      - "traefik.http.routers.odoo-chat.rule=Host(`odoo.cleardeals.xyz`) && PathPrefix(`/longpolling`)"
+      - "traefik.http.routers.odoo-chat.entrypoints=websecure"
+      - "traefik.http.routers.odoo-chat.tls.certresolver=myresolver"
+      - "traefik.http.routers.odoo-chat.service=odoo-chat-service"
+      - "traefik.http.services.odoo-chat-service.loadbalancer.server.port=8072"
+    restart: unless-stopped
+
+networks:
+  web:
+    driver: bridge

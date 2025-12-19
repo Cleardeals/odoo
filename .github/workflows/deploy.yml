@@ -1,0 +1,51 @@
+name: Deploy Odoo 19 to New VM
+
+on:
+  push:
+    branches:
+      - '19.0'  # Changed: Triggers only on '19.0' branch
+
+jobs:
+  deploy:
+    name: Deploy to Odoo 19 VM
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH into VM and deploy
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          # Make sure these secrets point to your NEW Odoo 19 VM
+          host: ${{ secrets.VM_IP }} 
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
+          timeout: 120s
+          command_timeout: 15m
+          debug: true
+          script: |
+            set -e
+            echo "Connected as $(whoami)"
+            
+            # Ensure folder exists
+            mkdir -p ~/odoo-project
+            cd ~/odoo-project
+            
+            # Initialize repo if empty, otherwise pull
+            if [ ! -d ".git" ]; then
+              echo ">>> Cloning repo for the first time..."
+              git clone -b 19.0 https://github.com/Cleardeals/odoo.git .
+            else
+              echo ">>> Pulling latest changes from branch 19.0..."
+              git fetch origin 19.0
+              git reset --hard origin/19.0
+            fi
+            
+            echo ">>> Rebuilding Odoo 19 image..."
+            docker-compose build odoo
+            
+            echo ">>> Restarting the Odoo Service..."
+            docker-compose up -d --force-recreate odoo
+            
+            echo ">>> Pruning unused Docker objects..."
+            docker system prune -f
+            
+            echo ">>> Deployment Finished Successfully!"
