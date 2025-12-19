@@ -33,7 +33,7 @@ class PropertyLeadSuggestion(models.Model):
         string="Property Tag"
     )
     
-    suggested_lead_phone = fields.Char(string="Lead Phone", readonly=True, required=True)
+    suggested_lead_phone = fields.Char(string="Lead Phone", required=True)
     
     suggested_lead_phone_whatsapp_url = fields.Char(
         string="WhatsApp URL",
@@ -48,19 +48,18 @@ class PropertyLeadSuggestion(models.Model):
         store=False
     )
     
-    lead_name = fields.Char(string="Lead Name", readonly=True)
+    lead_name = fields.Char(string="Lead Name")
 
-    original_property_tag = fields.Char(string="Original Property", readonly=True)
+    original_property_tag = fields.Char(string="Original Property")
     original_property_similarity = fields.Float(
         string="Similarity (%)",
         digits=(16, 2),
-        readonly=True,
         aggregator="avg"  
     )
-    contact_type = fields.Char(string="Lead's Current Status", readonly=True)
+    contact_type = fields.Char(string="Lead's Current Status")
 
     # --- Date Fields ---
-    generation_date = fields.Date(string="Suggested On", readonly=True, default=fields.Date.context_today)
+    generation_date = fields.Date(string="Suggested On", default=fields.Date.context_today)
 
     # [FIX] Computed Display Field for strict DD/MM/YYYY format
     generation_date_display = fields.Char(

@@ -11,6 +11,8 @@ class LeadScore(models.Model):
     assigned_rm_id = fields.Many2one('res.users', string='Assigned RM')
     standardized_phone = fields.Char(string = 'Phone')
 
+    x_migrated_write_date = fields.Datetime(string="Migration Update Timestamp")
+
     # Scoring Information
     predicted_score = fields.Float(string='Predicted Score')
     #current_status = fields.Char(string='Current Status (Stage in Funnel)')

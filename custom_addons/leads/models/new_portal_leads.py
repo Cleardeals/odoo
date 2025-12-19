@@ -155,6 +155,8 @@ class NewPortalLead(models.Model):
         help="Includes both the primary and recommended properties."
     )
 
+    x_migrated_date = fields.Datetime(string="Migration Date Temp")
+
     create_date_only = fields.Date(
         string="Creation Date",
         compute='_compute_create_date_only',

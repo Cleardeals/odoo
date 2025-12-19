@@ -23,5 +23,12 @@
         action="action_property_inventory_manager"
         groups="group_property_prospector_manager"
         sequence="20"/>
+
+    <menuitem
+        id="menu_export_suggestions_data"
+        name="Export Suggestions Data"
+        parent="menu_rm_prospector_root"
+        action="action_export_suggestions_data"
+        sequence="50"/>
 </odoo>
 
