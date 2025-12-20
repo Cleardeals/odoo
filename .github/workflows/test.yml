@@ -23,7 +23,7 @@ jobs:
           - 5432:5432
         # Health check ensures DB is ready before Odoo starts
         options: >-
-          --health-cmd "pg_isready -U odoo -d odoo_test_db"
+          --health-cmd "pg_isready -U odoo"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -35,11 +35,22 @@ jobs:
       - name: Build Odoo Docker Image
         run: docker build -t my-odoo-image .
       
+      - name: List repository structure
+        run: |
+          echo "Repository structure:"
+          ls -la ${{ github.workspace }}
+          echo "---"
+          echo "Custom addons directory:"
+          ls -la ${{ github.workspace }}/custom_addons/ || echo "custom_addons not found"
+          echo "---"
+          echo "Looking for module manifests:"
+          find ${{ github.workspace }}/custom_addons -name "__manifest__.py" -o -name "__openerp__.py" || echo "No manifests found"
+      
       - name: Run Odoo Tests
         run: |
           docker run --rm \
             --network host \
-            -v ${{ github.workspace }}:/mnt/extra-addons \
+            -v ${{ github.workspace }}/custom_addons:/mnt/extra-addons \
             -e HOST=localhost \
             -e PORT=5432 \
             -e USER=odoo \
@@ -53,6 +64,5 @@ jobs:
             --addons-path=/mnt/extra-addons,/usr/lib/python3/dist-packages/odoo/addons \
             -i leads,lead_suggestor,cleardeals_dashboards \
             --test-enable \
-            --test-tags /leads,/lead_suggestor,/cleardeals_dashboards \
             --stop-after-init \
             --log-level=test
