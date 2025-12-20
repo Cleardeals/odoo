@@ -23,7 +23,7 @@ jobs:
           - 5432:5432
         # Health check ensures DB is ready before Odoo starts
         options: >-
-          --health-cmd "pg_isready -U odoo"
+          --health-cmd "pg_isready -U odoo -d odoo_test_db"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
