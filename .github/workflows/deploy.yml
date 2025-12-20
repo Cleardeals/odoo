@@ -23,16 +23,23 @@ jobs:
           port: 22
           timeout: 120s
           command_timeout: 15m
-          debug: true
           script: |
             set -e
-            echo ">>> Connected as $(whoami)"
+            echo "Connected as $(whoami)"
             
-            # --- 1. SSH Configuration (The "Key" to Success) ---
+            # Quick VM diagnostics
+            echo ">>> SSH dir permissions: $(ls -ld ~/.ssh)"
+            echo ">>> SSH key permissions: $(ls -la ~/.ssh/id_ed25519*)"
+            echo ">>> Timeout available: $(which timeout)"
+            echo ">>> Testing SSH auth in script..."
+            if ssh -T git@github.com 2>&1 | grep -q "successfully authenticated"; then
+              echo ">>> SSH auth: Success!"
+            else
+              echo ">>> SSH auth: Failed - check output above"
+            fi
+            
+            # Ensure SSH config prioritizes the ed25519 key (idempotent)
             mkdir -p ~/.ssh
-            chmod 700 ~/.ssh
-            
-            # Create a config file that tells Git EXACTLY how to talk to GitHub
             cat > ~/.ssh/config << EOF
             Host github.com
               HostName github.com
@@ -40,41 +47,37 @@ jobs:
               IdentityFile ~/.ssh/id_ed25519
               IdentitiesOnly yes
               StrictHostKeyChecking no
-              LogLevel ERROR
+              LogLevel VERBOSE
             EOF
-            chmod 600 ~/.ssh/config
+            chmod 700 ~/.ssh
+            chmod 600 ~/.ssh/config ~/.ssh/id_ed25519
             
-            # Ensure the key we want to use has the right permissions
-            chmod 600 ~/.ssh/id_ed25519
-            
-            # Add to agent just in case
+            # Load agent explicitly (fallback, suppresses output)
             eval "$(ssh-agent -s)" > /dev/null
-            ssh-add ~/.ssh/id_ed25519 > /dev/null 2>&1 || echo ">>> Key add warning (ignoring)"
+            ssh-add ~/.ssh/id_ed25519 > /dev/null 2>&1 || echo ">>> Key add warning (may not need agent)"
             
-            # --- 2. Project Setup ---
+            # Ensure folder exists
             mkdir -p ~/odoo-project
             cd ~/odoo-project
             
-            # --- 3. Git Operations ---
+            # Initialize repo if empty, otherwise pull (with verbose & timeout, bash-forced)
             if [ ! -d ".git" ]; then
               echo ">>> Cloning repo for the first time..."
-              # We don't need GIT_SSH_COMMAND because ~/.ssh/config handles it now!
-              git clone -b 19.0 git@github.com:Cleardeals/odoo.git .
+              bash -c 'timeout 120 GIT_SSH_COMMAND="ssh -vvv" git clone -b 19.0 git@github.com:Cleardeals/odoo.git .' || (echo ">>> Clone timed out/failed - check SSH verbose logs above"; exit 1)
             else
               echo ">>> Pulling latest changes from branch 19.0..."
               git remote set-url origin git@github.com:Cleardeals/odoo.git
-              git fetch origin 19.0
+              bash -c 'timeout 120 GIT_SSH_COMMAND="ssh -vvv" git fetch origin 19.0' || (echo ">>> Fetch timed out/failed - check SSH verbose logs above"; exit 1)
               git reset --hard origin/19.0
             fi
             
-            # --- 4. Docker Operations ---
             echo ">>> Rebuilding Odoo 19 image..."
-            sudo docker compose build odoo
+            docker compose build odoo
             
             echo ">>> Restarting the Odoo Service..."
-            sudo docker compose up -d --force-recreate odoo
+            docker compose up -d --force-recreate odoo
             
             echo ">>> Pruning unused Docker objects..."
-            sudo docker system prune -f
+            docker system prune -f
             
             echo ">>> Deployment Finished Successfully!"
