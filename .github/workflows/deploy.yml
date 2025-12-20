@@ -29,18 +29,42 @@ jobs:
             set -e
             echo "Connected as $(whoami)"
             
+            # Quick VM diagnostics
+            echo ">>> SSH dir permissions: $(ls -ld ~/.ssh)"
+            echo ">>> SSH key permissions: $(ls -la ~/.ssh/id_ed25519*)"
+            echo ">>> Testing SSH auth in script..."
+            ssh -T git@github.com || echo "SSH test failed in script"
+            
+            # Ensure SSH config prioritizes the ed25519 key (idempotent)
+            mkdir -p ~/.ssh
+            cat > ~/.ssh/config << EOF
+            Host github.com
+              HostName github.com
+              User git
+              IdentityFile ~/.ssh/id_ed25519
+              IdentitiesOnly yes
+              StrictHostKeyChecking no
+              LogLevel VERBOSE
+            EOF
+            chmod 700 ~/.ssh
+            chmod 600 ~/.ssh/config ~/.ssh/id_ed25519
+            
+            # Load agent explicitly (fallback)
+            eval "$(ssh-agent -s)" > /dev/null
+            ssh-add ~/.ssh/id_ed25519 > /dev/null 2>&1 || echo ">>> Key add warning (may not need agent)"
+            
             # Ensure folder exists
             mkdir -p ~/odoo-project
             cd ~/odoo-project
             
-            # Initialize repo if empty, otherwise pull
+            # Initialize repo if empty, otherwise pull (with verbose & timeout)
             if [ ! -d ".git" ]; then
               echo ">>> Cloning repo for the first time..."
-              git clone -b 19.0 git@github.com:Cleardeals/odoo.git .
+              timeout 120 GIT_SSH_COMMAND="ssh -vvv" git clone -b 19.0 git@github.com:Cleardeals/odoo.git . || (echo ">>> Clone timed out/failed - check logs"; exit 1)
             else
               echo ">>> Pulling latest changes from branch 19.0..."
               git remote set-url origin git@github.com:Cleardeals/odoo.git
-              git fetch origin 19.0
+              timeout 120 GIT_SSH_COMMAND="ssh -vvv" git fetch origin 19.0 || (echo ">>> Fetch timed out/failed"; exit 1)
               git reset --hard origin/19.0
             fi
             
