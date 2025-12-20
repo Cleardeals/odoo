@@ -12,6 +12,7 @@ jobs:
   deploy:
     name: Deploy to Odoo 19 VM
     runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
       - name: SSH into VM and deploy
         uses: appleboy/ssh-action@v1.0.3
@@ -35,9 +36,10 @@ jobs:
             # Initialize repo if empty, otherwise pull
             if [ ! -d ".git" ]; then
               echo ">>> Cloning repo for the first time..."
-              git clone -b 19.0 https://github.com/Cleardeals/odoo.git .
+              git clone -b 19.0 git@github.com:Cleardeals/odoo.git .
             else
               echo ">>> Pulling latest changes from branch 19.0..."
+              git remote set-url origin git@github.com:Cleardeals/odoo.git
               git fetch origin 19.0
               git reset --hard origin/19.0
             fi
