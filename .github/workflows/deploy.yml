@@ -14,81 +14,29 @@ jobs:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     
     steps:
-      - name: SSH into VM and deploy
+      - name: Deploy to VM
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VM_IP }} 
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: 22
-          timeout: 120s
-          command_timeout: 15m
+          command_timeout: 30m
           script: |
             set -e
-            echo "Connected as $(whoami)"
+            cd ~/odoo-project || mkdir -p ~/odoo-project && cd ~/odoo-project
             
-            # Quick VM diagnostics
-            echo ">>> SSH dir permissions: $(ls -ld ~/.ssh)"
-            echo ">>> SSH key permissions: $(ls -la ~/.ssh/id_ed25519* 2>/dev/null || echo 'No ed25519 keys found')"
-            echo ">>> Timeout available: $(which timeout)"
-            echo ">>> Testing SSH auth in script..."
-            if ssh -T git@github.com 2>&1 | grep -q "successfully authenticated"; then
-              echo ">>> SSH auth: Success!"
-            else
-              echo ">>> SSH auth: Failed - check output above"
-            fi
-            
-            # Ensure SSH config prioritizes the ed25519 key (idempotent)
-            mkdir -p ~/.ssh
-            cat > ~/.ssh/config << 'EOF'
-            Host github.com
-              HostName github.com
-              User git
-              IdentityFile ~/.ssh/id_ed25519
-              IdentitiesOnly yes
-              StrictHostKeyChecking no
-              LogLevel ERROR
-            EOF
-            chmod 700 ~/.ssh
-            chmod 600 ~/.ssh/config
-            [ -f ~/.ssh/id_ed25519 ] && chmod 600 ~/.ssh/id_ed25519
-            
-            # Load agent explicitly (fallback, suppresses output)
-            eval "$(ssh-agent -s)" > /dev/null
-            [ -f ~/.ssh/id_ed25519 ] && ssh-add ~/.ssh/id_ed25519 > /dev/null 2>&1 || echo ">>> Key add warning (may not need agent)"
-            
-            # Ensure folder exists
-            mkdir -p ~/odoo-project
-            cd ~/odoo-project
-            
-            # Initialize repo if empty, otherwise pull (with verbose & timeout)
+            # Clone or update repo
             if [ ! -d ".git" ]; then
-              echo ">>> Cloning repo for the first time..."
-              # Set environment variable properly, then run git command with timeout
-              export GIT_SSH_COMMAND="ssh -vvv"
-              timeout 120 git clone -b 19.0 git@github.com:Cleardeals/odoo.git . || {
-                echo ">>> Clone timed out/failed - check SSH verbose logs above"
-                exit 1
-              }
+              git clone -b 19.0 git@github.com:Cleardeals/odoo.git .
             else
-              echo ">>> Pulling latest changes from branch 19.0..."
-              git remote set-url origin git@github.com:Cleardeals/odoo.git
-              # Set environment variable properly, then run git command with timeout
-              export GIT_SSH_COMMAND="ssh -vvv"
-              timeout 120 git fetch origin 19.0 || {
-                echo ">>> Fetch timed out/failed - check SSH verbose logs above"
-                exit 1
-              }
+              git fetch origin 19.0
               git reset --hard origin/19.0
             fi
             
-            echo ">>> Rebuilding Odoo 19 image..."
+            # Rebuild and restart
             docker compose build odoo
-            
-            echo ">>> Restarting the Odoo Service..."
             docker compose up -d --force-recreate odoo
-            
-            echo ">>> Pruning unused Docker objects..."
             docker system prune -f
             
-            echo ">>> Deployment Finished Successfully!"
+            echo "Deployment complete!"
