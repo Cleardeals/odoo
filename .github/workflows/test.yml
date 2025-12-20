@@ -23,7 +23,7 @@ jobs:
           - 5432:5432
         # Health check ensures DB is ready before Odoo starts
         options: >-
-          --health-cmd pg_isready
+          --health-cmd "pg_isready -U odoo"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -40,7 +40,8 @@ jobs:
         run: |
           docker run --rm \
             --network host \
-            -e HOST=localhost \
+            -v $(pwd): /mnt/extra-addons \
+            -e HOST=127.0.0.1 \
             -e USER=odoo \
             -e PASSWORD=odoo \
             my-odoo-image \
