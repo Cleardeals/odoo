@@ -9,11 +9,11 @@ on:
 jobs:
   test:
     name: Test Custom Modules
-    runs-on : ubuntu-latest
+    runs-on: ubuntu-latest
 
-    # We define a service for the database so Odoo can connect during testing
+    # Database service for Odoo to connect to during testing
     services:
-      debug:
+      postgres:
         image: postgres:17
         env:
           POSTGRES_USER: odoo
@@ -36,11 +36,10 @@ jobs:
         run: docker build -t my-odoo-image .
       
       - name: Run Odoo Tests
-        # We run the container, connect it to the 'db' service. and run the test command
         run: |
           docker run --rm \
             --network host \
-            -v $(pwd): /mnt/extra-addons \
+            -v ${{ github.workspace }}:/mnt/extra-addons \
             -e HOST=127.0.0.1 \
             -e USER=odoo \
             -e PASSWORD=odoo \
@@ -48,7 +47,5 @@ jobs:
             odoo -d odoo_test_db \
             -i leads,lead_suggestor,cleardeals_dashboards \
             --test-enable \
-            --stop-after-init
+            --stop-after-init \
             --log-level=test
-
-      
