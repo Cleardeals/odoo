@@ -1,0 +1,53 @@
+name: Run Odoo Tests
+
+on: 
+  push:
+    branches: ['19.0']
+  pull_request:
+    branches: ['19.0']
+
+jobs:
+  test:
+    name: Test Custom Modules
+    runs-on : ubuntu-latest
+
+    # We define a service for the database so Odoo can connect during testing
+    services:
+      debug:
+        image: postgres:17
+        env:
+          POSTGRES_USER: odoo
+          POSTGRES_PASSWORD: odoo
+          POSTGRES_DB: odoo_test_db
+        ports:
+          - 5432:5432
+        # Health check ensures DB is ready before Odoo starts
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+      
+      - name: Build Odoo Docker Image
+        run: docker build -t my-odoo-image .
+      
+      - name: Run Odoo Tests
+        # We run the container, connect it to the 'db' service. and run the test command
+        run: |
+          docker run --rm \
+            --network host \
+            -e HOST=localhost \
+            -e USER=odoo \
+            -e PASSWORD=odoo \
+            my-odoo-image \
+            odoo -d odoo_test_db \
+            -i leads,lead_suggestor,cleardeals_dashboards \
+            --test-enable \
+            --stop-after-init
+            --log-level=test
+
+      

@@ -1,9 +1,12 @@
 name: Deploy Odoo 19 to New VM
 
-on:
-  push:
-    branches:
-      - '19.0'  # Changed: Triggers only on '19.0' branch
+on:  
+  # Trigger : Only run when the test workflow finishes successfully
+  workflow_run:
+    workflows: ["Run Odoo Tests"]
+    branches: ["19.0"]
+    types:
+      - completed  
 
 jobs:
   deploy:
@@ -40,10 +43,10 @@ jobs:
             fi
             
             echo ">>> Rebuilding Odoo 19 image..."
-            docker-compose build odoo
+            docker compose build odoo
             
             echo ">>> Restarting the Odoo Service..."
-            docker-compose up -d --force-recreate odoo
+            docker compose up -d --force-recreate odoo
             
             echo ">>> Pruning unused Docker objects..."
             docker system prune -f
