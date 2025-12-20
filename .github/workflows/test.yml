@@ -40,11 +40,17 @@ jobs:
           docker run --rm \
             --network host \
             -v ${{ github.workspace }}:/mnt/extra-addons \
-            -e HOST=127.0.0.1 \
+            -e HOST=localhost \
+            -e PORT=5432 \
             -e USER=odoo \
             -e PASSWORD=odoo \
             my-odoo-image \
             odoo -d odoo_test_db \
+            --db_host=localhost \
+            --db_port=5432 \
+            --db_user=odoo \
+            --db_password=odoo \
+            --addons-path=/mnt/extra-addons,/usr/lib/python3/dist-packages/odoo/addons \
             -i leads,lead_suggestor,cleardeals_dashboards \
             --test-enable \
             --stop-after-init \
