@@ -64,5 +64,6 @@ jobs:
             --addons-path=/mnt/extra-addons,/usr/lib/python3/dist-packages/odoo/addons \
             -i leads,lead_suggestor,cleardeals_dashboards \
             --test-enable \
+            --test-tags /leads,/lead_suggestor,/cleardeals_dashboards \
             --stop-after-init \
             --log-level=test
