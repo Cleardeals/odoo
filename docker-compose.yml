@@ -44,6 +44,10 @@ services:
     build: .
     depends_on:
       - db
+    # --- ADDED: Expose Port 8069 Directly ---
+    ports:
+      - "8069:8069"
+    # -----------------------------------------
     volumes:
       # CHANGED: Mapping single config file from root to the default Odoo location
       - ./odoo.conf:/etc/odoo/odoo.conf
