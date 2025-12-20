@@ -11,7 +11,7 @@ jobs:
     name: Test Custom Modules
     runs-on: ubuntu-latest
 
-    # Database service for Odoo to connect to during testing
+    # Database service for Odoo to connect to during testing phase
     services:
       postgres:
         image: postgres:17
