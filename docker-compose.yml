@@ -57,7 +57,7 @@ services:
       - web
     environment:
       - ODOO_PROXY=True
-      - WEB_BASE_URL=https://odoo.cleardeals.xyz
+      - WEB_BASE_URL=http://34.123.208.104:8069
     labels:
       - "traefik.enable=true"
       # --- Main Odoo Router ---
