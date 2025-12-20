@@ -24,19 +24,25 @@ jobs:
           command_timeout: 30m
           script: |
             set -e
-            cd ~/odoo-project || mkdir -p ~/odoo-project && cd ~/odoo-project
+            cd ~/odoo-project || { mkdir -p ~/odoo-project && cd ~/odoo-project; }
             
-            # Clone or update repo
+            # Clone or update repo with timeout
             if [ ! -d ".git" ]; then
-              git clone -b 19.0 git@github.com:Cleardeals/odoo.git .
+              echo "Cloning repository..."
+              timeout 300 git clone --depth 1 -b 19.0 git@github.com:Cleardeals/odoo.git . || exit 1
             else
-              git fetch origin 19.0
+              echo "Updating repository..."
+              timeout 300 git fetch --depth 1 origin 19.0 || exit 1
               git reset --hard origin/19.0
             fi
             
-            # Rebuild and restart
+            echo "Rebuilding Docker image..."
             docker compose build odoo
+            
+            echo "Restarting containers..."
             docker compose up -d --force-recreate odoo
+            
+            echo "Cleaning up..."
             docker system prune -f
             
             echo "Deployment complete!"
