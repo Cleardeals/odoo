@@ -56,7 +56,7 @@ services:
     networks:
       - web
     environment:
-      - ODOO_PROXY=True
+      - ODOO_PROXY=False
       - WEB_BASE_URL=http://34.123.208.104:8069
     labels:
       - "traefik.enable=true"
