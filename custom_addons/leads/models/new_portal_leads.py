@@ -163,6 +163,8 @@ class NewPortalLead(models.Model):
         store=True, # 'store=True' is ESSENTIAL for it to be searchable
         readonly=True
     )
+
+
     
     # --- Compute Methods ---
 

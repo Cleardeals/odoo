@@ -44,10 +44,6 @@ services:
     build: .
     depends_on:
       - db
-    # --- ADDED: Expose Port 8069 Directly ---
-    ports:
-      - "8069:8069"
-    # -----------------------------------------
     volumes:
       # CHANGED: Mapping single config file from root to the default Odoo location
       - ./odoo.conf:/etc/odoo/odoo.conf
@@ -56,8 +52,8 @@ services:
     networks:
       - web
     environment:
-      - ODOO_PROXY=False
-      - WEB_BASE_URL=http://34.123.208.104:8069
+      - ODOO_PROXY=true
+      - WEB_BASE_URL=https://odoo.cleardeals.xyz
     labels:
       - "traefik.enable=true"
       # --- Main Odoo Router ---
