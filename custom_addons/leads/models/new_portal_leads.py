@@ -59,6 +59,10 @@ class NewPortalLead(models.Model):
 
     remarks = fields.Text('Remarks')
 
+    is_ops_sale_lead = fields.Boolean(
+        string="Is Ops Sale Lead",
+        default=False)
+
     site_visit_date = fields.Datetime(
         string="Site Visit Scheduled On",
         copy = False,

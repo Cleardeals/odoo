@@ -111,3 +111,31 @@ class TestPortalLeadProcessing(PortalLeadTestCase):
         self.assertFalse(lead.property_id)
         self.assertEqual(lead.user_id, original_user)
         self.assertEqual(lead.state, 'assigned')
+
+    def test_11_process_ops_lead_assignment(self):
+        """
+        Test that an OPS sales lead is processed and assigned correctly.
+        Ensures the flag does not interfere with standard RM assignment.
+        """
+        # Create an OPS lead
+        lead = self.create_portal_lead(
+            name="OPS Processing Test",
+            portal_name='MagicBricks',
+            portal_property_id=self.mb_id, 
+            is_ops_sale_lead=True  # Ensure this matches your singular field name
+        )
+        
+        # Trigger processing
+        lead._process_lead_logic()  # Using the internal logic method consistent with other tests
+        
+        # Verification 1: Flag remains True
+        self.assertTrue(lead.is_ops_sale_lead, "Processing should not alter OPS flag")
+        
+        # Verification 2: RM was still assigned
+        # Since we passed a valid 'portal_property_id' (self.mb_id) that links to 'self.test_property',
+        # and 'self.test_property' has 'self.rm_user', the lead should be assigned to that RM.
+        self.assertEqual(
+            lead.user_id, 
+            self.rm_user, 
+            "OPS Leads should still be assigned an RM if property matches"
+        )

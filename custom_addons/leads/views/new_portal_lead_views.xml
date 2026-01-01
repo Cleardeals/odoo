@@ -67,6 +67,10 @@
                                  ('interest_ids.site_visit_date_only', '=', context_today())
                                 ]"
                         help="Primary or recommended property site visit scheduled for today (IST)"/>
+                
+                <filter string="Ops Sales Leads"
+                        name="ops_sales_leads"
+                        domain="[('is_ops_sale_lead', '=', True)]"/>
 
                 <separator/>
 
@@ -204,6 +208,7 @@
                                     <field name="property_location"/>
                                     <field name="property_link" widget="url"/>
                                     <field name="property_bhk"/>
+                                    <field name="is_ops_sale_lead" widget="boolean"/>
                                 </group>
                             </group>
                         </page>
