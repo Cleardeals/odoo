@@ -68,3 +68,29 @@ class TestPortalLeadCRUD(PortalLeadTestCase):
         self.assertEqual(lead.site_visit_date_only.day, 25)
         self.assertEqual(lead.site_visit_date_only.month, 12)
         self.assertEqual(lead.site_visit_date_only.year, 2025)
+
+    def test_07_ops_sales_lead_flag(self):
+        """
+        Test that is_ops_sales_lead flag functions correctly.
+        1. Verifies default is False.
+        2. Verifies explicit assignment to True.
+        """
+        # Case 1: Default Behavior
+        # We rely on your existing helper. Since we don't pass the flag, 
+        # it should default to False (standard boolean behavior in Odoo).
+        lead_default = self.create_portal_lead(name="Standard Lead")
+        self.assertFalse(
+            lead_default.is_ops_sale_lead, 
+            "is_ops_sale_lead should default to False"
+        )
+
+        # Case 2: Explicit Creation
+        # We pass the new field via **kwargs to your helper
+        lead_ops = self.create_portal_lead(
+            name="OPS Specialized Lead",
+            is_ops_sale_lead=True
+        )
+        self.assertTrue(
+            lead_ops.is_ops_sale_lead, 
+            "is_ops_sale_lead should be True when explicitly set"
+        )
