@@ -59,6 +59,23 @@ class NewPortalLead(models.Model):
 
     remarks = fields.Text('Remarks')
 
+    feedback_general = fields.Selection([
+        ('buyer_did_not_visit_property', 'Buyer Did Not Visit Property'),
+        ('buyer_not_interested', 'Buyer Not Interested'),
+        ('buyer_not_picking_call', 'Buyer Not Picking Call'),
+        ('visit_needs_to_be_rescheduled', 'Visit Needs to be Rescheduled'),
+        ('other', 'Other'),
+    ], string='Feedback')
+
+    feedback_site_visit_done = fields.Selection([
+        ('requirements_not_matching', 'Requirements Not Matching'),
+        ('buyer_liked_property', 'Buyer Liked Property'),
+        ('buyer_requirement_closed', 'Buyer Requirement Closed'),
+        ('buyer_visit_from_outside', 'Buyer Visit From Outside'),
+        ('buyer_not_pickup_call', 'Buyer Not Picking Call'),
+        ('other', 'Other')
+    ], string='Feedback for Site Visit Done')
+
     is_ops_sale_lead = fields.Boolean(
         string="Is Ops Sale Lead",
         default=False)

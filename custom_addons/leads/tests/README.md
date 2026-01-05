@@ -30,8 +30,8 @@ This test suite provides comprehensive coverage for the **Leads Management Modul
 
 ### Test Statistics
 
-- **Total Test Files:** 10
-- **Test Categories:** CRUD, Processing, API, Webhook, Cron Jobs, WhatsApp Integration
+- **Total Test Files:** 11
+- **Test Categories:** CRUD, Processing, API, Webhook, Cron Jobs, WhatsApp Integration, Property Interests
 - **Test Tags:** `@tagged('post_install', '-at_install')`
 
 ---
@@ -43,7 +43,7 @@ tests/
 ├── __init__.py                      # Test module imports
 ├── test_portal_common.py            # Base test fixtures (PortalLeadTestCase)
 ├── test_lead_score.py               # Lead scoring model tests (20 tests)
-├── test_portal_lead_crud.py         # Basic CRUD operations (6 tests)
+├── test_portal_lead_crud.py         # Basic CRUD operations (10 tests)
 ├── test_portal_lead_duplicate.py    # Duplicate detection logic (5 tests)
 ├── test_portal_lead_phone.py        # Phone standardization (9 tests)
 ├── test_portal_lead_processing.py   # Lead assignment & property matching (10 tests)
@@ -51,6 +51,7 @@ tests/
 ├── test_portal_lead_cron.py         # Cron job operations (3 tests)
 ├── test_portal_lead_api.py          # External API integrations (4 tests)
 ├── test_portal_lead_webhook.py      # n8n webhook functionality (3 tests)
+├── test_lead_property_interest.py   # Property interests & computed fields (18 tests)
 └── README.md                        # This documentation
 ```
 
@@ -181,16 +182,19 @@ def create_portal_lead(self, **kwargs):
 
 **Class:** `TestPortalLeadCRUD(PortalLeadTestCase)`  
 **Model Under Test:** `leads.new`  
-**Total Tests:** 7
+**Total Tests:** 10
 
 | Test ID | Method | Description |
-|---------|--------|-----------|
+|---------|--------|-------------|
 | 01 | `test_01_create_lead_with_required_fields` | Basic lead creation |
 | 02 | `test_02_missing_required_fields` | Required field validation |
 | 04 | `test_04_related_property_fields` | Property field propagation |
 | 05 | `test_05_compute_create_date_only` | Date computation |
 | 06 | `test_06_compute_site_visit_date_only` | Site visit date extraction |
 | 07 | `test_07_ops_sales_lead_flag` | OPS sales lead boolean flag |
+| 08 | `test_08_feedback_general_field` | Feedback general selection field |
+| 09 | `test_09_feedback_site_visit_done_field` | Feedback site visit done selection |
+| 10 | `test_10_feedback_fields_independent` | Independent feedback fields |
 
 ---
 
@@ -379,6 +383,83 @@ def test_01_housing_api_fetch_success(self, mock_get):
 
 ---
 
+### 11. `test_lead_property_interest.py` - Property Interests & Computed Fields
+
+**Classes:**
+- `TestLeadPropertyInterest(PortalLeadTestCase)` - 10 tests
+- `TestLeadAllAssociatedProperties(PortalLeadTestCase)` - 6 tests  
+- `TestLeadDateComputations(PortalLeadTestCase)` - 5 tests
+
+**Models Under Test:** `lead.property.interest`, `leads.new`  
+**Total Tests:** 21
+
+#### TestLeadPropertyInterest - Property Interest Model Tests
+
+| Test ID | Method | Description |
+|---------|--------|-------------|
+| 01 | `test_01_create_lead_property_interest` | Basic interest record creation |
+| 02 | `test_02_unique_constraint_lead_property` | Unique constraint (lead_id, property_id) |
+| 03 | `test_03_related_property_fields` | Related fields (bhk, location) |
+| 04 | `test_04_site_visit_date_only_computation` | site_visit_date_only computed field |
+| 05 | `test_05_site_visit_date_only_empty_when_no_date` | Empty date handling |
+| 06 | `test_06_cascade_delete_on_lead` | Cascade delete behavior |
+| 07 | `test_07_feedback_fields` | Basic feedback field tests |
+| 08 | `test_08_multiple_interests_per_lead` | Multiple interests per lead |
+| 09 | `test_09_feedback_general_all_options` | All feedback_general options |
+| 10 | `test_10_feedback_site_visit_done_all_options` | All feedback_site_visit_done options |
+
+#### TestLeadAllAssociatedProperties - Computed Many2many Tests
+
+| Test ID | Method | Description |
+|---------|--------|-------------|
+| 01 | `test_01_all_associated_with_primary_only` | Primary property only |
+| 02 | `test_02_all_associated_with_no_properties` | No properties linked |
+| 03 | `test_03_all_associated_with_primary_and_interests` | Primary + interests combined |
+| 04 | `test_04_all_associated_with_interests_only` | Interests only (no primary) |
+| 05 | `test_05_all_associated_updates_on_interest_change` | Dynamic updates on change |
+| 06 | `test_06_no_duplicate_in_all_associated` | No duplicate properties |
+
+#### TestLeadDateComputations - Date Field Computations
+
+| Test ID | Method | Description |
+|---------|--------|-------------|
+| 01 | `test_01_create_date_only_is_computed` | create_date_only auto-compute |
+| 02 | `test_02_create_date_only_matches_ist_date` | IST timezone conversion |
+| 03 | `test_03_site_visit_date_only_on_lead` | site_visit_date_only on leads.new |
+| 04 | `test_04_site_visit_date_only_empty_when_no_visit` | Empty site visit handling |
+| 05 | `test_05_site_visit_date_only_updates_on_change` | Dynamic updates |
+
+#### Feedback Fields Reference:
+
+```python
+# feedback_general options:
+- 'buyer_did_not_visit_property'  # Buyer Did Not Visit Property
+- 'buyer_not_interested'          # Buyer Not Interested
+- 'buyer_not_picking_call'        # Buyer Not Picking Call
+- 'visit_needs_to_be_rescheduled' # Visit Needs to be Rescheduled
+- 'other'                         # Other
+
+# feedback_site_visit_done options:
+- 'requirements_not_matching'     # Requirements Not Matching
+- 'buyer_liked_property'          # Buyer Liked Property
+- 'buyer_requirement_closed'      # Buyer Requirement Closed
+- 'buyer_visit_from_outside'      # Buyer Visit From Outside
+- 'buyer_not_pickup_call'         # Buyer Not Picking Call
+- 'other'                         # Other
+```
+
+#### Unique Constraint (Odoo 19.0 Syntax):
+
+```python
+# New models.Constraint syntax replacing _sql_constraints
+_lead_prop_uniq = models.Constraint(
+    'UNIQUE(lead_id, property_id)',
+    message='This property is already linked to the lead.'
+)
+```
+
+---
+
 ## Test Coverage Matrix
 
 | Feature | CRUD | Compute | Validation | Integration | Cron |
@@ -393,6 +474,10 @@ def test_01_housing_api_fetch_success(self, mock_get):
 | External API | | | | ✅ | ✅ |
 | Webhooks | | | | ✅ | ✅ |
 | Lead Scoring | ✅ | ✅ | ✅ | | ✅ |
+| Property Interests | ✅ | ✅ | ✅ | | |
+| Feedback Fields | ✅ | | ✅ | | |
+| All Associated Props | | ✅ | | | |
+| Date Computations | | ✅ | | | |
 
 ---
 
