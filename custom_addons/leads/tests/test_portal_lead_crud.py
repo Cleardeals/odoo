@@ -94,3 +94,94 @@ class TestPortalLeadCRUD(PortalLeadTestCase):
             lead_ops.is_ops_sale_lead, 
             "is_ops_sale_lead should be True when explicitly set"
         )
+    def test_08_feedback_general_field(self):
+        """
+        Test the feedback_general selection field.
+        1. Verifies default is False (not set).
+        2. Verifies all selection options can be set.
+        """
+        # Case 1: Default should be False/empty
+        lead = self.create_portal_lead(name="Feedback Test Lead")
+        self.assertFalse(
+            lead.feedback_general,
+            "feedback_general should default to False"
+        )
+
+        # Case 2: Test all valid selection values
+        valid_feedback_options = [
+            'buyer_did_not_visit_property',
+            'buyer_not_interested',
+            'buyer_not_picking_call',
+            'visit_needs_to_be_rescheduled',
+            'other',
+        ]
+        
+        for feedback_value in valid_feedback_options:
+            lead.write({'feedback_general': feedback_value})
+            self.assertEqual(
+                lead.feedback_general,
+                feedback_value,
+                f"feedback_general should be set to '{feedback_value}'"
+            )
+
+    def test_09_feedback_site_visit_done_field(self):
+        """
+        Test the feedback_site_visit_done selection field.
+        1. Verifies default is False (not set).
+        2. Verifies all selection options can be set.
+        """
+        # Case 1: Default should be False/empty
+        lead = self.create_portal_lead(
+            name="Site Visit Feedback Lead",
+            current_status='site_visit_done'
+        )
+        self.assertFalse(
+            lead.feedback_site_visit_done,
+            "feedback_site_visit_done should default to False"
+        )
+
+        # Case 2: Test all valid selection values
+        valid_feedback_options = [
+            'requirements_not_matching',
+            'buyer_liked_property',
+            'buyer_requirement_closed',
+            'buyer_visit_from_outside',
+            'buyer_not_pickup_call',
+            'other',
+        ]
+        
+        for feedback_value in valid_feedback_options:
+            lead.write({'feedback_site_visit_done': feedback_value})
+            self.assertEqual(
+                lead.feedback_site_visit_done,
+                feedback_value,
+                f"feedback_site_visit_done should be set to '{feedback_value}'"
+            )
+
+    def test_10_feedback_fields_independent(self):
+        """
+        Test that feedback_general and feedback_site_visit_done 
+        are independent fields and can be set separately.
+        """
+        lead = self.create_portal_lead(name="Independent Feedback Lead")
+        
+        # Set only feedback_general
+        lead.write({'feedback_general': 'buyer_not_interested'})
+        self.assertEqual(lead.feedback_general, 'buyer_not_interested')
+        self.assertFalse(lead.feedback_site_visit_done)
+        
+        # Set only feedback_site_visit_done (clear general first)
+        lead.write({
+            'feedback_general': False,
+            'feedback_site_visit_done': 'buyer_liked_property'
+        })
+        self.assertFalse(lead.feedback_general)
+        self.assertEqual(lead.feedback_site_visit_done, 'buyer_liked_property')
+        
+        # Set both simultaneously
+        lead.write({
+            'feedback_general': 'other',
+            'feedback_site_visit_done': 'other'
+        })
+        self.assertEqual(lead.feedback_general, 'other')
+        self.assertEqual(lead.feedback_site_visit_done, 'other')

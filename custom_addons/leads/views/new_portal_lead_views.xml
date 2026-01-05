@@ -148,6 +148,9 @@
                         <field name="current_status"/>
                         <field name="site_visit_date"
                                invisible="current_status != 'site_visit_scheduled'"/>
+                        <field name="feedback_general" placeholder="Select Appropriate Feedback" string="Feedback" invisible = "current_status == 'site_visit_done'"/>
+                        <field name="feedback_site_visit_done" placeholder="Select appropriate feedback" string = "Feedback" invisible = "current_status != 'site_visit_done'"/>
+                                    
                         <field name="remarks"/>
                     </group>
                 </sheet>
@@ -202,7 +205,9 @@
                                     <field name="current_status"/>
                                     <field name="site_visit_date" 
                                            invisible="current_status != 'site_visit_scheduled'"/>
-                                    <field name="remarks"/>
+                                    <field name="feedback_general" placeholder="Select Appropriate Feedback" string="Feedback" invisible = "current_status == 'site_visit_done'"/>
+                                    <field name="feedback_site_visit_done" placeholder="Select appropriate feedback" string = "Feedback" invisible = "current_status != 'site_visit_done'"/>
+                                    <field name="remarks"/>                                    
                                 </group>
                                 <group>
                                     <field name="property_location"/>
