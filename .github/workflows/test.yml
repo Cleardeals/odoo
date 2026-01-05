@@ -2,7 +2,7 @@ name: Run Odoo Tests
 
 on: 
   push:
-    branches: ['development_19']
+    branches: ['development_19', '19.0']
   pull_request:
     branches: ['19.0']
 
