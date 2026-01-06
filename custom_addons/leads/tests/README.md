@@ -440,12 +440,18 @@ def test_01_housing_api_fetch_success(self, mock_get):
 - 'other'                         # Other
 
 # feedback_site_visit_done options:
-- 'requirements_not_matching'     # Requirements Not Matching
-- 'buyer_liked_property'          # Buyer Liked Property
-- 'buyer_requirement_closed'      # Buyer Requirement Closed
-- 'buyer_visit_from_outside'      # Buyer Visit From Outside
-- 'buyer_not_pickup_call'         # Buyer Not Picking Call
-- 'other'                         # Other
+- 'buyer_liked_property'              # Buyer Liked Property
+- 'buyer_requirement_closed'          # Buyer Requirement Closed
+- 'buyer_visit_from_outside'          # Buyer Visit From Outside
+- 'buyer_not_pickup_call'             # Buyer Not Picking Call
+- 'planning_for_second_visit'         # Planning for Second Visit
+- 'negotiation_stage'                 # Negotiation Stage
+- 'visit_done_confirmed_by_owner'     # Visit Done - Confirmed by Owner
+- 'looking_for_more_options'          # Looking for More Options
+- 'price_is_high'                     # Price is High
+- 'location_mismatch'                 # Location Mismatch
+- 'deal_closed'                       # Deal Closed
+- 'other'                             # Other
 ```
 
 #### Unique Constraint (Odoo 19.0 Syntax):
