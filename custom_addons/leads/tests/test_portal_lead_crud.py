@@ -142,11 +142,17 @@ class TestPortalLeadCRUD(PortalLeadTestCase):
 
         # Case 2: Test all valid selection values
         valid_feedback_options = [
-            'requirements_not_matching',
             'buyer_liked_property',
             'buyer_requirement_closed',
             'buyer_visit_from_outside',
             'buyer_not_pickup_call',
+            'planning_for_second_visit',
+            'negotiation_stage',
+            'visit_done_confirmed_by_owner',
+            'looking_for_more_options',
+            'price_is_high',
+            'location_mismatch',
+            'deal_closed',
             'other',
         ]
         

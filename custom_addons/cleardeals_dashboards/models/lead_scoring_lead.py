@@ -119,7 +119,8 @@ class LeadScoringLead(models.Model):
             lead.has_replied = bool(inbound)
             
             if inbound:
-                lead.last_response = inbound.sorted(key=lambda r: r.event_timestamp, reverse=True)[0].message_content
+                # Sort by timestamp desc, then by id desc for deterministic ordering when timestamps match
+                lead.last_response = inbound.sorted(key=lambda r: (r.event_timestamp, r.id), reverse=True)[0].message_content
             else:
                 lead.last_response = False
 
