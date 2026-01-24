@@ -70,8 +70,8 @@ class TestPortalLeadProcessing(PortalLeadTestCase):
         self.assertEqual(lead.user_id, self.rm_user) 
         self.assertEqual(lead.state, 'assigned')
 
-    def test_08_process_lead_property_not_found_assigns_naresh(self):
-        """Should assign to Naresh when property not found."""
+    def test_08_process_lead_magicbricks_not_found_assigns_mayuri(self):
+        """Should assign to Mayuri Malivad when property not found for MagicBricks portal."""
         lead = self.create_portal_lead(
             portal_name="MagicBricks",
             portal_property_id="NON_EXISTENT_ID",
@@ -80,7 +80,7 @@ class TestPortalLeadProcessing(PortalLeadTestCase):
 
         lead._process_lead_logic()
 
-        self.assertEqual(lead.user_id, self.naresh_user)
+        self.assertEqual(lead.user_id, self.mayuri_user)
         self.assertEqual(lead.state, 'assigned')
         self.assertFalse(lead.property_id)
 
@@ -139,3 +139,62 @@ class TestPortalLeadProcessing(PortalLeadTestCase):
             self.rm_user, 
             "OPS Leads should still be assigned an RM if property matches"
         )
+
+    def test_12_process_lead_99acres_not_found_assigns_pratham(self):
+        """Should assign to Pratham Bhandari when property not found for 99acres portal."""
+        lead = self.create_portal_lead(
+            portal_name="99acres",
+            portal_property_id="NON_EXISTENT_99ACRES_ID",
+            state='new'
+        )
+
+        lead._process_lead_logic()
+
+        self.assertEqual(lead.user_id, self.pratham_user)
+        self.assertEqual(lead.state, 'assigned')
+        self.assertFalse(lead.property_id)
+        self.assertIn("Pratham Bhandari", lead.process_notes)
+
+    def test_13_process_lead_housing_not_found_assigns_naresh(self):
+        """Should assign to Naresh Rojiya when property not found for Housing.com portal."""
+        lead = self.create_portal_lead(
+            portal_name="Housing.com",
+            portal_property_id="NON_EXISTENT_HOUSING_ID",
+            state='new'
+        )
+
+        lead._process_lead_logic()
+
+        self.assertEqual(lead.user_id, self.naresh_user)
+        self.assertEqual(lead.state, 'assigned')
+        self.assertFalse(lead.property_id)
+        self.assertIn("Naresh Rojiya", lead.process_notes)
+
+    def test_14_process_lead_olx_not_found_assigns_naresh(self):
+        """Should assign to Naresh Rojiya when property not found for OLX portal."""
+        lead = self.create_portal_lead(
+            portal_name="OLX",
+            portal_property_id="NON_EXISTENT_OLX_ID",
+            state='new'
+        )
+
+        lead._process_lead_logic()
+
+        self.assertEqual(lead.user_id, self.naresh_user)
+        self.assertEqual(lead.state, 'assigned')
+        self.assertFalse(lead.property_id)
+        self.assertIn("Naresh Rojiya", lead.process_notes)
+
+    def test_15_process_lead_unknown_portal_not_found_assigns_naresh(self):
+        """Should assign to Naresh Rojiya (default) when property not found for unknown portal."""
+        lead = self.create_portal_lead(
+            portal_name="UnknownPortal",
+            portal_property_id="NON_EXISTENT_ID",
+            state='new'
+        )
+
+        lead._process_lead_logic()
+
+        self.assertEqual(lead.user_id, self.naresh_user)
+        self.assertEqual(lead.state, 'assigned')
+        self.assertFalse(lead.property_id)

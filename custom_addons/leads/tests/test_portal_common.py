@@ -26,6 +26,20 @@ class PortalLeadTestCase(TransactionCase):
             'email': f'naresh_{cls.suffix}@test.com'
         })
 
+        # Create Pratham Bhandari user for 99acres default assignment
+        cls.pratham_user = cls.env['res.users'].create({
+            'name': 'Pratham Bhandari',
+            'login': f'pratham_{cls.suffix}',
+            'email': f'pratham_{cls.suffix}@test.com'
+        })
+
+        # Create Mayuri Malivad user for MagicBricks default assignment
+        cls.mayuri_user = cls.env['res.users'].create({
+            'name': 'Mayuri Malivad',
+            'login': f'mayuri_{cls.suffix}',
+            'email': f'mayuri_{cls.suffix}@test.com'
+        })
+
         # Create Property with UNIQUE IDs
         cls.mb_id = f'MB_{cls.suffix}'
         cls.hsg_id = f'HSG_{cls.suffix}'
