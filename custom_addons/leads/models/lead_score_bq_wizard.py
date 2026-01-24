@@ -135,7 +135,7 @@ class LeadScoreBqWizard(models.TransientModel):
                 # --- UPDATED LOGIC FOR HANDLING EXISTING LEADS ---
 
                 # 1. If status is site visit scheduled/rescheduled, check for date mismatch.
-                if existing_lead.current_status in ['site_visit_scheduled', 'rescheduled']:
+                if existing_lead.current_status in ['site_visit_scheduled', 'rescheduled', 'site_visit_done']:
                     odoo_date = existing_lead.site_visit_scheduled_date
                     
                     # Compare only if both dates are available.

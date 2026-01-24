@@ -395,8 +395,12 @@ class NewPortalLead(models.Model):
     
     def _process_lead_logic(self):
         """
-        This now runs in the same transaction as the cron job.
-        Updated: If Property is not found, assigns to 'Naresh Rojiya'
+        Processes lead assignment. 
+        If Property is found, assigns to the linked RM.
+        If Property is NOT found, assigns based on Portal:
+        - 99acres -> Pratham Bhandari
+        - MagicBricks -> Mayuri Malivad
+        - Housing.com/OLX -> Naresh Rojiya
         """
         self.ensure_one()
         _logger.info(f"🔄 Processing lead {self.id}: {self.name} (state: {self.state})")
@@ -420,11 +424,18 @@ class NewPortalLead(models.Model):
                 msg = f"Property not found for {self.portal_name} ID: {self.portal_property_id}"
                 _logger.warning(f"⚠️ Lead {self.id}: {msg}. Attempting to assign to default RM.")
 
-                rm_user = self.env['res.users'].search([('name', 'ilike', 'Naresh Rojiya')], limit=1)
+                if self.portal_name == '99acres':
+                    target_name = 'Pratham Bhandari'
+                elif self.portal_name == 'MagicBricks':
+                    target_name = 'Mayuri Malivad'
+                else:
+                    target_name = 'Naresh Rojiya'
+                
+                rm_user = self.env['res.users'].search([('name', 'ilike', target_name)], limit=1)
 
                 if not rm_user:
-                    # Safety Fallback: If Naresh is not found in the system, assign to Admin to prevent error
-                    _logger.error("User 'Naresh Rojiya' not found. Assigning to Administrator.")
+                    # Safety Fallback: If Specific RM is not found in the system, assign to Admin to prevent error
+                    _logger.error(f"User '{target_name}' not found. Assigning to Administrator.")
                     rm_user = self.env.ref('base.user_admin')
 
                 notes = f"{msg}\nAssigned to Default RM: {rm_user.name}.\n"

@@ -102,7 +102,9 @@ pytest custom_addons/leads/tests/ -v --odoo-database=<database_name>
 | Fixture | Type | Description |
 |---------|------|-------------|
 | `cls.rm_user` | `res.users` | Test Relationship Manager user |
-| `cls.naresh_user` | `res.users` | Fallback user for unassigned leads |
+| `cls.naresh_user` | `res.users` | Fallback user for Housing.com/OLX/unknown portal leads |
+| `cls.pratham_user` | `res.users` | Default RM for 99acres leads when property not found |
+| `cls.mayuri_user` | `res.users` | Default RM for MagicBricks leads when property not found |
 | `cls.test_property` | `property.inventory` | Test property with multiple portal IDs |
 | `cls.mb_id` | `str` | Dynamic MagicBricks property ID |
 | `cls.hsg_id` | `str` | Dynamic Housing.com property ID |
@@ -252,18 +254,22 @@ NOT DUPLICATE if ANY:
 
 **Class:** `TestPortalLeadProcessing(PortalLeadTestCase)`  
 **Model Under Test:** `leads.new`  
-**Total Tests:** 11
+**Total Tests:** 15
 
 | Test ID | Method | Description |
-|---------|--------|-----------|
+|---------|--------|-------------|
 | 01-04 | `test_0X_find_property_by_*` | Property lookup by portal ID |
 | 05 | `test_05_property_not_found_returns_empty` | Empty recordset on not found |
 | 06 | `test_06_find_rm_from_property` | RM extraction from property |
 | 07 | `test_07_process_lead_assigns_property_and_rm` | Full processing flow |
-| 08 | `test_08_process_lead_property_not_found_assigns_naresh` | Fallback assignment |
+| 08 | `test_08_process_lead_magicbricks_not_found_assigns_mayuri` | MagicBricks fallback to Mayuri |
 | 09 | `test_09_process_lead_adds_notes` | Processing notes |
 | 10 | `test_10_process_lead_skips_non_new_leads` | Skip already processed |
 | 11 | `test_11_process_ops_lead_assignment` | OPS sales lead processing |
+| 12 | `test_12_process_lead_99acres_not_found_assigns_pratham` | 99acres fallback to Pratham |
+| 13 | `test_13_process_lead_housing_not_found_assigns_naresh` | Housing.com fallback to Naresh |
+| 14 | `test_14_process_lead_olx_not_found_assigns_naresh` | OLX fallback to Naresh |
+| 15 | `test_15_process_lead_unknown_portal_not_found_assigns_naresh` | Unknown portal fallback to Naresh |
 
 #### Property Matching Logic:
 
@@ -274,6 +280,18 @@ Portal Name          → Property Field Searched
 'Housing.com'        → housing_id
 '99acres'            → ninety_nine_acres_id
 'OLX'                → olx_id
+```
+
+#### Fallback RM Assignment (When Property Not Found):
+
+```python
+Portal Name          → Default RM Assigned
+─────────────────────────────────────────────
+'99acres'            → Pratham Bhandari
+'MagicBricks'        → Mayuri Malivad
+'Housing.com'        → Naresh Rojiya
+'OLX'                → Naresh Rojiya
+(Unknown Portal)     → Naresh Rojiya (default)
 ```
 
 #### OPS Sales Lead Flag:
