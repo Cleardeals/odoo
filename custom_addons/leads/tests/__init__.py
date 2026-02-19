@@ -1,5 +1,6 @@
 from . import (
     test_buyer_activity_api,
+    test_buyer_site_visits_api,
     test_lead_property_interest,
     test_lead_score,
     test_portal_common,

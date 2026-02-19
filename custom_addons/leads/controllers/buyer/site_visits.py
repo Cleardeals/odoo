@@ -1,12 +1,11 @@
 """
-GET /api/track/property/site-visits
---------------------------------------
-Returns all site visits across all properties belonging to the owner
-identified by `phone`. Pulls from TWO sources so no visit is missed:
-  1. leads.new                — primary inquiry site visits
-  2. lead.property.interest   — recommended property site visits
+GET /api/track/lead/site-visits
+---------------------------------
+Returns all site visits for a buyer across ALL of their inquiries —
+both primary leads (leads.new) and recommended property interests
+(lead.property.interest).
 
-Classification rules
+Classification rules  (mirrors seller site-visits logic exactly)
 --------------------
 
   upcoming
@@ -15,56 +14,49 @@ Classification rules
   pending_feedback
       status = site_visit_scheduled AND date is in the past AND
       feedback_general is empty or "other".
-      The visit was scheduled but no meaningful outcome has been logged yet.
-      RM action is needed — the buyer may not have shown up, the RM may
-      not have followed up, or the outcome is simply unrecorded.
+      Visit was never formally closed — no meaningful outcome logged yet.
 
   cancelled
       status = site_visit_scheduled AND date is in the past AND
       feedback_general has a real value (e.g. "buyer_not_interested",
       "buyer_not_picking_call").
-      The visit did not occur and the RM has logged a reason why.
-      The feedback_general value is always included in the record.
+      Visit did not occur and the RM has logged a reason why.
 
   rescheduled
       status = rescheduled.
-      The previously scheduled slot was cancelled and a new one is
-      pending confirmation or has been set.
+      Previously scheduled slot was cancelled; new slot TBD or set.
 
   completed
       status = explicitly site_visit_done.
-      feedback_site_visit_done is always included — it is the actual
-      outcome of the visit.
-      remarks is only included when feedback_site_visit_done = "other",
-      because that is the only case where the RM describes the outcome
-      in free text rather than selecting a dropdown value.
+      feedback_site_visit_done is always included.
+      remarks is only included when feedback_site_visit_done = "other"
+      (RM described the outcome in free text instead of a dropdown value).
 
-Query params
-------------
-phone        : str  — owner phone, with or without leading 91  (required)
-property_tag : str  — filter to a single property tag          (optional)
+Query param
+-----------
+phone : str — buyer phone, with or without leading 91 (required)
 
 Response shape
 --------------
 {
   "success": true,
   "data": {
-    "owner_phone": "9876543210",
-    "properties":  ["TAG1", "TAG2"],
-    "tag_filter":  null,
+    "buyer_phone": "9876543210",
 
     "upcoming": [
       {
         "source":              "primary" | "recommended",
+        "lead_id":             101,
         "lead_name":           "Ravi Shah",
-        "lead_phone":          "9876543210",
+        "portal":              "MagicBricks",
         "property_tag":        "TAG1",
         "property_bhk":        "2BHK",
         "property_location":   "Maninagar",
+        "property_city":       "Ahmedabad",
         "site_visit_datetime": "2025-03-20T11:00:00",
         "site_visit_date":     "2025-03-20",
         "current_status":      "site_visit_scheduled",
-        "remarks":             "Wants to see the terrace"
+        "remarks":             "Ask for key from owner"
       }
     ],
 
@@ -103,11 +95,11 @@ Response shape
     ],
 
     "totals": {
-      "upcoming":         2,
+      "upcoming":         1,
       "pending_feedback": 1,
       "cancelled":        1,
       "rescheduled":      1,
-      "completed":        4
+      "completed":        3
     }
   },
   "error": null
@@ -122,53 +114,23 @@ from odoo.http import request
 
 from ..shared.auth import validate_api_key
 from ..shared.phone_utils import extract_phone_from_request
-from ..shared.property_resolver import (
-    get_primary_leads_for_tags,
-    get_properties_for_phone,
-    get_recommended_leads_for_tags,
-)
 from ..shared.response_utils import error_response, success_response
 
 _logger = logging.getLogger(__name__)
 
-# Only records with these statuses are worth surfacing
 _VISIT_STATUSES = {"site_visit_scheduled", "site_visit_done", "rescheduled"}
 
-# feedback_general values treated as "nothing meaningful logged yet"
 _EMPTY_FEEDBACK = {None, "", "other", False}
-
-FEEDBACK_GENERAL_MAP = {
-    "buyer_did_not_visit_property": "Buyer Did Not Visit Property",
-    "buyer_not_interested": "Buyer Not Interested",
-    "buyer_not_picking_call": "Buyer Not Picking Call",
-    "visit_needs_to_be_rescheduled": "Visit Needs to be Rescheduled",
-    "other": "Other",
-}
-
-FEEDBACK_DONE_MAP = {
-    "buyer_liked_property": "Buyer Liked Property",
-    "buyer_requirement_closed": "Buyer Requirement Closed",
-    "buyer_visit_from_outside": "Buyer Visit From Outside",
-    "buyer_not_pickup_call": "Buyer Not Picking Call",
-    "planning_for_second_visit": "Planning for Second Visit",
-    "negotiation_stage": "Negotiation Stage",
-    "visit_done_confirmed_by_owner": "Visit Done - Confirmed by Owner",
-    "looking_for_more_options": "Looking for More Options",
-    "price_is_high": "Price is High",
-    "location_mismatch": "Location Mismatch",
-    "deal_closed": "Deal Closed",
-    "other": "Other",
-}
 
 
 def _classify_visit(
     current_status: str,
-    site_visit_date: datetime,
+    site_visit_date: datetime | None,
     now: datetime,
     feedback_general: str | None,
 ) -> str:
     """
-    Determine which bucket a visit record belongs to.
+     Determine which bucket a visit record belongs to.
 
     Returns one of: "upcoming" | "pending_feedback" | "cancelled" | "rescheduled" | "completed"
     """
@@ -181,20 +143,19 @@ def _classify_visit(
     if current_status == "site_visit_scheduled":
         if site_visit_date > now:
             return "upcoming"
-        # Date is in the past — check feedback_general to decide if the
-        # RM has already logged a reason the visit didn't happen.
+
         if feedback_general in _EMPTY_FEEDBACK:
             return "pending_feedback"
         return "cancelled"
 
-    # Safety fallback — should not reach here given _VISIT_STATUSES filter
     return "pending_feedback"
 
 
 def _build_base_record(
     source: str,
+    lead_id: int,
     lead_name,
-    lead_phone,
+    portal,
     prop,
     site_visit_date,
     site_visit_date_only,
@@ -204,11 +165,13 @@ def _build_base_record(
     """Fields present in every bucket."""
     return {
         "source": source,
+        "lead_id": lead_id,
         "lead_name": lead_name or None,
-        "lead_phone": lead_phone or None,
+        "portal": portal or None,
         "property_tag": prop.property_tag if prop else None,
         "property_bhk": prop.bhk if prop else None,
         "property_location": prop.location if prop else None,
+        "property_city": prop.city if prop else None,
         "site_visit_datetime": (
             site_visit_date.isoformat() if site_visit_date else None
         ),
@@ -259,8 +222,9 @@ def _apply_bucket_fields(
 
 def _process_visit(
     source: str,
+    lead_id: int,
     lead_name,
-    lead_phone,
+    portal,
     prop,
     site_visit_date,
     site_visit_date_only,
@@ -278,8 +242,9 @@ def _process_visit(
 
     record = _build_base_record(
         source=source,
+        lead_id=lead_id,
         lead_name=lead_name,
-        lead_phone=lead_phone,
+        portal=portal,
         prop=prop,
         site_visit_date=site_visit_date,
         site_visit_date_only=site_visit_date_only,
@@ -301,8 +266,9 @@ def _process_visit(
 def _visit_from_primary(lead, now: datetime) -> tuple[str, datetime, dict]:
     return _process_visit(
         source="primary",
+        lead_id=lead.id,
         lead_name=lead.name,
-        lead_phone=lead.phone,
+        portal=lead.portal_name,
         prop=lead.property_id,
         site_visit_date=lead.site_visit_date,
         site_visit_date_only=lead.site_visit_date_only,
@@ -314,12 +280,16 @@ def _visit_from_primary(lead, now: datetime) -> tuple[str, datetime, dict]:
     )
 
 
-def _visit_from_recommended(interest, now: datetime) -> tuple[str, datetime, dict]:
-    parent = interest.lead_id
+def _visit_from_interest(
+    interest,
+    parent_lead,
+    now: datetime,
+) -> tuple[str, datetime, dict]:
     return _process_visit(
         source="recommended",
-        lead_name=parent.name if parent else None,
-        lead_phone=parent.phone if parent else None,
+        lead_id=parent_lead.id,
+        lead_name=parent_lead.name,
+        portal=parent_lead.portal_name,
         prop=interest.property_id,
         site_visit_date=interest.site_visit_date,
         site_visit_date_only=interest.site_visit_date_only,
@@ -331,17 +301,17 @@ def _visit_from_recommended(interest, now: datetime) -> tuple[str, datetime, dic
     )
 
 
-class SellerSiteVisitsController(http.Controller):
+class BuyerSiteVisitsController(http.Controller):
     @http.route(
-        "/api/track/property/site-visits",
+        "/api/track/lead/site-visits",
         type="http",
         auth="public",
         methods=["GET"],
         csrf=False,
     )
-    def property_site_visits(self, **kwargs):
+    def lead_site_visits(self, **kwargs):
         """
-        Query params: phone (required), property_tag (optional).
+        Query param: phone (required) — buyer's phone number.
         """
         auth_error = validate_api_key(request)
         if auth_error:
@@ -351,23 +321,11 @@ class SellerSiteVisitsController(http.Controller):
         if not phone:
             return error_response(400, "Valid 'phone' query parameter is required.")
 
-        properties = get_properties_for_phone(request.env, phone)
-        if not properties:
-            return error_response(
-                404,
-                f"No active properties found for phone number {phone}.",
-            )
+        leads = request.env["leads.new"].sudo().search([("phone", "=", phone)])
 
-        tag_filter = request.params.get("property_tag", "").strip() or None
-        if tag_filter:
-            properties = properties.filtered(lambda p: p.property_tag == tag_filter)
-            if not properties:
-                return error_response(
-                    404,
-                    f"No active properties found for phone number {phone} with tag '{tag_filter}'.",
-                )
+        if not leads:
+            return error_response(404, f"No inquiries found for phone {phone}.")
 
-        tags = properties.mapped("property_tag")
         now = datetime.now()
 
         # Accumulate (sort_datetime, record) tuples per bucket
@@ -379,26 +337,20 @@ class SellerSiteVisitsController(http.Controller):
             "completed": [],
         }
 
-        # ── Primary leads ─────────────────────────────────────────────────────
-        primary_leads = get_primary_leads_for_tags(request.env, tags).filtered(
-            lambda lead: (
-                lead.site_visit_date and lead.current_status in _VISIT_STATUSES
-            ),
-        )
-        for lead in primary_leads:
-            bucket, sort_key, record = _visit_from_primary(lead, now)
-            buckets[bucket].append((sort_key, record))
+        for lead in leads:
+            # ── Primary lead site visit ───────────────────────────────────────
+            if lead.site_visit_date and lead.current_status in _VISIT_STATUSES:
+                bucket, sort_key, record = _visit_from_primary(lead, now)
+                buckets[bucket].append((sort_key, record))
 
-        # ── Recommended interests ─────────────────────────────────────────────
-        recommended_interests = get_recommended_leads_for_tags(
-            request.env,
-            tags,
-        ).filtered(
-            lambda i: i.site_visit_date and i.current_status in _VISIT_STATUSES,
-        )
-        for interest in recommended_interests:
-            bucket, sort_key, record = _visit_from_recommended(interest, now)
-            buckets[bucket].append((sort_key, record))
+            # ── Recommended property site visits on this lead ─────────────────
+            for interest in lead.interest_ids:
+                if (
+                    interest.site_visit_date
+                    and interest.current_status in _VISIT_STATUSES
+                ):
+                    bucket, sort_key, record = _visit_from_interest(interest, lead, now)
+                    buckets[bucket].append((sort_key, record))
 
         # ── Sort each bucket ──────────────────────────────────────────────────
         # upcoming         → soonest first (ascending)
@@ -424,9 +376,7 @@ class SellerSiteVisitsController(http.Controller):
         ]
 
         data = {
-            "owner_phone": phone,
-            "properties": tags,
-            "tag_filter": tag_filter,
+            "buyer_phone": phone,
             "upcoming": upcoming_sorted,
             "pending_feedback": pending_feedback_sorted,
             "cancelled": cancelled_sorted,
