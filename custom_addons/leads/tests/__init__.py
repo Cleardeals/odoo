@@ -10,6 +10,7 @@ from . import (
     test_portal_lead_processing,
     test_portal_lead_webhook,
     test_portal_lead_whatsapp,
+    test_seller_activity_api,
     test_seller_funnel_api,
     test_seller_summary_api,
 )

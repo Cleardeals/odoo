@@ -49,10 +49,66 @@ def error_response(http_status: int, message: str) -> Response:
         },
     }
 
-    _logger.error("API Error %s: %s", http_status, message)
+    # 5xx = real server errors → log as error
+    # 4xx = client mistakes (bad key, not found) → log as warning only
+    if http_status >= 500:
+        _logger.error("Track API %s: %s", http_status, message)
+    else:
+        _logger.warning("Track API %s: %s", http_status, message)
 
     return Response(
         json.dumps(payload, default=str),
         status=http_status,
         mimetype="application/json",
     )
+
+
+def paginate(items: list, page: int, page_size: int) -> dict:
+    """
+    Slice a list and return a pagination meta-block alongside the page items.
+
+    Parameters
+    ----------
+    items     : the full unsorted/sorted list to paginate
+    page      : 1-based page number (values < 1 are clamped to 1)
+    page_size : records per page (clamped to min 1, max 200)
+
+    Returns
+    -------
+    {
+        "items": [...],
+        "pagination": {
+            "page":        <int>,
+            "page_size":   <int>,
+            "total":       <int>,
+            "total_pages": <int>
+        }
+    }
+
+    Usage
+    -----
+        paged = paginate(records, page, page_size)
+        data = {
+            "owner_phone": phone,
+            **paged,          # inlines "items" and "pagination" into data
+        }
+        return success_response(data)
+    """
+    page = max(1, page)
+    page_size = max(1, min(page_size, 200))  # hard cap at 200
+
+    total = len(items)
+    total_pages = max(1, -(-total // page_size))  # ceiling division
+
+    start = (page - 1) * page_size
+    end = start + page_size
+
+    return {
+        "items": items[start:end],
+        "pagination": {
+            "page": page,
+            "page_size": page_size,
+            "total": total,
+            "total_pages": total_pages,
+        },
+    }
