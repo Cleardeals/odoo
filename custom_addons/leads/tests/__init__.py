@@ -9,3 +9,4 @@ from . import test_portal_lead_cron
 from . import test_portal_lead_api
 from . import test_portal_lead_webhook
 from . import test_lead_property_interest
+from . import test_seller_summary_api
