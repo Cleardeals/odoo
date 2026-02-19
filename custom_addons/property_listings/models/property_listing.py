@@ -1,10 +1,15 @@
 from odoo import api, fields, models
 
-class PropertyListing(models.Model):
-    _name = 'property.listing'
-    _description = 'Onboarded Property Listing'
 
-    currency_id = fields.Many2one('res.currency', string="Currency", default=lambda self: self.env.user.company_id.currency_id)
+class PropertyListing(models.Model):
+    _name = "property.listing"
+    _description = "Onboarded Property Listing"
+
+    currency_id = fields.Many2one(
+        "res.currency",
+        string="Currency",
+        default=lambda self: self.env.user.company_id.currency_id,
+    )
 
     # 1. Name of the owner of the property
     name = fields.Char(string="Owner Name", required=True)
@@ -16,35 +21,74 @@ class PropertyListing(models.Model):
     property_address = fields.Text(string="Property Address")
 
     # 5, 6, 7. Location Details (Linked to other models)
-    country_id = fields.Many2one('res.country', string="Country", default=lambda self: self.env.ref('base.in'))
-    state_id = fields.Many2one('res.country.state', string="State", domain="[('country_id', '=', country_id)]")
-    city_id = fields.Many2one('res.city', string="City", domain="[('state_id', '=', state_id)]")
+    country_id = fields.Many2one(
+        "res.country",
+        string="Country",
+        default=lambda self: self.env.ref("base.in"),
+    )
+    state_id = fields.Many2one(
+        "res.country.state",
+        string="State",
+        domain="[('country_id', '=', country_id)]",
+    )
+    city_id = fields.Many2one(
+        "res.city",
+        string="City",
+        domain="[('state_id', '=', state_id)]",
+    )
     # 16. Location/Area
-    location_id = fields.Many2one('res.location', string="Location", domain="[('city_id', '=', city_id)]")
-    
+    location_id = fields.Many2one(
+        "res.location",
+        string="Location",
+        domain="[('city_id', '=', city_id)]",
+    )
+
     # 8. Tag
-    tag = fields.Char(string="Property ")
+    tag = fields.Char(string="Property Tag")
 
     # 11, 13, 14, 15. Property Type and Specs
     bhk = fields.Char(string="BHK")
-    property_type = fields.Selection([('residential', 'Residential'), ('commercial', 'Commercial')], string="Property Type")
-    residential_type = fields.Char(string="Residential Type") # e.g., Apartment, Villa
-    commercial_type = fields.Char(string="Commercial Type") # e.g., Office, Showroom
+    property_type = fields.Selection(
+        [("residential", "Residential"), ("commercial", "Commercial")],
+        string="Property Type",
+    )
+    residential_type = fields.Char(string="Residential Type")  # e.g., Apartment, Villa
+    commercial_type = fields.Char(string="Commercial Type")  # e.g., Office, Showroom
 
     # 17. Sell/Rent
-    listing_type = fields.Selection([('sell', 'For Sell'), ('rent', 'For Rent')], string="Listing Type", default='sell')
+    listing_type = fields.Selection(
+        [("sell", "For Sell"), ("rent", "For Rent")],
+        string="Listing Type",
+        default="sell",
+    )
 
     # 36 to 47. Detailed Specs
-    current_status = fields.Selection([('self_occupied', 'Self Occupied'), ('empty', 'Empty'), ('tenant_occupied', 'Tenant Occupied')], string="Current Status")
+    current_status = fields.Selection(
+        [
+            ("self_occupied", "Self Occupied"),
+            ("empty", "Empty"),
+            ("tenant_occupied", "Tenant Occupied"),
+        ],
+        string="Current Status",
+    )
     property_on_floor = fields.Char(string="Property On Floor")
     property_facing = fields.Char(string="Property Facing")
     lift_per_block = fields.Char(string="No. of Lifts per Block")
-    furniture_details = fields.Selection([('unfurnished', 'Unfurnished'), ('semi_furnished', 'Semi-Furnished'), ('furnished', 'Furnished')], string="Furniture Details")
+    furniture_details = fields.Selection(
+        [
+            ("unfurnished", "Unfurnished"),
+            ("semi_furnished", "Semi-Furnished"),
+            ("furnished", "Furnished"),
+        ],
+        string="Furniture Details",
+    )
     age_of_property = fields.Char(string="Age of Property (Years)")
     parking_details = fields.Char(string="Parking Details")
     bathroom = fields.Char(string="Bathrooms")
     super_built_up_plot_space = fields.Char(string="Super Built-up Plot Space")
-    super_built_up_construction_area = fields.Char(string="Super Built-up Construction Area")
+    super_built_up_construction_area = fields.Char(
+        string="Super Built-up Construction Area",
+    )
     carpet_construction_area = fields.Char(string="Carpet Construction Area")
     carpet_plot_area = fields.Char(string="Carpet Plot Area")
 
@@ -52,31 +96,59 @@ class PropertyListing(models.Model):
     service_call_date = fields.Date(string="Service Call Date")
     payment_package = fields.Char(string="Payment Package")
     form_number = fields.Char(string="Form Number")
-    property_price = fields.Monetary(string="Property Price", currency_field='currency_id')
+    property_price = fields.Monetary(
+        string="Property Price",
+        currency_field="currency_id",
+    )
     payment_mode = fields.Char(string="Payment Mode")
     receipt_number = fields.Char(string="Receipt Number")
-    service_validity = fields.Selection([
-        ('1', '1 Month'), ('3', '3 Months'), ('6', '6 Months'), ('12', '12 Months')
-    ], string="Service Validity (Months)")
-    package_amount = fields.Monetary(string="Package Amount", currency_field='currency_id')
-    net_amount = fields.Monetary(string="Net Amount", currency_field='currency_id')
-    due_amount = fields.Monetary(string="Due Amount", currency_field='currency_id')
-    total_package_amount = fields.Monetary(string="Total Package Amount", currency_field='currency_id')
+    service_validity = fields.Selection(
+        [
+            ("1", "1 Month"),
+            ("3", "3 Months"),
+            ("6", "6 Months"),
+            ("12", "12 Months"),
+        ],
+        string="Service Validity (Months)",
+    )
+    package_amount = fields.Monetary(
+        string="Package Amount",
+        currency_field="currency_id",
+    )
+    net_amount = fields.Monetary(string="Net Amount", currency_field="currency_id")
+    due_amount = fields.Monetary(string="Due Amount", currency_field="currency_id")
+    total_package_amount = fields.Monetary(
+        string="Total Package Amount",
+        currency_field="currency_id",
+    )
     inventory_count = fields.Integer(string="Number of Inventory", default=1)
     property_register_date = fields.Date(string="Property Register Date")
-    gst_status = fields.Selection([('gst', 'GST Applicable'), ('no_gst', 'No GST')], string="GST Status")
-    expiry_date = fields.Date(string="Expiry Date", compute='_compute_expiry_date', store=True)
-    
+    gst_status = fields.Selection(
+        [("gst", "GST Applicable"), ("no_gst", "No GST")],
+        string="GST Status",
+    )
+    expiry_date = fields.Date(
+        string="Expiry Date",
+        compute="_compute_expiry_date",
+        store=True,
+    )
+
     # 2, 26, 33. Assigned Users
-    rm_id = fields.Many2one('res.users', string="Relationship Manager")
-    sales_executive_id = fields.Many2one('res.users', string="Sales Executive")
-    
+    rm_id = fields.Many2one("res.users", string="Relationship Manager")
+    sales_executive_id = fields.Many2one("res.users", string="Sales Executive")
+
     # 48 to 57. Marketing and Status
     property_link = fields.Char(string="Property Website Link")
     link_360_dgt = fields.Char(string="360 Video Link")
-    property_status = fields.Selection([
-        ('live', 'Live'), ('expired', 'Expired'), ('sold', 'Sold')
-    ], string="Listing Status", default='live')
+    property_status = fields.Selection(
+        [
+            ("live", "Live"),
+            ("expired", "Expired"),
+            ("sold", "Sold"),
+        ],
+        string="Listing Status",
+        default="live",
+    )
     property_sold_date = fields.Date(string="Property Sold Date")
     reason_for_unsold = fields.Text(string="Reason For Unsold")
     instagram_reel = fields.Boolean(string="Instagram Reel Made?")
@@ -85,19 +157,25 @@ class PropertyListing(models.Model):
     id_magicbricks = fields.Char(string="Magicbricks ID")
     id_olx = fields.Char(string="OLX ID")
 
-    @api.onchange('property_register_date', 'service_validity')
+    @api.onchange("property_register_date", "service_validity")
     def _compute_expiry_date(self):
         for record in self:
             if record.property_register_date and record.service_validity:
-                record.expiry_date = fields.Date.add(record.property_register_date, months=int(record.service_validity))
+                record.expiry_date = fields.Date.add(
+                    record.property_register_date,
+                    months=int(record.service_validity),
+                )
             else:
                 record.expiry_date = False
-    
+
     def _cron_expire_listings(self):
-        """ Automated action to expire property listings based on service validity."""
-        for prop in self.search([('property_status', '=', 'live')]):
+        """Automated action to expire property listings based on service validity."""
+        for prop in self.search([("property_status", "=", "live")]):
             if prop.service_validity and prop.property_register_date:
                 # In property_listing.py, around line 100
-                expiry_date = fields.Date.add(prop.property_register_date, months=int(prop.service_validity))
+                expiry_date = fields.Date.add(
+                    prop.property_register_date,
+                    months=int(prop.service_validity),
+                )
                 if fields.Date.today() > expiry_date:
-                    prop.property_status = 'expired'
+                    prop.property_status = "expired"

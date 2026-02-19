@@ -8,6 +8,7 @@ from odoo.exceptions import UserError
 
 _logger = logging.getLogger(__name__)
 
+
 class LeadImportWizard(models.TransientModel):
     _name = 'lead.import.wizard'
     _description = 'Lead Scoring Import Wizard'
@@ -34,7 +35,7 @@ class LeadImportWizard(models.TransientModel):
 
         User = self.env['res.users']
         user_record = User.search([('name', '=ilike', user_name)], limit=1)
-        
+
         if not user_record:
             _logger.warning(f"User '{user_name}' not found, defaulting to Admin.")
             return self.env.ref('base.user_admin').id
@@ -53,7 +54,7 @@ class LeadImportWizard(models.TransientModel):
     def _clean_lead_status(self, status_str):
         """Maps the status from the CSV to the keys in the Odoo selection field."""
         if not status_str:
-            return 'lead' # Default value
+            return 'lead'  # Default value
 
         status_map = {
             'busy': 'busy',
@@ -63,7 +64,7 @@ class LeadImportWizard(models.TransientModel):
             'site visit scheduled': 'site_visit_scheduled',
             'option not matching requirements': 'option_not_matching_requirements',
             'details shared of property': 'details_shared_of_property',
-            'no requiremnets' : 'no_requirements',
+            'no requiremnets': 'no_requirements',
             'details shared and interested for site visit': 'details_shared_and_interested_for_site_visit',
             'switched off': 'switched_off',
             'requirement closed': 'requirement_closed',
@@ -74,7 +75,7 @@ class LeadImportWizard(models.TransientModel):
             'others': 'other',
 
         }
-        return status_map.get(status_str.strip().lower(), 'lead') # Default to 'lead' if not found
+        return status_map.get(status_str.strip().lower(), 'lead')  # Default to 'lead' if not found
 
     def action_import_leads(self):
         """ The main logic for parsing the CSV and creating lead score records. """
@@ -85,7 +86,7 @@ class LeadImportWizard(models.TransientModel):
         reader = csv.DictReader(StringIO(decoded_file))
 
         LeadScore = self.env['lead.score']
-        
+
         for row in reader:
             lead_name = row.get('customer_name', '').strip()
             if not lead_name:
@@ -93,8 +94,8 @@ class LeadImportWizard(models.TransientModel):
 
             # Find related records
             rm_id = self._find_user_by_name(row.get('assigned_rm'))
-            #property_id = self._find_property_by_name(row.get('Project_Name'))
-            
+            # property_id = self._find_property_by_name(row.get('Project_Name'))
+
             # Clean and map the status
             lead_state = self._clean_lead_status(row.get('current_status'))
 
@@ -107,7 +108,7 @@ class LeadImportWizard(models.TransientModel):
 
                     # Link to other models
                     'assigned_rm_id': rm_id,
-                    #'property_id': property_id,
+                    # 'property_id': property_id,
                     'project_name': row.get('Project_Name', '').strip(),
                     'property_type': row.get('Property_Type', '').strip(),
                     'property_tag': row.get('property_tag', '').strip(),
@@ -125,7 +126,6 @@ class LeadImportWizard(models.TransientModel):
                     'parking_details': row.get('Parking_Details', '').strip(),
                     'offer_price': row.get('Offer_Price', '').strip(),
                     'bathroom': row.get('Bathroom', '').strip(),
-                    
                     # Fields for RM Interaction
                     'state': lead_state,
                     'site_visit_scheduled_date': row.get('site_visit_date') or None,
@@ -134,5 +134,5 @@ class LeadImportWizard(models.TransientModel):
             except (ValueError, TypeError) as e:
                 _logger.warning(f"Could not import lead '{lead_name}' due to a data conversion error: {e}")
                 continue
-            
+
         return {'type': 'ir.actions.client', 'tag': 'reload'}

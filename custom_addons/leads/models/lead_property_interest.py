@@ -6,11 +6,10 @@ class LeadPropertyInterest(models.Model):
     _description = "Lead Recommended Property Interests"
     _order = "create_date desc"
 
-
     # [MIGRATION 19.0] Replaced legacy _sql_constraints with models.Constraint
     _lead_prop_uniq = models.Constraint(
         'UNIQUE(lead_id, property_id)',
-        message='This property is already linked to the lead.'
+        message='This property is already linked to the lead.',
     )
 
     lead_id = fields.Many2one('leads.new', string="Lead", ondelete="cascade", required=True)
@@ -34,17 +33,17 @@ class LeadPropertyInterest(models.Model):
         ('budget_not_sufficient', 'Budget Not Sufficient'),
         ('site_visit_done', 'Site Visit Done'),
         ('number_not_in_use_wrong_number', 'Number Not in Use/Wrong Number'),
-        ('other', 'Other')
+        ('other', 'Other'),
     ], string='Current Status', default='lead', required=True)
 
     remarks = fields.Text(string='Remarks')
-    site_visit_date = fields.Datetime(string='Site Visit Date', copy = False)
+    site_visit_date = fields.Datetime(string='Site Visit Date', copy=False)
 
     site_visit_date_only = fields.Date(
         string="Site Visit Date (Recommended Property)",
         compute='_compute_site_visit_date_only',
-        store=True, # Essential for filtering
-        readonly=True
+        store=True,  # Essential for filtering
+        readonly=True,
     )
 
     # # We link to the RM of the property for the security rules
@@ -57,12 +56,12 @@ class LeadPropertyInterest(models.Model):
 
     property_bhk = fields.Char(
         related='property_id.bhk',
-        readonly=True
+        readonly=True,
     )
 
     property_location = fields.Char(
         related='property_id.location',
-        readonly=True
+        readonly=True,
     )
 
     feedback_general = fields.Selection([
@@ -85,7 +84,7 @@ class LeadPropertyInterest(models.Model):
         ('price_is_high', 'Price is High'),
         ('location_mismatch', 'Location Mismatch'),
         ('deal_closed', 'Deal Closed'),
-        ('other', 'Other')
+        ('other', 'Other'),
     ], string='Feedback for Site Visit Done')
 
     @api.depends('site_visit_date')

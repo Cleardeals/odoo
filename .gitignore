@@ -69,3 +69,5 @@ odoo-web-data/
 docker-compose.override.yml
 
 letsencrypt/
+
+hrms_addons/
