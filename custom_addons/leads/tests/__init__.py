@@ -13,5 +13,6 @@ from . import (
     test_seller_activity_api,
     test_seller_ai_suggestions_api,
     test_seller_funnel_api,
+    test_seller_site_visits_api,
     test_seller_summary_api,
 )
