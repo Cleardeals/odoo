@@ -1,12 +1,15 @@
-from . import test_lead_score
-from . import test_portal_common
-from . import test_portal_lead_crud
-from . import test_portal_lead_duplicate
-from . import test_portal_lead_phone
-from . import test_portal_lead_processing
-from . import test_portal_lead_whatsapp
-from . import test_portal_lead_cron
-from . import test_portal_lead_api
-from . import test_portal_lead_webhook
-from . import test_lead_property_interest
-from . import test_seller_summary_api
+from . import (
+    test_lead_property_interest,
+    test_lead_score,
+    test_portal_common,
+    test_portal_lead_api,
+    test_portal_lead_cron,
+    test_portal_lead_crud,
+    test_portal_lead_duplicate,
+    test_portal_lead_phone,
+    test_portal_lead_processing,
+    test_portal_lead_webhook,
+    test_portal_lead_whatsapp,
+    test_seller_funnel_api,
+    test_seller_summary_api,
+)

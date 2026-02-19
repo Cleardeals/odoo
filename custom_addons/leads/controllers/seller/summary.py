@@ -33,6 +33,7 @@ import logging
 from odoo import http
 from odoo.http import request
 
+from ..shared.auth import validate_api_key
 from ..shared.phone_utils import extract_phone_from_request
 from ..shared.property_resolver import (
     get_primary_leads_for_tags,
@@ -58,6 +59,10 @@ class SellerSummaryController(http.Controller):
         """
         Query param: phone (str) — owner phone, with or without leading 91
         """
+        auth_error = validate_api_key(request)
+        if auth_error:
+            return auth_error
+
         phone = extract_phone_from_request(request)
         if not phone:
             return error_response(400, "Valid 'phone' query parameter is required.")
