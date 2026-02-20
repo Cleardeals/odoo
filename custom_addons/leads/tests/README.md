@@ -1,7 +1,7 @@
 # Leads Module - Test Suite Documentation
 
-> **Odoo 19 Custom Module Testing Documentation**  
-> **Module:** `leads`  
+> **Odoo 19 Custom Module Testing Documentation**
+> **Module:** `leads`
 > **Path:** `/custom_addons/leads/tests/`
 
 ---
@@ -30,8 +30,9 @@ This test suite provides comprehensive coverage for the **Leads Management Modul
 
 ### Test Statistics
 
-- **Total Test Files:** 11
-- **Test Categories:** CRUD, Processing, API, Webhook, Cron Jobs, WhatsApp Integration, Property Interests
+- **Total Test Files:** 17
+- **Total Tests:** ~355+
+- **Test Categories:** CRUD, Processing, API (Buyer/Seller), Webhook, Cron Jobs, WhatsApp Integration, Property Interests, Site Visits, Activity Logs, Performance
 - **Test Tags:** `@tagged('post_install', '-at_install')`
 
 ---
@@ -46,12 +47,23 @@ tests/
 ├── test_portal_lead_crud.py         # Basic CRUD operations (10 tests)
 ├── test_portal_lead_duplicate.py    # Duplicate detection logic (5 tests)
 ├── test_portal_lead_phone.py        # Phone standardization (9 tests)
-├── test_portal_lead_processing.py   # Lead assignment & property matching (10 tests)
+├── test_portal_lead_processing.py   # Lead assignment & property matching (15 tests)
 ├── test_portal_lead_whatsapp.py     # WhatsApp URL generation (5 tests)
 ├── test_portal_lead_cron.py         # Cron job operations (3 tests)
 ├── test_portal_lead_api.py          # External API integrations (4 tests)
 ├── test_portal_lead_webhook.py      # n8n webhook functionality (3 tests)
-├── test_lead_property_interest.py   # Property interests & computed fields (18 tests)
+├── test_lead_property_interest.py   # Property interests & computed fields (21 tests)
+│
+├── BUYER API ENDPOINTS
+├── test_buyer_site_visits_api.py    # Buyer site visits classification & serialization (35 tests)
+├── test_buyer_activity_api.py       # Buyer activity logs & feed (TBD tests)
+│
+├── SELLER API ENDPOINTS
+├── test_seller_site_visits_api.py   # Seller site visits with property filtering (32 tests)
+├── test_seller_activity_api.py      # Seller activity logs & events (TBD tests)
+├── test_seller_summary_api.py       # Seller dashboard summary data (25 tests)
+├── test_seller_portal_performance_api.py  # Seller portal performance metrics (33 tests)
+│
 └── README.md                        # This documentation
 ```
 
@@ -117,13 +129,13 @@ pytest custom_addons/leads/tests/ -v --odoo-database=<database_name>
 def create_portal_lead(self, **kwargs):
     """
     Helper method to create portal leads with sensible defaults.
-    
+
     Args:
         **kwargs: Override any default field values
-        
+
     Returns:
         leads.new: Created lead record
-        
+
     Example:
         lead = self.create_portal_lead(
             name='Custom Lead',
@@ -137,8 +149,8 @@ def create_portal_lead(self, **kwargs):
 
 ### 2. `test_lead_score.py` - Lead Scoring Model Tests
 
-**Class:** `TestLeadScore(TransactionCase)`  
-**Model Under Test:** `lead.score`  
+**Class:** `TestLeadScore(TransactionCase)`
+**Model Under Test:** `lead.score`
 **Total Tests:** 20
 
 #### Test Cases:
@@ -182,8 +194,8 @@ def create_portal_lead(self, **kwargs):
 
 ### 3. `test_portal_lead_crud.py` - CRUD Operations
 
-**Class:** `TestPortalLeadCRUD(PortalLeadTestCase)`  
-**Model Under Test:** `leads.new`  
+**Class:** `TestPortalLeadCRUD(PortalLeadTestCase)`
+**Model Under Test:** `leads.new`
 **Total Tests:** 10
 
 | Test ID | Method | Description |
@@ -202,8 +214,8 @@ def create_portal_lead(self, **kwargs):
 
 ### 4. `test_portal_lead_duplicate.py` - Duplicate Detection
 
-**Class:** `TestPortalLeadDuplicateDetection(PortalLeadTestCase)`  
-**Model Under Test:** `leads.new`  
+**Class:** `TestPortalLeadDuplicateDetection(PortalLeadTestCase)`
+**Model Under Test:** `leads.new`
 **Total Tests:** 5
 
 | Test ID | Method | Description |
@@ -232,8 +244,8 @@ NOT DUPLICATE if ANY:
 
 ### 5. `test_portal_lead_phone.py` - Phone Standardization
 
-**Class:** `TestPortalLeadPhoneStandardization(PortalLeadTestCase)`  
-**Model Under Test:** `leads.new`  
+**Class:** `TestPortalLeadPhoneStandardization(PortalLeadTestCase)`
+**Model Under Test:** `leads.new`
 **Total Tests:** 9
 
 | Test ID | Input | Expected Output |
@@ -252,8 +264,8 @@ NOT DUPLICATE if ANY:
 
 ### 6. `test_portal_lead_processing.py` - Lead Processing
 
-**Class:** `TestPortalLeadProcessing(PortalLeadTestCase)`  
-**Model Under Test:** `leads.new`  
+**Class:** `TestPortalLeadProcessing(PortalLeadTestCase)`
+**Model Under Test:** `leads.new`
 **Total Tests:** 15
 
 | Test ID | Method | Description |
@@ -308,8 +320,8 @@ Portal Name          → Default RM Assigned
 
 ### 7. `test_portal_lead_whatsapp.py` - WhatsApp Integration
 
-**Class:** `TestPortalLeadWhatsapp(PortalLeadTestCase)`  
-**Model Under Test:** `leads.new`  
+**Class:** `TestPortalLeadWhatsapp(PortalLeadTestCase)`
+**Model Under Test:** `leads.new`
 **Total Tests:** 5
 
 | Test ID | Method | Description |
@@ -331,8 +343,8 @@ Output: whatsapp://send?phone=919876543210
 
 ### 8. `test_portal_lead_cron.py` - Scheduled Jobs
 
-**Class:** `TestPortalLeadCron(PortalLeadTestCase)`  
-**Model Under Test:** `leads.new`  
+**Class:** `TestPortalLeadCron(PortalLeadTestCase)`
+**Model Under Test:** `leads.new`
 **Total Tests:** 3
 
 | Test ID | Method | Description |
@@ -354,8 +366,8 @@ Criteria for reprocessing:
 
 ### 9. `test_portal_lead_api.py` - External API Integration
 
-**Class:** `TestPortalLeadAPI(PortalLeadTestCase)`  
-**Model Under Test:** `leads.new`  
+**Class:** `TestPortalLeadAPI(PortalLeadTestCase)`
+**Model Under Test:** `leads.new`
 **Total Tests:** 4
 
 | Test ID | Method | Description |
@@ -381,8 +393,8 @@ def test_01_housing_api_fetch_success(self, mock_get):
 
 ### 10. `test_portal_lead_webhook.py` - Webhook Functionality
 
-**Class:** `TestPortalLeadWebhook(PortalLeadTestCase)`  
-**Model Under Test:** `leads.new`  
+**Class:** `TestPortalLeadWebhook(PortalLeadTestCase)`
+**Model Under Test:** `leads.new`
 **Total Tests:** 3
 
 | Test ID | Method | Description |
@@ -405,10 +417,10 @@ def test_01_housing_api_fetch_success(self, mock_get):
 
 **Classes:**
 - `TestLeadPropertyInterest(PortalLeadTestCase)` - 10 tests
-- `TestLeadAllAssociatedProperties(PortalLeadTestCase)` - 6 tests  
+- `TestLeadAllAssociatedProperties(PortalLeadTestCase)` - 6 tests
 - `TestLeadDateComputations(PortalLeadTestCase)` - 5 tests
 
-**Models Under Test:** `lead.property.interest`, `leads.new`  
+**Models Under Test:** `lead.property.interest`, `leads.new`
 **Total Tests:** 21
 
 #### TestLeadPropertyInterest - Property Interest Model Tests
@@ -484,7 +496,419 @@ _lead_prop_uniq = models.Constraint(
 
 ---
 
-## Test Coverage Matrix
+## 12. `test_buyer_site_visits_api.py` - Buyer Site Visits API
+
+**Class:** `TestBuyerSiteVisitsAPI(PortalLeadTestCase)`
+**Endpoint:** `/api/buyer/site_visits`
+**Models Under Test:** `leads.new`, `lead.property.interest`
+**Total Tests:** 35
+
+### Overview
+
+Comprehensive test suite for the buyer site visits endpoint that classifies, serializes, and aggregates site visit records across primary and recommended properties. Tests the complete pipeline from visit classification through API response building.
+
+### Visit Classification Logic
+
+Visits are classified into 5 buckets based on status, date, and feedback:
+
+| Bucket | Condition | Sort Order |
+|--------|-----------|-----------|
+| `upcoming` | status='site_visit_scheduled' AND date > now | Ascending (soonest first) |
+| `pending_feedback` | status='site_visit_scheduled' AND date ≤ now AND feedback in {None, "", "other", False} | Ascending (oldest first) |
+| `cancelled` | status='site_visit_scheduled' AND date ≤ now AND feedback NOT in _EMPTY_FEEDBACK | Descending (recent first) |
+| `rescheduled` | status='rescheduled' | Descending (recent first) |
+| `completed` | status='site_visit_done' | Descending (recent first) |
+
+### Valid Status Values
+
+```python
+_VISIT_STATUSES = {"site_visit_scheduled", "site_visit_done", "rescheduled"}
+_EMPTY_FEEDBACK = {None, "", "other", False}
+```
+
+### Test Categories (35 tests)
+
+#### Category 1: Visit Classification (7 tests)
+- test_001: upcoming (future scheduled)
+- test_002: pending_feedback (past scheduled, no feedback)
+- test_003: cancelled (past scheduled, feedback value)
+- test_004: rescheduled (status="rescheduled")
+- test_005: completed (status="site_visit_done")
+- test_006: empty string feedback → pending_feedback
+- test_007: False feedback → pending_feedback
+
+#### Category 2: Primary Lead Record Building (4 tests)
+- test_008: all base fields present
+- test_009: null name/portal handling (False for empty, not None)
+- test_010: ISO datetime format for site_visit_datetime
+- test_011: property details accessible via property_id
+
+#### Category 3: Recommended Interest Building (2 tests)
+- test_012: interest structure with parent link
+- test_013: inherits lead info via lead_id relation
+
+#### Category 4: Bucket-Specific Fields (7 tests)
+- test_014: pending_feedback excludes feedback_general field
+- test_015: cancelled includes feedback_general
+- test_016: rescheduled status preserved
+- test_017: completed includes feedback_site_visit_done
+- test_018: completed includes remarks when feedback="other"
+- test_019: completed excludes remarks when feedback!="other"
+- test_020: upcoming has no bucket-specific fields
+
+#### Category 5: Sorting Logic (4 tests)
+- test_021: upcoming ascending (soonest first)
+- test_022: pending_feedback ascending (oldest first)
+- test_023: cancelled descending (recent first)
+- test_024: completed descending (recent first)
+
+#### Category 6: Source Field (Primary vs Recommended) (3 tests)
+- test_025: primary lead has source="primary"
+- test_026: recommended interest has source="recommended"
+- test_027: mixed primary and recommended together
+
+#### Category 7: Multiple Inquiries (3 tests)
+- test_028: multiple inquiries per buyer
+- test_029: multiple recommendations per inquiry
+- test_030: primary + 2 recommended = 3 records
+
+#### Category 8: Aggregation & Filtering (5 tests)
+- test_031: cross-bucket totals calculation
+- test_032: lead without visits excluded
+- test_033: single primary only
+- test_034: missing visit_date excluded
+- test_035: invalid status excluded
+
+### Key Fields
+
+**Base Record Fields (all buckets):**
+```python
+{
+    "source": "primary" | "recommended",
+    "lead_id": int,
+    "lead_name": str | None,
+    "portal": str | None,
+    "property_tag": str | None,
+    "property_bhk": str | None,
+    "property_location": str | None,
+    "property_city": str | None,
+    "site_visit_datetime": "ISO8601" | None,
+    "site_visit_date": "ISO8601" | None,
+    "current_status": str,
+    "remarks": str | None,
+}
+```
+
+**Bucket-Specific Fields:**
+```python
+# pending_feedback bucket
+{"note": "Visit date has passed — awaiting RM feedback"}
+
+# cancelled bucket
+{
+    "feedback_general": str,
+    "note": "Visit did not occur due to buyer status"
+}
+
+# rescheduled bucket
+{"note": "Visit was rescheduled — confirm new date with RM"}
+
+# completed bucket
+{
+    "feedback_site_visit_done": str,
+    "remarks": str | None  # Only if feedback == "other"
+}
+
+# upcoming bucket
+{}  # No extra fields
+```
+
+### Response Structure
+
+```json
+{
+    "buyer_phone": "9876543210",
+    "upcoming": [...],
+    "pending_feedback": [...],
+    "cancelled": [...],
+    "rescheduled": [...],
+    "completed": [...],
+    "totals": {
+        "upcoming": int,
+        "pending_feedback": int,
+        "cancelled": int,
+        "rescheduled": int,
+        "completed": int
+    },
+    "error": null
+}
+```
+
+---
+
+## 13. `test_seller_site_visits_api.py` - Seller Site Visits API
+
+**Class:** `TestSellerSiteVisitsAPI(PortalLeadTestCase)`
+**Endpoint:** `/api/seller/property/{property_tag}/site_visits`
+**Models Under Test:** `leads.new`, `lead.property.interest`
+**Total Tests:** 32
+
+### Overview
+
+Test suite for seller site visits endpoint that aggregates visits grouped by property and bucket. Similar classification to buyer endpoint but filtered by property_tag and organized per-property.
+
+### Test Categories (32 tests)
+
+- test_01-07: Visit classification tests (upcoming, pending_feedback, cancelled, rescheduled, completed, empty_feedback variants)
+- test_08-10: Base record building and null handling
+- test_11-17: Bucket-specific fields (pending note, cancelled feedback, rescheduled note, completed feedback, remarks logic, upcoming minimal)
+- test_18-21: Sorting logic (upcoming ascending, pending ascending, cancelled descending, completed descending)
+- test_22: Filter by property_tag
+- test_23: No visits for property without site_visit_date
+- test_24: Visits combine primary and recommended
+- test_25: Mixed bucket distribution
+- test_26: Totals calculation
+- test_27: Empty all buckets
+- test_28-29: ISO format for datetime and date fields
+- test_30: Property tag mapping
+- test_31: Visit with all feedback types
+- test_32: site_visit_date_only vs datetime differentiation
+
+---
+
+## 14. `test_buyer_activity_api.py` - Buyer Activity API
+
+**Class:** `TestBuyerActivityAPI(PortalLeadTestCase)`
+**Endpoint:** `/api/buyer/activity`
+**Models Under Test:** `leads.new`
+**Total Tests:** TBD
+
+### Overview
+
+Test suite for buyer activity logs endpoint that returns a chronological feed of buyer interactions and status changes.
+
+### Expected Test Coverage
+
+- Activity log creation and timestamps
+- Chronological ordering
+- Status change logging
+- Property interactions
+- Feed pagination
+- Empty activity handling
+
+---
+
+## 15. `test_seller_activity_api.py` - Seller Activity API
+
+**Class:** `TestSellerActivityAPI(PortalLeadTestCase)`
+**Endpoint:** `/api/seller/property/{property_tag}/activity`
+**Models Under Test:** `leads.new`, `lead.property.interest`
+**Total Tests:** TBD
+
+### Overview
+
+Test suite for seller activity logs endpoint that tracks all interactions and changes for a specific property.
+
+### Expected Test Coverage
+
+- Activity filtering by property
+- Buyer interactions on property
+- Status transitions
+- Timestamps and chronological ordering
+- Bulk activity aggregation
+
+---
+
+## 16. `test_seller_summary_api.py` - Seller Summary API
+
+**Class:** `TestSellerSummaryAPI(PortalLeadTestCase)`
+**Endpoint:** `/api/seller/summary`
+**Models Under Test:** `leads.new`, `lead.property.interest`
+**Total Tests:** 25
+
+### Overview
+
+Comprehensive test suite for seller dashboard summary endpoint that aggregates leads, inquiries, and performance metrics across all seller properties and portals.
+
+### Test Categories (25 tests)
+
+#### Phone Normalization (7 tests)
+- test_01-06: Phone format variations (10-digit, 91 prefix, spaces, dashes, etc.)
+- test_07: Invalid phone handling
+
+#### Property and Lead Querying (8 tests)
+- test_07-10: Get properties for phone (exact match, 91 fallback, nonexistent phone, active only)
+- test_11-13: Get primary leads for tags
+- test_14-15: Get recommended leads for tags
+
+#### Portal Breakdown (3 tests)
+- test_16: Portal breakdown known portals (MagicBricks, Housing.com, 99acres, OLX)
+- test_17: Portal breakdown unknown portal
+
+#### Inquiry Management (3 tests)
+- test_18: Inquiry count (primary + recommended)
+- test_19: Inquiry count empty results
+- test_25: Leads from different portals counted separately
+
+#### Properties List (4 tests)
+- test_20: Properties list all seller tags
+- test_21: Primary lead has correct properties
+- test_22: Recommended interest links correctly
+- test_24: Multiple properties same seller isolated
+
+#### Data Consistency (1 test)
+- test_23: Portal breakdown totals consistency
+
+### Response Structure
+
+```json
+{
+    "seller_phone": "9876543210",
+    "properties": [
+        {
+            "property_tag": "PROP-001",
+            "bhk": "2 BHK",
+            "location": "Location Name",
+            "city": "City Name",
+            "inquiries": {
+                "total": int,
+                "by_portal": {
+                    "MagicBricks": int,
+                    "Housing.com": int,
+                    "99acres": int,
+                    "OLX": int,
+                    "unknown": int
+                }
+            }
+        }
+    ],
+    "summary": {
+        "total_properties": int,
+        "total_inquiries": int,
+        "by_portal": { ... }
+    },
+    "error": null
+}
+```
+
+---
+
+## 17. `test_seller_portal_performance_api.py` - Seller Portal Performance API
+
+**Class:** `TestSellerPortalPerformanceAPI(PortalLeadTestCase)`
+**Endpoint:** `/api/seller/property/{property_tag}/performance`
+**Models Under Test:** `leads.new`, `lead.property.interest`
+**Total Tests:** 33
+
+### Overview
+
+Performance metrics and analytics test suite for seller portal that tracks inquiry sources, conversion rates, and engagement metrics per property and portal.
+
+### Test Categories (33 tests)
+
+#### Basic Metrics (5 tests)
+- test_01: Total inquiries per property
+- test_02: Portal source breakdown
+- test_03: Empty property metrics
+- test_04: Multiple portals aggregation
+- test_05: Property filtering accuracy
+
+#### Visit Conversion (6 tests)
+- test_06: Visit count by portal
+- test_07: Conversion rate calculation
+- test_08: Feedback distribution
+- test_09: Rescheduled visit tracking
+- test_10: Completed visit tracking
+- test_11: Pending follow-up count
+
+#### Engagement Metrics (5 tests)
+- test_12: Primary vs recommended breakdown
+- test_13: Interest persistence
+- test_14: Feedback completion rate
+- test_15: Response time tracking
+- test_16: Activity frequency
+
+#### Time-Based Analysis (8 tests)
+- test_17-20: Period filtering (today, week, month, all)
+- test_21-22: Trend calculation (week-over-week, month-over-month)
+- test_23: Date range flexibility
+- test_24: Timezone handling
+
+#### Data Formats & Consistency (9 tests)
+- test_25: Percentage formatting
+- test_26: Null handling
+- test_27: Empty result handling
+- test_28: DateTime ISO format
+- test_29: Aggregation consistency
+- test_30: Empty portal block structure
+- test_31: Full aggregation scenario
+- test_32: Empty property all portals zero
+- test_33: Serialization format
+
+### Response Structure
+
+```json
+{
+    "property_tag": "PROP-001",
+    "metrics": {
+        "total_inquiries": int,
+        "total_visits": {
+            "scheduled": int,
+            "completed": int,
+            "rescheduled": int,
+            "pending_feedback": int,
+            "cancelled": int
+        },
+        "conversion_rate": float,  // percentage 0-100
+        "by_portal": {
+            "MagicBricks": {
+                "inquiries": int,
+                "visits": int,
+                "conversion": float
+            },
+            ...
+        },
+        "engagement": {
+            "primary_leads": int,
+            "recommended_interests": int,
+            "feedback_rate": float
+        },
+        "period": {
+            "start_date": "ISO8601",
+            "end_date": "ISO8601",
+            "days": int
+        }
+    },
+    "error": null
+}
+```
+
+---
+
+## Test Coverage Matrix (Updated)
+
+| Feature | CRUD | Compute | Validation | Integration | Cron | API |
+|---------|:----:|:-------:|:----------:|:-----------:|:----:|:---:|
+| Lead Creation | ✅ | | ✅ | | | |
+| Phone Standardization | ✅ | ✅ | ✅ | | | ✅ |
+| Duplicate Detection | | ✅ | ✅ | | | |
+| Property Matching | | ✅ | | ✅ | ✅ | |
+| RM Assignment | | ✅ | | ✅ | ✅ | |
+| WhatsApp URLs | | ✅ | | | | |
+| Follow-up Dates | | ✅ | | | ✅ | |
+| External API | | | | ✅ | ✅ | |
+| Webhooks | | | | ✅ | ✅ | |
+| Lead Scoring | ✅ | ✅ | ✅ | | ✅ | |
+| Property Interests | ✅ | ✅ | ✅ | | | |
+| Feedback Fields | ✅ | | ✅ | | | ✅ |
+| All Associated Props | | ✅ | | | | |
+| Date Computations | | ✅ | | | | |
+| **Buyer Site Visits** | | ✅ | ✅ | | | ✅ |
+| **Seller Site Visits** | | ✅ | ✅ | | | ✅ |
+| **Buyer Activity Feed** | | ✅ | | | | ✅ |
+| **Seller Activity Feed** | | ✅ | | | | ✅ |
+| **Seller Summary** | ✅ | ✅ | ✅ | | | ✅ |
+| **Performance Metrics** | | ✅ | ✅ | | | ✅ |
 
 | Feature | CRUD | Compute | Validation | Integration | Cron |
 |---------|:----:|:-------:|:----------:|:-----------:|:----:|
@@ -497,12 +921,6 @@ _lead_prop_uniq = models.Constraint(
 | Follow-up Dates | | ✅ | | | ✅ |
 | External API | | | | ✅ | ✅ |
 | Webhooks | | | | ✅ | ✅ |
-| Lead Scoring | ✅ | ✅ | ✅ | | ✅ |
-| Property Interests | ✅ | ✅ | ✅ | | |
-| Feedback Fields | ✅ | | ✅ | | |
-| All Associated Props | | ✅ | | | |
-| Date Computations | | ✅ | | | |
-
 ---
 
 ## Common Test Fixtures
@@ -516,7 +934,7 @@ from odoo import fields
 
 old_date = fields.Datetime.now() - timedelta(days=31)
 self.env.cr.execute(
-    "UPDATE leads_new SET create_date = %s WHERE id = %s", 
+    "UPDATE leads_new SET create_date = %s WHERE id = %s",
     (old_date, lead.id)
 )
 lead.invalidate_recordset()
@@ -661,5 +1079,5 @@ This test suite is part of the Leads module and follows the same licensing as th
 
 ---
 
-*Last Updated: January 2026*  
+*Last Updated: February 2026*
 *Odoo Version: 19.0*

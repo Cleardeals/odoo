@@ -1,5 +1,6 @@
 from odoo import models, fields, api
 
+
 class WhatsAppResponse(models.Model):
     _name = 'whatsapp.response'
     _description = 'WhatsApp Response from Leads'
@@ -11,7 +12,7 @@ class WhatsAppResponse(models.Model):
 
     # Original fields
     number = fields.Char(string='Phone Number', required=True)
-    
+
     # [FIX] Logic: Ensure these keys match the list in _compute_response_type
     response = fields.Selection([
         ('yes_going_for_visit', 'Yes, going for the visit'),
@@ -24,7 +25,7 @@ class WhatsAppResponse(models.Model):
         ('slot_book_kre', 'Slot book kre'),
         ('schedule_visit_now', 'Schedule Visit Now'),
         ('talk_to_a_property_expert', 'Talk to a Property Expert'),
-        ('generic_response', 'Generic Response')
+        ('generic_response', 'Generic Response'),
     ], string='Response', required=True)
 
     # Related fields
@@ -39,9 +40,9 @@ class WhatsAppResponse(models.Model):
     # Additional fields
     response_type = fields.Selection([
         ('positive', 'Positive'),
-        ('neutral', 'Neutral')
+        ('neutral', 'Neutral'),
     ], string='Response Type', compute='_compute_response_type', store=True)
-    
+
     response_date = fields.Datetime(string='Response Date', default=fields.Datetime.now)
     is_processed = fields.Boolean(string='Processed', default=False)
     notes = fields.Text(string='Notes')
@@ -75,11 +76,11 @@ class WhatsAppResponse(models.Model):
         [FIX] Updated list to match actual Selection keys defined above.
         """
         positive_responses = [
-            'yes_going_for_visit', 
-            'yes_visit_done', 
-            'yes_liked_the_property', 
-            'slot_book_kre', 
-            'schedule_visit_now'
+            'yes_going_for_visit',
+            'yes_visit_done',
+            'yes_liked_the_property',
+            'slot_book_kre',
+            'schedule_visit_now',
         ]
 
         for record in self:
