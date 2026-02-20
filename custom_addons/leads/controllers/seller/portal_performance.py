@@ -101,7 +101,7 @@ class SellerPortalPerformanceController(http.Controller):
         if not properties:
             return error_response(
                 404,
-                f"No active properties found for phone number {phone}.",
+                f"No properties found for phone number {phone}.",
             )
 
         tag_filter = request.params.get("property_tag", "").strip() or None
@@ -110,7 +110,7 @@ class SellerPortalPerformanceController(http.Controller):
             if not properties:
                 return error_response(
                     404,
-                    f"No active properties found for phone number {phone} with tag '{tag_filter}'.",
+                    f"No properties found for phone number {phone} with tag '{tag_filter}'.",
                 )
 
         tags = properties.mapped("property_tag")

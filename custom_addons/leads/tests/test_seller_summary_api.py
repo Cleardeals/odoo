@@ -239,11 +239,12 @@ class TestSellerSummaryAPI(PortalLeadTestCase):
         # ASSERT
         self.assertEqual(len(properties), 0)
 
-    def test_10_get_properties_only_active_properties(self):
+    def test_10_get_properties_returns_all_including_inactive(self):
         """
         ARRANGE: Create one inactive property
-        ACT: Query properties
-        ASSERT: Returns only active properties
+        ACT: Query properties by phone
+        ASSERT: Returns ALL properties for that phone, including inactive ones,
+                because the business requirement is to show full history to the owner
         """
         # ARRANGE
         phone = "9876543210"
@@ -253,8 +254,12 @@ class TestSellerSummaryAPI(PortalLeadTestCase):
         properties = get_properties_for_phone(self.env, phone)
 
         # ASSERT
-        self.assertEqual(len(properties), 2, "Should only return active properties")
-        self.assertNotIn(self.test_property_3, properties)
+        self.assertEqual(
+            len(properties),
+            3,
+            "Should return all properties including inactive",
+        )
+        self.assertIn(self.test_property_3, properties)
 
     # ========================================================================
     # PRIMARY LEADS TESTS

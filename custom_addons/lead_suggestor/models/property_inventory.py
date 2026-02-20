@@ -10,6 +10,7 @@ _logger = logging.getLogger(__name__)
 MASTER_PROPERTY_TABLE = "cleardeals-459513.cleardeals_dataset.Customer_Data"
 BIGQUERY_PROJECT_ID = "cleardeals-459513"
 
+
 class PropertyInventory(models.Model):
     _name = 'property.inventory'
     _description = 'Master Property Inventory for RM Dashboard'

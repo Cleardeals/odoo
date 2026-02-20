@@ -1,8 +1,8 @@
 # Track API — Complete Reference
 
-**Base URL:** `https://odoo.cleardeals.xyz`  
-**Protocol:** HTTPS only  
-**Format:** All requests and responses are JSON (`Content-Type: application/json`)  
+**Base URL:** `https://odoo.cleardeals.xyz`
+**Protocol:** HTTPS only
+**Format:** All requests and responses are JSON (`Content-Type: application/json`)
 **Version:** No versioning prefix — routes are stable under `/api/track/`
 
 ---
@@ -63,7 +63,7 @@ Every response — success or error — shares the same top-level envelope:
 ## 2. Authentication
 
 ### Protected endpoints
-All endpoints **except** `GET /api/track/lead/activity` require an API key.
+All endpoints require an API key.
 
 ### Header
 
@@ -103,7 +103,7 @@ curl -H "X-API-Key: your-secret-key" \
 ### `property_tag` (seller endpoints)
 
 - **Optional** on seller endpoints that list it.
-- When supplied, filters results to that single property. When absent, results span all active properties owned by the phone number.
+- When supplied, filters results to that single property. When absent, results span all properties owned by the phone number.
 - The active filter value is echoed back as `tag_filter` in the response (`null` when no filter applied).
 
 ### Pagination (`page`, `page_size`)
@@ -151,14 +151,14 @@ These values appear in `current_status` fields across all endpoints.
 | `lead`                                           | New — not yet contacted                      |
 | `busy`                                           | Line was busy                                |
 | `ringing`                                        | Called, no answer                            |
-| `call_back_later`                                | Requested callback                           |
+| `call_back_later`                                | Requested callback Later                     |
 | `details_shared_of_property`                     | Property details sent to buyer               |
 | `detail_shared_and_interested_for_site_visit`    | Interested, site visit being arranged        |
 | `option_not_matching_requirements`               | Property doesn't match buyer's needs         |
 | `site_visit_scheduled`                           | Site visit confirmed                         |
 | `rescheduled`                                    | Previously scheduled visit was rescheduled   |
 | `site_visit_done`                                | Site visit completed                         |
-| `requirement_closed`                             | Deal closed / requirement fulfilled          |
+| `requirement_closed`                             | No More Requirement from Buyer end           |
 | `no_requirements`                                | Buyer no longer looking                      |
 | `property_sold_out`                              | Property no longer available                 |
 | `budget_not_sufficient`                          | Budget mismatch                              |
@@ -168,8 +168,8 @@ These values appear in `current_status` fields across all endpoints.
 
 ### Feedback fields
 
-`feedback_general` and `feedback_site_visit_done` may contain free-text strings entered by the RM, or `null`.
-
+`feedback_general` and `feedback_site_visit_done` contain feeback selected by the RM, or `null`.
+`feedback_general` is for feedback given before site visit done, mostly stored when site visit scheduled stage is present and `feedback_site_visit_done` is after the site visit has been done.
 ---
 
 ## 5. Endpoints — Buyer
@@ -211,8 +211,8 @@ Returns all site visits for a buyer's phone number, classified into five timelin
 | Bucket             | Condition                                                                                                          | Sort order |
 |--------------------|---------------------------------------------------------------------------------------------------------------------|------------|
 | `upcoming`         | `current_status = "site_visit_scheduled"` AND `site_visit_datetime` is in the future                              | ASC (soonest first) |
-| `pending_feedback` | `current_status = "site_visit_done"` AND `feedback_site_visit_done` is null/empty/`"other"`                       | ASC        |
-| `cancelled`        | `current_status` not in `{site_visit_scheduled, site_visit_done, rescheduled}` AND had a `site_visit_datetime`    | DESC (most recent first) |
+| `pending_feedback` | `current_status = "site_visit_scheduled"` AND `feedback_general` is null/empty/`"other"`                       | ASC        |
+| `cancelled`        | `current_status` in `{site_visit_scheduled, rescheduled}` AND `feedback_general` is present    | DESC (most recent first) |
 | `rescheduled`      | `current_status = "rescheduled"`                                                                                   | DESC       |
 | `completed`        | `current_status = "site_visit_done"` AND `feedback_site_visit_done` is non-empty                                  | DESC       |
 
@@ -298,9 +298,7 @@ All buckets include this base set:
 
 Returns a full activity overview for a buyer: summary counts and a list of all primary inquiries with their recommended properties nested inside.
 
-**Auth required:** No ⚠️
-
-> This endpoint does **not** call `validate_api_key`. It is publicly accessible to any caller who knows the phone number.
+**Auth required:** Yes (`X-API-Key`)
 
 #### Query Parameters
 
@@ -357,6 +355,7 @@ Returns a full activity overview for a buyer: summary counts and a list of all p
 | `location`            | `string \| null` | Locality                                 |
 | `city`                | `string \| null` | City                                     |
 | `current_status`      | `string \| null` | Status of the interest record            |
+ `property_link` | `string \| null` | URL to the property listing        |
 | `site_visit_datetime` | `string \| null` | ISO 8601 datetime                        |
 | `site_visit_date`     | `string \| null` | Date-only string                         |
 
@@ -434,6 +433,7 @@ High-level aggregated counts for all of a seller's properties, broken down by po
 | Parameter | Type   | Required | Description              |
 |-----------|--------|----------|--------------------------|
 | `phone`   | string | ✅ Yes   | Owner phone number       |
+| `property_tag` | string  | No       | —       | Filter to a specific property      |
 
 #### Response — `data` shape
 
@@ -639,7 +639,6 @@ Paginated, chronologically-sorted list of every lead record (primary and recomme
 | Field                     | Type             | Description                                                    |
 |---------------------------|------------------|----------------------------------------------------------------|
 | `type`                    | `string`         | `"primary"` or `"recommended"`                                 |
-| `lead_id`                 | `integer \| null`| ID of the parent `leads.new` record                            |
 | `lead_name`               | `string \| null` | Buyer name                                                     |
 | `lead_phone`              | `string \| null` | Buyer phone                                                    |
 | `portal`                  | `string \| null` | Portal of origin (from parent lead for recommended)            |
@@ -703,8 +702,8 @@ Paginated, chronologically-sorted list of every lead record (primary and recomme
 |-------|----------------------------------------------------------------------------------|
 | `400` | `Valid 'phone' query parameter is required.`                                     |
 | `400` | `'page' and 'page_size' must be integers.`                                       |
-| `404` | `No active properties found for phone number {phone}.`                           |
-| `404` | `No active properties found for phone number {phone} with tag '{property_tag}'.` |
+| `404` | `No properties found for phone number {phone}.`                           |
+| `404` | `No properties found for phone number {phone} with tag '{property_tag}'.` |
 
 ---
 

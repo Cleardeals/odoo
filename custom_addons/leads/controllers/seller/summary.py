@@ -4,6 +4,12 @@ GET /api/track/property/summary
 Returns a high-level summary of inquiry activity for all properties
 belonging to the owner identified by the `phone` query parameter.
 
+Query params
+------------
+phone        : str  — owner phone, with or without leading 91  (required)
+property_tag : str  — filter to a single property tag          (optional)
+                      When omitted, all properties for the owner are aggregated.
+
 Response shape
 --------------
 {
@@ -11,6 +17,7 @@ Response shape
   "data": {
     "owner_phone": "9876543210",
     "properties": ["TAG1", "TAG2"],
+    "tag_filter": null | "TAG1",
     "inquiries": {
       "total":       42,
       "primary":     35,
@@ -57,7 +64,7 @@ class SellerSummaryController(http.Controller):
     )
     def property_summary(self, **kwargs):
         """
-        Query param: phone (str) — owner phone, with or without leading 91
+        Query params: phone (required), property_tag (optional).
         """
         auth_error = validate_api_key(request)
         if auth_error:
@@ -74,15 +81,25 @@ class SellerSummaryController(http.Controller):
                 f"No active properties found for phone number {phone}.",
             )
 
+        # Optional single-property filter
+        tag_filter = request.params.get("property_tag", "").strip() or None
+        if tag_filter:
+            properties = properties.filtered(lambda p: p.property_tag == tag_filter)
+            if not properties:
+                return error_response(
+                    404,
+                    f"No active properties found for phone number {phone} with tag '{tag_filter}'.",
+                )
+
         tags = properties.mapped("property_tag")
 
-        # Primiary leads (leads.new records linked to the owner's properties)
+        # Primary leads (leads.new records linked to the owner's properties)
         primary_leads = get_primary_leads_for_tags(request.env, tags)
 
-        # Recommnded leads (lead.property.interest)
+        # Recommended leads (lead.property.interest)
         recommended_interests = get_recommended_leads_for_tags(request.env, tags)
 
-        # Portal Breakdown
+        # Portal breakdown
         portal_breakdown = {p: {"primary": 0, "recommended": 0} for p in KNOWN_PORTALS}
         portal_breakdown["Unknown"] = {"primary": 0, "recommended": 0}
 
@@ -92,8 +109,8 @@ class SellerSummaryController(http.Controller):
             )
             portal_breakdown[portal]["primary"] += 1
 
-        # Recommended leads come via lead.property.interest; The originating
-        # portal lives on the parent leads.new.record.
+        # Recommended leads come via lead.property.interest; the originating
+        # portal lives on the parent leads.new record.
         for interest in recommended_interests:
             portal = (
                 interest.lead_id.portal_name
@@ -105,6 +122,7 @@ class SellerSummaryController(http.Controller):
         data = {
             "owner_phone": phone,
             "properties": tags,
+            "tag_filter": tag_filter,
             "inquiries": {
                 "total": len(primary_leads) + len(recommended_interests),
                 "primary": len(primary_leads),

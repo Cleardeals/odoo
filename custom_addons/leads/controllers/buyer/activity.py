@@ -73,6 +73,7 @@ import logging
 from odoo import http
 from odoo.http import request
 
+from ..shared.auth import validate_api_key
 from ..shared.phone_utils import extract_phone_from_request
 from ..shared.response_utils import error_response, success_response
 
@@ -151,6 +152,10 @@ class BuyerActivityController(http.Controller):
         """
         Query param: phone (required) — buyer's phone number.
         """
+        auth_error = validate_api_key(request)
+        if auth_error:
+            return auth_error
+
         phone = extract_phone_from_request(request)
         if not phone:
             return error_response(400, "Valid 'phone' query parameter is required.")

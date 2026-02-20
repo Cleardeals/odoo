@@ -2,7 +2,7 @@
 
 **Base URL:** `https://odoo.cleardeals.xyz`
 
-All endpoints return JSON with the envelope `{ "success", "data", "error" }`.  
+All endpoints return JSON with the envelope `{ "success", "data", "error" }`.
 All endpoints accept `phone` in any format (`9876543210`, `+919876543210`, `919876543210`).
 
 ---

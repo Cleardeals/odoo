@@ -42,7 +42,6 @@ def get_properties_for_phone(env, phone_10: str):
     props = PropertyInventory.search(
         [
             ("owner_phone", "=", phone_10),
-            ("is_active", "=", True),
         ],
     )
 
@@ -51,7 +50,6 @@ def get_properties_for_phone(env, phone_10: str):
         props = PropertyInventory.search(
             [
                 ("owner_phone", "=", f"91{phone_10}"),
-                ("is_active", "=", True),
             ],
         )
 

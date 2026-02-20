@@ -58,7 +58,6 @@ def _serialize_primary_lead(lead) -> dict:
     prop = lead.property_id
     return {
         "type": "primary",
-        "lead_id": lead.id,
         "lead_name": lead.name or None,
         "lead_phone": lead.phone or None,
         "portal": lead.portal_name or None,
@@ -90,7 +89,6 @@ def _serialize_recommended_lead(interest) -> dict:
     parent_lead = interest.lead_id
     return {
         "type": "recommended",
-        "lead_id": parent_lead.id if parent_lead else None,
         "lead_name": parent_lead.name if parent_lead else None,
         "lead_phone": parent_lead.phone if parent_lead else None,
         "portal": parent_lead.portal_name if parent_lead else None,
@@ -147,7 +145,7 @@ class SellerActivityController(http.Controller):
         if not properties:
             return error_response(
                 404,
-                f"No active properties found for phone number {phone}.",
+                f"No properties found for phone number {phone}.",
             )
 
         tag_filter = request.params.get("property_tag", "").strip() or None
@@ -156,7 +154,7 @@ class SellerActivityController(http.Controller):
             if not properties:
                 return error_response(
                     404,
-                    f"No active properties found for phone number {phone} with tag '{tag_filter}'.",
+                    f"No properties found for phone number {phone} with tag '{tag_filter}'.",
                 )
 
         tags = properties.mapped("property_tag")

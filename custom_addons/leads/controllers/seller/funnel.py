@@ -7,6 +7,12 @@ belonging to the owner identified by the `phone` query parameter.
 The funnel covers both primary leads (leads.new) and recommended leads
 (lead.property.interest) combined.
 
+Query params
+------------
+phone        : str  — owner phone, with or without leading 91  (required)
+property_tag : str  — filter to a single property tag          (optional)
+                      When omitted, all properties for the owner are aggregated.
+
 Response shape
 --------------
 {
@@ -14,27 +20,33 @@ Response shape
   "data": {
     "owner_phone": "9876543210",
     "properties": ["TAG1", "TAG2"],
+    "tag_filter": null | "TAG1",
     "funnel": {
       "total_inquiries": 42,
       "stages": {
-        "lead":                                     {"count": 10, "pct_of_total": 23.8},
-        "busy":                                     {"count":  3, "pct_of_total":  7.1},
-        "ringing":                                  {"count":  2, "pct_of_total":  4.8},
-        "call_back_later":                          {"count":  1, "pct_of_total":  2.4},
-        "details_shared_of_property":               {"count":  5, "pct_of_total": 11.9},
-        "detail_shared_and_interested_for_site_visit":{"count": 4, "pct_of_total": 9.5},
-        "site_visit_scheduled":                     {"count":  6, "pct_of_total": 14.3},
-        "site_visit_done":                          {"count":  4, "pct_of_total":  9.5},
-        "requirement_closed":                       {"count":  3, "pct_of_total":  7.1},
-        "no_requirements":                          {"count":  2, "pct_of_total":  4.8},
-        "not_reachable":                            {"count":  2, "pct_of_total":  4.8},
-        "other":                                    {"count":  0, "pct_of_total":  0.0}
+        "lead":                                       {"count": 10, "pct_of_total": 23.8},
+        "busy":                                       {"count":  3, "pct_of_total":  7.1},
+        "ringing":                                    {"count":  2, "pct_of_total":  4.8},
+        "call_back_later":                            {"count":  1, "pct_of_total":  2.4},
+        "details_shared_of_property":                 {"count":  5, "pct_of_total": 11.9},
+        "detail_shared_and_interested_for_site_visit":{"count":  4, "pct_of_total":  9.5},
+        "option_not_matching_requirements":           {"count":  0, "pct_of_total":  0.0},
+        "site_visit_scheduled":                       {"count":  6, "pct_of_total": 14.3},
+        "rescheduled":                                {"count":  1, "pct_of_total":  2.4},
+        "site_visit_done":                            {"count":  4, "pct_of_total":  9.5},
+        "requirement_closed":                         {"count":  3, "pct_of_total":  7.1},
+        "no_requirements":                            {"count":  2, "pct_of_total":  4.8},
+        "property_sold_out":                          {"count":  0, "pct_of_total":  0.0},
+        "budget_not_sufficient":                      {"count":  0, "pct_of_total":  0.0},
+        "switched_off":                               {"count":  1, "pct_of_total":  2.4},
+        "number_not_in_use_wrong_number":             {"count":  0, "pct_of_total":  0.0},
+        "other":                                      {"count":  0, "pct_of_total":  0.0}
       },
       "key_metrics": {
         "contacted":            15,
-        "site_visit_scheduled": 6,
-        "site_visit_done":      4,
-        "closed_or_lost":       5
+        "site_visit_scheduled":  6,
+        "site_visit_done":       4,
+        "closed_or_lost":        5
       }
     }
   },
@@ -115,7 +127,7 @@ class SellerFunnelController(http.Controller):
     )
     def property_funnel(self, **kwargs):
         """
-        Query param: phone (str) — owner phone, with or without leading 91.
+        Query params: phone (required), property_tag (optional).
         """
         auth_error = validate_api_key(request)
         if auth_error:
@@ -129,8 +141,18 @@ class SellerFunnelController(http.Controller):
         if not properties:
             return error_response(
                 404,
-                f"No active properties found for phone number {phone}.",
+                f"No properties found for phone number {phone}.",
             )
+
+        # Optional single-property filter
+        tag_filter = request.params.get("property_tag", "").strip() or None
+        if tag_filter:
+            properties = properties.filtered(lambda p: p.property_tag == tag_filter)
+            if not properties:
+                return error_response(
+                    404,
+                    f"No properties found for phone number {phone} with tag '{tag_filter}'.",
+                )
 
         tags = properties.mapped("property_tag")
 
@@ -149,7 +171,7 @@ class SellerFunnelController(http.Controller):
 
         total = len(primary_leads) + len(recommended_interests)
 
-        # Build stages dict - ensure all known stages are present, even if zero
+        # Build stages dict — ensure all known stages are present even if zero
         def pct(count):
             return round((count / total) * 100, 1) if total > 0 else 0.0
 
@@ -161,13 +183,14 @@ class SellerFunnelController(http.Controller):
             for stage in ALL_FUNNEL_STAGES
         }
 
-        # Key metrics
+        # Key metrics rollups
         contacted = sum(stage_counts[stage] for stage in _CONTACTED_STAGES)
         closed_or_lost = sum(stage_counts[stage] for stage in _CLOSED_STAGES)
 
         data = {
             "owner_phone": phone,
             "properties": tags,
+            "tag_filter": tag_filter,
             "funnel": {
                 "total_inquiries": total,
                 "stages": stages,
