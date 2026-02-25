@@ -718,6 +718,7 @@ Aggregated conversion funnel across all of a seller's properties. Shows how many
 | Parameter | Type   | Required | Description              |
 |-----------|--------|----------|--------------------------|
 | `phone`   | string | ✅ Yes   | Owner phone number       |
+| `property_tag` | string  | No       | —       | Filter to a specific property      |
 
 > No `property_tag` filter — funnel is always across all properties for the phone.
 
@@ -863,8 +864,8 @@ Returns AI-generated lead suggestions for a seller's properties, sourced from a 
 |-------|----------------------------------------------------------------------------------|
 | `400` | `Valid 'phone' query parameter is required.`                                     |
 | `400` | `Invalid 'page' or 'page_size' parameter. Must be integers.`                     |
-| `404` | `No active properties found for phone number {phone}.`                           |
-| `404` | `No active properties found for phone number {phone} with tag '{property_tag}'.` |
+| `404` | `No properties found for phone number {phone}.`                           |
+| `404` | `No properties found for phone number {phone} with tag '{property_tag}'.` |
 
 ---
 
@@ -898,7 +899,7 @@ Returns AI-generated lead suggestions for a seller's properties, sourced from a 
 | Endpoint                                    | Auth Required |
 |---------------------------------------------|:-------------:|
 | `GET /api/track/lead/site-visits`           | ✅ Yes        |
-| `GET /api/track/lead/activity`              | ❌ No         |
+| `GET /api/track/lead/activity`              | ✅ Yes        |
 | `GET /api/track/property/summary`           | ✅ Yes        |
 | `GET /api/track/property/portal-performance`| ✅ Yes        |
 | `GET /api/track/property/site-visits`       | ✅ Yes        |

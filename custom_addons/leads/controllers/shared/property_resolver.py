@@ -20,7 +20,7 @@ _logger = logging.getLogger(__name__)
 
 def get_properties_for_phone(env, phone_10: str):
     """
-    Return all active property.inventory records whose owner_phone
+    Return all property.inventory records whose owner_phone
     normalises to `phone_10` (a clean 10-digit string).
 
     Odoo stores owner_phone in various formats (with/without 91, spaces, etc.),
