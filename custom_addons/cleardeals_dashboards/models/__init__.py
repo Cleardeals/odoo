@@ -1,14 +1,16 @@
-from . import active_lead_assignment
-from . import property_daily_stat 
-from . import property_lead_suggestion
-from . import renewal_lead_assignment
-from . import renewal_interakt_event
-from . import renewal_template_stats
-from . import renewal_property_owner
-from . import lead_scoring_event
-from . import lead_scoring_template_stats
-from . import lead_scoring_lead
-from . import active_template_stats 
-from . import new_lead_event
-from . import new_lead_template_stats
-from . import new_lead_dashboard
+from . import (
+    active_lead_assignment,
+    active_template_stats,
+    lead_scoring_event,
+    lead_scoring_lead,
+    lead_scoring_template_stats,
+    new_lead_dashboard,
+    new_lead_event,
+    new_lead_template_stats,
+    property_daily_stat,
+    property_lead_suggestion,
+    renewal_interakt_event,
+    renewal_lead_assignment,
+    renewal_property_owner,
+    renewal_template_stats,
+)
