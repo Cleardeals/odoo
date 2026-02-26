@@ -35,7 +35,7 @@
                 <field name="welcome_call_date"/>
                 <field name="service_expiry_date_display"/>
                 <field name="welcome_call_date_display"/>
-                
+
                 <templates>
                     <t t-name="card">
                         <div class="o_kanban_tags" style="margin-bottom: 8px;">
@@ -44,8 +44,8 @@
                                     <i class="fa fa-exclamation-triangle"/> SERVICE EXPIRED
                                 </span>
                             </t>
-                            
-                            <t t-if="record.welcome_call_date.raw_value &amp;&amp; 
+
+                            <t t-if="record.welcome_call_date.raw_value &amp;&amp;
                                             record.welcome_call_date.raw_value &lt;= new Date().toISOString().split('T')[0] &amp;&amp;
                                             record.welcome_call_date.raw_value &gt;= new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]">
                                 <span class="badge" style="font-size: 0.85em; margin-left: 4px; background-color: #28a745; color: white;">
@@ -53,7 +53,7 @@
                                 </span>
                             </t>
                         </div>
-                        
+
                         <main class="oe_kanban_details">
                             <strong class="o_kanban_record_title">
                                 <field name="property_tag"/>
@@ -64,21 +64,21 @@
                                     <t t-esc="record.rm_user_id.value"/>
                                 </span>
                             </div>
-                            
+
                             <div style="margin-top: 6px; font-size: 0.9em;">
                                 <span t-if="record.welcome_call_date.raw_value" class="text-muted">
-                                    <i class="fa fa-phone-square"/> Welcome call: 
+                                    <i class="fa fa-phone-square"/> Welcome call:
                                     <field name="welcome_call_date_display"/>
                                 </span>
                                 <br t-if="record.service_expiry_date.raw_value &amp;&amp; record.welcome_call_date.raw_value"/>
-                                
+
                                 <span t-if="record.service_expiry_date.raw_value" class="text-muted">
-                                    <i class="fa fa-calendar-times-o"/> Service Expiry: 
+                                    <i class="fa fa-calendar-times-o"/> Service Expiry:
                                     <field name="service_expiry_date_display"/>
                                 </span>
                             </div>
                         </main>
-                        
+
                         <footer class="o_kanban_footer">
                             <div class="o_kanban_footer_left">
                                 <span class="text-muted">
@@ -119,11 +119,12 @@
                             <field name="housing_id" readonly="1"/>
                             <field name="ninety_nine_acres_id" readonly="1"/>
                             <field name="olx_id" readonly="1"/>
+                            <field name="property_link" readonly="1" widget="url" options="{'always_show': True}"/>
                         </group>
                         <group>
                             <field name="service_expiry_date_display" string="Service Expiry Date"/>
                             <field name="welcome_call_date_display" string="Welcome Call Date"/>
-                            
+
                             <field name="service_expiry_date" invisible="1"/>
                             <field name="welcome_call_date" invisible="1"/>
                         </group>
@@ -143,16 +144,16 @@
                                             decoration-warning="status in ('contacted', 'interested')"
                                             decoration-danger="status == 'not_interested'"
                                             decoration-info="status == 'new'"/>
-                                    
+
                                     <field name="generation_date_display" readonly="1"/>
                                     <field name="lead_name" readonly="1"/>
                                     <field name="suggested_lead_phone" readonly="1" string="Lead Phone"/>
-                                    
+
                                     <button name="action_whatsapp_with_copy"
                                             type="object"
                                             icon="fa-whatsapp"
                                             title="Chat on WhatsApp"
-                                            class="btn-link" 
+                                            class="btn-link"
                                             invisible="suggested_lead_phone_whatsapp_url == False"/>
 
                                     <field name="suggested_lead_phone_whatsapp_url" invisible="1"/>
@@ -181,28 +182,28 @@
                 <field name="rm_user_id" string="Assigned RM"/>
                 <field name="owner_name" string="Owner Name"/>
                 <field name="owner_phone" string="Owner Phone"/>
-                
+
                 <separator/>
-                
+
                 <filter name="filter_new_suggestions" string="With New Suggestions" domain="[('new_suggestion_count', '>', 0)]"/>
-                
+
                 <separator/>
-                
+
                 <filter name="filter_my_properties" string="My Properties" domain="[('rm_user_id', '=', uid)]"/>
-                
+
                 <separator/>
-                
+
                 <filter name="filter_active" string="Active Only" domain="[('is_active', '=', True)]"/>
                 <filter name="filter_inactive" string="Inactive/Expired" domain="[('is_active', '=', False)]"/>
-                
+
                 <separator/>
-                
+
                 <filter string="Assigned RM" name="group_by_rm" context="{'group_by': 'rm_user_id'}"/>
                 <filter string="Is Active" name="group_by_active" context="{'group_by': 'is_active'}"/>
             </search>
         </field>
     </record>
-    
+
     <record id="action_property_inventory_rm" model="ir.actions.act_window">
         <field name="name">My Property Suggestions</field>
         <field name="res_model">property.inventory</field>
@@ -221,7 +222,7 @@
         <field name="res_model">property.inventory</field>
         <field name="view_mode">list,kanban,form</field>
         <field name="search_view_id" ref="view_property_inventory_search"/>
-        <field name="domain">[]</field> 
+        <field name="domain">[]</field>
         <field name="context">{
             'search_default_filter_active': 1,
             'search_default_group_by_rm': 1,
@@ -237,7 +238,7 @@
             <list string="All Similar Leads" create="true" edit="false">
                 <field name="lead_name"/>
                 <field name="suggested_lead_phone" optional="show"/>
-                <field name="property_inventory_id" string="Related Property"/> 
+                <field name="property_inventory_id" string="Related Property"/>
                 <field name="status" widget="badge" decoration-success="status == 'converted'"/>
                 <field name="original_property_similarity" string="Match (%)"/>
                 <field name="rm_feedback"/>
