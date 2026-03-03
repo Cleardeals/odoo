@@ -1,0 +1,251 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- ====================================================================
+         List view
+    ==================================================================== -->
+    <record id="view_property_base_list" model="ir.ui.view">
+        <field name="name">property.base.list</field>
+        <field name="model">property.base</field>
+        <field name="arch" type="xml">
+            <list string="Properties"
+                  default_order="reg_date desc"
+                  decoration-muted="not is_active">
+
+                <!-- Manager-only "Sync Now" button in the control panel -->
+                <header>
+                    <button name="action_manual_sync"
+                            string="Sync Now"
+                            type="object"
+                            class="btn-primary"
+                            groups="properties.group_property_manager"/>
+                </header>
+
+                <field name="prop_id" string="ID"/>
+                <field name="name" string="Property Name"/>
+                <field name="prop_type" string="Type"/>
+                <field name="for_sell" string="Sale?"
+                       widget="boolean_toggle"/>
+                <field name="city"/>
+                <field name="location"/>
+                <field name="bedroom_count" string="Beds"/>
+                <field name="bhk" optional="show"/>
+                <field name="owner_name"/>
+                <field name="rm_name" string="RM"/>
+                <field name="service_expiry_date_display"
+                       string="Expiry"/>
+                <field name="is_active" widget="boolean_toggle"
+                       string="Active"/>
+                <field name="inventory_migrated" optional="hide"
+                       groups="properties.group_property_manager"/>
+                <!-- Hidden fields needed for decoration / domain -->
+                <field name="service_expiry_date" column_invisible="1"/>
+                <field name="reg_date" column_invisible="1"/>
+            </list>
+        </field>
+    </record>
+
+    <!-- ====================================================================
+         Form view
+    ==================================================================== -->
+    <record id="view_property_base_form" model="ir.ui.view">
+        <field name="name">property.base.form</field>
+        <field name="model">property.base</field>
+        <field name="arch" type="xml">
+            <form string="Property">
+                <header>
+                    <button name="action_manual_sync"
+                            string="Sync from API"
+                            type="object"
+                            class="btn-primary"
+                            groups="properties.group_property_manager"/>
+                    <field name="is_active"
+                           widget="boolean_button"
+                           options="{'terminology': 'active'}"/>
+                </header>
+
+                <sheet>
+                    <!-- Banner row -->
+                    <div class="oe_title">
+                        <h1>
+                            <field name="name" placeholder="Property Name"
+                                   readonly="1"/>
+                        </h1>
+                        <div class="o_row">
+                            <field name="prop_id" readonly="1"
+                                   class="text-muted"/>
+                            <span class="mx-2 text-muted">·</span>
+                            <field name="property_link" readonly="1"
+                                   widget="url"/>
+                        </div>
+                    </div>
+
+                    <group>
+                        <!-- Left column — API-sourced overview -->
+                        <group string="Overview">
+                            <field name="uuid" readonly="1"/>
+                            <field name="reg_date" readonly="1"/>
+                            <field name="prop_type" readonly="1"/>
+                            <field name="prop_sub_type" readonly="1"/>
+                            <field name="for_sell" readonly="1"/>
+                            <field name="bhk" readonly="1"/>
+                            <field name="bedroom_count" readonly="1"/>
+                            <field name="pricing" readonly="1"
+                                   widget="monetary"
+                                   options="{'currency_field': false}"/>
+                        </group>
+
+                        <!-- Right column — Location -->
+                        <group string="Location">
+                            <field name="state" readonly="1"/>
+                            <field name="city" readonly="1"/>
+                            <field name="location" readonly="1"/>
+                            <field name="gmaps_url" readonly="1"
+                                   widget="url"/>
+                        </group>
+                    </group>
+
+                    <group>
+                        <!-- Owner info -->
+                        <group string="Owner">
+                            <field name="owner_name" readonly="1"/>
+                            <field name="owner_phone" readonly="1"
+                                   widget="phone"/>
+                            <field name="owner_email" readonly="1"
+                                   widget="email"/>
+                            <field name="rm_name" readonly="1"/>
+                        </group>
+
+                        <!-- Service dates — manager-editable -->
+                        <group string="Service">
+                            <!--
+                                service_expiry_date and welcome_call_date are
+                                editable only by managers.  RMs see them readonly
+                                via the access rule on the model (RM group has
+                                no write access), but we also add groups= here
+                                so the field widget renders as readonly visually
+                                even when viewed in a context where write is
+                                technically inherited.
+                            -->
+                            <field name="service_expiry_date"
+                                   groups="properties.group_property_manager"/>
+                            <field name="service_expiry_date_display"
+                                   string="Expiry (display)"
+                                   readonly="1"/>
+                            <field name="welcome_call_date"
+                                   groups="properties.group_property_manager"/>
+                            <field name="welcome_call_date_display"
+                                   string="Welcome Call (display)"
+                                   readonly="1"/>
+                            <field name="inventory_migrated" readonly="1"
+                                   groups="properties.group_property_manager"/>
+                        </group>
+                    </group>
+
+                    <!-- Portal IDs tab — manager-only edit -->
+                    <notebook>
+                        <page string="Portal IDs"
+                              groups="properties.group_property_manager">
+                            <group>
+                                <field name="property_tag"/>
+                                <field name="ninety_nine_acres_id"/>
+                                <field name="housing_id"/>
+                                <field name="magicbricks_id"/>
+                                <field name="olx_id"/>
+                            </group>
+                        </page>
+                    </notebook>
+                </sheet>
+
+                <!-- Chatter -->
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+    <!-- ====================================================================
+         Search view
+    ==================================================================== -->
+    <record id="view_property_base_search" model="ir.ui.view">
+        <field name="name">property.base.search</field>
+        <field name="model">property.base</field>
+        <field name="arch" type="xml">
+            <search string="Search Properties">
+                <!-- Searchable fields -->
+                <field name="name" string="Property Name"/>
+                <field name="prop_id" string="Short Code"/>
+                <field name="property_tag" string="Tag"/>
+                <field name="owner_name"/>
+                <field name="owner_phone"/>
+                <field name="city"/>
+                <field name="location"/>
+                <field name="rm_name" string="RM"/>
+                <field name="ninety_nine_acres_id" string="99acres ID"/>
+                <field name="housing_id"/>
+                <field name="magicbricks_id"/>
+                <field name="olx_id"/>
+
+                <!-- Quick filters -->
+                <filter name="active_only"
+                        string="Active"
+                        domain="[('is_active', '=', True)]"/>
+                <filter name="inactive"
+                        string="Inactive"
+                        domain="[('is_active', '=', False)]"/>
+                <separator/>
+                <filter name="for_sale"
+                        string="For Sale"
+                        domain="[('for_sell', '=', True)]"/>
+                <filter name="for_rent"
+                        string="For Rent"
+                        domain="[('for_sell', '=', False)]"/>
+                <separator/>
+                <filter name="not_migrated"
+                        string="Not Yet Migrated"
+                        domain="[('inventory_migrated', '=', False)]"
+                        groups="properties.group_property_manager"/>
+
+                <!-- Group by options -->
+                <group>
+                    <filter name="group_city"
+                            string="City"
+                            context="{'group_by': 'city'}"/>
+                    <filter name="group_state"
+                            string="State"
+                            context="{'group_by': 'state'}"/>
+                    <filter name="group_prop_type"
+                            string="Property Type"
+                            context="{'group_by': 'prop_type'}"/>
+                    <filter name="group_rm"
+                            string="RM"
+                            context="{'group_by': 'rm_name'}"/>
+                    <filter name="group_for_sell"
+                            string="Sale / Rent"
+                            context="{'group_by': 'for_sell'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <!-- ====================================================================
+         Window action
+    ==================================================================== -->
+    <record id="action_property_base" model="ir.actions.act_window">
+        <field name="name">Properties</field>
+        <field name="res_model">property.base</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="view_property_base_search"/>
+        <field name="context">{'search_default_active_only': 1}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                No properties found.
+            </p>
+            <p>
+                Properties are synced automatically every 3 hours from
+                the Cleardeals website API.  Managers can also trigger
+                a manual sync using the <b>Sync Now</b> button.
+            </p>
+        </field>
+    </record>
+
+</odoo>
