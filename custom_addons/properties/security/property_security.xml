@@ -36,5 +36,46 @@
             </field>
         </record>
 
+        <!-- ================================================================
+             Record rules — access scoping
+        ================================================================ -->
+
+        <!--
+            RM rule: an RM user can only read properties where the rm_name
+            field matches their Odoo user display name.
+
+            NOTE: group_property_manager implies group_property_rm, so a
+            manager user belongs to BOTH groups.  Odoo OR's rules across
+            groups — the manager-level rule below (domain = 1=1) ensures
+            managers always see all records regardless of this restriction.
+        -->
+        <record id="rule_property_base_rm_own_only" model="ir.rule">
+            <field name="name">Property Base: RM sees own properties only</field>
+            <field name="model_id" ref="model_property_base"/>
+            <field name="groups" eval="[(4, ref('group_property_rm'))]"/>
+            <field name="domain_force">[('rm_name', '=', user.name)]</field>
+            <field name="perm_read"   eval="True"/>
+            <field name="perm_write"  eval="False"/>
+            <field name="perm_create" eval="False"/>
+            <field name="perm_unlink" eval="False"/>
+        </record>
+
+        <!--
+            Manager rule: full read/write/create/unlink on all records.
+            Because Odoo OR's rules, this allows managers to bypass the RM
+            restriction above (a manager is in both groups → either rule
+            matching grants access).
+        -->
+        <record id="rule_property_base_manager_all" model="ir.rule">
+            <field name="name">Property Base: Manager sees all properties</field>
+            <field name="model_id" ref="model_property_base"/>
+            <field name="groups" eval="[(4, ref('group_property_manager'))]"/>
+            <field name="domain_force">[(1, '=', 1)]</field>
+            <field name="perm_read"   eval="True"/>
+            <field name="perm_write"  eval="True"/>
+            <field name="perm_create" eval="True"/>
+            <field name="perm_unlink" eval="True"/>
+        </record>
+
     </data>
 </odoo>

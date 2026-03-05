@@ -33,6 +33,7 @@ API_WRITABLE_FIELDS = {
     "owner_phone",
     "owner_email",
     "pricing",
+    "pricing_unit",
     "gmaps_url",
     "bedroom_count",
 }
@@ -107,6 +108,23 @@ def _parse_pricing(api_item: dict) -> float:
     return float(rent.get("rent_price") or 0.0)
 
 
+def _parse_pricing_unit(api_item: dict) -> str:
+    """
+    Return the unit string for the property price (e.g. 'lakh', 'crore',
+    'thousand').  Mirrors the selection logic of _parse_pricing().
+
+    For-sale properties:  sell_pricing.offer_price_unit
+    For-rent properties:  rent_pricing.rent_price_unit
+    Returns an empty string when the unit is absent.
+    """
+    for_sell = bool(api_item.get("for_sell"))
+    if for_sell:
+        sell = api_item.get("sell_pricing") or {}
+        return str(sell.get("offer_price_unit") or "")
+    rent = api_item.get("rent_pricing") or {}
+    return str(rent.get("rent_price_unit") or "")
+
+
 def _map_api_record(api_item: dict) -> dict:
     """
     Map a single property JSON object returned by the Cleardeals website API
@@ -162,6 +180,7 @@ def _map_api_record(api_item: dict) -> dict:
         "owner_email": api_item.get("owner_email") or "",
         # Financials
         "pricing": _parse_pricing(api_item),
+        "pricing_unit": _parse_pricing_unit(api_item),
         # Map
         "gmaps_url": api_item.get("gmaps_url") or "",
         # Details — nested object
@@ -315,6 +334,12 @@ class PropertyBaseSync(models.Model):
                     page,
                     len(created),
                 )
+
+            # Commit after every page so each page is its own short
+            # transaction.  This prevents a 60+ second single transaction that
+            # causes PostgreSQL SerializationFailure when concurrent requests
+            # touch the same property_base rows during the sync window.
+            self.env.cr.commit()
 
             _logger.info(
                 "Page %d processed. Running totals — created: %d, "

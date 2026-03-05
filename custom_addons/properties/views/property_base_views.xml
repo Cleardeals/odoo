@@ -2,7 +2,7 @@
 <odoo>
 
     <!-- ====================================================================
-         List view
+         List view  (shared — used by All / Residential / Commercial actions)
     ==================================================================== -->
     <record id="view_property_base_list" model="ir.ui.view">
         <field name="name">property.base.list</field>
@@ -10,6 +10,7 @@
         <field name="arch" type="xml">
             <list string="Properties"
                   default_order="reg_date desc"
+                  decoration-success="is_new"
                   decoration-muted="not is_active">
 
                 <!-- Manager-only "Sync Now" button in the control panel -->
@@ -21,26 +22,27 @@
                             groups="properties.group_property_manager"/>
                 </header>
 
-                <field name="prop_id" string="ID"/>
-                <field name="name" string="Property Name"/>
-                <field name="prop_type" string="Type"/>
-                <field name="for_sell" string="Sale?"
-                       widget="boolean_toggle"/>
+                <field name="prop_id"            string="ID"/>
+                <field name="name"               string="Property Name"/>
+                <field name="prop_type_display"  string="Type"/>
+                <field name="listing_type"       string="Sale / Rent"/>
+                <field name="prop_sub_type"      string="Sub-Type"/>
+                <field name="bhk"                string="BHK" optional="show"/>
                 <field name="city"/>
                 <field name="location"/>
-                <field name="bedroom_count" string="Beds"/>
-                <field name="bhk" optional="show"/>
+                <field name="pricing_display"    string="Price"/>
                 <field name="owner_name"/>
-                <field name="rm_name" string="RM"/>
-                <field name="service_expiry_date_display"
-                       string="Expiry"/>
-                <field name="is_active" widget="boolean_toggle"
-                       string="Active"/>
+                <field name="rm_name"            string="RM"/>
+                <field name="service_expiry_date_display" string="Expiry"/>
+                <field name="is_active"          widget="boolean_toggle"
+                                                 string="Active"/>
                 <field name="inventory_migrated" optional="hide"
                        groups="properties.group_property_manager"/>
-                <!-- Hidden fields needed for decoration / domain -->
+                <!-- Hidden fields used for decoration / domain evaluation -->
+                <field name="is_new"              column_invisible="1"/>
                 <field name="service_expiry_date" column_invisible="1"/>
-                <field name="reg_date" column_invisible="1"/>
+                <field name="reg_date"            column_invisible="1"/>
+                <field name="for_sell"            column_invisible="1"/>
             </list>
         </field>
     </record>
@@ -61,11 +63,22 @@
                             groups="properties.group_property_manager"/>
                     <field name="is_active"
                            widget="boolean_button"
-                           options="{'terminology': 'active'}"/>
+                           options="{'terminology': {'string_true': 'Active',
+                                                     'string_false': 'Expired',
+                                                     'hover_true': 'Mark as Expired',
+                                                     'hover_false': 'Mark as Active'}}"/>
                 </header>
 
                 <sheet>
-                    <!-- Banner row -->
+                    <!-- New property banner -->
+                    <div class="alert alert-success mb-0"
+                         role="alert"
+                         invisible="not is_new">
+                        <strong>New Property</strong> — This property was registered
+                        within the last 3 days.
+                    </div>
+
+                    <!-- Title row -->
                     <div class="oe_title">
                         <h1>
                             <field name="name" placeholder="Property Name"
@@ -85,14 +98,15 @@
                         <group string="Overview">
                             <field name="uuid" readonly="1"/>
                             <field name="reg_date" readonly="1"/>
-                            <field name="prop_type" readonly="1"/>
-                            <field name="prop_sub_type" readonly="1"/>
-                            <field name="for_sell" readonly="1"/>
+                            <field name="prop_type_display" readonly="1"
+                                   string="Type"/>
+                            <field name="prop_sub_type" readonly="1"
+                                   string="Sub-Type"/>
+                            <field name="listing_type" readonly="1"
+                                   string="Sale / Rent"/>
                             <field name="bhk" readonly="1"/>
-                            <field name="bedroom_count" readonly="1"/>
-                            <field name="pricing" readonly="1"
-                                   widget="monetary"
-                                   options="{'currency_field': false}"/>
+                            <field name="pricing_display" readonly="1"
+                                   string="Price"/>
                         </group>
 
                         <!-- Right column — Location -->
@@ -100,8 +114,6 @@
                             <field name="state" readonly="1"/>
                             <field name="city" readonly="1"/>
                             <field name="location" readonly="1"/>
-                            <field name="gmaps_url" readonly="1"
-                                   widget="url"/>
                         </group>
                     </group>
 
@@ -118,15 +130,6 @@
 
                         <!-- Service dates — manager-editable -->
                         <group string="Service">
-                            <!--
-                                service_expiry_date and welcome_call_date are
-                                editable only by managers.  RMs see them readonly
-                                via the access rule on the model (RM group has
-                                no write access), but we also add groups= here
-                                so the field widget renders as readonly visually
-                                even when viewed in a context where write is
-                                technically inherited.
-                            -->
                             <field name="service_expiry_date"
                                    groups="properties.group_property_manager"/>
                             <field name="service_expiry_date_display"
@@ -142,8 +145,9 @@
                         </group>
                     </group>
 
-                    <!-- Portal IDs tab — manager-only edit -->
+                    <!-- Tabs -->
                     <notebook>
+                        <!-- Portal IDs — manager-only -->
                         <page string="Portal IDs"
                               groups="properties.group_property_manager">
                             <group>
@@ -153,6 +157,20 @@
                                 <field name="magicbricks_id"/>
                                 <field name="olx_id"/>
                             </group>
+                        </page>
+
+                        <!-- Google Maps — visible to all groups -->
+                        <page string="Google Maps">
+                            <group>
+                                <field name="gmaps_url" readonly="1"
+                                       widget="url" string="Embed URL"/>
+                            </group>
+                            <div class="o_field_html mt-2">
+                                <field name="gmaps_embed_html"
+                                       widget="html"
+                                       readonly="1"
+                                       options="{'no_attachment_upload': True}"/>
+                            </div>
                         </page>
                     </notebook>
                 </sheet>
@@ -172,25 +190,29 @@
         <field name="arch" type="xml">
             <search string="Search Properties">
                 <!-- Searchable fields -->
-                <field name="name" string="Property Name"/>
-                <field name="prop_id" string="Short Code"/>
-                <field name="property_tag" string="Tag"/>
+                <field name="name"               string="Property Name"/>
+                <field name="prop_id"             string="Short Code"/>
+                <field name="property_tag"        string="Tag"/>
                 <field name="owner_name"/>
                 <field name="owner_phone"/>
                 <field name="city"/>
                 <field name="location"/>
-                <field name="rm_name" string="RM"/>
+                <field name="rm_name"             string="RM"/>
                 <field name="ninety_nine_acres_id" string="99acres ID"/>
                 <field name="housing_id"/>
                 <field name="magicbricks_id"/>
                 <field name="olx_id"/>
 
                 <!-- Quick filters -->
+                <filter name="is_new"
+                        string="New (last 3 days)"
+                        domain="[('reg_date', '&gt;=', (context_today() - datetime.timedelta(days=3)).strftime('%Y-%m-%d'))]"/>
+                <separator/>
                 <filter name="active_only"
                         string="Active"
                         domain="[('is_active', '=', True)]"/>
-                <filter name="inactive"
-                        string="Inactive"
+                <filter name="expired"
+                        string="Expired"
                         domain="[('is_active', '=', False)]"/>
                 <separator/>
                 <filter name="for_sale"
@@ -228,10 +250,12 @@
     </record>
 
     <!-- ====================================================================
-         Window action
+         Window actions
     ==================================================================== -->
+
+    <!-- All Properties (managers use this for the full unfiltered view) -->
     <record id="action_property_base" model="ir.actions.act_window">
-        <field name="name">Properties</field>
+        <field name="name">All Properties</field>
         <field name="res_model">property.base</field>
         <field name="view_mode">list,form</field>
         <field name="search_view_id" ref="view_property_base_search"/>
@@ -242,8 +266,38 @@
             </p>
             <p>
                 Properties are synced automatically every 3 hours from
-                the Cleardeals website API.  Managers can also trigger
+                the Cleardeals website API. Managers can also trigger
                 a manual sync using the <b>Sync Now</b> button.
+            </p>
+        </field>
+    </record>
+
+    <!-- Residential Properties -->
+    <record id="action_property_residential" model="ir.actions.act_window">
+        <field name="name">Residential Properties</field>
+        <field name="res_model">property.base</field>
+        <field name="view_mode">list,form</field>
+        <field name="domain">[('prop_type', '=', 'residential')]</field>
+        <field name="search_view_id" ref="view_property_base_search"/>
+        <field name="context">{'search_default_active_only': 1}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                No residential properties found.
+            </p>
+        </field>
+    </record>
+
+    <!-- Commercial Properties -->
+    <record id="action_property_commercial" model="ir.actions.act_window">
+        <field name="name">Commercial Properties</field>
+        <field name="res_model">property.base</field>
+        <field name="view_mode">list,form</field>
+        <field name="domain">[('prop_type', '=', 'commercial')]</field>
+        <field name="search_view_id" ref="view_property_base_search"/>
+        <field name="context">{'search_default_active_only': 1}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                No commercial properties found.
             </p>
         </field>
     </record>

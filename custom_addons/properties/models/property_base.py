@@ -1,5 +1,6 @@
 import logging
 import re
+from datetime import timedelta
 
 from odoo import _, api, fields, models
 
@@ -168,6 +169,11 @@ class PropertyBase(models.Model):
         digits=(16, 2),
         help="Sell price when for_sale=True; rent price when for_sale=False.",
     )
+    pricing_unit = fields.Char(
+        string="Price Unit",
+        readonly=True,
+        help="Unit of the pricing value (e.g. 'lakh', 'crore', 'thousand').",
+    )
     gmaps_url = fields.Char(
         string="Google Maps URL",
         readonly=True,
@@ -196,6 +202,33 @@ class PropertyBase(models.Model):
         store=True,
         readonly=True,
         help="Human-readable bedroom label, e.g. '2 BHK'.  Derived from bedroom_count.",
+    )
+    # Display-only computed fields (not stored — rendered fresh on every read)
+    prop_type_display = fields.Char(
+        string="Type",
+        compute="_compute_display_fields",
+        help="Capitalised property type label (e.g. 'Residential').",
+    )
+    listing_type = fields.Char(
+        string="Listing",
+        compute="_compute_display_fields",
+        help="'Sell' when for_sell is True, 'Rent' otherwise.",
+    )
+    pricing_display = fields.Char(
+        string="Price",
+        compute="_compute_display_fields",
+        help="Pricing value combined with its unit (e.g. '48 Lakh').",
+    )
+    is_new = fields.Boolean(
+        string="New",
+        compute="_compute_display_fields",
+        help="True when registration date is within the last 3 days.",
+    )
+    gmaps_embed_html = fields.Html(
+        string="Google Maps",
+        compute="_compute_gmaps_embed_html",
+        sanitize=False,
+        help="Embedded Google Maps iframe rendered from the gmaps_url.",
     )
 
     # Display-formatted dates (DD/MM/YYYY) for the UI
@@ -299,6 +332,46 @@ class PropertyBase(models.Model):
             else:
                 rec.bhk = ""
 
+    @api.depends("prop_type", "for_sell", "pricing", "pricing_unit", "reg_date")
+    def _compute_display_fields(self):
+        """Computes all lightweight UI-display fields in one pass."""
+        today = fields.Date.today()
+        three_days_ago = today - timedelta(days=3)
+        for rec in self:
+            # Capitalised type label
+            rec.prop_type_display = (rec.prop_type or "").capitalize()
+            # Sell / Rent text label
+            rec.listing_type = "Sell" if rec.for_sell else "Rent"
+            # Combined pricing display
+            if rec.pricing:
+                unit = (rec.pricing_unit or "").capitalize()
+                suffix = "/month" if not rec.for_sell else ""
+                rec.pricing_display = (
+                    f"{rec.pricing:g} {unit}{suffix}".strip()
+                    if unit
+                    else f"{rec.pricing:g}"
+                )
+            else:
+                rec.pricing_display = ""
+            # New flag — registration within last 3 days
+            rec.is_new = bool(
+                rec.reg_date and rec.reg_date >= three_days_ago,
+            )
+
+    @api.depends("gmaps_url")
+    def _compute_gmaps_embed_html(self):
+        """Builds an iframe HTML block from the stored Google Maps embed URL."""
+        for rec in self:
+            if rec.gmaps_url:
+                rec.gmaps_embed_html = (
+                    f'<iframe src="{rec.gmaps_url}" '
+                    'width="100%" height="420" style="border:0;" '
+                    'allowfullscreen="" loading="lazy" '
+                    'referrerpolicy="no-referrer-when-downgrade"></iframe>'
+                )
+            else:
+                rec.gmaps_embed_html = '<p class="text-muted">No Google Maps URL available for this property.</p>'
+
     @api.depends("service_expiry_date", "welcome_call_date")
     def _compute_date_displays(self):
         """Formats dates strictly as DD/MM/YYYY for display."""
@@ -313,6 +386,24 @@ class PropertyBase(models.Model):
                 if rec.welcome_call_date
                 else ""
             )
+
+    # =========================================================================
+    # Write override — auto-update is_active when service_expiry_date changes
+    # =========================================================================
+
+    def write(self, vals):
+        """
+        When service_expiry_date is explicitly updated, automatically keeps
+        is_active in sync: active if expiry >= today, inactive if past.
+        This mirrors what the nightly cleanup cron does, but fires immediately
+        on save so the status is correct without waiting for the next cron run.
+        """
+        if "service_expiry_date" in vals and "is_active" not in vals:
+            expiry_val = vals["service_expiry_date"]
+            if expiry_val:
+                expiry_date = fields.Date.to_date(expiry_val)
+                vals["is_active"] = expiry_date >= fields.Date.today()
+        return super().write(vals)
 
     # =========================================================================
     # Cron — Expiry cleanup
@@ -351,7 +442,6 @@ class PropertyBase(models.Model):
     # Manual sync trigger (Managers only — button in list view)
     # =========================================================================
 
-    @api.model
     def action_manual_sync(self):
         """
         Manually triggers the API sync cron.  Only visible/accessible to users
