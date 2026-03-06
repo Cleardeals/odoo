@@ -93,7 +93,7 @@ def _serialize_property(prop) -> dict | None:
 
 
 def _serialize_recommended_interest(interest) -> dict:
-    prop = interest.property_id
+    prop = interest.property_base_id
     return {
         "property_tag": prop.property_tag if prop else None,
         "bhk": prop.bhk if prop else None,
@@ -112,7 +112,7 @@ def _serialize_recommended_interest(interest) -> dict:
 
 
 def _serialize_primary_lead(lead) -> dict:
-    prop = lead.property_id or None
+    prop = lead.property_base_id or None
 
     recommended = [_serialize_recommended_interest(i) for i in lead.interest_ids]
 
@@ -182,7 +182,7 @@ class BuyerActivityController(http.Controller):
             serialised_leads.append(serialised)
 
             # Count property touchpoints
-            if lead.property_id:
+            if lead.property_base_id:
                 total_properties += 1
             total_properties += len(lead.interest_ids)
 

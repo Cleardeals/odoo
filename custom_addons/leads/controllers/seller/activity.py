@@ -55,7 +55,7 @@ def _serialize_primary_lead(lead) -> dict:
     """
     Serialize a leads.new record into the unified activity shape.
     """
-    prop = lead.property_id
+    prop = lead.property_base_id
     return {
         "type": "primary",
         "lead_name": lead.name or None,
@@ -85,7 +85,7 @@ def _serialize_primary_lead(lead) -> dict:
 
 def _serialize_recommended_lead(interest) -> dict:
     """Serialise a lead.property.interest record into the unified activity shape."""
-    prop = interest.property_id
+    prop = interest.property_base_id
     parent_lead = interest.lead_id
     return {
         "type": "recommended",

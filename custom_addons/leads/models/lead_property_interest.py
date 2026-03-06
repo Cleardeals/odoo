@@ -7,13 +7,29 @@ class LeadPropertyInterest(models.Model):
     _order = "create_date desc"
 
     # [MIGRATION 19.0] Replaced legacy _sql_constraints with models.Constraint
+    # Constraint uses property_base_id (the canonical property.base link).
     _lead_prop_uniq = models.Constraint(
-        'UNIQUE(lead_id, property_id)',
+        'UNIQUE(lead_id, property_base_id)',
         message='This property is already linked to the lead.',
     )
 
     lead_id = fields.Many2one('leads.new', string="Lead", ondelete="cascade", required=True)
-    property_id = fields.Many2one('property.inventory', string="Property", required=True)
+
+    # Keeps pointing to property.inventory — matches the existing DB column (legacy data).
+    # Never change this comodel without a proper DB migration.
+    property_id = fields.Many2one(
+        'property.inventory',
+        string="Property (Legacy)",
+    )
+
+    # NEW field — links to the canonical property.base model.
+    # Populated going forward; backfilled via the Lead Property Migration Wizard.
+    property_base_id = fields.Many2one(
+        'property.base',
+        string="Property",
+        copy=False,
+        index=True,
+    )
 
     # The models own status pipelines
     current_status = fields.Selection([
@@ -54,14 +70,61 @@ class LeadPropertyInterest(models.Model):
     #     string="Property's RM"
     # )
 
+    # Legacy related fields — sourced from property.inventory (property_id)
     property_bhk = fields.Char(
         related='property_id.bhk',
+        string="Property BHK (Legacy)",
+        readonly=True,
+        store=True,
+    )
+    property_location = fields.Char(
+        related='property_id.location',
+        string="Property Location (Legacy)",
+        readonly=True,
+        store=True,
+    )
+    property_city = fields.Char(
+        related='property_id.city',
+        string="Property City (Legacy)",
+        readonly=True,
+        store=True,
+    )
+    property_link = fields.Char(
+        related='property_id.property_link',
+        string="Property Link (Legacy)",
         readonly=True,
     )
 
-    property_location = fields.Char(
-        related='property_id.location',
+    # New related fields — sourced from property.base (property_base_id)
+    base_property_bhk = fields.Char(
+        related='property_base_id.bhk',
+        string="Property BHK",
         readonly=True,
+        store=True,
+    )
+    base_property_location = fields.Char(
+        related='property_base_id.location',
+        string="Property Location",
+        readonly=True,
+        store=True,
+    )
+    base_property_city = fields.Char(
+        related='property_base_id.city',
+        string="Property City",
+        readonly=True,
+        store=True,
+    )
+    base_property_link = fields.Char(
+        related='property_base_id.property_link',
+        string="Property Link",
+        readonly=True,
+        store=True,
+    )
+    base_property_owner_name = fields.Char(
+        related='property_base_id.owner_name',
+        string="Property Owner",
+        readonly=True,
+        store=True,
     )
 
     feedback_general = fields.Selection([

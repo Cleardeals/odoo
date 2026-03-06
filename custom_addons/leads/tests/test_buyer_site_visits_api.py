@@ -38,27 +38,27 @@ class TestBuyerSiteVisitsAPI(PortalLeadTestCase):
         super().setUpClass()
 
         # Create additional test properties for recommended interests
-        cls.test_property_2 = cls.env["property.inventory"].create(
+        cls.test_property_2 = cls.env["property.base"].create(
             {
                 "property_tag": f"TEST-PROP-2-{cls.suffix}",
-                "bhk": "2 BHK",
+                "name": f"Test Property 2 {cls.suffix}",
+                "bedroom_count": 2,
                 "location": "Second Test Location",
                 "city": "Second Test City",
                 "rm_user_id": cls.rm_user.id,
                 "is_active": True,
-                "property_link": f"https://test.com/property/TEST-PROP-2-{cls.suffix}",
             },
         )
 
-        cls.test_property_3 = cls.env["property.inventory"].create(
+        cls.test_property_3 = cls.env["property.base"].create(
             {
                 "property_tag": f"TEST-PROP-3-{cls.suffix}",
-                "bhk": "4 BHK",
+                "name": f"Test Property 3 {cls.suffix}",
+                "bedroom_count": 4,
                 "location": "Third Test Location",
                 "city": "Third Test City",
                 "rm_user_id": cls.rm_user.id,
                 "is_active": True,
-                "property_link": f"https://test.com/property/TEST-PROP-3-{cls.suffix}",
             },
         )
 
@@ -72,13 +72,13 @@ class TestBuyerSiteVisitsAPI(PortalLeadTestCase):
     def create_interest_for_lead(self, lead, property_obj):
         """
         Helper to create a recommended property interest (lead.property.interest).
-        UNIQUE constraint: (lead_id, property_id) — same lead cannot have duplicate
+        UNIQUE constraint: (lead_id, property_base_id) — same lead cannot have duplicate
         interests for same property.
         """
         interest = self.env["lead.property.interest"].create(
             {
                 "lead_id": lead.id,
-                "property_id": property_obj.id,
+                "property_base_id": property_obj.id,
             },
         )
         return interest
@@ -227,7 +227,7 @@ class TestBuyerSiteVisitsAPI(PortalLeadTestCase):
                 "site_visit_date_only": self.future_date.date(),
                 "current_status": "site_visit_scheduled",
                 "remarks": "Wants east-facing flat",
-                "property_id": self.test_property.id,
+                "property_base_id": self.test_property.id,
             },
         )
 
@@ -237,7 +237,7 @@ class TestBuyerSiteVisitsAPI(PortalLeadTestCase):
         self.assertIsNotNone(lead.site_visit_date_only)
         self.assertEqual(lead.current_status, "site_visit_scheduled")
         self.assertEqual(lead.remarks, "Wants east-facing flat")
-        self.assertIsNotNone(lead.property_id)
+        self.assertIsNotNone(lead.property_base_id)
 
     def test_009_null_name_and_portal(self):
         """
@@ -286,13 +286,13 @@ class TestBuyerSiteVisitsAPI(PortalLeadTestCase):
         lead = self.create_portal_lead()
         lead.write(
             {
-                "property_id": self.test_property.id,
+                "property_base_id": self.test_property.id,
                 "site_visit_date": self.future_date,
                 "current_status": "site_visit_scheduled",
             },
         )
 
-        prop = lead.property_id
+        prop = lead.property_base_id
         self.assertIsNotNone(prop.property_tag)
         self.assertIsNotNone(prop.bhk)
         self.assertIsNotNone(prop.location)
@@ -318,7 +318,7 @@ class TestBuyerSiteVisitsAPI(PortalLeadTestCase):
         )
 
         self.assertEqual(interest.lead_id.id, lead.id)
-        self.assertEqual(interest.property_id.id, self.test_property_2.id)
+        self.assertEqual(interest.property_base_id.id, self.test_property_2.id)
 
     def test_013_recommended_inherits_lead_info(self):
         """
@@ -719,7 +719,7 @@ class TestBuyerSiteVisitsAPI(PortalLeadTestCase):
         lead = self.create_portal_lead()
         lead.write(
             {
-                "property_id": self.test_property.id,
+                "property_base_id": self.test_property.id,
                 "site_visit_date": self.future_date,
                 "current_status": "site_visit_scheduled",
             },

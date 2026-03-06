@@ -80,10 +80,11 @@ class TestSellerFunnelAPI(PortalLeadTestCase):
         super().setUpClass()
 
         # Create multiple test properties owned by same seller
-        cls.test_property_2 = cls.env["property.inventory"].create(
+        cls.test_property_2 = cls.env["property.base"].create(
             {
                 "property_tag": f"TEST-PROP-2-{cls.suffix}",
-                "bhk": "2 BHK",
+                "name": f"Test Property 2 {cls.suffix}",
+                "bedroom_count": 2,
                 "location": "Second Location",
                 "city": "Second City",
                 "rm_user_id": cls.rm_user.id,
@@ -92,10 +93,11 @@ class TestSellerFunnelAPI(PortalLeadTestCase):
             },
         )
 
-        cls.test_property_3 = cls.env["property.inventory"].create(
+        cls.test_property_3 = cls.env["property.base"].create(
             {
                 "property_tag": f"TEST-PROP-3-{cls.suffix}",
-                "bhk": "4 BHK",
+                "name": f"Test Property 3 {cls.suffix}",
+                "bedroom_count": 4,
                 "location": "Third Location",
                 "city": "Third City",
                 "rm_user_id": cls.rm_user.id,
@@ -194,7 +196,7 @@ class TestSellerFunnelAPI(PortalLeadTestCase):
         for i in range(2):
             lead = self.create_portal_lead(
                 phone=f"33333333{i:02d}",
-                property_id=self.test_property.id,
+                property_base_id=self.test_property.id,
             )
             lead.write({"current_status": "lead"})
             stage_counts["lead"] += 1
@@ -205,7 +207,7 @@ class TestSellerFunnelAPI(PortalLeadTestCase):
             interest = self.env["lead.property.interest"].create(
                 {
                     "lead_id": lead.id,
-                    "property_id": self.test_property_2.id,
+                    "property_base_id": self.test_property_2.id,
                     "current_status": "site_visit_done",
                 },
             )
@@ -388,10 +390,11 @@ class TestSellerFunnelAPI(PortalLeadTestCase):
         """
         # ARRANGE
         phone = "2222222222"
-        prop = self.env["property.inventory"].create(
+        prop = self.env["property.base"].create(
             {
                 "property_tag": f"EMPTY-FUNNEL-{self.suffix}",
-                "bhk": "3 BHK",
+                "name": f"Empty Funnel Prop {self.suffix}",
+                "bedroom_count": 3,
                 "location": "Empty",
                 "city": "City",
                 "rm_user_id": self.rm_user.id,
@@ -473,7 +476,7 @@ class TestSellerFunnelAPI(PortalLeadTestCase):
         for prop in [self.test_property, self.test_property_2, self.test_property_3]:
             lead = self.create_portal_lead(
                 phone=f"99999999{prop.id}",
-                property_id=prop.id,
+                property_base_id=prop.id,
             )
             lead.write({"current_status": "site_visit_done"})
             stage_counts["site_visit_done"] += 1
@@ -503,7 +506,7 @@ class TestSellerFunnelAPI(PortalLeadTestCase):
         for i in range(5):
             lead = self.create_portal_lead(
                 phone=f"10101010{i:02d}",
-                property_id=self.test_property.id,
+                property_base_id=self.test_property.id,
             )
             lead.write({"current_status": "lead"})
             primary_count += 1
@@ -515,7 +518,7 @@ class TestSellerFunnelAPI(PortalLeadTestCase):
             self.env["lead.property.interest"].create(
                 {
                     "lead_id": lead.id,
-                    "property_id": self.test_property.id,
+                    "property_base_id": self.test_property.id,
                     "current_status": "busy",
                 },
             )

@@ -38,10 +38,11 @@ class TestSellerAiSuggestionsAPI(PortalLeadTestCase):
         super().setUpClass()
 
         # Create multiple test properties owned by same seller
-        cls.test_property_2 = cls.env["property.inventory"].create(
+        cls.test_property_2 = cls.env["property.base"].create(
             {
                 "property_tag": f"TEST-PROP-2-{cls.suffix}",
-                "bhk": "2 BHK",
+                "name": f"Test Property 2 {cls.suffix}",
+                "bedroom_count": 2,
                 "location": "Second Location",
                 "city": "Second City",
                 "rm_user_id": cls.rm_user.id,
@@ -50,10 +51,11 @@ class TestSellerAiSuggestionsAPI(PortalLeadTestCase):
             },
         )
 
-        cls.test_property_3 = cls.env["property.inventory"].create(
+        cls.test_property_3 = cls.env["property.base"].create(
             {
                 "property_tag": f"TEST-PROP-3-{cls.suffix}",
-                "bhk": "4 BHK",
+                "name": f"Test Property 3 {cls.suffix}",
+                "bedroom_count": 4,
                 "location": "Third Location",
                 "city": "Third City",
                 "rm_user_id": cls.rm_user.id,
@@ -71,7 +73,7 @@ class TestSellerAiSuggestionsAPI(PortalLeadTestCase):
         self.env["property.lead.suggestion"].search(
             [
                 (
-                    "property_inventory_id",
+                    "property_base_id",
                     "in",
                     [
                         self.test_property.id,
@@ -96,7 +98,7 @@ class TestSellerAiSuggestionsAPI(PortalLeadTestCase):
         }
         return self.env["property.lead.suggestion"].create(
             {
-                "property_inventory_id": property_id,
+                "property_base_id": property_id,
                 **defaults,
             },
         )
@@ -278,9 +280,9 @@ class TestSellerAiSuggestionsAPI(PortalLeadTestCase):
             )
 
         suggestions = self.env["property.lead.suggestion"].search(
-            [("property_inventory_id", "=", self.test_property.id)],
+            [("property_base_id", "=", self.test_property.id)],
         )
-        records = [{"id": s.id} for s in suggestions]
+        records = [{"+id": s.id} for s in suggestions]
 
         # ACT - Paginate manually
         page = 1
@@ -345,7 +347,7 @@ class TestSellerAiSuggestionsAPI(PortalLeadTestCase):
             )
 
         suggestions = self.env["property.lead.suggestion"].search(
-            [("property_inventory_id", "=", self.test_property.id)],
+            [("property_base_id", "=", self.test_property.id)],
         )
         records = [{"id": s.id} for s in suggestions]
 
@@ -552,10 +554,11 @@ class TestSellerAiSuggestionsAPI(PortalLeadTestCase):
         """
         # ARRANGE
         phone = "1111111111"
-        prop = self.env["property.inventory"].create(
+        prop = self.env["property.base"].create(
             {
                 "property_tag": f"EMPTY-SUGG-{self.suffix}",
-                "bhk": "3 BHK",
+                "name": f"Empty Sugg Prop {self.suffix}",
+                "bedroom_count": 3,
                 "location": "Empty",
                 "city": "City",
                 "rm_user_id": self.rm_user.id,
@@ -566,7 +569,7 @@ class TestSellerAiSuggestionsAPI(PortalLeadTestCase):
 
         # ACT
         suggestions = self.env["property.lead.suggestion"].search(
-            [("property_inventory_id", "=", prop.id)],
+            [("property_base_id", "=", prop.id)],
         )
 
         # ASSERT
@@ -627,7 +630,7 @@ class TestSellerAiSuggestionsAPI(PortalLeadTestCase):
             [("suggested_lead_phone", "=", lead_phone)],
         )
         prop1_suggestions = all_suggestions.filtered(
-            lambda s: s.property_inventory_id == self.test_property,
+            lambda s: s.property_base_id == self.test_property,
         )
 
         # ASSERT

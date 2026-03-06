@@ -10,3 +10,4 @@ access_leads_new_manager,leads.new.manager,model_leads_new,leads.group_lead_scor
 access_leads_new_rm,leads.new.rm,model_leads_new,leads.group_lead_score_rm,1,1,1,0
 access_lead_property_interest_rm,lead.property.interest.rm,model_lead_property_interest,leads.group_lead_score_rm,1,1,1,1
 access_lead_import_wizard,access_lead_import_wizard,model_lead_import_wizard,leads.group_lead_score_manager,1,1,1,1
+access_lead_migration_wizard,access.lead.migration.wizard,model_lead_migration_wizard,leads.group_lead_score_manager,1,1,1,1

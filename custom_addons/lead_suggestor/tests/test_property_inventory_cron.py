@@ -14,7 +14,7 @@ class TestPropertyInventoryCron(PropertyInventoryTestCase):
         """Cron should mark expired properties as inactive."""
         # Create poperty_tag that expires yesterday
 
-        expired_prop = self.create_property(
+        expired_prop = self.create_inventory(
             service_expiry_date=date.today() - timedelta(days=1),
             is_active=True,
         )
@@ -29,7 +29,7 @@ class TestPropertyInventoryCron(PropertyInventoryTestCase):
 
     def test_02_cleanup_keeps_active_properties_active(self):
         """Cron should not affect properties with future expiry"""
-        active_prop = self.create_property(
+        active_prop = self.create_inventory(
             service_expiry_date=date.today() + timedelta(days=30),
             is_active=True,
         )
@@ -44,17 +44,17 @@ class TestPropertyInventoryCron(PropertyInventoryTestCase):
 
     def test_03_cleanup_handles_multiple_expired(self):
         """Cron should handle multiple expired properties."""
-        expired1 = self.create_property(
+        expired1 = self.create_inventory(
             service_expiry_date=date.today() - timedelta(days=5),
             is_active=True,
         )
 
-        expired2 = self.create_property(
+        expired2 = self.create_inventory(
             service_expiry_date=date.today() - timedelta(days=10),
             is_active=True,
         )
 
-        expired3 = self.create_property(
+        expired3 = self.create_inventory(
             service_expiry_date=date.today() - timedelta(days=1),
             is_active=True,
         )
@@ -70,7 +70,7 @@ class TestPropertyInventoryCron(PropertyInventoryTestCase):
 
     def test_04_cleanup_skips_already_inactive(self):
         """Cron should not affect already inactive properties."""
-        inactive_prop = self.create_property(
+        inactive_prop = self.create_inventory(
             service_expiry_date=date.today() - timedelta(days=10),
             is_active=False,
         )
@@ -85,7 +85,7 @@ class TestPropertyInventoryCron(PropertyInventoryTestCase):
 
     def test_05_cleanup_boundary_today(self):
         """Properties expiring today should remain active."""
-        today_prop = self.create_property(
+        today_prop = self.create_inventory(
             service_expiry_date=date.today(),
             is_active=True,
         )

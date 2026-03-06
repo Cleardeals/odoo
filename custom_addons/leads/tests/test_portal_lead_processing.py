@@ -65,7 +65,7 @@ class TestPortalLeadProcessing(PortalLeadTestCase):
 
         lead._process_lead_logic()
 
-        self.assertEqual(lead.property_id, self.test_property)
+        self.assertEqual(lead.property_base_id, self.test_property)
         # [FIX] Changed assigned_rm_id to user_id to match model
         self.assertEqual(lead.user_id, self.rm_user) 
         self.assertEqual(lead.state, 'assigned')
@@ -82,7 +82,7 @@ class TestPortalLeadProcessing(PortalLeadTestCase):
 
         self.assertEqual(lead.user_id, self.mayuri_user)
         self.assertEqual(lead.state, 'assigned')
-        self.assertFalse(lead.property_id)
+        self.assertFalse(lead.property_base_id)
 
     def test_09_process_lead_adds_notes(self):
         """Processing should add notes."""
@@ -108,7 +108,7 @@ class TestPortalLeadProcessing(PortalLeadTestCase):
         lead._process_lead_logic()
 
         # Should NOT change
-        self.assertFalse(lead.property_id)
+        self.assertFalse(lead.property_base_id)
         self.assertEqual(lead.user_id, original_user)
         self.assertEqual(lead.state, 'assigned')
 
@@ -152,7 +152,7 @@ class TestPortalLeadProcessing(PortalLeadTestCase):
 
         self.assertEqual(lead.user_id, self.pratham_user)
         self.assertEqual(lead.state, 'assigned')
-        self.assertFalse(lead.property_id)
+        self.assertFalse(lead.property_base_id)
         self.assertIn("Pratham Bhandari", lead.process_notes)
 
     def test_13_process_lead_housing_not_found_assigns_naresh(self):
@@ -167,7 +167,7 @@ class TestPortalLeadProcessing(PortalLeadTestCase):
 
         self.assertEqual(lead.user_id, self.naresh_user)
         self.assertEqual(lead.state, 'assigned')
-        self.assertFalse(lead.property_id)
+        self.assertFalse(lead.property_base_id)
         self.assertIn("Naresh Rojiya", lead.process_notes)
 
     def test_14_process_lead_olx_not_found_assigns_naresh(self):
@@ -182,7 +182,7 @@ class TestPortalLeadProcessing(PortalLeadTestCase):
 
         self.assertEqual(lead.user_id, self.naresh_user)
         self.assertEqual(lead.state, 'assigned')
-        self.assertFalse(lead.property_id)
+        self.assertFalse(lead.property_base_id)
         self.assertIn("Naresh Rojiya", lead.process_notes)
 
     def test_15_process_lead_unknown_portal_not_found_assigns_naresh(self):
@@ -197,4 +197,4 @@ class TestPortalLeadProcessing(PortalLeadTestCase):
 
         self.assertEqual(lead.user_id, self.naresh_user)
         self.assertEqual(lead.state, 'assigned')
-        self.assertFalse(lead.property_id)
+        self.assertFalse(lead.property_base_id)

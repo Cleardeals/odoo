@@ -47,7 +47,7 @@ class TestSuggestionCron(PropertyInventoryTestCase):
         # Verify suggestion was created
         suggestion = self.env['property.lead.suggestion'].search([
             ('suggested_lead_phone', '=', '9111111111'),
-            ('property_inventory_id', '=', prop.id)
+            ('property_base_id', '=', prop.id)
         ])
 
         self.assertTrue(suggestion, "Cron should create suggestion from BQ data")
@@ -93,7 +93,7 @@ class TestSuggestionCron(PropertyInventoryTestCase):
         # Count before CRON
         count_before = self.env['property.lead.suggestion'].search_count([
             ('suggested_lead_phone', '=', '9222222222'),
-            ('property_inventory_id', '=', prop.id)
+            ('property_base_id', '=', prop.id)
         ])
 
         # Run cron
@@ -102,7 +102,7 @@ class TestSuggestionCron(PropertyInventoryTestCase):
         # Count after CRON
         count_after = self.env['property.lead.suggestion'].search_count([
             ('suggested_lead_phone', '=', '9222222222'),
-            ('property_inventory_id', '=', prop.id)
+            ('property_base_id', '=', prop.id)
         ])
 
         self.assertEqual(
@@ -178,10 +178,10 @@ class TestSuggestionCron(PropertyInventoryTestCase):
         
         # Verify all were created
         sugg1 = self.env['property.lead.suggestion'].search([
-            ('property_inventory_id', '=', prop1.id)
+            ('property_base_id', '=', prop1.id)
         ])
         sugg2 = self.env['property.lead.suggestion'].search([
-            ('property_inventory_id', '=', prop2.id)
+            ('property_base_id', '=', prop2.id)
         ])
         
         self.assertEqual(len(sugg1), 2)

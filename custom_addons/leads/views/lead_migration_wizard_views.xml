@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- Migration Wizard Form View -->
+    <record id="view_lead_migration_wizard_form" model="ir.ui.view">
+        <field name="name">lead.migration.wizard.form</field>
+        <field name="model">lead.migration.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Backfill Lead → Property Links">
+
+                <!-- PREVIEW STATE -->
+                <group invisible="state != 'preview'">
+
+                    <group string="Section 1: Backfill Missing Links">
+                        <field name="pending_count" readonly="1"/>
+                        <field name="already_linked_count" readonly="1"/>
+                        <div class="alert alert-info" role="alert">
+                            Leads that have a <strong>Portal Property ID</strong> but
+                            <strong>no</strong> DB-level <code>property_id</code> link.
+                            The wizard looks up the matching property using the portal field
+                            map (MagicBricks → magicbricks_id, 99acres → ninety_nine_acres_id,
+                            etc.) and writes only <code>property_id</code>.
+                            Safe to run multiple times — already-linked leads are skipped.
+                        </div>
+                    </group>
+
+                    <group string="Section 2: Cleanup Stale / Dangling Links">
+                        <field name="stale_count" readonly="1"/>
+                        <div class="alert alert-warning" role="alert" invisible="stale_count == 0">
+                            <strong>⚠ Stale links detected!</strong><br/>
+                            These leads have <code>property_id</code> pointing to a
+                            <code>property.base</code> record that was deleted at the DB
+                            level. This causes the server-log warning:<br/>
+                            <em>"Record does not exist or has been deleted.
+                            (Record: property.base(XXXX,), User: 2)"</em><br/><br/>
+                            Clicking <strong>Clear Stale Links</strong> will set
+                            <code>property_id = False</code> on those leads.
+                            The stored related fields (BHK, location, city, owner)
+                            already retain their last values and are unaffected.
+                        </div>
+                        <div class="alert alert-success" role="alert" invisible="stale_count != 0">
+                            No stale links detected.
+                        </div>
+                    </group>
+
+                </group>
+
+                <!-- DONE STATE -->
+                <group invisible="state != 'done'">
+
+                    <group string="Backfill Results" invisible="matched_count == 0 and unmatched_count == 0">
+                        <field name="matched_count" readonly="1"/>
+                        <field name="unmatched_count" readonly="1"/>
+                        <div class="alert alert-warning" role="alert" invisible="unmatched_count == 0">
+                            <strong>Unmatched leads</strong> still have
+                            <code>portal_property_id</code> set but no property was found —
+                            the property may not yet exist in the system.
+                            Check server logs for details.
+                        </div>
+                    </group>
+
+                    <group string="Stale Link Cleanup Results" invisible="stale_cleaned_count == 0 and stale_count != 0">
+                        <field name="stale_cleaned_count" readonly="1"/>
+                        <div class="alert alert-success" role="alert" invisible="stale_cleaned_count == 0">
+                            Stale property links cleared. The server-log warnings should stop.
+                        </div>
+                    </group>
+
+                </group>
+
+                <footer>
+                    <!-- Backfill button -->
+                    <button name="action_run_migration"
+                            string="Backfill Missing Links"
+                            type="object"
+                            class="btn-primary"
+                            invisible="state != 'preview' or pending_count == 0"
+                            confirm="This will backfill property_id on all unlinked leads. Proceed?"/>
+
+                    <!-- Stale cleanup button -->
+                    <button name="action_cleanup_stale_links"
+                            string="Clear Stale Links"
+                            type="object"
+                            class="btn-warning"
+                            invisible="state != 'preview' or stale_count == 0"
+                            confirm="This will set property_id = False on leads with deleted properties. Proceed?"/>
+
+                    <button string="Close"
+                            class="btn-secondary"
+                            special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <!-- Server Action: appears in Action menu on the leads.new list view -->
+    <record id="action_lead_migration_wizard" model="ir.actions.server">
+        <field name="name">Backfill Property Links (Migration)</field>
+        <field name="model_id" ref="leads.model_leads_new"/>
+        <field name="binding_model_id" ref="leads.model_leads_new"/>
+        <field name="binding_view_types">list</field>
+        <field name="state">code</field>
+        <field name="code">
+wizard = env['lead.migration.wizard'].create({})
+action = {
+    'type': 'ir.actions.act_window',
+    'name': 'Backfill Property Links (Migration)',
+    'res_model': 'lead.migration.wizard',
+    'res_id': wizard.id,
+    'view_mode': 'form',
+    'target': 'new',
+}
+        </field>
+    </record>
+
+    <!--
+        Standalone Server Action: accessible via
+        Settings → Technical → Actions → Server Actions → "Run"
+        No binding_model_id so it does NOT require a record selection context.
+        Run it directly from the Technical menu to open the migration wizard.
+    -->
+    <record id="action_lead_migration_wizard_standalone" model="ir.actions.server">
+        <field name="name">Leads: Run Property Migration Wizard</field>
+        <field name="model_id" ref="leads.model_leads_new"/>
+        <field name="state">code</field>
+        <field name="code">
+wizard = env['lead.migration.wizard'].create({})
+action = {
+    'type': 'ir.actions.act_window',
+    'name': 'Leads: Run Property Migration Wizard',
+    'res_model': 'lead.migration.wizard',
+    'res_id': wizard.id,
+    'view_mode': 'form',
+    'target': 'new',
+}
+        </field>
+    </record>
+
+</odoo>

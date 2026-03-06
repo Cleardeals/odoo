@@ -41,12 +41,12 @@ class TestPortalLeadCRUD(PortalLeadTestCase):
 
     def test_04_related_property_fields(self):
         """Test that related property fields populate correctly."""
-        lead = self.create_portal_lead(property_id = self.test_property.id)
+        lead = self.create_portal_lead(property_base_id=self.test_property.id)
 
-        self.assertEqual(lead.property_bhk, '3 BHK')
-        self.assertEqual(lead.property_location, 'Test Location')
-        self.assertEqual(lead.property_city, 'Test City')
-        self.assertEqual(lead.property_link, self.test_property.property_link)
+        self.assertEqual(lead.base_property_bhk, '3 BHK')
+        self.assertEqual(lead.base_property_location, 'Test Location')
+        self.assertEqual(lead.base_property_city, 'Test City')
+        self.assertEqual(lead.base_property_link, self.test_property.property_link)
 
     
     def test_05_compute_create_date_only(self):

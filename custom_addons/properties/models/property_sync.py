@@ -1,14 +1,24 @@
 import logging
 import re
+from datetime import datetime
 
 import requests
 
-from odoo import api, models
+from odoo import _, api, models
+
+try:
+    from google.cloud import bigquery as _bigquery
+except ImportError:  # noqa: BLE001
+    _bigquery = None
 
 _logger = logging.getLogger(__name__)
 
 # API endpoint for the Cleardeals property listing
 PROPERTY_API_URL = "https://api.cleardeals.cc/api/v1/properties"
+
+# BigQuery — same project/table used by the lead_suggestor BQ sync
+_BQ_PROJECT = "cleardeals-459513"
+_BQ_CUSTOMER_TABLE = "cleardeals-459513.cleardeals_dataset.Customer_Data"
 # Records per API page.  The website API uses the `limit` query param.
 # Keeping at 100 halves the number of HTTP round-trips vs the default of 20.
 PAGE_SIZE = 100
@@ -20,6 +30,7 @@ PAGE_SIZE = 100
 API_WRITABLE_FIELDS = {
     "uuid",
     "prop_id",
+    "form_no",
     "name",
     "reg_date",
     "prop_type",
@@ -28,7 +39,7 @@ API_WRITABLE_FIELDS = {
     "state",
     "city",
     "location",
-    "rm_name",
+    "rm_user_id",
     "owner_name",
     "owner_phone",
     "owner_email",
@@ -162,6 +173,7 @@ def _map_api_record(api_item: dict) -> dict:
         # Identifiers
         "uuid": api_item.get("id"),
         "prop_id": api_item.get("prop_id"),
+        "form_no": api_item.get("form_no") or "",
         # Core info
         "name": api_item.get("property_name"),
         "reg_date": _parse_reg_date(api_item.get("reg_date")),
@@ -172,8 +184,8 @@ def _map_api_record(api_item: dict) -> dict:
         "state": (api_item.get("state") or {}).get("name", ""),
         "city": (api_item.get("city") or {}).get("name", ""),
         "location": (api_item.get("location_area") or {}).get("name", ""),
-        # RM / exec
-        "rm_name": api_item.get("exec_name") or "",
+        # RM / exec — raw name; resolved to rm_user_id in the cron loop
+        "_exec_name": api_item.get("exec_name") or "",
         # Owner
         "owner_name": api_item.get("owner_name") or "",
         "owner_phone": api_item.get("owner_contact_no") or "",
@@ -235,10 +247,33 @@ class PropertyBaseSync(models.Model):
             [],
             list(API_WRITABLE_FIELDS) + ["id", "uuid"],
         )
+        # Normalise Many2one fields: search_read returns (id, name) tuples;
+        # strip to a bare int so the change-detection diff works correctly.
+        for r in existing_records:
+            if isinstance(r.get("rm_user_id"), (list, tuple)):
+                r["rm_user_id"] = r["rm_user_id"][0]
         # { uuid_value: {odoo_id, ...current field values...} }
         existing_map: dict[str, dict] = {
             r["uuid"]: r for r in existing_records if r.get("uuid")
         }
+        # Build name→id lookup so exec_name (from API) can be resolved to
+        # rm_user_id without a per-property DB hit.
+        users_by_name: dict[str, int] = {
+            u.name: u.id
+            for u in self.env["res.users"]
+            .sudo()
+            .search(
+                [("active", "in", [True, False])],
+            )
+        }
+        # Alias map: normalize variant API spellings to the canonical Odoo name.
+        # Key = spelling that may appear in API (AFTER basic cleaning),
+        # Value = canonical name as it appears in Odoo.
+        _rm_name_aliases: dict[str, str] = {
+            "Bhumika Prajapati": "Bhoomika Prajapati",
+            "Krusha Kadiya": "Krusha Kadiya",  # canonical spelling; catches 'krusha' after title-case
+        }
+        _missing_rm: set[str] = set()
         _logger.info(
             "Loaded %d existing property.base records into memory.",
             len(existing_map),
@@ -297,6 +332,34 @@ class PropertyBaseSync(models.Model):
 
             for api_item in items:
                 vals = _map_api_record(api_item)
+                # Resolve exec_name → rm_user_id using the pre-built name cache.
+                exec_name = vals.pop("_exec_name", "")
+                # --- Normalisation pipeline ---
+                # 1. Strip leading/trailing whitespace (handles '     ' and 'Name   ')
+                exec_name = exec_name.strip()
+                # 2. Replace hyphens with spaces (handles 'Vivek-Vaghela' style)
+                exec_name = exec_name.replace("-", " ")
+                # 3. Collapse multiple internal spaces into one
+                exec_name = re.sub(r" {2,}", " ", exec_name)
+                # 4. Apply known alias overrides
+                exec_name = _rm_name_aliases.get(exec_name, exec_name)
+                if exec_name:
+                    uid = users_by_name.get(exec_name)
+                    # 5. Case-insensitive fallback: try Title Case version
+                    if uid is None:
+                        uid = users_by_name.get(exec_name.title())
+                    if uid:
+                        vals["rm_user_id"] = uid
+                    else:
+                        vals["rm_user_id"] = False
+                        if exec_name not in _missing_rm:
+                            _logger.warning(
+                                "API sync: RM '%s' not found in Odoo users.",
+                                exec_name,
+                            )
+                            _missing_rm.add(exec_name)
+                else:
+                    vals["rm_user_id"] = False
                 uuid_val = vals.get("uuid")
 
                 if not uuid_val:
@@ -372,7 +435,8 @@ class PropertyBaseSync(models.Model):
         already present in Odoo (synced from BigQuery) and copies the
         manager-editable fields into the matching property.base record.
 
-        Matching key: property_link (computed identically in both models).
+        Matching key: form_no  (from BigQuery Form_Number column, same value as
+        the website API form_no field — stable across name / slug changes).
 
         After a successful match the record's inventory_migrated flag is set
         True so this cron skips it on every subsequent run.
@@ -392,7 +456,7 @@ class PropertyBaseSync(models.Model):
             )
             return
 
-        # --- Build lookup from property.inventory indexed by property_link ---
+        # --- Build lookup from property.inventory indexed by form_no ---
         inventory_records = (
             self.env["property.inventory"]
             .sudo()
@@ -400,7 +464,7 @@ class PropertyBaseSync(models.Model):
                 [],
                 [
                     "id",
-                    "property_link",
+                    "form_no",
                     "property_tag",
                     "ninety_nine_acres_id",
                     "housing_id",
@@ -413,24 +477,24 @@ class PropertyBaseSync(models.Model):
             )
         )
 
-        # { property_link: inventory_record_dict }
+        # { form_no: inventory_record_dict }  — form_no is the stable cross-model key
         inventory_map: dict[str, dict] = {
-            r["property_link"]: r for r in inventory_records if r.get("property_link")
+            r["form_no"]: r for r in inventory_records if r.get("form_no")
         }
         _logger.info(
-            "Loaded %d property.inventory records into migration map.",
+            "Loaded %d property.inventory records into migration map (keyed by form_no).",
             len(inventory_map),
         )
 
-        # --- Process only unmigrated property.base records ---
+        # --- Process only unmigrated property.base records that have a form_no ---
         unmigrated = self.sudo().search(
             [
                 ("inventory_migrated", "=", False),
-                ("property_link", "!=", False),
+                ("form_no", "!=", False),
             ],
         )
         _logger.info(
-            "%d unmigrated property.base records to process.",
+            "%d unmigrated property.base records with form_no to process.",
             len(unmigrated),
         )
 
@@ -438,11 +502,11 @@ class PropertyBaseSync(models.Model):
         unmatched = 0
 
         for prop in unmigrated:
-            inv = inventory_map.get(prop.property_link)
+            inv = inventory_map.get(prop.form_no)
             if not inv:
                 _logger.debug(
-                    "No inventory match for property_link '%s' (id=%d).",
-                    prop.property_link,
+                    "No inventory match for form_no '%s' (id=%d).",
+                    prop.form_no,
                     prop.id,
                 )
                 unmatched += 1
@@ -486,3 +550,243 @@ class PropertyBaseSync(models.Model):
             matched,
             unmatched,
         )
+
+    # =========================================================================
+    # PROP-7 — Manual one-time: pull BQ Customer_Data directly into property.base
+    # =========================================================================
+
+    def action_sync_from_bigquery(self):
+        """
+        Manager-triggered one-time action that queries BigQuery Customer_Data
+        directly and fills migration fields on existing property.base records.
+
+        Matching key: form_no  (BQ Form_Number == website API form_no).
+
+        Fills: property_tag, portal IDs (99acres / Housing / Magicbricks / OLX),
+               service_expiry_date, welcome_call_date, is_active.
+
+        Only writes a field when BQ provides a non-empty value; service_expiry_date
+        is only overwritten if property.base does not already have one.
+
+        Safe to call multiple times — will refresh BQ data on every run.
+        Records with no matching BQ Form_Number are left untouched.
+        """
+        if _bigquery is None:
+            return {
+                "type": "ir.actions.client",
+                "tag": "display_notification",
+                "params": {
+                    "title": _("BigQuery library missing"),
+                    "message": _("Install google-cloud-bigquery to use this feature."),
+                    "sticky": True,
+                    "type": "danger",
+                },
+            }
+
+        _logger.info(
+            "Manual BQ → property.base sync started by user %s.",
+            self.env.user.name,
+        )
+
+        # ------------------------------------------------------------------
+        # 1. Build in-memory map of property.base records keyed by form_no
+        # ------------------------------------------------------------------
+        base_records = self.sudo().search_read(
+            [("form_no", "!=", False)],
+            ["id", "form_no", "service_expiry_date"],
+        )
+        # { form_no_value: {id, service_expiry_date} }
+        base_map: dict[str, dict] = {
+            r["form_no"]: r for r in base_records if r.get("form_no")
+        }
+        if not base_map:
+            _logger.info("No property.base records with form_no — nothing to sync.")
+            return {
+                "type": "ir.actions.client",
+                "tag": "display_notification",
+                "params": {
+                    "title": _("Nothing to sync"),
+                    "message": _(
+                        "No property.base records have a Form Number yet. "
+                        "Run the API sync first so form_no values are populated.",
+                    ),
+                    "sticky": False,
+                    "type": "warning",
+                },
+            }
+
+        _logger.info(
+            "Loaded %d property.base records with form_no into memory.",
+            len(base_map),
+        )
+
+        # ------------------------------------------------------------------
+        # 2. Query BigQuery — fetch the latest row per Form_Number
+        # ------------------------------------------------------------------
+        try:
+            client = _bigquery.Client(project=_BQ_PROJECT)
+        except Exception as e:  # noqa: BLE001
+            _logger.error("Failed to create BigQuery client: %s", e)
+            return {
+                "type": "ir.actions.client",
+                "tag": "display_notification",
+                "params": {
+                    "title": _("BigQuery connection failed"),
+                    "message": str(e),
+                    "sticky": True,
+                    "type": "danger",
+                },
+            }
+
+        # Build a parameterised IN list so we only fetch rows we actually need
+        form_nos = list(base_map.keys())
+        # BigQuery IN clauses have a limit of ~10 000 items — safe for our volume
+        form_nos_literal = ", ".join(f"'{fn}'" for fn in form_nos)
+
+        query = f"""
+            WITH LatestRows AS (
+                SELECT
+                    *,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY Form_Number
+                        ORDER BY
+                            SAFE.PARSE_TIMESTAMP('%d-%m-%Y %H:%M:%S', Created_Date) DESC,
+                            upload_timestamp DESC
+                    ) AS rn
+                FROM `{_BQ_CUSTOMER_TABLE}`
+                WHERE Form_Number IS NOT NULL
+                  AND TRIM(Form_Number) != ''
+                  AND Form_Number IN ({form_nos_literal})
+            )
+            SELECT
+                Form_Number                                         AS form_no,
+                Tag                                                 AS property_tag,
+                `99acres_ID`                                        AS ninety_nine_acres_id,
+                SPLIT(CAST(Housing_ID    AS STRING), '.')[OFFSET(0)] AS housing_id,
+                SPLIT(CAST(Magicbricks_ID AS STRING), '.')[OFFSET(0)] AS magicbricks_id,
+                SPLIT(CAST(OLX_ID        AS STRING), '.')[OFFSET(0)] AS olx_id,
+                Service_Expiry_Date                                 AS service_expiry_date_raw,
+                COALESCE(
+                    SAFE.PARSE_DATE('%d/%m/%Y', Service_Expiry_Date),
+                    SAFE.PARSE_DATE('%d-%m-%Y', Service_Expiry_Date)
+                )                                                   AS expiry_date,
+                COALESCE(
+                    SAFE.PARSE_DATE('%d/%m/%Y', Welcome_Call_Date),
+                    SAFE.PARSE_DATE('%d-%m-%Y', Welcome_Call_Date)
+                )                                                   AS welcome_call_date,
+                CASE
+                    WHEN Property_Status IN ('Sold-CD', 'Sold-Others', 'Rented-CD') THEN FALSE
+                    WHEN COALESCE(
+                        SAFE.PARSE_DATE('%d/%m/%Y', Service_Expiry_Date),
+                        SAFE.PARSE_DATE('%d-%m-%Y', Service_Expiry_Date)
+                    ) < CURRENT_DATE('Asia/Kolkata') THEN FALSE
+                    ELSE TRUE
+                END                                                 AS is_active
+            FROM LatestRows
+            WHERE rn = 1
+        """
+
+        try:
+            _logger.info("Running BigQuery query for %d form numbers...", len(form_nos))
+            rows = list(client.query(query).result())
+            _logger.info("BigQuery returned %d matching rows.", len(rows))
+        except Exception as e:  # noqa: BLE001
+            _logger.error("BigQuery query failed: %s", e)
+            return {
+                "type": "ir.actions.client",
+                "tag": "display_notification",
+                "params": {
+                    "title": _("BigQuery query failed"),
+                    "message": str(e),
+                    "sticky": True,
+                    "type": "danger",
+                },
+            }
+
+        # ------------------------------------------------------------------
+        # 3. Write BQ data into matched property.base records
+        # ------------------------------------------------------------------
+        matched = 0
+        skipped = 0
+
+        for row in rows:
+            fn = row.form_no
+            base_rec_meta = base_map.get(fn)
+            if not base_rec_meta:
+                skipped += 1
+                continue
+
+            rec = self.sudo().browse(base_rec_meta["id"])
+
+            # Parse expiry date
+            service_expiry_date = None
+            if row.expiry_date:
+                try:
+                    service_expiry_date = (
+                        datetime.strptime(str(row.expiry_date), "%Y-%m-%d").date()
+                        if isinstance(row.expiry_date, str)
+                        else row.expiry_date
+                    )
+                except Exception:  # noqa: BLE001
+                    service_expiry_date = None
+
+            # Parse welcome call date
+            welcome_call_date = None
+            if row.welcome_call_date:
+                try:
+                    welcome_call_date = (
+                        datetime.strptime(str(row.welcome_call_date), "%Y-%m-%d").date()
+                        if isinstance(row.welcome_call_date, str)
+                        else row.welcome_call_date
+                    )
+                except Exception:  # noqa: BLE001
+                    welcome_call_date = None
+
+            vals = {"inventory_migrated": True}
+
+            if row.property_tag:
+                vals["property_tag"] = row.property_tag
+            if row.ninety_nine_acres_id:
+                vals["ninety_nine_acres_id"] = str(row.ninety_nine_acres_id)
+            if row.housing_id and row.housing_id not in ("None", "nan"):
+                vals["housing_id"] = row.housing_id
+            if row.magicbricks_id and row.magicbricks_id not in ("None", "nan"):
+                vals["magicbricks_id"] = row.magicbricks_id
+            if row.olx_id and row.olx_id not in ("None", "nan"):
+                vals["olx_id"] = row.olx_id
+            if welcome_call_date:
+                vals["welcome_call_date"] = welcome_call_date
+            # Only overwrite service_expiry_date if not already set on the record
+            if service_expiry_date and not base_rec_meta.get("service_expiry_date"):
+                vals["service_expiry_date"] = service_expiry_date
+            vals["is_active"] = bool(row.is_active)
+
+            rec.write(vals)
+            matched += 1
+
+            if matched % 100 == 0:
+                self.env.cr.commit()
+                _logger.info("Committed %d records so far...", matched)
+
+        self.env.cr.commit()
+        _logger.info(
+            "BQ → property.base sync complete. Written: %d | No BQ match: %d",
+            matched,
+            skipped,
+        )
+
+        return {
+            "type": "ir.actions.client",
+            "tag": "display_notification",
+            "params": {
+                "title": _("BigQuery Sync Complete"),
+                "message": _(
+                    "%(matched)d properties updated from BigQuery. "
+                    "%(skipped)d had no matching Form Number in BQ.",
+                    matched=matched,
+                    skipped=skipped,
+                ),
+                "sticky": False,
+                "type": "success",
+            },
+        }

@@ -19,7 +19,8 @@
 
         # 3. Wizard Views
         'views/lead_score_bq_wizard_views.xml',
-        'views/lead_csv_import_wizard_views.xml', 
+        'views/lead_csv_import_wizard_views.xml',
+        'views/lead_migration_wizard_views.xml',
 
         # 4. Model Views (Defines Actions) -- [MOVED UP]
         'views/lead_score_views.xml',

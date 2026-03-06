@@ -46,7 +46,7 @@ class TestPortalLeadWhatsapp(PortalLeadTestCase):
         """Should generate proper message for WhatsApp action."""
         lead = self.create_portal_lead(
             name='John Doe',
-            property_id=self.test_property.id,
+            property_base_id=self.test_property.id,
             portal_name='MagicBricks'
         )
         

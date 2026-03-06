@@ -46,19 +46,19 @@ class PortalLeadTestCase(TransactionCase):
         cls.acres_id = f'99_{cls.suffix}'
         cls.olx_id = f'OLX_{cls.suffix}'
 
-        cls.test_property = cls.env['property.inventory'].create({
+        cls.test_property = cls.env['property.base'].create({
             'property_tag': f'TEST-PROP-{cls.suffix}',
-            'bhk': '3 BHK',
+            'name': f'Test Property {cls.suffix}',
+            'prop_id': f'TP{cls.suffix}',  # drives computed property_link
+            'bedroom_count': 3,             # drives computed bhk ('3 BHK')
             'location': 'Test Location',
             'city': 'Test City',
             'rm_user_id': cls.rm_user.id,
             'is_active': True,
-            'property_link': f'https://test.com/property/TEST-PROP-{cls.suffix}',
-            
             'magicbricks_id': cls.mb_id,
             'housing_id': cls.hsg_id,
             'ninety_nine_acres_id': cls.acres_id,
-            'olx_id': cls.olx_id
+            'olx_id': cls.olx_id,
         })
 
     def create_portal_lead(self, **kwargs):

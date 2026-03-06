@@ -101,6 +101,15 @@ class PropertyBase(models.Model):
         help="6-character alphanumeric short-code used by the website and "
         "certain API endpoints (e.g. GBH75X0K).",
     )
+    form_no = fields.Char(
+        string="Form Number",
+        index=True,
+        readonly=True,
+        copy=False,
+        help="Unique form number from the Cleardeals website API (form_no field).  "
+        "Matches Form_Number in the BigQuery Customer_Data table and is used as "
+        "the stable cross-model key for migrating data from property.inventory.",
+    )
     name = fields.Char(
         string="Property Name",
         readonly=True,
@@ -145,10 +154,12 @@ class PropertyBase(models.Model):
         readonly=True,
         help="Micro-location or locality within the city.",
     )
-    rm_name = fields.Char(
-        string="RM / Exec Name",
+    rm_user_id = fields.Many2one(
+        "res.users",
+        string="Assigned RM",
         readonly=True,
-        help="Name of the Relationship Manager assigned on the website.",
+        index=True,
+        help="Odoo user record of the Relationship Manager assigned on the website.",
     )
     owner_name = fields.Char(
         string="Owner Name",

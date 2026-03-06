@@ -90,6 +90,6 @@ class TestPortalLeadAPI(PortalLeadTestCase):
         
         # 4. Verify Processing Logic (Property Linking)
         self.assertEqual(lead.portal_name, 'Housing.com')
-        self.assertEqual(lead.property_id, self.test_property, "Lead should link to Test Property")
+        self.assertEqual(lead.property_base_id, self.test_property, "Lead should link to Test Property")
         self.assertEqual(lead.user_id, self.rm_user, "Lead should be assigned to RM")
         self.assertEqual(lead.state, 'assigned')

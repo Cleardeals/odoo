@@ -21,7 +21,7 @@ class TestPortalLeadWebhook(PortalLeadTestCase):
         )
         
         lead = self.create_portal_lead(
-            property_id=self.test_property.id,
+            property_base_id=self.test_property.id,
             user_id=self.rm_user.id,
             is_webhook_sent=False
         )
@@ -48,7 +48,7 @@ class TestPortalLeadWebhook(PortalLeadTestCase):
         unique_name = f"Webhook Test Lead {self.suffix}"
         lead = self.create_portal_lead(
             name=unique_name,
-            property_id=self.test_property.id,
+            property_base_id=self.test_property.id,
             user_id=self.rm_user.id,
             is_webhook_sent=False
         )

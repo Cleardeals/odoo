@@ -5,7 +5,7 @@ Core lookup helpers shared by every seller endpoint.
 
 The seller flow always starts the same way:
   1. Normalise the owner's phone number.
-  2. Find all property.inventory records whose owner_phone matches.
+  2. Find all property.base records whose owner_phone matches.
   3. Return the property tags (and optionally the full records) so the
      individual endpoint controllers can do their specific queries.
 
@@ -20,7 +20,7 @@ _logger = logging.getLogger(__name__)
 
 def get_properties_for_phone(env, phone_10: str):
     """
-    Return all property.inventory records whose owner_phone
+    Return all property.base records whose owner_phone
     normalises to `phone_10` (a clean 10-digit string).
 
     Odoo stores owner_phone in various formats (with/without 91, spaces, etc.),
@@ -34,9 +34,9 @@ def get_properties_for_phone(env, phone_10: str):
 
     Returns
     -------
-    property.inventory recordset  (may be empty)
+    property.base recordset  (may be empty)
     """
-    PropertyInventory = env["property.inventory"].sudo()
+    PropertyInventory = env["property.base"].sudo()
 
     # Primary match: stored as exact 10-digit
     props = PropertyInventory.search(
@@ -86,7 +86,7 @@ def get_primary_leads_for_tags(env, property_tags: list[str]):
         return env["leads.new"].sudo().browse([])
 
     props = (
-        env["property.inventory"]
+        env["property.base"]
         .sudo()
         .search(
             [
@@ -100,7 +100,7 @@ def get_primary_leads_for_tags(env, property_tags: list[str]):
         .sudo()
         .search(
             [
-                ("property_id", "in", props.ids),
+                ("property_base_id", "in", props.ids),
             ],
         )
     )
@@ -124,7 +124,7 @@ def get_recommended_leads_for_tags(env, property_tags: list[str]):
         return env["lead.property.interest"].sudo().browse([])
 
     props = (
-        env["property.inventory"]
+        env["property.base"]
         .sudo()
         .search(
             [
@@ -138,7 +138,7 @@ def get_recommended_leads_for_tags(env, property_tags: list[str]):
         .sudo()
         .search(
             [
-                ("property_id", "in", props.ids),
+                ("property_base_id", "in", props.ids),
             ],
         )
     )

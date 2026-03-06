@@ -52,10 +52,11 @@ class TestSellerPortalPerformanceAPI(PortalLeadTestCase):
         super().setUpClass()
 
         # Create multiple test properties owned by same seller
-        cls.test_property_2 = cls.env["property.inventory"].create(
+        cls.test_property_2 = cls.env["property.base"].create(
             {
                 "property_tag": f"TEST-PROP-2-{cls.suffix}",
-                "bhk": "2 BHK",
+                "name": f"Test Property 2 {cls.suffix}",
+                "bedroom_count": 2,
                 "location": "Second Location",
                 "city": "Second City",
                 "rm_user_id": cls.rm_user.id,
@@ -64,10 +65,11 @@ class TestSellerPortalPerformanceAPI(PortalLeadTestCase):
             },
         )
 
-        cls.test_property_3 = cls.env["property.inventory"].create(
+        cls.test_property_3 = cls.env["property.base"].create(
             {
                 "property_tag": f"TEST-PROP-3-{cls.suffix}",
-                "bhk": "4 BHK",
+                "name": f"Test Property 3 {cls.suffix}",
+                "bedroom_count": 4,
                 "location": "Third Location",
                 "city": "Third City",
                 "rm_user_id": cls.rm_user.id,
@@ -208,13 +210,13 @@ class TestSellerPortalPerformanceAPI(PortalLeadTestCase):
             self.create_portal_lead(
                 phone=f"91000000{i:02d}",
                 portal_name="MagicBricks",
-                property_id=self.test_property.id,
+                property_base_id=self.test_property.id,
             )
 
         # ACT
         portal_data = {p: _empty_portal_block() for p in KNOWN_PORTALS + ["Unknown"]}
         leads = self.env["leads.new"].search(
-            [("property_id", "=", self.test_property.id)],
+            [("property_base_id", "=", self.test_property.id)],
         )
         for lead in leads:
             portal = (
@@ -240,20 +242,20 @@ class TestSellerPortalPerformanceAPI(PortalLeadTestCase):
             self.create_portal_lead(
                 phone=f"91100000{i:02d}",
                 portal_name="MagicBricks",
-                property_id=self.test_property.id,
+                property_base_id=self.test_property.id,
             )
 
         for i in range(3):
             self.create_portal_lead(
                 phone=f"91110000{i:02d}",
                 portal_name="99acres",
-                property_id=self.test_property.id,
+                property_base_id=self.test_property.id,
             )
 
         # ACT
         portal_data = {p: _empty_portal_block() for p in KNOWN_PORTALS + ["Unknown"]}
         leads = self.env["leads.new"].search(
-            [("property_id", "=", self.test_property.id)],
+            [("property_base_id", "=", self.test_property.id)],
         )
         for lead in leads:
             portal = (
@@ -275,7 +277,7 @@ class TestSellerPortalPerformanceAPI(PortalLeadTestCase):
         lead = self.create_portal_lead(
             phone="9120000001",
             portal_name="RandomPortal",
-            property_id=self.test_property.id,
+            property_base_id=self.test_property.id,
         )
 
         # ACT
@@ -307,7 +309,7 @@ class TestSellerPortalPerformanceAPI(PortalLeadTestCase):
             self.env["lead.property.interest"].create(
                 {
                     "lead_id": parent_lead.id,
-                    "property_id": prop.id,
+                    "property_base_id": prop.id,
                 },
             )
 
@@ -349,7 +351,7 @@ class TestSellerPortalPerformanceAPI(PortalLeadTestCase):
             self.env["lead.property.interest"].create(
                 {
                     "lead_id": parent_lead.id,
-                    "property_id": properties_for_interests[i].id,
+                    "property_base_id": properties_for_interests[i].id,
                 },
             )
 
@@ -385,7 +387,7 @@ class TestSellerPortalPerformanceAPI(PortalLeadTestCase):
         interest = self.env["lead.property.interest"].create(
             {
                 "lead_id": parent_lead.id,
-                "property_id": self.test_property.id,
+                "property_base_id": self.test_property.id,
             },
         )
 
@@ -490,14 +492,14 @@ class TestSellerPortalPerformanceAPI(PortalLeadTestCase):
             lead = self.create_portal_lead(
                 phone=f"91200000{i:02d}",
                 portal_name="MagicBricks",
-                property_id=self.test_property.id,
+                property_base_id=self.test_property.id,
             )
             lead.write({"current_status": "site_visit_scheduled"})
 
         # ACT
         portal_data = {p: _empty_portal_block() for p in KNOWN_PORTALS + ["Unknown"]}
         leads = self.env["leads.new"].search(
-            [("property_id", "=", self.test_property.id)],
+            [("property_base_id", "=", self.test_property.id)],
         )
         for lead in leads:
             portal = (
@@ -524,7 +526,7 @@ class TestSellerPortalPerformanceAPI(PortalLeadTestCase):
             lead = self.create_portal_lead(
                 phone=f"91210000{i:02d}",
                 portal_name="MagicBricks",
-                property_id=self.test_property.id,
+                property_base_id=self.test_property.id,
             )
             lead.write({"current_status": status})
             leads.append(lead)
@@ -554,7 +556,7 @@ class TestSellerPortalPerformanceAPI(PortalLeadTestCase):
         lead = self.create_portal_lead(
             phone="9122000001",
             portal_name="99acres",
-            property_id=self.test_property.id,
+            property_base_id=self.test_property.id,
         )
         # Explicitly set status to None
         lead.write({"current_status": None})
@@ -676,12 +678,12 @@ class TestSellerPortalPerformanceAPI(PortalLeadTestCase):
         self.create_portal_lead(
             phone="9130000001",
             portal_name="MagicBricks",
-            property_id=self.test_property.id,
+            property_base_id=self.test_property.id,
         )
         self.create_portal_lead(
             phone="9130000002",
             portal_name="99acres",
-            property_id=self.test_property_2.id,
+            property_base_id=self.test_property_2.id,
         )
 
         properties = [self.test_property, self.test_property_2]
@@ -702,7 +704,7 @@ class TestSellerPortalPerformanceAPI(PortalLeadTestCase):
         ASSERT: No properties returned
         """
         # ARRANGE
-        properties = self.env["property.inventory"].search(
+        properties = self.env["property.base"].search(
             [("property_tag", "=", "NON_EXISTENT")],
         )
 
@@ -778,14 +780,14 @@ class TestSellerPortalPerformanceAPI(PortalLeadTestCase):
         mb_p1 = self.create_portal_lead(
             phone="9140000001",
             portal_name="MagicBricks",
-            property_id=self.test_property.id,
+            property_base_id=self.test_property.id,
         )
         mb_p1.write({"current_status": "site_visit_scheduled"})
 
         mb_p2 = self.create_portal_lead(
             phone="9140000002",
             portal_name="MagicBricks",
-            property_id=self.test_property.id,
+            property_base_id=self.test_property.id,
         )
         mb_p2.write({"current_status": "site_visit_done"})
 
@@ -797,7 +799,7 @@ class TestSellerPortalPerformanceAPI(PortalLeadTestCase):
         mb_interest = self.env["lead.property.interest"].create(
             {
                 "lead_id": mb_parent.id,
-                "property_id": self.test_property.id,
+                "property_base_id": self.test_property.id,
             },
         )
         mb_interest.write({"current_status": "site_visit_scheduled"})
@@ -840,10 +842,11 @@ class TestSellerPortalPerformanceAPI(PortalLeadTestCase):
         """
         # ARRANGE
         phone = "1111111111"
-        prop = self.env["property.inventory"].create(
+        prop = self.env["property.base"].create(
             {
                 "property_tag": f"EMPTY-PORTAL-{self.suffix}",
-                "bhk": "3 BHK",
+                "name": f"Empty Portal Prop {self.suffix}",
+                "bedroom_count": 3,
                 "location": "Empty",
                 "city": "City",
                 "rm_user_id": self.rm_user.id,
