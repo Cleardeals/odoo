@@ -21,9 +21,9 @@ class NewPortalLead(models.Model):
     _order = "create_date desc"
 
     # Lead Fields
-    name = fields.Char("Lead Name", required=True, index=True)
-    phone = fields.Char("Phone Number", index=True)
-    email = fields.Char("Email Address", index=True)
+    name = fields.Char("Lead Name", required=True, index=True, tracking=True)
+    phone = fields.Char("Phone Number", index=True, tracking=True)
+    email = fields.Char("Email Address", index=True, tracking=True)
     portal_name = fields.Char("Portal Source", help="e.g., Magicbricks, 99acres")
     project_name = fields.Char("Project Name", help="Project Name from portal")
     portal_property_id = fields.Char(
@@ -44,6 +44,7 @@ class NewPortalLead(models.Model):
         required=True,
         index=True,
         copy=False,
+        tracking=True,
     )
 
     current_status = fields.Selection(
@@ -72,9 +73,10 @@ class NewPortalLead(models.Model):
         string="Current Status",
         default="lead",
         required=True,
+        tracking=True,
     )
 
-    remarks = fields.Text("Remarks")
+    remarks = fields.Text("Remarks", tracking=True)
 
     feedback_general = fields.Selection(
         [
@@ -85,6 +87,7 @@ class NewPortalLead(models.Model):
             ("other", "Other"),
         ],
         string="Feedback",
+        tracking=True,
     )
 
     feedback_site_visit_done = fields.Selection(
@@ -103,9 +106,12 @@ class NewPortalLead(models.Model):
             ("other", "Other"),
         ],
         string="Feedback for Site Visit Done",
+        tracking=True,
     )
 
-    is_ops_sale_lead = fields.Boolean(string="Is Ops Sale Lead", default=False)
+    is_ops_sale_lead = fields.Boolean(
+        string="Is Ops Sale Lead", default=False, tracking=True
+    )
 
     site_visit_date = fields.Datetime(
         string="Site Visit Scheduled On",
@@ -145,9 +151,12 @@ class NewPortalLead(models.Model):
         string="Related Property",
         copy=False,
         index=True,
+        tracking=True,
     )
 
-    user_id = fields.Many2one("res.users", string="Assigned RM", copy=False)
+    user_id = fields.Many2one(
+        "res.users", string="Assigned RM", copy=False, tracking=True
+    )
 
     # ------------------------------------------------------------------
     # Legacy related fields — sourced from property.inventory (property_id).
