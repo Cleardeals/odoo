@@ -30,6 +30,9 @@
         "views/property_base_views.xml",
         "views/property_menus.xml",
     ],
+    "controllers": [
+        "controllers/controllers.py",
+    ],
     "installable": True,
     "application": True,
     "auto_install": False,
