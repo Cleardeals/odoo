@@ -13,6 +13,23 @@ except ImportError:  # noqa: BLE001
 
 _logger = logging.getLogger(__name__)
 
+
+def _normalize_owner_phone(raw: str) -> str:
+    """
+    Strip formatting and country code from an Indian mobile number.
+    Returns a clean 10-digit string, or the raw value if it cannot be resolved.
+    """
+    if not raw:
+        return ""
+    digits = re.sub(r"\D", "", raw.strip())
+    if len(digits) == 10:
+        return digits
+    if len(digits) == 11 and digits.startswith("0"):
+        return digits[1:]
+    if len(digits) == 12 and digits.startswith("91"):
+        return digits[2:]
+    return raw  # unrecognised format — store as-is so data isn't lost
+
 # API endpoint for the Cleardeals property listing
 PROPERTY_API_URL = "https://api.cleardeals.cc/api/v1/properties"
 
@@ -188,7 +205,7 @@ def _map_api_record(api_item: dict) -> dict:
         "_exec_name": api_item.get("exec_name") or "",
         # Owner
         "owner_name": api_item.get("owner_name") or "",
-        "owner_phone": api_item.get("owner_contact_no") or "",
+        "owner_phone": _normalize_owner_phone(api_item.get("owner_contact_no") or ""),
         "owner_email": api_item.get("owner_email") or "",
         # Financials
         "pricing": _parse_pricing(api_item),
