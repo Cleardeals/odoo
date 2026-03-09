@@ -57,6 +57,14 @@ class LeadMigrationWizard(models.TransientModel):
     )
     matched_count = fields.Integer(string="Successfully Linked", readonly=True)
     unmatched_count = fields.Integer(string="Could Not Match", readonly=True)
+    recomputed_count = fields.Integer(string="Fields Recomputed", readonly=True)
+
+    # count of leads that have property_base_id but empty stored related fields
+    stale_fields_count = fields.Integer(
+        string="Leads With Missing Stored Fields",
+        readonly=True,
+        help="Leads linked to a property.base but whose stored fields (BHK, location, city etc.) are blank — usually from a raw SQL update that bypassed the ORM.",
+    )
 
     # --- Helpers ---
 
@@ -100,9 +108,18 @@ class LeadMigrationWizard(models.TransientModel):
 
         stale_count = len(self._get_stale_lead_ids())
 
+        # Count leads linked via SQL that have empty stored related fields
+        stale_fields_count = self.env["leads.new"].search_count(
+            [
+                ("property_base_id", "!=", False),
+                ("base_property_city", "=", False),
+            ]
+        )
+
         res["pending_count"] = pending
         res["already_linked_count"] = already_linked
         res["stale_count"] = stale_count
+        res["stale_fields_count"] = stale_fields_count
         return res
 
     # --- Actions ---
@@ -113,18 +130,25 @@ class LeadMigrationWizard(models.TransientModel):
 
         Eligible = portal_property_id is set AND property_id is False.
         Uses the existing _find_property() lookup (portal name → portal field map).
+        Processes in batches of 100 and commits after each batch to avoid
+        cursor timeouts on large datasets.
         """
         self.ensure_one()
 
-        leads_to_migrate = self.env["leads.new"].search(
-            [
-                ("portal_property_id", "!=", False),
-                ("portal_property_id", "!=", ""),
-                ("property_base_id", "=", False),
-            ],
+        # Fetch IDs only — avoids holding a huge recordset open across commits
+        lead_ids = (
+            self.env["leads.new"]
+            .search(
+                [
+                    ("portal_property_id", "!=", False),
+                    ("portal_property_id", "!=", ""),
+                    ("property_base_id", "=", False),
+                ],
+            )
+            .ids
         )
 
-        total = len(leads_to_migrate)
+        total = len(lead_ids)
         _logger.info(
             "MIGRATION: Starting property backfill for %d leads.",
             total,
@@ -132,35 +156,50 @@ class LeadMigrationWizard(models.TransientModel):
 
         matched = 0
         unmatched = 0
+        BATCH_SIZE = 100
 
-        for lead in leads_to_migrate:
-            try:
-                property_rec = lead._find_property()
-                if property_rec:
-                    # Write only property_base_id — leave state/user_id/process_notes untouched
-                    lead.write({"property_base_id": property_rec.id})
-                    matched += 1
-                    _logger.info(
-                        "MIGRATION: Lead %d linked to property %s.",
-                        lead.id,
-                        property_rec.property_tag,
-                    )
-                else:
+        for batch_start in range(0, total, BATCH_SIZE):
+            batch_ids = lead_ids[batch_start : batch_start + BATCH_SIZE]
+            leads_batch = self.env["leads.new"].browse(batch_ids)
+
+            for lead in leads_batch:
+                try:
+                    property_rec = lead._find_property()
+                    if property_rec:
+                        lead.write({"property_base_id": property_rec.id})
+                        matched += 1
+                        _logger.info(
+                            "MIGRATION: Lead %d linked to property %s.",
+                            lead.id,
+                            property_rec.property_tag,
+                        )
+                    else:
+                        unmatched += 1
+                        _logger.warning(
+                            "MIGRATION: Lead %d (%s / %s) — no matching property found.",
+                            lead.id,
+                            lead.portal_name,
+                            lead.portal_property_id,
+                        )
+                except Exception as e:
                     unmatched += 1
-                    _logger.warning(
-                        "MIGRATION: Lead %d (%s / %s) — no matching property found.",
+                    _logger.error(
+                        "MIGRATION: Error processing lead %d: %s",
                         lead.id,
-                        lead.portal_name,
-                        lead.portal_property_id,
+                        e,
+                        exc_info=True,
                     )
-            except Exception as e:
-                unmatched += 1
-                _logger.error(
-                    "MIGRATION: Error processing lead %d: %s",
-                    lead.id,
-                    e,
-                    exc_info=True,
-                )
+
+            # Commit after each batch to release the transaction and prevent
+            # cursor timeouts on large datasets
+            self.env.cr.commit()
+            _logger.info(
+                "MIGRATION: Progress %d/%d (matched: %d, unmatched: %d)",
+                min(batch_start + BATCH_SIZE, total),
+                total,
+                matched,
+                unmatched,
+            )
 
         _logger.info(
             "MIGRATION: Complete. Matched: %d, Unmatched: %d.",
@@ -177,6 +216,66 @@ class LeadMigrationWizard(models.TransientModel):
         )
 
         # Re-open the wizard to show results
+        return {
+            "type": "ir.actions.act_window",
+            "res_model": "lead.migration.wizard",
+            "res_id": self.id,
+            "view_mode": "form",
+            "target": "new",
+        }
+
+    def action_recompute_stored_fields(self):
+        """
+        Force-recomputes all stored related fields sourced from property_base_id
+        on leads that were linked via raw SQL (bypassing the ORM).
+
+        Processes in batches of 200 with a commit after each batch to avoid
+        memory and cursor timeout issues.
+        """
+        self.ensure_one()
+
+        lead_ids = (
+            self.env["leads.new"]
+            .search(
+                [
+                    ("property_base_id", "!=", False),
+                    ("base_property_city", "=", False),
+                ]
+            )
+            .ids
+        )
+
+        total = len(lead_ids)
+        _logger.info("MIGRATION: Recomputing stored fields for %d leads.", total)
+
+        BATCH_SIZE = 200
+        STORED_FIELDS = [
+            "base_property_bhk",
+            "base_property_location",
+            "base_property_city",
+            "base_property_owner_name",
+            "base_property_link",
+            "all_associated_properties",
+        ]
+
+        for batch_start in range(0, total, BATCH_SIZE):
+            batch = self.env["leads.new"].browse(
+                lead_ids[batch_start : batch_start + BATCH_SIZE]
+            )
+            # Notify ORM that property_base_id changed so it schedules recompute
+            batch.modified(["property_base_id"])
+            # Flush pending recomputes for just these fields
+            self.env["leads.new"]._recompute_model(fnames=STORED_FIELDS)
+            self.env.cr.commit()
+            _logger.info(
+                "MIGRATION: Recomputed %d/%d",
+                min(batch_start + BATCH_SIZE, total),
+                total,
+            )
+
+        _logger.info("MIGRATION: Stored field recompute complete for %d leads.", total)
+        self.write({"recomputed_count": total, "state": "done"})
+
         return {
             "type": "ir.actions.act_window",
             "res_model": "lead.migration.wizard",
