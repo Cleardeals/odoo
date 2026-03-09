@@ -1,19 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
 
-    <menuitem 
+    <menuitem
         id="menu_rm_prospector_root"
         name="Lead Suggestor"
         web_icon="rm_property_prospector,static/description/icon.png"
-        groups="group_property_prospector_rm"
+        groups="lead_suggestor.group_property_prospector_rm,lead_suggestor.group_property_prospector_manager"
         sequence="6"/>
-    
+
 
     <menuitem
         id="menu_rm_prospector_dashboard"
         name="My Property Suggestions"
         parent="menu_rm_prospector_root"
         action="action_property_inventory_rm"
+        groups="lead_suggestor.group_property_prospector_rm"
         sequence="10"/>
 
     <menuitem
@@ -29,6 +30,7 @@
         name="Export Suggestions Data"
         parent="menu_rm_prospector_root"
         action="action_export_suggestions_data"
+        groups="lead_suggestor.group_property_prospector_manager"
         sequence="50"/>
 </odoo>
 

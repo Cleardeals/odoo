@@ -25,7 +25,10 @@ class LeadPropertyInterest(models.Model):
     )
 
     lead_id = fields.Many2one(
-        "leads.new", string="Lead", ondelete="cascade", required=True,
+        "leads.new",
+        string="Lead",
+        ondelete="cascade",
+        required=True,
     )
 
     # Keeps pointing to property.inventory — matches the existing DB column (legacy data).

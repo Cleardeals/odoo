@@ -17,16 +17,17 @@
             </field>
         </record>
 
-        <record id="group_property_prospector_manager" model="res.groups">
-            <field name="name">Manager</field>
-            <field name="implied_ids" eval="[(4, ref('group_property_prospector_rm'))]"/>
-            <field name="comment">
-                User can access and manage all records in the
-                Lead Suggestor dashboard.
-            </field>
-        </record>
-
     </data>
+
+    <!-- Manager group outside noupdate so implied_ids changes apply on upgrade -->
+    <record id="group_property_prospector_manager" model="res.groups">
+        <field name="name">Manager</field>
+        <field name="implied_ids" eval="[(6, 0, [ref('base.group_user')])]"/>
+        <field name="comment">
+            User can access and manage all records in the
+            Lead Suggestor dashboard.
+        </field>
+    </record>
 
     <!-- Rule group extensions are NOT inside noupdate="1" so they apply on
          every module upgrade, not just fresh install. -->
