@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_lead_recompute_wizard_form" model="ir.ui.view">
+        <field name="name">lead.recompute.wizard.form</field>
+        <field name="model">lead.recompute.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Recompute Lead Property Fields">
+
+                <!-- PREVIEW STATE -->
+                <group invisible="state != 'preview'">
+                    <field name="affected_count" readonly="1" string="Leads to Fix"/>
+                    <div class="alert alert-info" role="alert" invisible="affected_count == 0">
+                        These leads have <code>property_base_id</code> set but their stored fields
+                        (BHK, location, city, owner, link) are blank. This usually
+                        happens after a raw SQL backfill that bypassed the ORM.<br/><br/>
+                        Click <strong>Recompute</strong> to fix them. This may take
+                        a few minutes for large datasets.
+                    </div>
+                    <div class="alert alert-success" role="alert" invisible="affected_count != 0">
+                        All linked leads already have their stored fields populated. Nothing to do.
+                    </div>
+                </group>
+
+                <!-- DONE STATE -->
+                <group invisible="state != 'done'">
+                    <field name="recomputed_count" readonly="1" string="Leads Recomputed"/>
+                    <div class="alert alert-success" role="alert">
+                        Done! BHK, location, city, owner and link fields are now
+                        populated on all affected leads.
+                    </div>
+                </group>
+
+                <footer>
+                    <button name="action_recompute"
+                            string="Recompute"
+                            type="object"
+                            class="btn-primary"
+                            invisible="state != 'preview' or affected_count == 0"
+                            confirm="This will recompute stored property fields for all affected leads. May take a few minutes. Proceed?"/>
+                    <button string="Close"
+                            class="btn-secondary"
+                            special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <!-- Standalone server action — run from Settings → Technical → Server Actions -->
+    <record id="action_lead_recompute_wizard_standalone" model="ir.actions.server">
+        <field name="name">Leads: Recompute Stored Property Fields</field>
+        <field name="model_id" ref="leads.model_leads_new"/>
+        <field name="state">code</field>
+        <field name="code">
+wizard = env['lead.recompute.wizard'].create({})
+action = {
+    'type': 'ir.actions.act_window',
+    'name': 'Recompute Lead Property Fields',
+    'res_model': 'lead.recompute.wizard',
+    'res_id': wizard.id,
+    'view_mode': 'form',
+    'target': 'new',
+}
+        </field>
+    </record>
+
+    <!-- Action menu entry on leads.new list view -->
+    <record id="action_lead_recompute_wizard_action_menu" model="ir.actions.server">
+        <field name="name">Recompute Stored Property Fields</field>
+        <field name="model_id" ref="leads.model_leads_new"/>
+        <field name="binding_model_id" ref="leads.model_leads_new"/>
+        <field name="binding_view_types">list</field>
+        <field name="state">code</field>
+        <field name="code">
+wizard = env['lead.recompute.wizard'].create({})
+action = {
+    'type': 'ir.actions.act_window',
+    'name': 'Recompute Lead Property Fields',
+    'res_model': 'lead.recompute.wizard',
+    'res_id': wizard.id,
+    'view_mode': 'form',
+    'target': 'new',
+}
+        </field>
+    </record>
+
+</odoo>

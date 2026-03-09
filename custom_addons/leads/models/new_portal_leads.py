@@ -110,7 +110,9 @@ class NewPortalLead(models.Model):
     )
 
     is_ops_sale_lead = fields.Boolean(
-        string="Is Ops Sale Lead", default=False, tracking=True
+        string="Is Ops Sale Lead",
+        default=False,
+        tracking=True,
     )
 
     site_visit_date = fields.Datetime(
@@ -155,7 +157,10 @@ class NewPortalLead(models.Model):
     )
 
     user_id = fields.Many2one(
-        "res.users", string="Assigned RM", copy=False, tracking=True
+        "res.users",
+        string="Assigned RM",
+        copy=False,
+        tracking=True,
     )
 
     # ------------------------------------------------------------------
@@ -355,8 +360,8 @@ class NewPortalLead(models.Model):
 
     @api.model_create_multi
     def create(self, vals_list):
-        # Create the new lead(s) first
-        new_leads = super().create(vals_list)
+        # Create the new lead(s) first — suppress automatic chatter log on creation
+        new_leads = super().with_context(mail_create_nolog=True).create(vals_list)
         channel = "leads.new"
         notification_type = "bus_notification"
         message = {
@@ -401,10 +406,6 @@ class NewPortalLead(models.Model):
                 "Duplicate lead detected. Phone: %s, Property: %s. Skipping creation.",
                 phone_clean,
                 portal_prop_id,
-            )
-            existing_lead.message_post(
-                body=f"Duplicate inquiry received from {lead_vals.get('portal_name')}. Raw data: {lead_vals.get('raw_data')}",
-                subject=f"Duplicate Inquiry ({lead_vals.get('portal_name')})",
             )
             return None
         else:  # noqa: RET505

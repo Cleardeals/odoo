@@ -24,6 +24,17 @@
                         </div>
                     </group>
 
+                    <group string="Section 3: Recompute Stored Fields (after SQL backfill)" invisible="stale_fields_count == 0">
+                        <field name="stale_fields_count" readonly="1"/>
+                        <div class="alert alert-warning" role="alert">
+                            These leads have <code>property_base_id</code> set but their
+                            stored fields (BHK, location, city, owner, link) are blank —
+                            this happens when <code>property_base_id</code> was set via
+                            raw SQL, bypassing the ORM recompute.
+                            Click <strong>Recompute Stored Fields</strong> to fix them.
+                        </div>
+                    </group>
+
                     <group string="Section 2: Cleanup Stale / Dangling Links">
                         <field name="stale_count" readonly="1"/>
                         <div class="alert alert-warning" role="alert" invisible="stale_count == 0">
@@ -66,6 +77,13 @@
                         </div>
                     </group>
 
+                    <group string="Stored Field Recompute Results" invisible="recomputed_count == 0">
+                        <field name="recomputed_count" readonly="1"/>
+                        <div class="alert alert-success" role="alert">
+                            Stored fields recomputed. Lead form views will now show BHK, location, city etc.
+                        </div>
+                    </group>
+
                 </group>
 
                 <footer>
@@ -76,6 +94,14 @@
                             class="btn-primary"
                             invisible="state != 'preview' or pending_count == 0"
                             confirm="This will backfill property_id on all unlinked leads. Proceed?"/>
+
+                    <!-- Recompute stored fields button -->
+                    <button name="action_recompute_stored_fields"
+                            string="Recompute Stored Fields"
+                            type="object"
+                            class="btn-primary"
+                            invisible="state != 'preview' or stale_fields_count == 0"
+                            confirm="This will recompute BHK, location, city etc. for all leads linked via SQL. May take a few minutes. Proceed?"/>
 
                     <!-- Stale cleanup button -->
                     <button name="action_cleanup_stale_links"
