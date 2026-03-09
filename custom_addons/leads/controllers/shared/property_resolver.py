@@ -14,18 +14,29 @@ across summary, funnel, activity, site_visits, etc.
 """
 
 import logging
+import re
+
+from .phone_utils import normalize_phone_to_10_digit
 
 _logger = logging.getLogger(__name__)
 
 
 def get_properties_for_phone(env, phone_10: str):
     """
-    Return all property.base records whose owner_phone
-    normalises to `phone_10` (a clean 10-digit string).
+    Return all property.base records whose owner_phone contains `phone_10`.
 
-    Odoo stores owner_phone in various formats (with/without 91, spaces, etc.),
-    so we search by the raw stored value first, then fall back to the 91-prefix
-    format.
+    owner_phone may be stored in several real-world formats:
+      - Single number, clean:       "9028233802"
+      - Single number, with prefix: "919028233802" | "+919028233802"
+      - Multiple numbers, space-separated: "9316108956 8780576009"
+
+    Strategy:
+      1. SQL LIKE to cheaply narrow candidates to rows that contain the
+         10-digit string as a substring.
+      2. Python token filter: split on whitespace/commas, normalise each
+         token, accept the record only if any token normalises to phone_10.
+         This avoids false positives where the 10-digit string appears
+         embedded inside a longer number.
 
     Parameters
     ----------
@@ -38,24 +49,26 @@ def get_properties_for_phone(env, phone_10: str):
     """
     PropertyInventory = env["property.base"].sudo()
 
-    # Primary match: stored as exact 10-digit
-    props = PropertyInventory.search(
-        [
-            ("owner_phone", "=", phone_10),
-        ],
+    # Step 1: broad SQL match — finds rows where phone_10 appears anywhere
+    # in the stored string (handles all prefix/multi-number variants).
+    candidates = PropertyInventory.search(
+        [("owner_phone", "like", phone_10)],
     )
 
-    if not props:
-        # Fallback: stored with country code "91XXXXXXXXXX"
-        props = PropertyInventory.search(
-            [
-                ("owner_phone", "=", f"91{phone_10}"),
-            ],
-        )
+    # Step 2: exact token match in Python — each space/comma-separated token
+    # is normalised; accept the record if any token resolves to phone_10.
+    def _any_token_matches(stored: str) -> bool:
+        for token in re.split(r"[\s,;]+", stored or ""):
+            if normalize_phone_to_10_digit(token.strip()) == phone_10:
+                return True
+        return False
+
+    props = candidates.filtered(lambda p: _any_token_matches(p.owner_phone))
 
     _logger.debug(
-        "property_resolver: phone=%s -> %d properties found",
+        "property_resolver: phone=%s -> %d candidates, %d matched",
         phone_10,
+        len(candidates),
         len(props),
     )
     return props
