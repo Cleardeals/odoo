@@ -144,15 +144,15 @@
 
                         <!-- Service dates — manager-editable -->
                         <group string="Service">
-                            <field name="service_expiry_date"
-                                   groups="properties.group_property_manager"/>
-                            <field name="service_expiry_date_display"
-                                   string="Expiry (display)"
-                                   readonly="1"/>
                             <field name="welcome_call_date"
                                    groups="properties.group_property_manager"/>
                             <field name="welcome_call_date_display"
                                    string="Welcome Call (display)"
+                                   readonly="1"/>
+                            <field name="service_expiry_date"
+                                   groups="properties.group_property_manager"/>
+                            <field name="service_expiry_date_display"
+                                   string="Expiry (display)"
                                    readonly="1"/>
                             <field name="inventory_migrated" readonly="1"
                                    groups="properties.group_property_manager"/>

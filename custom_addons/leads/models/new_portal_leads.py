@@ -164,49 +164,18 @@ class NewPortalLead(models.Model):
     )
 
     # ------------------------------------------------------------------
-    # Legacy related fields — sourced from property.inventory (property_id).
-    # These hold the stored values for all 6 000+ historical leads and
-    # remain the display source until property_base_id is fully backfilled.
-    # ------------------------------------------------------------------
-    property_bhk = fields.Char(
-        related="property_id.bhk",
-        string="Property BHK (Legacy)",
-        readonly=True,
-        store=True,
-    )
-
-    property_location = fields.Char(
-        related="property_id.location",
-        string="Property Location (Legacy)",
-        readonly=True,
-        store=True,
-    )
-
-    property_city = fields.Char(
-        related="property_id.city",
-        string="Property City (Legacy)",
-        readonly=True,
-        store=True,
-    )
-
-    property_owner_name = fields.Char(
-        related="property_id.owner_name",
-        string="Property Owner (Legacy)",
-        readonly=True,
-        store=True,
-    )
-
-    property_link = fields.Char(
-        related="property_id.property_link",
-        string="Property Link (Legacy)",
-        readonly=True,
-    )
-
-    # ------------------------------------------------------------------
     # New related fields — sourced from property.base (property_base_id).
     # Populated as property_base_id gets backfilled / set on new leads.
     # Once the migration is complete these become the primary display fields.
     # ------------------------------------------------------------------
+
+    base_property_tag = fields.Char(
+        related="property_base_id.property_tag",
+        string="Property Tag",
+        readonly=True,
+        store=True,
+    )
+
     base_property_bhk = fields.Char(
         related="property_base_id.bhk",
         string="Property BHK",
@@ -364,7 +333,10 @@ class NewPortalLead(models.Model):
         # Context must be set on `self` before super() — calling
         # super().with_context().create() returns the same overridden method
         # and causes infinite recursion.
-        new_leads = super(NewPortalLead, self.with_context(mail_create_nolog=True)).create(vals_list)
+        new_leads = super(
+            NewPortalLead,
+            self.with_context(mail_create_nolog=True),
+        ).create(vals_list)
         channel = "leads.new"
         notification_type = "bus_notification"
         message = {
