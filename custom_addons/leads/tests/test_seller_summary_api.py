@@ -42,15 +42,15 @@ class TestSellerSummaryAPI(PortalLeadTestCase):
         super().setUpClass()
 
         # Create multiple test properties owned by the same seller
-        cls.test_property_2 = cls.env["property.inventory"].create(
+        cls.test_property_2 = cls.env["property.base"].create(
             {
                 "property_tag": f"TEST-PROP-2-{cls.suffix}",
-                "bhk": "2 BHK",
+                "name": f"Test Property 2 {cls.suffix}",
+                "bedroom_count": 2,
                 "location": "Second Location",
                 "city": "Second City",
                 "rm_user_id": cls.rm_user.id,
                 "is_active": True,
-                "property_link": f"https://test.com/property/TEST-PROP-2-{cls.suffix}",
                 "owner_phone": "9876543210",
                 "magicbricks_id": f"MB2_{cls.suffix}",
                 "housing_id": f"HSG2_{cls.suffix}",
@@ -59,15 +59,15 @@ class TestSellerSummaryAPI(PortalLeadTestCase):
             },
         )
 
-        cls.test_property_3 = cls.env["property.inventory"].create(
+        cls.test_property_3 = cls.env["property.base"].create(
             {
                 "property_tag": f"TEST-PROP-3-{cls.suffix}",
-                "bhk": "4 BHK",
+                "name": f"Test Property 3 {cls.suffix}",
+                "bedroom_count": 4,
                 "location": "Third Location",
                 "city": "Third City",
                 "rm_user_id": cls.rm_user.id,
                 "is_active": True,
-                "property_link": f"https://test.com/property/TEST-PROP-3-{cls.suffix}",
                 "owner_phone": "9876543210",
                 "magicbricks_id": f"MB3_{cls.suffix}",
                 "housing_id": f"HSG3_{cls.suffix}",
@@ -282,15 +282,15 @@ class TestSellerSummaryAPI(PortalLeadTestCase):
         # Create 3 primary leads
         lead_1 = self.create_portal_lead(
             phone="9999999999",
-            property_id=self.test_property.id,
+            property_base_id=self.test_property.id,
         )
         lead_2 = self.create_portal_lead(
             phone="8888888888",
-            property_id=self.test_property_2.id,
+            property_base_id=self.test_property_2.id,
         )
         lead_3 = self.create_portal_lead(
             phone="7777777777",
-            property_id=self.test_property_3.id,
+            property_base_id=self.test_property_3.id,
         )
 
         # ACT
@@ -357,13 +357,13 @@ class TestSellerSummaryAPI(PortalLeadTestCase):
         interest_1 = self.env["lead.property.interest"].create(
             {
                 "lead_id": lead_1.id,
-                "property_id": self.test_property.id,
+                "property_base_id": self.test_property.id,
             },
         )
         interest_2 = self.env["lead.property.interest"].create(
             {
                 "lead_id": lead_2.id,
-                "property_id": self.test_property_2.id,
+                "property_base_id": self.test_property_2.id,
             },
         )
 
@@ -408,17 +408,17 @@ class TestSellerSummaryAPI(PortalLeadTestCase):
         self.create_portal_lead(
             phone="9999999999",
             portal_name="MagicBricks",
-            property_id=self.test_property.id,
+            property_base_id=self.test_property.id,
         )
         self.create_portal_lead(
             phone="8888888888",
             portal_name="99acres",
-            property_id=self.test_property.id,
+            property_base_id=self.test_property.id,
         )
         self.create_portal_lead(
             phone="7777777777",
             portal_name="Housing.com",
-            property_id=self.test_property.id,
+            property_base_id=self.test_property.id,
         )
 
         # Get primary leads
@@ -454,7 +454,7 @@ class TestSellerSummaryAPI(PortalLeadTestCase):
         self.create_portal_lead(
             phone="5555555555",
             portal_name=unknown_portal,
-            property_id=self.test_property.id,
+            property_base_id=self.test_property.id,
         )
 
         # Get primary leads
@@ -497,7 +497,7 @@ class TestSellerSummaryAPI(PortalLeadTestCase):
         for i in range(3):
             self.create_portal_lead(
                 phone=f"999999999{i}",
-                property_id=self.test_property.id,
+                property_base_id=self.test_property.id,
             )
 
         # Create 2 recommended interests
@@ -505,14 +505,14 @@ class TestSellerSummaryAPI(PortalLeadTestCase):
         self.env["lead.property.interest"].create(
             {
                 "lead_id": lead.id,
-                "property_id": self.test_property_2.id,
+                "property_base_id": self.test_property_2.id,
             },
         )
         lead_2 = self.create_portal_lead(phone="3333333333")
         self.env["lead.property.interest"].create(
             {
                 "lead_id": lead_2.id,
-                "property_id": self.test_property.id,
+                "property_base_id": self.test_property.id,
             },
         )
 
@@ -537,10 +537,11 @@ class TestSellerSummaryAPI(PortalLeadTestCase):
         """
         # ARRANGE
         phone = "2222222222"
-        prop = self.env["property.inventory"].create(
+        prop = self.env["property.base"].create(
             {
                 "property_tag": f"EMPTY-{self.suffix}",
-                "bhk": "3 BHK",
+                "name": f"Empty Prop {self.suffix}",
+                "bedroom_count": 3,
                 "location": "Empty",
                 "city": "City",
                 "rm_user_id": self.rm_user.id,
@@ -598,7 +599,7 @@ class TestSellerSummaryAPI(PortalLeadTestCase):
             name=lead_name,
             email=lead_email,
             portal_name="MagicBricks",
-            property_id=self.test_property.id,
+            property_base_id=self.test_property.id,
         )
 
         # ACT
@@ -621,13 +622,13 @@ class TestSellerSummaryAPI(PortalLeadTestCase):
         interest = self.env["lead.property.interest"].create(
             {
                 "lead_id": lead.id,
-                "property_id": self.test_property.id,
+                "property_base_id": self.test_property.id,
             },
         )
 
         # ACT & ASSERT
         self.assertEqual(interest.lead_id, lead)
-        self.assertEqual(interest.property_id, self.test_property)
+        self.assertEqual(interest.property_base_id, self.test_property)
         self.assertEqual(interest.current_status, "lead")
 
     def test_23_portal_breakdown_totals_consistency(self):
@@ -644,19 +645,19 @@ class TestSellerSummaryAPI(PortalLeadTestCase):
             self.create_portal_lead(
                 phone=f"999999999{i}",
                 portal_name="MagicBricks",
-                property_id=self.test_property.id,
+                property_base_id=self.test_property.id,
             )
         for i in range(3):
             self.create_portal_lead(
                 phone=f"888888888{i}",
                 portal_name="99acres",
-                property_id=self.test_property.id,
+                property_base_id=self.test_property.id,
             )
         for i in range(2):
             self.create_portal_lead(
                 phone=f"777777777{i}",
                 portal_name="Housing.com",
-                property_id=self.test_property.id,
+                property_base_id=self.test_property.id,
             )
 
         # Get leads and build breakdown
@@ -696,10 +697,11 @@ class TestSellerSummaryAPI(PortalLeadTestCase):
         seller_2_phone = "1234567890"
 
         # Create seller 2 property
-        other_prop = self.env["property.inventory"].create(
+        other_prop = self.env["property.base"].create(
             {
                 "property_tag": f"OTHER-PROP-{self.suffix}",
-                "bhk": "3 BHK",
+                "name": f"Other Prop {self.suffix}",
+                "bedroom_count": 3,
                 "location": "Other Location",
                 "city": "Other City",
                 "rm_user_id": self.rm_user.id,
@@ -734,7 +736,7 @@ class TestSellerSummaryAPI(PortalLeadTestCase):
                 self.create_portal_lead(
                     phone=phone,
                     portal_name=portal,
-                    property_id=self.test_property.id,
+                    property_base_id=self.test_property.id,
                 )
 
         # Get leads

@@ -39,7 +39,7 @@ class LeadImportWizard(models.TransientModel):
         property_cache = {}
         
         LeadsNew = self.env['leads.new']
-        PropertyInv = self.env['property.inventory']
+        PropertyInv = self.env['property.base']
 
         COLUMN_MAPPING = {
             'name': 'Name',

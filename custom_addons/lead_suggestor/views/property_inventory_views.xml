@@ -2,32 +2,44 @@
 <odoo>
 
     <record id="view_property_inventory_list" model="ir.ui.view">
-        <field name="name">property.inventory.list</field>
-        <field name="model">property.inventory</field>
+        <field name="name">property.base.lead_suggestor.list</field>
+        <field name="model">property.base</field>
+        <field name="priority">99</field>
         <field name="arch" type="xml">
-            <list string="Property Inventory" multi_edit="1">
-                <field name="property_tag"/>
-                <field name="rm_user_id"/>
-                <field name="owner_name"/>
-                <field name="owner_phone"/>
-                <field name="suggestion_count" optional="show"/>
-                <field name="new_suggestion_count" optional="show"/>
-                <field name="service_expiry_date" optional="hide"/>
-                <field name="welcome_call_date" optional="hide"/>
-                <field name="magicbricks_id" optional="hide"/>
-                <field name="housing_id" optional="hide"/>
-                <field name="ninety_nine_acres_id" optional="hide"/>
-                <field name="olx_id" optional="hide"/>
+            <list string="Property Suggestions"
+                  create="false" edit="false"
+                  decoration-muted="not is_active"
+                  decoration-info="new_suggestion_count &gt; 0">
+
+                <header>
+                    <button name="action_backfill_suggestions"
+                            string="Link Existing Suggestions"
+                            type="object"
+                            class="btn-warning"
+                            confirm="This will match all existing suggestion records to their property and refresh counts. Run once after migration. Continue?"
+                            groups="lead_suggestor.group_property_prospector_manager"/>
+                </header>
+
+                <field name="property_tag" string="Property Tag"/>
+                <field name="name" string="Property Name"/>
+                <field name="city"/>
+                <field name="location" optional="hide"/>
+                <field name="rm_user_id" string="Assigned RM"/>
+                <field name="suggestion_count" string="Total Leads"/>
+                <field name="new_suggestion_count" string="New Leads"/>
+                <field name="is_active" column_invisible="1"/>
             </list>
         </field>
     </record>
 
     <record id="view_property_inventory_kanban" model="ir.ui.view">
-        <field name="name">property.inventory.kanban</field>
-        <field name="model">property.inventory</field>
+        <field name="name">property.base.lead_suggestor.kanban</field>
+        <field name="model">property.base</field>
+        <field name="priority">99</field>
         <field name="arch" type="xml">
             <kanban class="o_kanban_mobile" create="false">
                 <field name="property_tag"/>
+                <field name="name"/>
                 <field name="rm_user_id"/>
                 <field name="suggestion_count"/>
                 <field name="new_suggestion_count"/>
@@ -35,28 +47,25 @@
                 <field name="welcome_call_date"/>
                 <field name="service_expiry_date_display"/>
                 <field name="welcome_call_date_display"/>
-
+                <field name="is_active"/>
+                <field name="is_new"/>
                 <templates>
                     <t t-name="card">
                         <div class="o_kanban_tags" style="margin-bottom: 8px;">
-                            <t t-if="record.service_expiry_date.raw_value &amp;&amp; record.service_expiry_date.raw_value &lt; new Date().toISOString().split('T')[0]">
+                            <t t-if="!record.is_active.raw_value">
                                 <span class="badge" style="font-size: 0.85em; background-color: #dc3545; color: white;">
                                     <i class="fa fa-exclamation-triangle"/> SERVICE EXPIRED
                                 </span>
                             </t>
-
-                            <t t-if="record.welcome_call_date.raw_value &amp;&amp;
-                                            record.welcome_call_date.raw_value &lt;= new Date().toISOString().split('T')[0] &amp;&amp;
-                                            record.welcome_call_date.raw_value &gt;= new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]">
+                            <t t-if="record.is_new.raw_value">
                                 <span class="badge" style="font-size: 0.85em; margin-left: 4px; background-color: #28a745; color: white;">
                                     <i class="fa fa-star"/> NEW PROPERTY
                                 </span>
                             </t>
                         </div>
-
                         <main class="oe_kanban_details">
                             <strong class="o_kanban_record_title">
-                                <field name="property_tag"/>
+                                <t t-esc="record.property_tag.value or record.name.value"/>
                             </strong>
                             <div class="text-muted o_kanban_record_subtitle">
                                 <span t-if="record.rm_user_id.value">
@@ -64,21 +73,18 @@
                                     <t t-esc="record.rm_user_id.value"/>
                                 </span>
                             </div>
-
                             <div style="margin-top: 6px; font-size: 0.9em;">
                                 <span t-if="record.welcome_call_date.raw_value" class="text-muted">
                                     <i class="fa fa-phone-square"/> Welcome call:
                                     <field name="welcome_call_date_display"/>
                                 </span>
-                                <br t-if="record.service_expiry_date.raw_value &amp;&amp; record.welcome_call_date.raw_value"/>
-
+                                <br t-if="record.service_expiry_date.raw_value and record.welcome_call_date.raw_value"/>
                                 <span t-if="record.service_expiry_date.raw_value" class="text-muted">
                                     <i class="fa fa-calendar-times-o"/> Service Expiry:
                                     <field name="service_expiry_date_display"/>
                                 </span>
                             </div>
                         </main>
-
                         <footer class="o_kanban_footer">
                             <div class="o_kanban_footer_left">
                                 <span class="text-muted">
@@ -87,9 +93,7 @@
                                 </span>
                             </div>
                             <div class="o_kanban_footer_right">
-                                <span t-if="record.new_suggestion_count.value > 0"
-                                            class="badge badge-danger"
-                                            title="New Suggestions">
+                                <span t-if="record.new_suggestion_count.value > 0" class="badge badge-danger" title="New Suggestions">
                                     <i class="fa fa-star" aria-label="New"/>
                                     <t t-esc="record.new_suggestion_count.value"/> New
                                 </span>
@@ -102,134 +106,128 @@
     </record>
 
     <record id="view_property_inventory_form" model="ir.ui.view">
-        <field name="name">property.inventory.form</field>
-        <field name="model">property.inventory</field>
+        <field name="name">property.base.lead_suggestor.form</field>
+        <field name="model">property.base</field>
+        <field name="inherit_id" ref="properties.view_property_base_form"/>
+        <field name="mode">primary</field>
+        <field name="priority">99</field>
         <field name="arch" type="xml">
-            <form string="Property Details" create="false" edit="false">
-                <sheet>
-                    <div class="oe_title">
-                        <h1><field name="property_tag" readonly="1"/></h1>
-                    </div>
-                    <group>
-                        <group>
-                            <field name="rm_user_id" readonly="1"/>
-                            <field name="owner_name" readonly="1"/>
-                            <field name="owner_phone" readonly="1"/>
-                            <field name="magicbricks_id" readonly="1"/>
-                            <field name="housing_id" readonly="1"/>
-                            <field name="ninety_nine_acres_id" readonly="1"/>
-                            <field name="olx_id" readonly="1"/>
-                            <field name="property_link" readonly="1" widget="url" options="{'always_show': True}"/>
-                        </group>
-                        <group>
-                            <field name="service_expiry_date_display" string="Service Expiry Date"/>
-                            <field name="welcome_call_date_display" string="Welcome Call Date"/>
+            <!-- Remove property-sync buttons (not relevant in Lead Suggestor) -->
+            <xpath expr="//header/button[@name='action_manual_sync']" position="replace"/>
+            <xpath expr="//header/button[@name='action_sync_from_bigquery']" position="replace"/>
 
-                            <field name="service_expiry_date" invisible="1"/>
-                            <field name="welcome_call_date" invisible="1"/>
-                        </group>
-                    </group>
-                    <group class="oe_subtotal_footer oe_right" colspan="2" name="suggestion_summary">
-                        <field name="suggestion_count" nolabel="1" class="oe_subtotal_footer_separator" string="Total Suggestions"/>
-                        <field name="new_suggestion_count" nolabel="1" string="New Suggestions"/>
-                    </group>
-                    <div class="clearfix"/>
-
-                    <notebook>
-                        <page string="Similar Leads" name="suggestions">
-                            <field name="suggestion_ids" nolabel="1">
-                                <list editable="bottom" create="false" delete="false">
-                                    <field name="status" widget="badge"
-                                            decoration-success="status == 'converted'"
-                                            decoration-warning="status in ('contacted', 'interested')"
-                                            decoration-danger="status == 'not_interested'"
-                                            decoration-info="status == 'new'"/>
-
-                                    <field name="generation_date_display" readonly="1"/>
-                                    <field name="lead_name" readonly="1"/>
-                                    <field name="suggested_lead_phone" readonly="1" string="Lead Phone"/>
-
-                                    <button name="action_whatsapp_with_copy"
-                                            type="object"
-                                            icon="fa-whatsapp"
-                                            title="Chat on WhatsApp"
-                                            class="btn-link"
-                                            invisible="suggested_lead_phone_whatsapp_url == False"/>
-
-                                    <field name="suggested_lead_phone_whatsapp_url" invisible="1"/>
-                                    <field name="contact_type" string="Lead Status" readonly="1"/>
-                                    <field name="original_property_tag" readonly="1" string="Liked"/>
-                                    <field name="original_property_similarity" readonly="1" string="Match (%)" />
-                                    <field name="rm_feedback"/>
-                                    <button name="action_log_feedback" type="object"
-                                            string="Feedback" icon="fa-pencil-square-o"
-                                            class="btn-sm btn-primary"/>
-                                </list>
-                            </field>
-                        </page>
-                    </notebook>
-                </sheet>
-            </form>
+            <!-- Similar Leads as the FIRST notebook page -->
+            <xpath expr="//notebook/page[1]" position="before">
+                <page string="Similar Leads" name="suggestions">
+                    <field name="suggestion_ids" nolabel="1">
+                        <list editable="bottom" create="false" delete="false">
+                            <field name="status" widget="badge"
+                                   decoration-success="status == &apos;converted&apos;"
+                                   decoration-warning="status in (&apos;contacted&apos;, &apos;interested&apos;)"
+                                   decoration-danger="status == &apos;not_interested&apos;"
+                                   decoration-info="status == &apos;new&apos;"/>
+                            <field name="generation_date_display" readonly="1"/>
+                            <field name="lead_name" readonly="1"/>
+                            <field name="suggested_lead_phone" readonly="1" string="Lead Phone"/>
+                            <button name="action_whatsapp_with_copy" type="object" icon="fa-whatsapp" title="Chat on WhatsApp" class="btn-link" invisible="suggested_lead_phone_whatsapp_url == False"/>
+                            <field name="suggested_lead_phone_whatsapp_url" column_invisible="1"/>
+                            <field name="contact_type" string="Lead Status" readonly="1"/>
+                            <field name="original_property_tag" readonly="1" string="Liked"/>
+                            <field name="original_property_similarity" readonly="1" string="Match (%)"/>
+                            <field name="rm_feedback"/>
+                            <button name="action_log_feedback" type="object" string="Feedback" icon="fa-pencil-square-o" class="btn-sm btn-primary"/>
+                        </list>
+                    </field>
+                </page>
+            </xpath>
         </field>
     </record>
 
     <record id="view_property_inventory_search" model="ir.ui.view">
-        <field name="name">property.inventory.search</field>
-        <field name="model">property.inventory</field>
+        <field name="name">property.base.lead_suggestor.search</field>
+        <field name="model">property.base</field>
+        <field name="priority">99</field>
         <field name="arch" type="xml">
             <search>
                 <field name="property_tag" string="Property Tag"/>
+                <field name="name" string="Property Name"/>
                 <field name="rm_user_id" string="Assigned RM"/>
-                <field name="owner_name" string="Owner Name"/>
-                <field name="owner_phone" string="Owner Phone"/>
-
+                <field name="city"/>
                 <separator/>
-
-                <filter name="filter_new_suggestions" string="With New Suggestions" domain="[('new_suggestion_count', '>', 0)]"/>
-
+                <filter name="filter_new_suggestions"
+                        string="With New Suggestions"
+                        domain="[('new_suggestion_count', '&gt;', 0)]"/>
+                <filter name="filter_has_suggestions"
+                        string="Has Suggestions"
+                        domain="[('suggestion_count', '&gt;', 0)]"/>
                 <separator/>
-
-                <filter name="filter_my_properties" string="My Properties" domain="[('rm_user_id', '=', uid)]"/>
-
+                <filter name="filter_active"
+                        string="Active Only"
+                        domain="[('is_active', '=', True)]"/>
+                <filter name="filter_inactive"
+                        string="Inactive / Expired"
+                        domain="[('is_active', '=', False)]"/>
                 <separator/>
-
-                <filter name="filter_active" string="Active Only" domain="[('is_active', '=', True)]"/>
-                <filter name="filter_inactive" string="Inactive/Expired" domain="[('is_active', '=', False)]"/>
-
-                <separator/>
-
-                <filter string="Assigned RM" name="group_by_rm" context="{'group_by': 'rm_user_id'}"/>
-                <filter string="Is Active" name="group_by_active" context="{'group_by': 'is_active'}"/>
+                <filter string="Assigned RM" name="group_by_rm"
+                        context="{'group_by': 'rm_user_id'}"/>
+                <filter string="City" name="group_by_city"
+                        context="{'group_by': 'city'}"/>
             </search>
         </field>
     </record>
 
     <record id="action_property_inventory_rm" model="ir.actions.act_window">
         <field name="name">My Property Suggestions</field>
-        <field name="res_model">property.inventory</field>
-        <field name="view_mode">list,kanban,form</field>
+        <field name="res_model">property.base</field>
+        <field name="view_mode">kanban,list,form</field>
         <field name="search_view_id" ref="view_property_inventory_search"/>
-        <field name="domain">[('rm_user_id', '=', uid), ('is_active', '=', True)]</field>
-        <field name="context">{
-            'search_default_filter_active': 1,
-            'search_default_filter_my_properties': 1,
-            'search_default_filter_new_suggestions': 1
-        }</field>
+        <field name="context">{'search_default_filter_active': 1, 'search_default_filter_new_suggestions': 1}</field>
+    </record>
+    <record id="action_property_inventory_rm_view_list" model="ir.actions.act_window.view">
+        <field name="act_window_id" ref="action_property_inventory_rm"/>
+        <field name="view_id" ref="view_property_inventory_list"/>
+        <field name="view_mode">list</field>
+        <field name="sequence">2</field>
+    </record>
+    <record id="action_property_inventory_rm_view_kanban" model="ir.actions.act_window.view">
+        <field name="act_window_id" ref="action_property_inventory_rm"/>
+        <field name="view_id" ref="view_property_inventory_kanban"/>
+        <field name="view_mode">kanban</field>
+        <field name="sequence">1</field>
+    </record>
+    <record id="action_property_inventory_rm_view_form" model="ir.actions.act_window.view">
+        <field name="act_window_id" ref="action_property_inventory_rm"/>
+        <field name="view_id" ref="view_property_inventory_form"/>
+        <field name="view_mode">form</field>
+        <field name="sequence">3</field>
     </record>
 
     <record id="action_property_inventory_manager" model="ir.actions.act_window">
         <field name="name">All Property Suggestions</field>
-        <field name="res_model">property.inventory</field>
-        <field name="view_mode">list,kanban,form</field>
+        <field name="res_model">property.base</field>
+        <field name="view_mode">kanban,list,form</field>
         <field name="search_view_id" ref="view_property_inventory_search"/>
         <field name="domain">[]</field>
-        <field name="context">{
-            'search_default_filter_active': 1,
-            'search_default_group_by_rm': 1,
-            'search_default_filter_new_suggestions': 1
-        }</field>
+        <field name="context">{'search_default_filter_active': 1, 'search_default_group_by_rm': 1}</field>
     </record>
-
+    <record id="action_property_inventory_manager_view_list" model="ir.actions.act_window.view">
+        <field name="act_window_id" ref="action_property_inventory_manager"/>
+        <field name="view_id" ref="view_property_inventory_list"/>
+        <field name="view_mode">list</field>
+        <field name="sequence">2</field>
+    </record>
+    <record id="action_property_inventory_manager_view_kanban" model="ir.actions.act_window.view">
+        <field name="act_window_id" ref="action_property_inventory_manager"/>
+        <field name="view_id" ref="view_property_inventory_kanban"/>
+        <field name="view_mode">kanban</field>
+        <field name="sequence">1</field>
+    </record>
+    <record id="action_property_inventory_manager_view_form" model="ir.actions.act_window.view">
+        <field name="act_window_id" ref="action_property_inventory_manager"/>
+        <field name="view_id" ref="view_property_inventory_form"/>
+        <field name="view_mode">form</field>
+        <field name="sequence">3</field>
+    </record>
 
     <record id="view_property_lead_suggestion_list" model="ir.ui.view">
         <field name="name">property.lead.suggestion.list</field>
@@ -238,8 +236,9 @@
             <list string="All Similar Leads" create="true" edit="false">
                 <field name="lead_name"/>
                 <field name="suggested_lead_phone" optional="show"/>
-                <field name="property_inventory_id" string="Related Property"/>
-                <field name="status" widget="badge" decoration-success="status == 'converted'"/>
+                <field name="property_base_id" string="Related Property"/>
+                <field name="property_tag" string="Property Tag"/>
+                <field name="status" widget="badge" decoration-success="status == &apos;converted&apos;"/>
                 <field name="original_property_similarity" string="Match (%)"/>
                 <field name="rm_feedback"/>
                 <field name="generation_date_display"/>
@@ -253,9 +252,7 @@
         <field name="view_mode">list,form</field>
         <field name="view_id" ref="view_property_lead_suggestion_list"/>
         <field name="help" type="html">
-            <p class="o_view_nocontent_smiling_face">
-                No suggestions found.
-            </p>
+            <p class="o_view_nocontent_smiling_face">No suggestions found.</p>
         </field>
     </record>
 

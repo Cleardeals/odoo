@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- Root menu — visible to both Managers and RMs -->
+    <menuitem id="menu_properties_root"
+              name="Properties"
+              sequence="30"
+              groups="properties.group_property_manager,properties.group_property_rm"/>
+
+    <!-- Residential Properties -->
+    <menuitem id="menu_property_residential"
+              name="Residential"
+              parent="menu_properties_root"
+              action="action_property_residential"
+              sequence="10"
+              groups="properties.group_property_manager,properties.group_property_rm"/>
+
+    <!-- Commercial Properties -->
+    <menuitem id="menu_property_commercial"
+              name="Commercial"
+              parent="menu_properties_root"
+              action="action_property_commercial"
+              sequence="20"
+              groups="properties.group_property_manager,properties.group_property_rm"/>
+
+    <!-- All Properties — managers only (unfiltered view) -->
+    <menuitem id="menu_property_base_list"
+              name="All Properties"
+              parent="menu_properties_root"
+              action="action_property_base"
+              sequence="30"
+              groups="properties.group_property_manager"/>
+
+    <!-- Configuration — Managers only -->
+    <menuitem id="menu_properties_configuration"
+              name="Configuration"
+              parent="menu_properties_root"
+              sequence="90"
+              groups="properties.group_property_manager"/>
+
+    <!-- Scheduled Actions shortcut under Configuration -->
+    <menuitem id="menu_properties_cron"
+              name="Scheduled Syncs"
+              parent="menu_properties_configuration"
+              action="base.ir_cron_act"
+              sequence="10"
+              groups="properties.group_property_manager"/>
+
+</odoo>

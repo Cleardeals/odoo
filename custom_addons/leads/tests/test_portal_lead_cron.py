@@ -34,7 +34,7 @@ class TestPortalLeadCron(PortalLeadTestCase):
         # 4. Verify it was processed
         lead.invalidate_recordset()
         self.assertEqual(lead.state, 'assigned', "Old 'new' lead should be auto-processed by cron")
-        self.assertEqual(lead.property_id, self.test_property, "Lead should be linked to property")
+        self.assertEqual(lead.property_base_id, self.test_property, "Lead should be linked to property")
 
     def test_02_cron_skips_recent_leads(self):
         """Cron should not process leads less than 1 hour old."""

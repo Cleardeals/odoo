@@ -1,0 +1,355 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- ====================================================================
+         List view  (shared — used by All / Residential / Commercial actions)
+    ==================================================================== -->
+    <record id="view_property_base_list" model="ir.ui.view">
+        <field name="name">property.base.list</field>
+        <field name="model">property.base</field>
+        <field name="arch" type="xml">
+            <list string="Properties"
+                  default_order="reg_date desc"
+                  decoration-success="is_new"
+                  decoration-muted="not is_active">
+
+                <!-- Manager-only "Sync Now" button in the control panel -->
+                <header>
+                    <button name="action_manual_sync"
+                            string="Sync from API"
+                            type="object"
+                            class="btn-primary"
+                            groups="properties.group_property_manager"/>
+                    <button name="action_sync_from_bigquery"
+                            string="Pull from BigQuery"
+                            type="object"
+                            class="btn-secondary"
+                            confirm="This will query BigQuery directly and overwrite portal IDs, service dates and status on all matched properties. Continue?"
+                            groups="properties.group_property_manager"/>
+                </header>
+
+                <field name="prop_id"            string="ID"/>
+                <field name="name"               string="Property Name"/>
+                <field name="prop_type_display"  string="Type"/>
+                <field name="listing_type"       string="Sale / Rent"/>
+                <field name="prop_sub_type"      string="Sub-Type"/>
+                <field name="bhk"                string="BHK" optional="show"/>
+                <field name="city"/>
+                <field name="location"/>
+                <field name="pricing_display"    string="Price"/>
+                <field name="owner_name"/>
+                <field name="rm_user_id"          string="RM"/>
+                <field name="service_expiry_date_display" string="Expiry"/>
+                <field name="is_active"          widget="boolean_toggle"
+                                                 string="Active"/>
+                <field name="inventory_migrated" optional="hide"
+                       groups="properties.group_property_manager"/>
+                <!-- Hidden fields used for decoration / domain evaluation -->
+                <field name="is_new"              column_invisible="1"/>
+                <field name="service_expiry_date" column_invisible="1"/>
+                <field name="reg_date"            column_invisible="1"/>
+                <field name="for_sell"            column_invisible="1"/>
+            </list>
+        </field>
+    </record>
+
+    <!-- ====================================================================
+         Form view
+    ==================================================================== -->
+    <record id="view_property_base_form" model="ir.ui.view">
+        <field name="name">property.base.form</field>
+        <field name="model">property.base</field>
+        <field name="arch" type="xml">
+            <form string="Property">
+                <header>
+                    <button name="action_manual_sync"
+                            string="Sync from API"
+                            type="object"
+                            class="btn-primary"
+                            groups="properties.group_property_manager"/>
+                    <button name="action_sync_from_bigquery"
+                            string="Pull from BigQuery"
+                            type="object"
+                            class="btn-secondary"
+                            confirm="This will query BigQuery directly and overwrite portal IDs, service dates and status on all matched properties. Continue?"
+                            groups="properties.group_property_manager"/>
+                    <field name="is_active"
+                           widget="boolean_button"
+                           options="{'terminology': {'string_true': 'Active',
+                                                     'string_false': 'Expired',
+                                                     'hover_true': 'Mark as Expired',
+                                                     'hover_false': 'Mark as Active'}}"/>
+                </header>
+
+                <sheet>
+                    <!-- New property banner -->
+                    <div class="alert alert-success mb-0"
+                         role="alert"
+                         invisible="not is_new">
+                        <strong>New Property</strong> — This property was registered
+                        within the last 3 days.
+                    </div>
+
+                    <!-- Title row -->
+                    <div class="oe_title">
+                        <h1>
+                            <field name="name" placeholder="Property Name"
+                                   readonly="1"/>
+                        </h1>
+                        <div class="o_row">
+                            <field name="prop_id" readonly="1"
+                                   class="text-muted"/>
+                            <span class="mx-2 text-muted">·</span>
+                            <field name="property_link" readonly="1"
+                                   widget="url"/>
+                        </div>
+                    </div>
+
+                    <group>
+                        <!-- Left column — API-sourced overview -->
+                        <group string="Overview">
+                            <field name="uuid" readonly="1"/>
+                            <field name="property_tag"/>
+                            <field name="form_no" readonly="1"/>
+                            <field name="reg_date" readonly="1"/>
+                            <field name="prop_type_display" readonly="1"
+                                   string="Type"/>
+                            <field name="prop_sub_type" readonly="1"
+                                   string="Sub-Type"/>
+                            <field name="listing_type" readonly="1"
+                                   string="Sale / Rent"/>
+                            <field name="bhk" readonly="1"/>
+                            <field name="pricing_display" readonly="1"
+                                   string="Price"/>
+                        </group>
+
+                        <!-- Right column — Location -->
+                        <group string="Location">
+                            <field name="state" readonly="1"/>
+                            <field name="city" readonly="1"/>
+                            <field name="location" readonly="1"/>
+                        </group>
+                    </group>
+
+                    <group>
+                        <!-- Owner info -->
+                        <group string="Owner">
+                            <field name="owner_name" readonly="1"/>
+                            <field name="owner_phone" readonly="1"
+                                   widget="phone"/>
+                            <field name="owner_email" readonly="1"
+                                   widget="email"/>
+                            <field name="rm_user_id" readonly="1"/>
+                        </group>
+
+                        <!-- Service dates — manager-editable -->
+                        <group string="Service">
+                            <field name="service_expiry_date"
+                                   groups="properties.group_property_manager"/>
+                            <field name="service_expiry_date_display"
+                                   string="Expiry (display)"
+                                   readonly="1"/>
+                            <field name="welcome_call_date"
+                                   groups="properties.group_property_manager"/>
+                            <field name="welcome_call_date_display"
+                                   string="Welcome Call (display)"
+                                   readonly="1"/>
+                            <field name="inventory_migrated" readonly="1"
+                                   groups="properties.group_property_manager"/>
+                        </group>
+                    </group>
+
+                    <!-- Tabs -->
+                    <notebook>
+                        <!-- Portal IDs — manager-only -->
+                        <page string="Portal IDs"
+                              groups="properties.group_property_manager">
+                            <group>
+                                <field name="property_tag"/>
+                                <field name="ninety_nine_acres_id"/>
+                                <field name="housing_id"/>
+                                <field name="magicbricks_id"/>
+                                <field name="olx_id"/>
+                            </group>
+                        </page>
+
+                        <!-- Google Maps — visible to all groups -->
+                        <page string="Google Maps">
+                            <group>
+                                <field name="gmaps_url" readonly="1"
+                                       widget="url" string="Embed URL"/>
+                            </group>
+                            <div class="o_field_html mt-2">
+                                <field name="gmaps_embed_html"
+                                       widget="html"
+                                       readonly="1"
+                                       options="{'no_attachment_upload': True}"/>
+                            </div>
+                        </page>
+                    </notebook>
+                </sheet>
+
+                <!-- Chatter -->
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+    <!-- ====================================================================
+         Search view
+    ==================================================================== -->
+    <record id="view_property_base_search" model="ir.ui.view">
+        <field name="name">property.base.search</field>
+        <field name="model">property.base</field>
+        <field name="arch" type="xml">
+            <search string="Search Properties">
+                <!-- Searchable fields -->
+                <field name="name"               string="Property Name"/>
+                <field name="prop_id"             string="Short Code"/>
+                <field name="property_tag"        string="Tag"/>
+                <field name="owner_name"/>
+                <field name="owner_phone"/>
+                <field name="city"/>
+                <field name="location"/>
+                <field name="rm_user_id"           string="RM"/>
+                <field name="ninety_nine_acres_id" string="99acres ID"/>
+                <field name="housing_id"/>
+                <field name="magicbricks_id"/>
+                <field name="olx_id"/>
+
+                <!-- Quick filters -->
+                <filter name="is_new"
+                        string="New (last 3 days)"
+                        domain="[('reg_date', '&gt;=', (context_today() - datetime.timedelta(days=3)).strftime('%Y-%m-%d'))]"/>
+                <separator/>
+                <filter name="active_only"
+                        string="Active"
+                        domain="[('is_active', '=', True)]"/>
+                <filter name="expired"
+                        string="Expired"
+                        domain="[('is_active', '=', False)]"/>
+                <separator/>
+                <filter name="for_sale"
+                        string="For Sale"
+                        domain="[('for_sell', '=', True)]"/>
+                <filter name="for_rent"
+                        string="For Rent"
+                        domain="[('for_sell', '=', False)]"/>
+                <separator/>
+                <filter name="not_migrated"
+                        string="Not Yet Migrated"
+                        domain="[('inventory_migrated', '=', False)]"
+                        groups="properties.group_property_manager"/>
+
+                <!-- Group by options -->
+                <group>
+                    <filter name="group_city"
+                            string="City"
+                            context="{'group_by': 'city'}"/>
+                    <filter name="group_state"
+                            string="State"
+                            context="{'group_by': 'state'}"/>
+                    <filter name="group_prop_type"
+                            string="Property Type"
+                            context="{'group_by': 'prop_type'}"/>
+                    <filter name="group_rm"
+                            string="RM"
+                            context="{'group_by': 'rm_user_id'}"/>
+                    <filter name="group_for_sell"
+                            string="Sale / Rent"
+                            context="{'group_by': 'for_sell'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <!-- ====================================================================
+         Window actions
+    ==================================================================== -->
+
+    <!-- All Properties (managers use this for the full unfiltered view) -->
+    <record id="action_property_base" model="ir.actions.act_window">
+        <field name="name">All Properties</field>
+        <field name="res_model">property.base</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="view_property_base_search"/>
+        <field name="context">{'search_default_active_only': 1}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                No properties found.
+            </p>
+            <p>
+                Properties are synced automatically every 3 hours from
+                the Cleardeals website API. Managers can also trigger
+                a manual sync using the <b>Sync Now</b> button.
+            </p>
+        </field>
+    </record>
+    <record id="action_property_base_view_list" model="ir.actions.act_window.view">
+        <field name="act_window_id" ref="action_property_base"/>
+        <field name="view_id" ref="view_property_base_list"/>
+        <field name="view_mode">list</field>
+        <field name="sequence">1</field>
+    </record>
+    <record id="action_property_base_view_form" model="ir.actions.act_window.view">
+        <field name="act_window_id" ref="action_property_base"/>
+        <field name="view_id" ref="view_property_base_form"/>
+        <field name="view_mode">form</field>
+        <field name="sequence">2</field>
+    </record>
+
+    <!-- Residential Properties -->
+    <record id="action_property_residential" model="ir.actions.act_window">
+        <field name="name">Residential Properties</field>
+        <field name="res_model">property.base</field>
+        <field name="view_mode">list,form</field>
+        <field name="domain">[('prop_type', '=', 'residential')]</field>
+        <field name="search_view_id" ref="view_property_base_search"/>
+        <field name="context">{'search_default_active_only': 1}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                No residential properties found.
+            </p>
+        </field>
+    </record>
+    <record id="action_property_residential_view_list" model="ir.actions.act_window.view">
+        <field name="act_window_id" ref="action_property_residential"/>
+        <field name="view_id" ref="view_property_base_list"/>
+        <field name="view_mode">list</field>
+        <field name="sequence">1</field>
+    </record>
+    <record id="action_property_residential_view_form" model="ir.actions.act_window.view">
+        <field name="act_window_id" ref="action_property_residential"/>
+        <field name="view_id" ref="view_property_base_form"/>
+        <field name="view_mode">form</field>
+        <field name="sequence">2</field>
+    </record>
+
+    <!-- Commercial Properties -->
+    <record id="action_property_commercial" model="ir.actions.act_window">
+        <field name="name">Commercial Properties</field>
+        <field name="res_model">property.base</field>
+        <field name="view_mode">list,form</field>
+        <field name="domain">[('prop_type', '=', 'commercial')]</field>
+        <field name="search_view_id" ref="view_property_base_search"/>
+        <field name="context">{'search_default_active_only': 1}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                No commercial properties found.
+            </p>
+        </field>
+    </record>
+    <record id="action_property_commercial_view_list" model="ir.actions.act_window.view">
+        <field name="act_window_id" ref="action_property_commercial"/>
+        <field name="view_id" ref="view_property_base_list"/>
+        <field name="view_mode">list</field>
+        <field name="sequence">1</field>
+    </record>
+    <record id="action_property_commercial_view_form" model="ir.actions.act_window.view">
+        <field name="act_window_id" ref="action_property_commercial"/>
+        <field name="view_id" ref="view_property_base_form"/>
+        <field name="view_mode">form</field>
+        <field name="sequence">2</field>
+    </record>
+
+</odoo>

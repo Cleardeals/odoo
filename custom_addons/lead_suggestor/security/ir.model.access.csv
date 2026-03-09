@@ -5,4 +5,5 @@ access_rm_sugg_wiz_rm,access.rm.sugg.wiz.rm,model_suggestion_feedback_wizard,gro
 access_rm_prop_inv_mgr,access.rm.prop.inv.mgr,model_property_inventory,group_property_prospector_manager,1,1,1,1
 access_rm_prop_sugg_mgr,access.rm.prop.sugg.mgr,model_property_lead_suggestion,group_property_prospector_manager,1,1,1,1
 access_rm_sugg_wiz_mgr,access.rm.sugg.wiz.mgr,model_suggestion_feedback_wizard,group_property_prospector_manager,1,1,1,1
-
+access_ls_prop_base_rm,access.ls.prop.base.rm,properties.model_property_base,group_property_prospector_rm,1,0,0,0
+access_ls_prop_base_mgr,access.ls.prop.base.mgr,properties.model_property_base,group_property_prospector_manager,1,1,0,0

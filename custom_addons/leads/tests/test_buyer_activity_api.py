@@ -55,7 +55,7 @@ class TestBuyerActivityAPI(PortalLeadTestCase):
             phone="9876543210",
             name="Ravi Shah",
             portal_name="MagicBricks",
-            property_id=self.test_property.id,
+            property_base_id=self.test_property.id,
         )
         lead.write(
             {
@@ -72,7 +72,7 @@ class TestBuyerActivityAPI(PortalLeadTestCase):
                 lead.create_date.isoformat() if lead.create_date else None
             ),
             "current_status": lead.current_status or None,
-            "has_property": bool(lead.property_id),
+            "has_property": bool(lead.property_base_id),
             "remarks": lead.remarks or None,
         }
 
@@ -114,13 +114,13 @@ class TestBuyerActivityAPI(PortalLeadTestCase):
         # ARRANGE
         lead_with_prop = self.create_portal_lead(
             phone="9876543210",
-            property_id=self.test_property.id,
+            property_base_id=self.test_property.id,
         )
         lead_without_prop = self.create_portal_lead(phone="9876543211")
 
         # ACT
-        has_prop_1 = bool(lead_with_prop.property_id)
-        has_prop_2 = bool(lead_without_prop.property_id)
+        has_prop_1 = bool(lead_with_prop.property_base_id)
+        has_prop_2 = bool(lead_without_prop.property_base_id)
 
         # ASSERT
         self.assertTrue(has_prop_1)
@@ -211,7 +211,7 @@ class TestBuyerActivityAPI(PortalLeadTestCase):
 
         # ACT
         prop_serialized = (
-            None if not lead.property_id else {"tag": lead.property_id.property_tag}
+            None if not lead.property_base_id else {"tag": lead.property_base_id.property_tag}
         )
 
         # ASSERT
@@ -219,25 +219,23 @@ class TestBuyerActivityAPI(PortalLeadTestCase):
 
     def test_08_property_link_field(self):
         """
-        ARRANGE: Property with property_link
+        ARRANGE: Property with computed property_link (from name + prop_id)
         ACT: Serialize property_link
-        ASSERT: Link included in output
+        ASSERT: Link is a non-empty string when prop_id is set
         """
         # ARRANGE
-        self.test_property.write(
-            {"property_link": "https://example.com/property/123"},
-        )
+        # property_link is computed from name + prop_id (set in test_portal_common)
+        prop = self.test_property
 
         # ACT
         serialized = {
-            "property_link": self.test_property.property_link or None,
+            "property_link": prop.property_link or None,
         }
 
         # ASSERT
-        self.assertEqual(
-            serialized["property_link"],
-            "https://example.com/property/123",
-        )
+        # The test property has prop_id set in test_portal_common, so link should exist
+        self.assertIsNotNone(serialized["property_link"])
+        self.assertIn("cleardeals.in", serialized["property_link"])
 
     # ========================================================================
     # RECOMMENDED INTEREST SERIALIZATION TESTS
@@ -254,7 +252,7 @@ class TestBuyerActivityAPI(PortalLeadTestCase):
         interest = self.env["lead.property.interest"].create(
             {
                 "lead_id": parent_lead.id,
-                "property_id": self.test_property.id,
+                "property_base_id": self.test_property.id,
             },
         )
         interest.write(
@@ -265,12 +263,12 @@ class TestBuyerActivityAPI(PortalLeadTestCase):
 
         # ACT
         serialized = {
-            "property_tag": interest.property_id.property_tag
-            if interest.property_id
+            "property_tag": interest.property_base_id.property_tag
+            if interest.property_base_id
             else None,
-            "bhk": interest.property_id.bhk if interest.property_id else None,
-            "location": interest.property_id.location if interest.property_id else None,
-            "city": interest.property_id.city if interest.property_id else None,
+            "bhk": interest.property_base_id.bhk if interest.property_base_id else None,
+            "location": interest.property_base_id.location if interest.property_base_id else None,
+            "city": interest.property_base_id.city if interest.property_base_id else None,
             "current_status": interest.current_status or None,
         }
 
@@ -290,7 +288,7 @@ class TestBuyerActivityAPI(PortalLeadTestCase):
         interest = self.env["lead.property.interest"].create(
             {
                 "lead_id": parent_lead.id,
-                "property_id": self.test_property.id,
+                "property_base_id": self.test_property.id,
             },
         )
 
@@ -319,7 +317,7 @@ class TestBuyerActivityAPI(PortalLeadTestCase):
         interest = self.env["lead.property.interest"].create(
             {
                 "lead_id": parent_lead.id,
-                "property_id": self.test_property.id,
+                "property_base_id": self.test_property.id,
             },
         )
         interest.write(
@@ -373,12 +371,12 @@ class TestBuyerActivityAPI(PortalLeadTestCase):
         # ARRANGE
         lead = self.create_portal_lead(
             phone="9876543210",
-            property_id=self.test_property.id,
+            property_base_id=self.test_property.id,
         )
 
         # ACT
         total_inquiries = 1
-        total_properties = 1 if lead.property_id else 0
+        total_properties = 1 if lead.property_base_id else 0
 
         # ASSERT
         self.assertEqual(total_inquiries, 1)
@@ -411,15 +409,16 @@ class TestBuyerActivityAPI(PortalLeadTestCase):
         # ARRANGE
         lead = self.create_portal_lead(
             phone="9876543210",
-            property_id=self.test_property.id,
+            property_base_id=self.test_property.id,
         )
 
         # Create recommended interests
         for i in range(2):
-            other_prop = self.env["property.inventory"].create(
+            other_prop = self.env["property.base"].create(
                 {
                     "property_tag": f"OTHER-{i}",
-                    "bhk": "2 BHK",
+                    "name": f"Other Prop {i}",
+                    "bedroom_count": 2,
                     "location": f"Location {i}",
                     "city": f"City {i}",
                     "rm_user_id": self.rm_user.id,
@@ -430,13 +429,13 @@ class TestBuyerActivityAPI(PortalLeadTestCase):
             self.env["lead.property.interest"].create(
                 {
                     "lead_id": lead.id,
-                    "property_id": other_prop.id,
+                    "property_base_id": other_prop.id,
                 },
             )
 
         # ACT
         total_properties = 0
-        if lead.property_id:
+        if lead.property_base_id:
             total_properties += 1
         total_properties += len(lead.interest_ids)
 
@@ -489,10 +488,11 @@ class TestBuyerActivityAPI(PortalLeadTestCase):
 
         # Create recommended interests
         props = [
-            self.env["property.inventory"].create(
+            self.env["property.base"].create(
                 {
                     "property_tag": f"OTHER-{i}",
-                    "bhk": "2 BHK",
+                    "name": f"Other Prop {i}",
+                    "bedroom_count": 2,
                     "location": f"Location {i}",
                     "city": f"City {i}",
                     "rm_user_id": self.rm_user.id,
@@ -506,7 +506,7 @@ class TestBuyerActivityAPI(PortalLeadTestCase):
         interest_1 = self.env["lead.property.interest"].create(
             {
                 "lead_id": lead.id,
-                "property_id": props[0].id,
+                "property_base_id": props[0].id,
             },
         )
         interest_1.write({"current_status": "site_visit_scheduled"})
@@ -514,7 +514,7 @@ class TestBuyerActivityAPI(PortalLeadTestCase):
         interest_2 = self.env["lead.property.interest"].create(
             {
                 "lead_id": lead.id,
-                "property_id": props[1].id,
+                "property_base_id": props[1].id,
             },
         )
         interest_2.write({"current_status": "site_visit_done"})
@@ -577,15 +577,16 @@ class TestBuyerActivityAPI(PortalLeadTestCase):
         # ARRANGE
         lead_1 = self.create_portal_lead(
             phone="9876543210",
-            property_id=self.test_property.id,
+            property_base_id=self.test_property.id,
         )
         lead_2 = self.create_portal_lead(
             phone="9876543210",
-            property_id=self.env["property.inventory"]
+            property_base_id=self.env["property.base"]
             .create(
                 {
                     "property_tag": "OTHER-TAG",
-                    "bhk": "2 BHK",
+                    "name": "Other Tag Property",
+                    "bedroom_count": 2,
                     "location": "Other Loc",
                     "city": "Other City",
                     "rm_user_id": self.rm_user.id,
@@ -650,8 +651,8 @@ class TestBuyerActivityAPI(PortalLeadTestCase):
         lead = self.create_portal_lead(phone="9876543210")
 
         # ACT
-        has_property = bool(lead.property_id)
-        property_dict = None if not lead.property_id else {"tag": "has_prop"}
+        has_property = bool(lead.property_base_id)
+        property_dict = None if not lead.property_base_id else {"tag": "has_prop"}
 
         # ASSERT
         self.assertFalse(has_property)
@@ -682,10 +683,11 @@ class TestBuyerActivityAPI(PortalLeadTestCase):
         lead = self.create_portal_lead(phone="9876543210")
 
         props = [
-            self.env["property.inventory"].create(
+            self.env["property.base"].create(
                 {
                     "property_tag": f"REC-{i}",
-                    "bhk": "2 BHK",
+                    "name": f"Rec Prop {i}",
+                    "bedroom_count": 2,
                     "location": f"Loc {i}",
                     "city": f"City {i}",
                     "rm_user_id": self.rm_user.id,
@@ -700,7 +702,7 @@ class TestBuyerActivityAPI(PortalLeadTestCase):
             self.env["lead.property.interest"].create(
                 {
                     "lead_id": lead.id,
-                    "property_id": prop.id,
+                    "property_base_id": prop.id,
                 },
             )
 
@@ -792,7 +794,7 @@ class TestBuyerActivityAPI(PortalLeadTestCase):
         interest = self.env["lead.property.interest"].create(
             {
                 "lead_id": lead.id,
-                "property_id": self.test_property.id,
+                "property_base_id": self.test_property.id,
             },
         )
 

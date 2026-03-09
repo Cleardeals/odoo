@@ -1,6 +1,6 @@
 name: Run Odoo Tests
 
-on: 
+on:
   push:
     branches: ['development_19', '19.0']
   pull_request:
@@ -27,14 +27,14 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-    
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-      
+
       - name: Build Odoo Docker Image
         run: docker build -t my-odoo-image .
-      
+
       - name: List repository structure
         run: |
           echo "Repository structure:"
@@ -45,7 +45,7 @@ jobs:
           echo "---"
           echo "Looking for module manifests:"
           find ${{ github.workspace }}/custom_addons -name "__manifest__.py" -o -name "__openerp__.py" || echo "No manifests found"
-      
+
       - name: Run Odoo Tests
         run: |
           docker run --rm \
@@ -62,8 +62,8 @@ jobs:
             --db_user=odoo \
             --db_password=odoo \
             --addons-path=/mnt/extra-addons,/usr/lib/python3/dist-packages/odoo/addons \
-            -i leads,lead_suggestor,cleardeals_dashboards \
+            -i leads,lead_suggestor,cleardeals_dashboards,properties \
             --test-enable \
-            --test-tags /leads,/lead_suggestor,/cleardeals_dashboards \
+            --test-tags /leads,/lead_suggestor,/cleardeals_dashboards,/properties \
             --stop-after-init \
             --log-level=test

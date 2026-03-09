@@ -30,6 +30,13 @@ class PropertyInventory(models.Model):
         index=True,
         required=True,
     )
+    form_no = fields.Char(
+        string="Form Number",
+        readonly=True,
+        index=True,
+        help="Form number from BigQuery (Form_Number column).  "
+        "Matches the form_no field on property.base for cross-model linking.",
+    )
     owner_name = fields.Char(string="Owner Name", readonly=True)
     owner_phone = fields.Char(string="Owner Phone", readonly=True)
     rm_user_id = fields.Many2one(
@@ -87,31 +94,10 @@ class PropertyInventory(models.Model):
     magicbricks_id = fields.Char(string="Magicbricks ID", readonly=True, index=True)
     olx_id = fields.Char(string="OLX ID", readonly=True, index=True)
 
-    suggestion_ids = fields.One2many(
-        "property.lead.suggestion",
-        "property_inventory_id",
-        string="Suggested Leads",
-    )
-
-    suggestion_count = fields.Integer(
-        string="Total Suggestions",
-        compute="_compute_suggestion_counts",
-        store=True,
-    )
-    new_suggestion_count = fields.Integer(
-        string="New Suggestions",
-        compute="_compute_suggestion_counts",
-        store=True,
-    )
-
-    @api.depends("suggestion_ids", "suggestion_ids.status")
-    def _compute_suggestion_counts(self):
-        """Calculates total and new suggestions for the Kanban/Form view."""
-        for prop in self:
-            prop.suggestion_count = len(prop.suggestion_ids)
-            prop.new_suggestion_count = len(
-                prop.suggestion_ids.filtered(lambda s: s.status == "new"),
-            )
+    # suggestion_ids / suggestion_count / new_suggestion_count have been moved
+    # to property.base via lead_suggestor/models/property_base_ext.py.
+    # property.lead.suggestion now links to property.base (property_base_id),
+    # not to property.inventory.
 
     @api.depends("service_expiry_date", "welcome_call_date")
     def _compute_date_displays(self):
@@ -174,6 +160,7 @@ class PropertyInventory(models.Model):
                     Location,
                     City1 AS city,
                     Property_Link,
+                    Form_Number,
 
                     COALESCE(
                         SAFE.PARSE_DATE('%d/%m/%Y', Service_Expiry_Date),
@@ -210,7 +197,8 @@ class PropertyInventory(models.Model):
                 BHK,
                 Location,
                 city,
-                Property_Link
+                Property_Link,
+                Form_Number
             FROM PropertiesWithStatus
             WHERE calculated_status = 'Active'
             ORDER BY expiry_date ASC NULLS LAST
@@ -318,6 +306,7 @@ class PropertyInventory(models.Model):
 
                 vals = {
                     "property_tag": row.property_tag,
+                    "form_no": row.Form_Number if row.Form_Number else "",
                     "owner_name": row.owner_name if row.owner_name else "",
                     "owner_phone": row.owner_phone if row.owner_phone else "",
                     "rm_user_id": rm_user_id,

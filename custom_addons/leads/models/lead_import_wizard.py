@@ -43,10 +43,10 @@ class LeadImportWizard(models.TransientModel):
         return user_record.id
 
     def _find_property_by_name(self, property_name):
-        """Finds a property listing by its title and returns its ID."""
+        """Finds a property by its title in property.base and returns its ID."""
         if not property_name or property_name.strip().lower() in ('', 'not filled', 'n/a'):
             return None
-        Property = self.env['property.listing']
+        Property = self.env['property.base']
         # This assumes property names are unique. If not, this will pick the first one it finds.
         property_record = Property.search([('name', '=ilike', property_name.strip())], limit=1)
         return property_record.id if property_record else None

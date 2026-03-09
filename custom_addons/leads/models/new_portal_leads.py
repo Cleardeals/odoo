@@ -21,9 +21,9 @@ class NewPortalLead(models.Model):
     _order = "create_date desc"
 
     # Lead Fields
-    name = fields.Char("Lead Name", required=True, index=True)
-    phone = fields.Char("Phone Number", index=True)
-    email = fields.Char("Email Address", index=True)
+    name = fields.Char("Lead Name", required=True, index=True, tracking=True)
+    phone = fields.Char("Phone Number", index=True, tracking=True)
+    email = fields.Char("Email Address", index=True, tracking=True)
     portal_name = fields.Char("Portal Source", help="e.g., Magicbricks, 99acres")
     project_name = fields.Char("Project Name", help="Project Name from portal")
     portal_property_id = fields.Char(
@@ -44,6 +44,7 @@ class NewPortalLead(models.Model):
         required=True,
         index=True,
         copy=False,
+        tracking=True,
     )
 
     current_status = fields.Selection(
@@ -72,9 +73,10 @@ class NewPortalLead(models.Model):
         string="Current Status",
         default="lead",
         required=True,
+        tracking=True,
     )
 
-    remarks = fields.Text("Remarks")
+    remarks = fields.Text("Remarks", tracking=True)
 
     feedback_general = fields.Selection(
         [
@@ -85,6 +87,7 @@ class NewPortalLead(models.Model):
             ("other", "Other"),
         ],
         string="Feedback",
+        tracking=True,
     )
 
     feedback_site_visit_done = fields.Selection(
@@ -103,9 +106,12 @@ class NewPortalLead(models.Model):
             ("other", "Other"),
         ],
         string="Feedback for Site Visit Done",
+        tracking=True,
     )
 
-    is_ops_sale_lead = fields.Boolean(string="Is Ops Sale Lead", default=False)
+    is_ops_sale_lead = fields.Boolean(
+        string="Is Ops Sale Lead", default=False, tracking=True
+    )
 
     site_visit_date = fields.Datetime(
         string="Site Visit Scheduled On",
@@ -128,41 +134,107 @@ class NewPortalLead(models.Model):
         tracking=True,
     )
 
-    property_id = fields.Many2one("property.inventory", string="Related Property")
-    user_id = fields.Many2one("res.users", string="Assigned RM", copy=False)
+    # Keeps pointing to property.inventory — matches the existing DB column (6 000+
+    # historical leads were assigned using property.inventory IDs). Never change
+    # this comodel without a proper DB migration; doing so breaks upgrades.
+    property_id = fields.Many2one(
+        "property.inventory",
+        string="Related Property (Legacy)",
+        index=True,
+    )
 
+    # NEW field — links to the canonical property.base model.
+    # Populated going forward by _process_lead_logic() and backfilled for
+    # historical leads via the Lead Property Migration Wizard.
+    property_base_id = fields.Many2one(
+        "property.base",
+        string="Related Property",
+        copy=False,
+        index=True,
+        tracking=True,
+    )
+
+    user_id = fields.Many2one(
+        "res.users", string="Assigned RM", copy=False, tracking=True
+    )
+
+    # ------------------------------------------------------------------
+    # Legacy related fields — sourced from property.inventory (property_id).
+    # These hold the stored values for all 6 000+ historical leads and
+    # remain the display source until property_base_id is fully backfilled.
+    # ------------------------------------------------------------------
     property_bhk = fields.Char(
         related="property_id.bhk",
-        string="Property BHK",
+        string="Property BHK (Legacy)",
         readonly=True,
         store=True,
     )
 
     property_location = fields.Char(
         related="property_id.location",
-        string="Property Location",
+        string="Property Location (Legacy)",
         readonly=True,
         store=True,
     )
 
     property_city = fields.Char(
         related="property_id.city",
-        string="Property City",
+        string="Property City (Legacy)",
         readonly=True,
         store=True,
     )
 
     property_owner_name = fields.Char(
         related="property_id.owner_name",
-        string="Property Owner",
+        string="Property Owner (Legacy)",
         readonly=True,
         store=True,
     )
 
     property_link = fields.Char(
         related="property_id.property_link",
+        string="Property Link (Legacy)",
+        readonly=True,
+    )
+
+    # ------------------------------------------------------------------
+    # New related fields — sourced from property.base (property_base_id).
+    # Populated as property_base_id gets backfilled / set on new leads.
+    # Once the migration is complete these become the primary display fields.
+    # ------------------------------------------------------------------
+    base_property_bhk = fields.Char(
+        related="property_base_id.bhk",
+        string="Property BHK",
+        readonly=True,
+        store=True,
+    )
+
+    base_property_location = fields.Char(
+        related="property_base_id.location",
+        string="Property Location",
+        readonly=True,
+        store=True,
+    )
+
+    base_property_city = fields.Char(
+        related="property_base_id.city",
+        string="Property City",
+        readonly=True,
+        store=True,
+    )
+
+    base_property_owner_name = fields.Char(
+        related="property_base_id.owner_name",
+        string="Property Owner",
+        readonly=True,
+        store=True,
+    )
+
+    base_property_link = fields.Char(
+        related="property_base_id.property_link",
         string="Property Link",
         readonly=True,
+        store=True,
     )
 
     process_notes = fields.Text("Processing Notes")
@@ -196,11 +268,12 @@ class NewPortalLead(models.Model):
     )
 
     all_associated_properties = fields.Many2many(
-        "property.inventory",
+        "property.base",
+        relation="leads_new_property_base_rel",
         string="All Associated Properties",
         compute="_compute_all_associated_properties",
         store=True,
-        help="Includes both the primary and recommended properties.",
+        help="Includes property_base_id (primary) and all recommended properties.",
     )
 
     x_migrated_date = fields.Datetime(string="Migration Date Temp")
@@ -214,17 +287,17 @@ class NewPortalLead(models.Model):
 
     # --- Compute Methods ---
 
-    @api.depends("property_id", "interest_ids.property_id")
+    @api.depends("property_base_id", "interest_ids.property_base_id")
     def _compute_all_associated_properties(self):
         """
-        Combines the primary property and all recommended properties
-        into a single Many2many field for easy access.
+        Combines the primary property (property_base_id) and all recommended
+        properties (interest_ids.property_base_id) into a single Many2many field.
         """
         for lead in self:
-            properties = lead.property_id
+            properties = lead.property_base_id
 
             if lead.interest_ids:
-                properties |= lead.interest_ids.mapped("property_id")
+                properties |= lead.interest_ids.mapped("property_base_id")
 
             lead.all_associated_properties = properties
 
@@ -381,7 +454,7 @@ class NewPortalLead(models.Model):
         portal_pid = self.portal_property_id
 
         if not portal or not portal_pid:
-            return self.env["property.inventory"]
+            return self.env["property.base"]
 
         portal_field_map = {
             "MagicBricks": "magicbricks_id",
@@ -394,24 +467,25 @@ class NewPortalLead(models.Model):
 
         if not field_to_search:
             _logger.warning(f"Lead {self.id}: No field mapping for portal '{portal}'")
-            return self.env["property.inventory"]
+            return self.env["property.base"]
 
         domain = [
             (field_to_search, "=", portal_pid),
         ]
 
         _logger.info("Searching for property with domain: %s", domain)
-        return self.env["property.inventory"].search(domain, limit=1)
+        return self.env["property.base"].search(domain, limit=1)
 
-    def _find_rm(self, property_id):
-        """Finds the correct RM from the property record."""
+    def _find_rm(self, property_base):
+        """Finds the correct RM from a property.base record."""
         self.ensure_one()
 
-        if property_id and property_id.rm_user_id:
-            return property_id.rm_user_id
+        if property_base and property_base.rm_user_id:
+            return property_base.rm_user_id
 
         _logger.warning(
-            f"Property {property_id.property_tag} has no RM. Assigning to admin",
+            "Property %s has no RM. Assigning to admin",
+            property_base.display_name if property_base else "(none)",
         )
         return self.env.ref("base.user_admin")
 
@@ -476,7 +550,7 @@ class NewPortalLead(models.Model):
 
             self.write(
                 {
-                    "property_id": property_rec.id if property_rec else False,
+                    "property_base_id": property_rec.id if property_rec else False,
                     "user_id": rm_user.id,
                     "state": "assigned",
                     "process_notes": notes,
@@ -740,7 +814,7 @@ class NewPortalLead(models.Model):
         portal_name = self.portal_name or "our portal"
 
         # Get Property Details
-        prop = self.property_id
+        prop = self.property_base_id
         prop_bhk = "property"  # Default fallback
         prop_location = ""
         prop_city = ""
@@ -819,7 +893,7 @@ class NewPortalLead(models.Model):
             return
         batch_payload = []
         for lead in leads_to_send:
-            prop = lead.property_id
+            prop = lead.property_base_id
             prop_id = False
             prop_tag = False
             prop_bhk = False

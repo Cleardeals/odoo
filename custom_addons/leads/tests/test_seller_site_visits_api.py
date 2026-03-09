@@ -43,10 +43,11 @@ class TestSellerSiteVisitsAPI(PortalLeadTestCase):
         super().setUpClass()
 
         # Create multiple test properties owned by same seller
-        cls.test_property_2 = cls.env["property.inventory"].create(
+        cls.test_property_2 = cls.env["property.base"].create(
             {
                 "property_tag": f"TEST-PROP-2-{cls.suffix}",
-                "bhk": "2 BHK",
+                "name": f"Test Property 2 {cls.suffix}",
+                "bedroom_count": 2,
                 "location": "Second Location",
                 "city": "Second City",
                 "rm_user_id": cls.rm_user.id,
@@ -55,10 +56,11 @@ class TestSellerSiteVisitsAPI(PortalLeadTestCase):
             },
         )
 
-        cls.test_property_3 = cls.env["property.inventory"].create(
+        cls.test_property_3 = cls.env["property.base"].create(
             {
                 "property_tag": f"TEST-PROP-3-{cls.suffix}",
-                "bhk": "4 BHK",
+                "name": f"Test Property 3 {cls.suffix}",
+                "bedroom_count": 4,
                 "location": "Third Location",
                 "city": "Third City",
                 "rm_user_id": cls.rm_user.id,
@@ -256,7 +258,7 @@ class TestSellerSiteVisitsAPI(PortalLeadTestCase):
         lead = self.create_portal_lead(
             phone="9999999999",
             name="Ravi Shah",
-            property_id=self.test_property.id,
+            property_base_id=self.test_property.id,
         )
         lead.write(
             {
@@ -272,10 +274,10 @@ class TestSellerSiteVisitsAPI(PortalLeadTestCase):
             "source": "primary",
             "lead_name": lead.name or None,
             "lead_phone": lead.phone or None,
-            "property_tag": lead.property_id.property_tag if lead.property_id else None,
-            "property_bhk": lead.property_id.bhk if lead.property_id else None,
-            "property_location": lead.property_id.location
-            if lead.property_id
+            "property_tag": lead.property_base_id.property_tag if lead.property_base_id else None,
+            "property_bhk": lead.property_base_id.bhk if lead.property_base_id else None,
+            "property_location": lead.property_base_id.location
+            if lead.property_base_id
             else None,
             "site_visit_datetime": (
                 lead.site_visit_date.isoformat() if lead.site_visit_date else None
@@ -307,7 +309,7 @@ class TestSellerSiteVisitsAPI(PortalLeadTestCase):
         ASSERT: Null fields are None
         """
         # ARRANGE
-        lead = self.create_portal_lead(property_id=self.test_property.id)
+        lead = self.create_portal_lead(property_base_id=self.test_property.id)
 
         # ACT
         record = {
@@ -334,7 +336,7 @@ class TestSellerSiteVisitsAPI(PortalLeadTestCase):
         interest = self.env["lead.property.interest"].create(
             {
                 "lead_id": parent_lead.id,
-                "property_id": self.test_property.id,
+                "property_base_id": self.test_property.id,
             },
         )
 
@@ -620,11 +622,11 @@ class TestSellerSiteVisitsAPI(PortalLeadTestCase):
         # ARRANGE
         lead_1 = self.create_portal_lead(
             phone="9111111111",
-            property_id=self.test_property.id,
+            property_base_id=self.test_property.id,
         )
         lead_2 = self.create_portal_lead(
             phone="9111111112",
-            property_id=self.test_property_2.id,
+            property_base_id=self.test_property_2.id,
         )
 
         properties = [self.test_property, self.test_property_2, self.test_property_3]
@@ -647,7 +649,7 @@ class TestSellerSiteVisitsAPI(PortalLeadTestCase):
         # ARRANGE
         lead = self.create_portal_lead(
             phone="9222222222",
-            property_id=self.test_property.id,
+            property_base_id=self.test_property.id,
         )
         # site_visit_date is not set
 
@@ -677,11 +679,11 @@ class TestSellerSiteVisitsAPI(PortalLeadTestCase):
         # 2 primary
         lead_1 = self.create_portal_lead(
             phone="9333333333",
-            property_id=self.test_property.id,
+            property_base_id=self.test_property.id,
         )
         lead_2 = self.create_portal_lead(
             phone="9333333334",
-            property_id=self.test_property.id,
+            property_base_id=self.test_property.id,
         )
 
         # 2 recommended
@@ -689,7 +691,7 @@ class TestSellerSiteVisitsAPI(PortalLeadTestCase):
         interest_1 = self.env["lead.property.interest"].create(
             {
                 "lead_id": parent_lead_1.id,
-                "property_id": self.test_property.id,
+                "property_base_id": self.test_property.id,
             },
         )
 
@@ -697,7 +699,7 @@ class TestSellerSiteVisitsAPI(PortalLeadTestCase):
         interest_2 = self.env["lead.property.interest"].create(
             {
                 "lead_id": parent_lead_2.id,
-                "property_id": self.test_property.id,
+                "property_base_id": self.test_property.id,
             },
         )
 
@@ -908,7 +910,7 @@ class TestSellerSiteVisitsAPI(PortalLeadTestCase):
         ASSERT: Different formats, same underlying date
         """
         # ARRANGE
-        lead = self.create_portal_lead(property_id=self.test_property.id)
+        lead = self.create_portal_lead(property_base_id=self.test_property.id)
         lead.write(
             {
                 "site_visit_date": datetime(2025, 3, 20, 11, 30, 0),

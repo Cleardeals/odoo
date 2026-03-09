@@ -1,0 +1,13 @@
+from . import (
+    test_property_api_auth,
+    test_property_api_create,
+    test_property_api_delete,
+    test_property_api_get,
+    test_property_api_list,
+    test_property_api_update,
+    test_property_base_computed,
+    test_property_base_cron,
+    test_property_base_crud,
+    test_property_base_dates,
+    test_property_base_write,
+)

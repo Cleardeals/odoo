@@ -19,20 +19,21 @@ class TestLeadPropertyInterest(PortalLeadTestCase):
         super().setUpClass()
         
         # Create a second test property for recommended properties testing
-        cls.test_property_2 = cls.env['property.inventory'].create({
+        cls.test_property_2 = cls.env['property.base'].create({
             'property_tag': f'TEST-PROP-2-{cls.suffix}',
-            'bhk': '2 BHK',
+            'name': f'Test Property 2 {cls.suffix}',
+            'bedroom_count': 2,
             'location': 'Second Location',
             'city': 'Second City',
             'rm_user_id': cls.rm_user.id,
             'is_active': True,
-            'property_link': f'https://test.com/property/TEST-PROP-2-{cls.suffix}',
         })
 
         # Create a third property for additional tests
-        cls.test_property_3 = cls.env['property.inventory'].create({
+        cls.test_property_3 = cls.env['property.base'].create({
             'property_tag': f'TEST-PROP-3-{cls.suffix}',
-            'bhk': '4 BHK',
+            'name': f'Test Property 3 {cls.suffix}',
+            'bedroom_count': 4,
             'location': 'Third Location',
             'city': 'Third City',
             'rm_user_id': cls.rm_user.id,
@@ -41,32 +42,32 @@ class TestLeadPropertyInterest(PortalLeadTestCase):
 
     def test_01_create_lead_property_interest(self):
         """Test creating a lead property interest record."""
-        lead = self.create_portal_lead(property_id=self.test_property.id)
+        lead = self.create_portal_lead(property_base_id=self.test_property.id)
         
         interest = self.env['lead.property.interest'].create({
             'lead_id': lead.id,
-            'property_id': self.test_property_2.id,
+            'property_base_id': self.test_property_2.id,
         })
         
         self.assertEqual(interest.lead_id, lead)
-        self.assertEqual(interest.property_id, self.test_property_2)
+        self.assertEqual(interest.property_base_id, self.test_property_2)
         self.assertEqual(interest.current_status, 'lead')  # default status
 
     def test_02_unique_constraint_lead_property(self):
         """Test that the same property cannot be linked twice to the same lead."""
-        lead = self.create_portal_lead(property_id=self.test_property.id)
+        lead = self.create_portal_lead(property_base_id=self.test_property.id)
         
         # Create first interest
         self.env['lead.property.interest'].create({
             'lead_id': lead.id,
-            'property_id': self.test_property_2.id,
+            'property_base_id': self.test_property_2.id,
         })
         
         # Attempt to create duplicate should fail
         with mute_logger('odoo.sql_db'), self.assertRaises(psycopg2.IntegrityError):
             self.env['lead.property.interest'].create({
                 'lead_id': lead.id,
-                'property_id': self.test_property_2.id,
+                'property_base_id': self.test_property_2.id,
             })
 
     def test_03_related_property_fields(self):
@@ -75,11 +76,11 @@ class TestLeadPropertyInterest(PortalLeadTestCase):
         
         interest = self.env['lead.property.interest'].create({
             'lead_id': lead.id,
-            'property_id': self.test_property.id,
+            'property_base_id': self.test_property.id,
         })
         
-        self.assertEqual(interest.property_bhk, '3 BHK')
-        self.assertEqual(interest.property_location, 'Test Location')
+        self.assertEqual(interest.base_property_bhk, '3 BHK')
+        self.assertEqual(interest.base_property_location, 'Test Location')
 
     def test_04_site_visit_date_only_computation(self):
         """Test site_visit_date_only is computed from site_visit_date."""
@@ -88,7 +89,7 @@ class TestLeadPropertyInterest(PortalLeadTestCase):
         
         interest = self.env['lead.property.interest'].create({
             'lead_id': lead.id,
-            'property_id': self.test_property_2.id,
+            'property_base_id': self.test_property_2.id,
             'current_status': 'site_visit_scheduled',
             'site_visit_date': visit_datetime,
         })
@@ -103,7 +104,7 @@ class TestLeadPropertyInterest(PortalLeadTestCase):
         
         interest = self.env['lead.property.interest'].create({
             'lead_id': lead.id,
-            'property_id': self.test_property_2.id,
+            'property_base_id': self.test_property_2.id,
         })
         
         self.assertFalse(interest.site_visit_date_only)
@@ -114,7 +115,7 @@ class TestLeadPropertyInterest(PortalLeadTestCase):
         
         interest = self.env['lead.property.interest'].create({
             'lead_id': lead.id,
-            'property_id': self.test_property_2.id,
+            'property_base_id': self.test_property_2.id,
         })
         interest_id = interest.id
         
@@ -131,7 +132,7 @@ class TestLeadPropertyInterest(PortalLeadTestCase):
         
         interest = self.env['lead.property.interest'].create({
             'lead_id': lead.id,
-            'property_id': self.test_property_2.id,
+            'property_base_id': self.test_property_2.id,
             'current_status': 'site_visit_done',
             'feedback_site_visit_done': 'buyer_liked_property',
         })
@@ -148,16 +149,16 @@ class TestLeadPropertyInterest(PortalLeadTestCase):
 
     def test_08_multiple_interests_per_lead(self):
         """Test that a lead can have multiple property interests."""
-        lead = self.create_portal_lead(property_id=self.test_property.id)
+        lead = self.create_portal_lead(property_base_id=self.test_property.id)
         
         interest_1 = self.env['lead.property.interest'].create({
             'lead_id': lead.id,
-            'property_id': self.test_property_2.id,
+            'property_base_id': self.test_property_2.id,
         })
         
         interest_2 = self.env['lead.property.interest'].create({
             'lead_id': lead.id,
-            'property_id': self.test_property_3.id,
+            'property_base_id': self.test_property_3.id,
         })
         
         self.assertEqual(len(lead.interest_ids), 2)
@@ -170,7 +171,7 @@ class TestLeadPropertyInterest(PortalLeadTestCase):
         
         interest = self.env['lead.property.interest'].create({
             'lead_id': lead.id,
-            'property_id': self.test_property_2.id,
+            'property_base_id': self.test_property_2.id,
         })
         
         # Default should be False
@@ -199,7 +200,7 @@ class TestLeadPropertyInterest(PortalLeadTestCase):
         
         interest = self.env['lead.property.interest'].create({
             'lead_id': lead.id,
-            'property_id': self.test_property_2.id,
+            'property_base_id': self.test_property_2.id,
             'current_status': 'site_visit_done',
         })
         
@@ -243,18 +244,20 @@ class TestLeadAllAssociatedProperties(PortalLeadTestCase):
         super().setUpClass()
         
         # Create additional test properties
-        cls.test_property_2 = cls.env['property.inventory'].create({
+        cls.test_property_2 = cls.env['property.base'].create({
             'property_tag': f'TEST-PROP-2-{cls.suffix}',
-            'bhk': '2 BHK',
+            'name': f'Test Property 2 {cls.suffix}',
+            'bedroom_count': 2,
             'location': 'Second Location',
             'city': 'Second City',
             'rm_user_id': cls.rm_user.id,
             'is_active': True,
         })
 
-        cls.test_property_3 = cls.env['property.inventory'].create({
+        cls.test_property_3 = cls.env['property.base'].create({
             'property_tag': f'TEST-PROP-3-{cls.suffix}',
-            'bhk': '4 BHK',
+            'name': f'Test Property 3 {cls.suffix}',
+            'bedroom_count': 4,
             'location': 'Third Location',
             'city': 'Third City',
             'rm_user_id': cls.rm_user.id,
@@ -263,7 +266,7 @@ class TestLeadAllAssociatedProperties(PortalLeadTestCase):
 
     def test_01_all_associated_with_primary_only(self):
         """Test all_associated_properties with only primary property."""
-        lead = self.create_portal_lead(property_id=self.test_property.id)
+        lead = self.create_portal_lead(property_base_id=self.test_property.id)
         
         self.assertEqual(len(lead.all_associated_properties), 1)
         self.assertIn(self.test_property, lead.all_associated_properties)
@@ -276,16 +279,16 @@ class TestLeadAllAssociatedProperties(PortalLeadTestCase):
 
     def test_03_all_associated_with_primary_and_interests(self):
         """Test all_associated_properties includes both primary and interests."""
-        lead = self.create_portal_lead(property_id=self.test_property.id)
+        lead = self.create_portal_lead(property_base_id=self.test_property.id)
         
         # Add recommended properties
         self.env['lead.property.interest'].create({
             'lead_id': lead.id,
-            'property_id': self.test_property_2.id,
+            'property_base_id': self.test_property_2.id,
         })
         self.env['lead.property.interest'].create({
             'lead_id': lead.id,
-            'property_id': self.test_property_3.id,
+            'property_base_id': self.test_property_3.id,
         })
         
         # Force recompute
@@ -302,7 +305,7 @@ class TestLeadAllAssociatedProperties(PortalLeadTestCase):
         
         self.env['lead.property.interest'].create({
             'lead_id': lead.id,
-            'property_id': self.test_property_2.id,
+            'property_base_id': self.test_property_2.id,
         })
         
         lead.invalidate_recordset(['all_associated_properties'])
@@ -312,11 +315,11 @@ class TestLeadAllAssociatedProperties(PortalLeadTestCase):
 
     def test_05_all_associated_updates_on_interest_change(self):
         """Test that all_associated_properties updates when interests change."""
-        lead = self.create_portal_lead(property_id=self.test_property.id)
+        lead = self.create_portal_lead(property_base_id=self.test_property.id)
         
         interest = self.env['lead.property.interest'].create({
             'lead_id': lead.id,
-            'property_id': self.test_property_2.id,
+            'property_base_id': self.test_property_2.id,
         })
         
         lead.invalidate_recordset(['all_associated_properties'])
@@ -333,14 +336,14 @@ class TestLeadAllAssociatedProperties(PortalLeadTestCase):
         Test that if primary property is also in interests,
         it appears only once in all_associated_properties.
         """
-        lead = self.create_portal_lead(property_id=self.test_property.id)
+        lead = self.create_portal_lead(property_base_id=self.test_property.id)
         
         # Add the SAME property as an interest (edge case)
         # Note: The unique constraint would normally prevent this
         # But we test the compute logic doesn't duplicate
         self.env['lead.property.interest'].create({
             'lead_id': lead.id,
-            'property_id': self.test_property_2.id,
+            'property_base_id': self.test_property_2.id,
         })
         
         lead.invalidate_recordset(['all_associated_properties'])

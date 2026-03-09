@@ -21,20 +21,24 @@ class PropertyLeadSuggestion(models.Model):
 
     # --- SQL Constraints (Odoo 19 Style) ---
     _prop_lead_uniq = models.Constraint(
-        "UNIQUE(property_inventory_id, suggested_lead_phone)",
+        "UNIQUE(property_base_id, suggested_lead_phone)",
         message="This lead is already a suggestion for this property.",
     )
 
-    property_inventory_id = fields.Many2one(
-        "property.inventory",
+    property_base_id = fields.Many2one(
+        "property.base",
         string="Property",
         ondelete="cascade",
-        required=True,
+        index=True,
     )
     property_tag = fields.Char(
-        related="property_inventory_id.property_tag",
-        store=True,
+        related="property_base_id.property_tag",
         string="Property Tag",
+        index=True,
+        readonly=True,
+        store=True,
+        help="Stored copy of the property tag — kept independent of the FK "
+        "so migration / backfill data is never lost.",
     )
 
     suggested_lead_phone = fields.Char(string="Lead Phone", required=True)
@@ -64,7 +68,8 @@ class PropertyLeadSuggestion(models.Model):
 
     # --- Date Fields ---
     generation_date = fields.Date(
-        string="Suggested On", default=fields.Date.context_today
+        string="Suggested On",
+        default=fields.Date.context_today,
     )
 
     # [FIX] Computed Display Field for strict DD/MM/YYYY format
@@ -174,7 +179,7 @@ class PropertyLeadSuggestion(models.Model):
         whatsapp_url = self.suggested_lead_phone_whatsapp_url
 
         # --- ACCESS THE NEW PROPERTY FIELDS ---
-        prop = self.property_inventory_id
+        prop = self.property_base_id
 
         # Get property details
         prop_bhk = prop.bhk or "a property"  # Fallback if BHK is empty
@@ -224,7 +229,7 @@ class PropertyLeadSuggestion(models.Model):
                 "Cleardeals Advantage:",
                 "0% Brokerage | Verified Properties | Faster Closures\n",
                 'Reply "Hi" to get more details',
-            ]
+            ],
         )
 
         # Join all parts with newlines
@@ -275,30 +280,38 @@ class PropertyLeadSuggestion(models.Model):
             return
 
         # --- OPTIMIZATION 1: Fetch all properties into a dictionary ---
-        _logger.info("Fetching all existing properties from Odoo...")
+        _logger.info("Fetching all existing properties from property.base...")
         try:
-            PropertyInventory = self.env["property.inventory"]
-            all_props_recs = PropertyInventory.sudo().search_read([], ["property_tag"])
-            # Create a map of {'property_tag': property_id}
+            all_props_recs = (
+                self.env["property.base"]
+                .sudo()
+                .search_read(
+                    [("property_tag", "!=", False)],
+                    ["property_tag"],
+                )
+            )
+            # Create a map of {'property_tag': property_base record id}
             property_map = {rec["property_tag"]: rec["id"] for rec in all_props_recs}
             _logger.info(f"Loaded {len(property_map)} properties into memory map.")
         except Exception as e:
-            _logger.error("Failed to fetch property inventory: %s", e)
+            _logger.error("Failed to fetch property.base records: %s", e)
             return
 
         # --- OPTIMIZATION 2: Fetch all existing suggestion keys into a set ---
         _logger.info("Fetching all existing suggestion keys from Odoo...")
         try:
             existing_sugg_recs = self.sudo().search_read(
-                [], ["property_inventory_id", "suggested_lead_phone"]
+                [],
+                ["property_base_id", "suggested_lead_phone"],
             )
-            # Create a set of (property_id, 'lead_phone')
+            # Create a set of (property_base_id, 'lead_phone')
             existing_keys = {
-                (rec["property_inventory_id"][0], rec["suggested_lead_phone"])
+                (rec["property_base_id"][0], rec["suggested_lead_phone"])
                 for rec in existing_sugg_recs
+                if rec.get("property_base_id")
             }
             _logger.info(
-                f"Loaded {len(existing_keys)} existing suggestion keys into memory set."
+                f"Loaded {len(existing_keys)} existing suggestion keys into memory set.",
             )
         except Exception as e:
             _logger.error("Failed to fetch existing suggestions: %s", e)
@@ -339,7 +352,7 @@ class PropertyLeadSuggestion(models.Model):
 
                 if not prop_id:
                     _logger.warning(
-                        f"Skipping suggestion, property '{row.active_property_tag}' not found in Odoo property map."
+                        f"Skipping suggestion, property tag '{row.active_property_tag}' not found in property.base map.",
                     )
                     skipped_prop_not_found += 1
                     continue
@@ -355,7 +368,8 @@ class PropertyLeadSuggestion(models.Model):
                 # If we reach here, it's a new suggestion. Add to our batch list.
                 vals_to_create.append(
                     {
-                        "property_inventory_id": prop_id,
+                        "property_base_id": prop_id,
+                        "property_tag": row.active_property_tag,
                         "suggested_lead_phone": row.suggested_lead_phone,
                         "lead_name": row.lead_name,
                         "original_property_tag": row.original_property_tag,
@@ -366,7 +380,7 @@ class PropertyLeadSuggestion(models.Model):
                         "generation_date": row.generation_date,
                         "contact_type": row.current_status,
                         "status": "new",
-                    }
+                    },
                 )
                 # Add the key to our set so we don't add it twice *in this run*
                 existing_keys.add(suggestion_key)
@@ -374,7 +388,7 @@ class PropertyLeadSuggestion(models.Model):
             # --- OPTIMIZATION 3: Create all new records in one batch ---
             if vals_to_create:
                 _logger.info(
-                    f"Creating {len(vals_to_create)} new suggestions in a batch..."
+                    f"Creating {len(vals_to_create)} new suggestions in a batch...",
                 )
                 self.sudo().create(vals_to_create)
                 _logger.info("Batch creation complete.")
@@ -382,11 +396,12 @@ class PropertyLeadSuggestion(models.Model):
                 _logger.info("No new suggestions to create.")
 
             _logger.info(
-                f"Lead Suggestions Sync Summary: Created {len(vals_to_create)} new suggestions. Skipped {skipped_prop_not_found} (prop not found). Skipped {skipped_already_exists} (already exists)."
+                f"Lead Suggestions Sync Summary: Created {len(vals_to_create)} new suggestions. Skipped {skipped_prop_not_found} (prop not found). Skipped {skipped_already_exists} (already exists).",
             )
 
         except Exception as e:
             _logger.error(
-                "Error during Lead Suggestions sync BQ query or processing: %s", e
+                "Error during Lead Suggestions sync BQ query or processing: %s",
+                e,
             )
             self.env.cr.rollback()

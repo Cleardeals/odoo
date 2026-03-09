@@ -9,12 +9,14 @@
                 <field name="name" string="Lead Name"/>
                 <field name="phone"/>
                 <field name="user_id" string="RM"/>
-                <field name="property_location"/>
-                
+                <field name="base_property_location" string="Location"/>
+                <field name="property_location" string="Location (Legacy)" groups="leads.group_lead_score_manager"/>
+
                 <field name="all_associated_properties" string="Property (Primary or Recommended)"/>
-                <field name="property_id" string="Primary Property Only"/>
-                <field name="property_bhk"/>
-                <field name="property_city"/>
+                <field name="property_base_id" string="Primary Property"/>
+                <field name="property_id" string="Primary Property (Legacy)" groups="leads.group_lead_score_manager"/>
+                <field name="base_property_bhk" string="BHK"/>
+                <field name="base_property_city" string="City"/>
                 <field name="portal_name"/>
                 <field name="current_status"/>
 
@@ -67,7 +69,7 @@
                                  ('interest_ids.site_visit_date_only', '=', context_today())
                                 ]"
                         help="Primary or recommended property site visit scheduled for today (IST)"/>
-                
+
                 <filter string="Ops Sales Leads"
                         name="ops_sales_leads"
                         domain="[('is_ops_sale_lead', '=', True)]"/>
@@ -76,11 +78,11 @@
 
                 <filter string="Current Status" name="groupby_status" context="{'group_by': 'current_status'}"/>
                 <filter string="RM"             name="groupby_user"   context="{'group_by': 'user_id'}"/>
-                
-                <filter string="Property (All Associated)" 
-                        name="groupby_all_props" 
+
+                <filter string="Property (All Associated)"
+                        name="groupby_all_props"
                         context="{'group_by': 'all_associated_properties'}"/>
-                        
+
                 <filter string="Main State"     name="groupby_state"  context="{'group_by': 'state'}"/>
                 <filter string="Portal"         name="groupby_portal" context="{'group_by': 'portal_name'}"/>
                 <filter string="Creation Date"  name="groupby_date"   context="{'group_by': 'create_date_only'}"/>
@@ -94,12 +96,12 @@
         <field name="name">leads.new.list</field>
         <field name="model">leads.new</field>
         <field name="arch" type="xml">
-            <list string="New Portal Leads" 
+            <list string="New Portal Leads"
                     js_class="leads_new_list_controller"
-                    decoration-success="(state=='assigned' and current_status=='lead')" 
+                    decoration-success="(state=='assigned' and current_status=='lead')"
                     decoration-info="current_status != 'lead'"
                     decoration-danger="state=='new'">
-                
+
                 <field name="create_date"/>
                 <field name="portal_name"/>
                 <field name="name"/>
@@ -110,12 +112,14 @@
                     title="Chat on WhatsApp (and copy message)"
                     invisible="phone_whatsapp_url == False"/>
                 <field name="portal_property_id"/>
-                <field name="property_id"/>
+                <field name="property_base_id" string="Property"/>
+                <field name="property_id" string="Property (Legacy)" groups="leads.group_lead_score_manager" optional="hide"/>
                 <field name="user_id"/>
                 <field name="current_status"/>
                 <field name="interest_ids" widget="one2many"  optional="hide">
                     <list>
-                        <field name="property_id"/>
+                        <field name="property_base_id" string="Property"/>
+                        <field name="property_id" string="Property (Legacy)" groups="leads.group_lead_score_manager" optional="hide"/>
                         <field name="current_status"/>
                     </list>
                 </field>
@@ -136,21 +140,22 @@
                     <group>
                         <group>
                             <field name="lead_id" readonly="1" force_save="1"/>
-                            <field name="property_id" force_save="1"/>
+                            <field name="property_base_id" string="Property" force_save="1"/>
+                            <field name="property_id" string="Property (Legacy)" force_save="1" groups="leads.group_lead_score_manager"/>
                         </group>
                         <group>
                             <field name="property_bhk" readonly="1"/>
                             <field name="property_location" readonly="1"/>
                         </group>
                     </group>
-                    
+
                     <group string="Update Status">
                         <field name="current_status"/>
                         <field name="site_visit_date"
                                invisible="current_status != 'site_visit_scheduled'"/>
                         <field name="feedback_general" placeholder="Select Appropriate Feedback" string="Feedback" invisible = "current_status == 'site_visit_done'"/>
                         <field name="feedback_site_visit_done" placeholder="Select appropriate feedback" string = "Feedback" invisible = "current_status != 'site_visit_done'"/>
-                                    
+
                         <field name="remarks"/>
                     </group>
                 </sheet>
@@ -164,10 +169,10 @@
         <field name="arch" type="xml">
             <form string="New Portal Lead">
                 <header>
-                    <field name="state" widget="statusbar" 
+                    <field name="state" widget="statusbar"
                            statusbar_visible="new,assigned,failed"
                            groups="leads.group_lead_score_manager"/>
-                           
+
                     <field name="current_status" widget="statusbar"
                            statusbar_visible="lead,details_shared_of_property,site_visit_scheduled,site_visit_done,requirement_closed"
                            groups="leads.group_lead_score_rm"/>
@@ -176,7 +181,7 @@
                     <group>
                         <group>
                             <field name="name"/>
-                            
+
                             <label for="phone"/>
                             <div class="d-flex align-items-center">
                                 <field name="phone" nolabel="1" class="w-auto"/>
@@ -184,10 +189,10 @@
                                         type="object"
                                         icon="fa-whatsapp"
                                         title="Chat on WhatsApp (and copy message)"
-                                        class="btn-link ms-2" 
+                                        class="btn-link ms-2"
                                         invisible="phone_whatsapp_url == False"/>
                             </div>
-                            
+
                             <field name="email"/>
                         </group>
                         <group>
@@ -201,27 +206,37 @@
                             <group>
                                 <group>
                                     <field name="user_id"/>
-                                    <field name="property_id"/>
+                                    <field name="property_base_id" string="Property"/>
+                                    <field name="property_id" string="Property (Legacy)" groups="leads.group_lead_score_manager"/>
                                     <field name="current_status"/>
-                                    <field name="site_visit_date" 
+                                    <field name="site_visit_date"
                                            invisible="current_status != 'site_visit_scheduled'"/>
                                     <field name="feedback_general" placeholder="Select Appropriate Feedback" string="Feedback" invisible = "current_status == 'site_visit_done'"/>
                                     <field name="feedback_site_visit_done" placeholder="Select appropriate feedback" string = "Feedback" invisible = "current_status != 'site_visit_done'"/>
-                                    <field name="remarks"/>                                    
+                                    <field name="remarks"/>
                                 </group>
                                 <group>
-                                    <field name="property_location"/>
-                                    <field name="property_link" widget="url"/>
-                                    <field name="property_bhk"/>
+                                    <field name="base_property_location" string="Location"/>
+                                    <field name="base_property_link" string="Property Link" widget="url"/>
+                                    <field name="base_property_bhk" string="BHK"/>
+                                    <field name="base_property_city" string="City"/>
+                                    <field name="base_property_owner_name" string="Owner"/>
                                     <field name="is_ops_sale_lead" widget="boolean"/>
+                                </group>
+                                <!-- Legacy fields — visible to managers only until backfill is complete -->
+                                <group string="Legacy Property Info" groups="leads.group_lead_score_manager">
+                                    <field name="property_location" string="Location (Legacy)"/>
+                                    <field name="property_link" string="Link (Legacy)" widget="url"/>
+                                    <field name="property_bhk" string="BHK (Legacy)"/>
                                 </group>
                             </group>
                         </page>
-                        
+
                         <page string="Recommended Properties" name="recommended_properties">
                             <field name="interest_ids" nolabel="1">
                                 <list>
-                                    <field name="property_id"/>
+                                    <field name="property_base_id" string="Property"/>
+                                    <field name="property_id" string="Property (Legacy)" groups="leads.group_lead_score_manager" optional="hide"/>
                                     <field name="property_bhk"/>
                                     <field name="property_location"/>
                                     <field name="current_status"/>
@@ -231,6 +246,7 @@
                         </page>
                     </notebook>
                 </sheet>
+                <chatter/>
             </form>
         </field>
     </record>
@@ -248,7 +264,7 @@
 
     <menuitem id="menu_new_portal_lead"
               name="New Portal Leads"
-              parent="leads.lead_score_menu_main" 
+              parent="leads.lead_score_menu_main"
               action="action_new_portal_lead"
               sequence="10"
               groups="leads.group_lead_score_rm"/>

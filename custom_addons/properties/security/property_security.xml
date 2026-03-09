@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+
+        <!-- ================================================================
+             Security groups
+        ================================================================ -->
+
+        <!--
+            RM (Relationship Manager)
+            Read-only access to property.base.  Cannot edit any field in the
+            UI — property records are read-only for this group.
+        -->
+        <record id="group_property_rm" model="res.groups">
+            <field name="name">Properties RM</field>
+            <field name="implied_ids" eval="[(4, ref('base.group_user'))]"/>
+            <field name="comment">
+                Read-only access to the Properties module.
+                Cannot edit any field on a property record.
+            </field>
+        </record>
+
+        <!--
+            Manager
+            Full CRUD on property.base plus can edit the manager-editable
+            fields (portal IDs, service_expiry_date, welcome_call_date,
+            property_tag) and trigger the manual sync.
+            Implies RM so managers see everything RMs see.
+        -->
+        <record id="group_property_manager" model="res.groups">
+            <field name="name">Properties Manager</field>
+            <field name="implied_ids" eval="[(4, ref('group_property_rm'))]"/>
+            <field name="comment">
+                Full access to the Properties module including editing
+                manager-editable fields and triggering manual syncs.
+            </field>
+        </record>
+
+        <!-- ================================================================
+             Record rules — access scoping
+        ================================================================ -->
+
+    </data>
+
+    <!-- Rules are outside noupdate="1" so domain changes are always applied
+         on module upgrade (-u properties). -->
+
+        <!--
+            RM rule: an RM user can only read properties where rm_user_id
+            matches their own Odoo user id.
+
+            NOTE: group_property_manager implies group_property_rm, so a
+            manager user belongs to BOTH groups.  Odoo OR's rules across
+            groups — the manager-level rule below (domain = 1=1) ensures
+            managers always see all records regardless of this restriction.
+        -->
+        <record id="rule_property_base_rm_own_only" model="ir.rule">
+            <field name="name">Property Base: RM sees own properties only</field>
+            <field name="model_id" ref="model_property_base"/>
+            <field name="groups" eval="[(4, ref('group_property_rm'))]"/>
+            <field name="domain_force">[('rm_user_id', '=', user.id)]</field>
+            <field name="perm_read"   eval="True"/>
+            <field name="perm_write"  eval="False"/>
+            <field name="perm_create" eval="False"/>
+            <field name="perm_unlink" eval="False"/>
+        </record>
+
+        <!--
+            Manager rule: full read/write/create/unlink on all records.
+            Because Odoo OR's rules, this allows managers to bypass the RM
+            restriction above (a manager is in both groups → either rule
+            matching grants access).
+        -->
+        <record id="rule_property_base_manager_all" model="ir.rule">
+            <field name="name">Property Base: Manager sees all properties</field>
+            <field name="model_id" ref="model_property_base"/>
+            <field name="groups" eval="[(4, ref('group_property_manager'))]"/>
+            <field name="domain_force">[(1, '=', 1)]</field>
+            <field name="perm_read"   eval="True"/>
+            <field name="perm_write"  eval="True"/>
+            <field name="perm_create" eval="True"/>
+            <field name="perm_unlink" eval="True"/>
+        </record>
+
+</odoo>
