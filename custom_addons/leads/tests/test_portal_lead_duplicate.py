@@ -94,16 +94,14 @@ class TestPortalLeadDuplicateDetection(PortalLeadTestCase):
         new_lead = self.env['leads.new'].create_lead_if_not_duplicate(new_lead_vals)
         self.assertTrue(new_lead, "Should create lead after 30 days expiration")
 
-    def test_05_duplicate_detection_log_message(self):
-        """Duplicate detection should post a message to the EXISTING lead."""
+    def test_05_duplicate_detection_returns_none(self):
+        """Duplicate detection should return None and not create a new lead."""
         # 1. Create Base Lead
         lead1 = self.create_portal_lead(
             phone='9876543210',
             portal_property_id=self.mb_id
         )
 
-        initial_message_count = len(lead1.message_ids)
-    
         # 2. Attempt Duplicate
         lead2_vals = {
             'name': 'Duplicate',
@@ -113,9 +111,12 @@ class TestPortalLeadDuplicateDetection(PortalLeadTestCase):
             'raw_data': 'test data'
         }
 
-        self.env['leads.new'].create_lead_if_not_duplicate(lead2_vals)
+        result = self.env['leads.new'].create_lead_if_not_duplicate(lead2_vals)
 
-        # 3. Verify Message
-        lead1.invalidate_recordset(['message_ids']) # Refresh cache
-        self.assertGreater(len(lead1.message_ids), initial_message_count, 
-                           "Should log a message on the original lead")
+        # 3. Verify duplicate was silently skipped (no new lead, no chatter noise)
+        self.assertIsNone(result, "Duplicate should return None, not create a new lead")
+        duplicate_count = self.env['leads.new'].search_count([
+            ('phone', '=', '9876543210'),
+            ('portal_property_id', '=', self.mb_id),
+        ])
+        self.assertEqual(duplicate_count, 1, "Only one lead should exist for this phone/property")
