@@ -360,8 +360,11 @@ class NewPortalLead(models.Model):
 
     @api.model_create_multi
     def create(self, vals_list):
-        # Create the new lead(s) first — suppress automatic chatter log on creation
-        new_leads = super().with_context(mail_create_nolog=True).create(vals_list)
+        # Suppress automatic chatter log on creation.
+        # Context must be set on `self` before super() — calling
+        # super().with_context().create() returns the same overridden method
+        # and causes infinite recursion.
+        new_leads = super(NewPortalLead, self.with_context(mail_create_nolog=True)).create(vals_list)
         channel = "leads.new"
         notification_type = "bus_notification"
         message = {
