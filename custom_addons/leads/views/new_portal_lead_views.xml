@@ -10,11 +10,8 @@
                 <field name="phone"/>
                 <field name="user_id" string="RM"/>
                 <field name="base_property_location" string="Location"/>
-                <field name="property_location" string="Location (Legacy)" groups="leads.group_lead_score_manager"/>
-
+                <field name="base_property_tag" string="Property Tag"/>
                 <field name="all_associated_properties" string="Property (Primary or Recommended)"/>
-                <field name="property_base_id" string="Primary Property"/>
-                <field name="property_id" string="Primary Property (Legacy)" groups="leads.group_lead_score_manager"/>
                 <field name="base_property_bhk" string="BHK"/>
                 <field name="base_property_city" string="City"/>
                 <field name="portal_name"/>
@@ -113,13 +110,11 @@
                     invisible="phone_whatsapp_url == False"/>
                 <field name="portal_property_id"/>
                 <field name="property_base_id" string="Property"/>
-                <field name="property_id" string="Property (Legacy)" groups="leads.group_lead_score_manager" optional="hide"/>
                 <field name="user_id"/>
                 <field name="current_status"/>
                 <field name="interest_ids" widget="one2many"  optional="hide">
                     <list>
                         <field name="property_base_id" string="Property"/>
-                        <field name="property_id" string="Property (Legacy)" groups="leads.group_lead_score_manager" optional="hide"/>
                         <field name="current_status"/>
                     </list>
                 </field>
@@ -141,11 +136,10 @@
                         <group>
                             <field name="lead_id" readonly="1" force_save="1"/>
                             <field name="property_base_id" string="Property" force_save="1"/>
-                            <field name="property_id" string="Property (Legacy)" force_save="1" groups="leads.group_lead_score_manager"/>
                         </group>
                         <group>
-                            <field name="property_bhk" readonly="1"/>
-                            <field name="property_location" readonly="1"/>
+                            <field name="base_property_bhk" readonly="1"/>
+                            <field name="base_property_location" readonly="1"/>
                         </group>
                     </group>
 
@@ -207,7 +201,7 @@
                                 <group>
                                     <field name="user_id"/>
                                     <field name="property_base_id" string="Property"/>
-                                    <field name="property_id" string="Property (Legacy)" groups="leads.group_lead_score_manager"/>
+                                    <field name="base_property_tag" string="Property Tag"/>
                                     <field name="current_status"/>
                                     <field name="site_visit_date"
                                            invisible="current_status != 'site_visit_scheduled'"/>
@@ -223,12 +217,6 @@
                                     <field name="base_property_owner_name" string="Owner"/>
                                     <field name="is_ops_sale_lead" widget="boolean"/>
                                 </group>
-                                <!-- Legacy fields — visible to managers only until backfill is complete -->
-                                <group string="Legacy Property Info" groups="leads.group_lead_score_manager">
-                                    <field name="property_location" string="Location (Legacy)"/>
-                                    <field name="property_link" string="Link (Legacy)" widget="url"/>
-                                    <field name="property_bhk" string="BHK (Legacy)"/>
-                                </group>
                             </group>
                         </page>
 
@@ -236,9 +224,7 @@
                             <field name="interest_ids" nolabel="1">
                                 <list>
                                     <field name="property_base_id" string="Property"/>
-                                    <field name="property_id" string="Property (Legacy)" groups="leads.group_lead_score_manager" optional="hide"/>
-                                    <field name="property_bhk"/>
-                                    <field name="property_location"/>
+                                    <field name="base_property_location" string="Location"/>
                                     <field name="current_status"/>
                                     <field name="remarks"/>
                                 </list>
