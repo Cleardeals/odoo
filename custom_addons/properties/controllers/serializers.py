@@ -61,6 +61,21 @@ def serialize_property(record) -> dict:
             return {"id": rel.id, "name": rel.display_name or rel.name}
         return None
 
+    def _portal_listings(lines):
+        """Serialize property.portal.listing lines."""
+        result = []
+        for line in lines:
+            result.append(
+                {
+                    "id": line.id,
+                    "portal_name": _char(line.portal_name),
+                    "portal_listing_id": _char(line.portal_listing_id),
+                    "listing_label": _char(line.listing_label),
+                    "active": _bool(line.active),
+                },
+            )
+        return result
+
     return {
         # ------------------------------------------------------------------
         # Identifiers
@@ -107,13 +122,24 @@ def serialize_property(record) -> dict:
         "property_link": _char(record.property_link),
         "gmaps_url": _char(record.gmaps_url),
         # ------------------------------------------------------------------
-        # Portal / listing IDs (Manager-editable — PROP-2.3 / PROP-2.4)
+        # Portal / listing IDs (new relation model)
         # ------------------------------------------------------------------
         "property_tag": _char(record.property_tag),
-        "ninety_nine_acres_id": _char(record.ninety_nine_acres_id),
-        "housing_id": _char(record.housing_id),
-        "magicbricks_id": _char(record.magicbricks_id),
-        "olx_id": _char(record.olx_id),
+        "portal_listings": _portal_listings(
+            record.portal_listing_ids.sorted(
+                key=lambda r: (
+                    r.portal_name or "",
+                    r.portal_listing_id or "",
+                    r.id,
+                ),
+            ),
+        ),
+        "legacy_portal_ids": {
+            "ninety_nine_acres_id": _char(record.ninety_nine_acres_id),
+            "housing_id": _char(record.housing_id),
+            "magicbricks_id": _char(record.magicbricks_id),
+            "olx_id": _char(record.olx_id),
+        },
         # ------------------------------------------------------------------
         # Dates (Manager-editable)
         # ------------------------------------------------------------------
