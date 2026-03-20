@@ -189,7 +189,9 @@ class TestPropertyApiDelete(PropertyApiTestCase):
         data = self.assertSuccessResponse(resp)
         for field in ("id", "uuid", "prop_id", "name"):
             self.assertIn(
-                field, data["deleted"], msg=f"Missing field in deleted: {field}"
+                field,
+                data["deleted"],
+                msg=f"Missing field in deleted: {field}",
             )
 
     def test_16_response_body_reflects_deleted_record_name(self):
@@ -209,7 +211,8 @@ class TestPropertyApiDelete(PropertyApiTestCase):
         prop_b = self.make_property(name="Property B - Delete")
         self._call_delete(str(prop_b.id))
         self.assertTrue(
-            prop_a.exists(), "prop_a must still exist after deleting prop_b"
+            prop_a.exists(),
+            "prop_a must still exist after deleting prop_b",
         )
 
     # ------------------------------------------------------------------

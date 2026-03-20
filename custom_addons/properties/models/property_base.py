@@ -417,6 +417,37 @@ class PropertyBase(models.Model):
         return super().write(vals)
 
     # =========================================================================
+    # name_search override — multi-field search for leads context
+    # =========================================================================
+
+    @api.model
+    def name_search(self, name='', domain=None, operator='ilike', limit=100):
+        """
+        When called from the leads/interest context (context flag
+        'search_all_properties_for_lead'), bypass the RM-own record rule and
+        search across property_tag, olx_id, location, and name so any RM can
+        find and recommend any property.
+
+        Outside that context the default behaviour (and record rules) apply.
+        """
+        if self.env.context.get('search_all_properties_for_lead'):
+            base_domain = list(domain or [])
+            if name:
+                name_domain = [
+                    '|', '|', '|',
+                    ('property_tag', operator, name),
+                    ('olx_id', operator, name),
+                    ('location', operator, name),
+                    ('name', operator, name),
+                ]
+                search_domain = name_domain + base_domain
+            else:
+                search_domain = base_domain
+            records = self.sudo().search(search_domain, limit=limit)
+            return [(r.id, r.display_name) for r in records]
+        return super().name_search(name, domain, operator, limit)
+
+    # =========================================================================
     # Cron — Expiry cleanup
     # =========================================================================
 

@@ -154,6 +154,7 @@ class NewPortalLead(models.Model):
         copy=False,
         index=True,
         tracking=True,
+        context={'search_all_properties_for_lead': True},
     )
 
     user_id = fields.Many2one(

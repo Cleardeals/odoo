@@ -46,7 +46,12 @@ class TestPropertyApiUpdate(PropertyApiTestCase):
     # ------------------------------------------------------------------
 
     def _call_update(
-        self, identifier, *, api_key=None, body=None, content_type="application/json"
+        self,
+        identifier,
+        *,
+        api_key=None,
+        body=None,
+        content_type="application/json",
     ):
         key = api_key if api_key is not None else "test-api-key-abc123"
         req = self.make_mock_request(
@@ -66,7 +71,9 @@ class TestPropertyApiUpdate(PropertyApiTestCase):
         """Update endpoint must reject bad API key."""
         prop = self.make_property()
         resp = self._call_update(
-            str(prop.id), api_key="wrong-key", body={"city": "Delhi"}
+            str(prop.id),
+            api_key="wrong-key",
+            body={"city": "Delhi"},
         )
         self.assertErrorResponse(resp, 403)
 
@@ -150,7 +157,8 @@ class TestPropertyApiUpdate(PropertyApiTestCase):
         """PATCH with pricing + pricing_unit must update both fields."""
         prop = self.make_property(pricing=45.0, pricing_unit="lakh")
         resp = self._call_update(
-            str(prop.id), body={"pricing": 120.0, "pricing_unit": "cr"}
+            str(prop.id),
+            body={"pricing": 120.0, "pricing_unit": "cr"},
         )
         data = self.assertSuccessResponse(resp)
         self.assertAlmostEqual(data["pricing"], 120.0)
@@ -224,7 +232,8 @@ class TestPropertyApiUpdate(PropertyApiTestCase):
         """Unknown fields must not raise an error and must appear in '_ignored_fields'."""
         prop = self.make_property()
         resp = self._call_update(
-            str(prop.id), body={"city": "Kolkata", "ghost_field": "boo"}
+            str(prop.id),
+            body={"city": "Kolkata", "ghost_field": "boo"},
         )
         data = self.assertSuccessResponse(resp)
         self.assertIn("_ignored_fields", data)
@@ -234,7 +243,8 @@ class TestPropertyApiUpdate(PropertyApiTestCase):
         """Valid fields must be updated even when unknown fields are present."""
         prop = self.make_property()
         resp = self._call_update(
-            str(prop.id), body={"city": "Kolkata", "ghost_field": "boo"}
+            str(prop.id),
+            body={"city": "Kolkata", "ghost_field": "boo"},
         )
         data = self.assertSuccessResponse(resp)
         self.assertEqual(data["city"], "Kolkata")

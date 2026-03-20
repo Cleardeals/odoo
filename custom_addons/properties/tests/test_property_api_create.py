@@ -217,7 +217,8 @@ class TestPropertyApiCreate(PropertyApiTestCase):
         future_date = (date.today() + timedelta(days=60)).isoformat()
         today_str = date.today().isoformat()
         vals = self._unique_vals(
-            service_expiry_date=future_date, welcome_call_date=today_str
+            service_expiry_date=future_date,
+            welcome_call_date=today_str,
         )
         resp = self._call_create(body=vals)
         data = self.assertSuccessResponse(resp, expected_status=201)

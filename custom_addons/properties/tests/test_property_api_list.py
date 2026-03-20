@@ -188,7 +188,8 @@ class TestPropertyApiList(PropertyApiTestCase):
         data = self.assertSuccessResponse(resp)
         for record in data["results"]:
             self.assertTrue(
-                record["is_active"], f"Inactive record in results: {record['id']}"
+                record["is_active"],
+                f"Inactive record in results: {record['id']}",
             )
 
     def test_13_is_active_false_returns_only_inactive(self):
@@ -197,7 +198,8 @@ class TestPropertyApiList(PropertyApiTestCase):
         data = self.assertSuccessResponse(resp)
         for record in data["results"]:
             self.assertFalse(
-                record["is_active"], f"Active record in results: {record['id']}"
+                record["is_active"],
+                f"Active record in results: {record['id']}",
             )
 
     def test_14_is_active_zero_treated_as_false(self):

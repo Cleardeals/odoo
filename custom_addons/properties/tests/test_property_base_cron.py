@@ -92,7 +92,8 @@ class TestPropertyBaseCron(PropertyBaseTestCase):
         self._run_cron()
         prop.invalidate_recordset()
         self.assertTrue(
-            prop.is_active, "Expiry on today's date should not be deactivated"
+            prop.is_active,
+            "Expiry on today's date should not be deactivated",
         )
 
     # ------------------------------------------------------------------ #
@@ -103,7 +104,8 @@ class TestPropertyBaseCron(PropertyBaseTestCase):
         """Cron should handle deactivating multiple expired records at once."""
         props = [
             self.make_property(
-                is_active=True, service_expiry_date=date.today() - timedelta(days=d)
+                is_active=True,
+                service_expiry_date=date.today() - timedelta(days=d),
             )
             for d in (1, 5, 10, 30, 365)
         ]
@@ -172,7 +174,8 @@ class TestPropertyBaseCron(PropertyBaseTestCase):
         self._run_cron()
         prop.invalidate_recordset()
         self.assertTrue(
-            prop.is_active, "Properties without expiry date should not be deactivated"
+            prop.is_active,
+            "Properties without expiry date should not be deactivated",
         )
 
     # ------------------------------------------------------------------ #
