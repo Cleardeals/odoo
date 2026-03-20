@@ -99,7 +99,7 @@ class TestPortalLeadDuplicateDetection(PortalLeadTestCase):
     def test_05_duplicate_detection_returns_none(self):
         """Duplicate detection should return None and not create a new lead."""
         # 1. Create Base Lead
-        lead1 = self.create_portal_lead(
+        self.create_portal_lead(
             phone="9876543210",
             portal_property_id=self.mb_id,
         )
@@ -121,8 +121,50 @@ class TestPortalLeadDuplicateDetection(PortalLeadTestCase):
             [
                 ("phone", "=", "9876543210"),
                 ("portal_property_id", "=", self.mb_id),
-            ]
+            ],
         )
         self.assertEqual(
-            duplicate_count, 1, "Only one lead should exist for this phone/property"
+            duplicate_count,
+            1,
+            "Only one lead should exist for this phone/property",
         )
+
+    def test_06_duplicate_same_property_different_portal_ids(self):
+        """Same phone + same mapped property via different portal IDs is duplicate."""
+        listing_model = self.env["property.portal.listing"]
+
+        listing_model.create(
+            {
+                "property_base_id": self.test_property.id,
+                "portal_name": "MagicBricks",
+                "portal_listing_id": self.mb_id,
+                "listing_label": "Primary MB",
+            },
+        )
+        alternate_99_id = f"99_ALT_{self.suffix}"
+        listing_model.create(
+            {
+                "property_base_id": self.test_property.id,
+                "portal_name": "99acres",
+                "portal_listing_id": alternate_99_id,
+                "listing_label": "Alt 99",
+            },
+        )
+
+        first_vals = {
+            "name": "Lead MB",
+            "phone": "9876543210",
+            "portal_property_id": self.mb_id,
+            "portal_name": "MagicBricks",
+        }
+        first_lead = self.env["leads.new"].create_lead_if_not_duplicate(first_vals)
+        self.assertTrue(first_lead)
+
+        second_vals = {
+            "name": "Lead 99",
+            "phone": "9876543210",
+            "portal_property_id": alternate_99_id,
+            "portal_name": "99acres",
+        }
+        duplicate = self.env["leads.new"].create_lead_if_not_duplicate(second_vals)
+        self.assertIsNone(duplicate, "Should dedupe by resolved property_base_id")

@@ -154,7 +154,7 @@ class NewPortalLead(models.Model):
         copy=False,
         index=True,
         tracking=True,
-        context={'search_all_properties_for_lead': True},
+        context={"search_all_properties_for_lead": True},
     )
 
     user_id = fields.Many2one(
@@ -355,10 +355,16 @@ class NewPortalLead(models.Model):
         """
         Central Function to create leads.
         Checks for duplicates before creating new lead.
-        A duplicate is same phone + same portal_property_id in last 30 days.
+        Preferred duplicate key: same phone + same resolved property_base_id
+        in last 30 days (so multiple portal IDs on the same property don't
+        create duplicates).
+
+        Fallback (when no portal-listing mapping exists yet):
+        same phone + same portal source + same portal_property_id in 30 days.
         """
         phone_raw = lead_vals.get("phone")
         phone_clean = self._standardize_phone(phone_raw)
+        portal_name = lead_vals.get("portal_name")
         portal_prop_id = lead_vals.get("portal_property_id")
 
         lead_vals["phone"] = phone_clean
@@ -369,17 +375,34 @@ class NewPortalLead(models.Model):
             )
             return self.create(lead_vals)
 
+        resolved_property = self._resolve_property_from_portal(
+            portal_name,
+            portal_prop_id,
+        )
+
+        if resolved_property:
+            lead_vals.setdefault("property_base_id", resolved_property.id)
+
         time_limit = fields.Datetime.now() - timedelta(days=30)
-        domain = [
-            ("phone", "=", phone_clean),
-            ("portal_property_id", "=", portal_prop_id),
-            ("create_date", ">=", time_limit),
-        ]
+        if resolved_property:
+            domain = [
+                ("phone", "=", phone_clean),
+                ("property_base_id", "=", resolved_property.id),
+                ("create_date", ">=", time_limit),
+            ]
+        else:
+            domain = [
+                ("phone", "=", phone_clean),
+                ("portal_name", "=", portal_name),
+                ("portal_property_id", "=", portal_prop_id),
+                ("create_date", ">=", time_limit),
+            ]
+
         existing_lead = self.search(domain, limit=1)
 
         if existing_lead:
             _logger.info(
-                "Duplicate lead detected. Phone: %s, Property: %s. Skipping creation.",
+                "Duplicate lead detected. Phone: %s, Portal Property ID: %s. Skipping creation.",
                 phone_clean,
                 portal_prop_id,
             )
@@ -423,35 +446,58 @@ class NewPortalLead(models.Model):
 
     # --- Lead Processing & Assignment ---
 
-    def _find_property(self):
-        """Finds the synced property based on the portal name and the portal ID."""
-
-        self.ensure_one()
-        portal = self.portal_name
-        portal_pid = self.portal_property_id
+    @api.model
+    def _resolve_property_from_portal(self, portal_name, portal_listing_id):
+        """Resolve a property.base from portal source + listing ID."""
+        portal = (portal_name or "").strip()
+        portal_pid = (portal_listing_id or "").strip()
 
         if not portal or not portal_pid:
             return self.env["property.base"]
 
-        portal_field_map = {
-            "MagicBricks": "magicbricks_id",
-            "99acres": "ninety_nine_acres_id",
-            "Housing.com": "housing_id",
-            "OLX": "olx_id",
+        portal_name_map = {
+            "99acres": "99acres",
+            "housing.com": "Housing.com",
+            "housing": "Housing.com",
+            "magicbricks": "MagicBricks",
+            "magicbricks.com": "MagicBricks",
+            "olx": "OLX",
         }
 
-        field_to_search = portal_field_map.get(portal)
-
-        if not field_to_search:
-            _logger.warning(f"Lead {self.id}: No field mapping for portal '{portal}'")
+        canonical_portal = portal_name_map.get(portal.lower())
+        if not canonical_portal:
             return self.env["property.base"]
 
-        domain = [
-            (field_to_search, "=", portal_pid),
-        ]
+        listing = (
+            self.env["property.portal.listing"]
+            .sudo()
+            .search(
+                [
+                    ("portal_name", "=", canonical_portal),
+                    ("portal_listing_id", "=", portal_pid),
+                    ("active", "=", True),
+                ],
+                limit=1,
+            )
+        )
+        return listing.property_base_id if listing else self.env["property.base"]
 
-        _logger.info("Searching for property with domain: %s", domain)
-        return self.env["property.base"].search(domain, limit=1)
+    def _find_property(self):
+        """Finds the synced property from property.portal.listing."""
+
+        self.ensure_one()
+        property_rec = self._resolve_property_from_portal(
+            self.portal_name,
+            self.portal_property_id,
+        )
+        if not property_rec:
+            _logger.warning(
+                "Lead %s: No portal listing found for portal '%s' and listing ID '%s'",
+                self.id,
+                self.portal_name,
+                self.portal_property_id,
+            )
+        return property_rec
 
     def _find_rm(self, property_base):
         """Finds the correct RM from a property.base record."""
@@ -476,10 +522,15 @@ class NewPortalLead(models.Model):
         - Housing.com/OLX -> Naresh Rojiya
         """
         self.ensure_one()
-        _logger.info(f"🔄 Processing lead {self.id}: {self.name} (state: {self.state})")
+        _logger.info(
+            "🔄 Processing lead %s: %s (state: %s)",
+            self.id,
+            self.name,
+            self.state,
+        )
 
         if self.state != "new":
-            _logger.info(f"⏭️ Skipping lead {self.id}, state is {self.state}")
+            _logger.info("⏭️ Skipping lead %s, state is %s", self.id, self.state)
             return
 
         try:
@@ -489,18 +540,26 @@ class NewPortalLead(models.Model):
 
             if property_rec:
                 _logger.info(
-                    f"✅ Lead {self.id}: Found property {property_rec.property_tag} (ID: {property_rec.id})",
+                    "✅ Lead %s: Found property %s (ID: %s)",
+                    self.id,
+                    property_rec.property_tag,
+                    property_rec.id,
                 )
                 rm_user = self._find_rm(property_rec)
                 _logger.info(
-                    f"✅ Lead {self.id}: Found RM {rm_user.name} (ID: {rm_user.id})",
+                    "✅ Lead %s: Found RM %s (ID: %s)",
+                    self.id,
+                    rm_user.name,
+                    rm_user.id,
                 )
                 notes = f"Successfully assigned to RM {rm_user.name} for property {property_rec.property_tag}.\n"
 
             if not property_rec:
                 msg = f"Property not found for {self.portal_name} ID: {self.portal_property_id}"
                 _logger.warning(
-                    f"⚠️ Lead {self.id}: {msg}. Attempting to assign to default RM.",
+                    "⚠️ Lead %s: %s. Attempting to assign to default RM.",
+                    self.id,
+                    msg,
                 )
 
                 if self.portal_name == "99acres":
@@ -535,11 +594,14 @@ class NewPortalLead(models.Model):
             )
 
             _logger.info(
-                f"🎉 Lead {self.id}: Successfully assigned to {rm_user.name} for property {property_rec.property_tag}",
+                "🎉 Lead %s: Successfully assigned to %s for property %s",
+                self.id,
+                rm_user.name,
+                property_rec.property_tag,
             )
 
         except Exception as e:
-            _logger.error(f"❌ Failed to process lead {self.id}: {e}", exc_info=True)
+            _logger.exception("❌ Failed to process lead %s", self.id)
             self.write(
                 {
                     "state": "failed",
@@ -561,17 +623,18 @@ class NewPortalLead(models.Model):
         ]
         leads_to_retry = self.search(domain)
         _logger.info(
-            f"CRON: Found {len(leads_to_retry)} unassigned leads to reprocess.",
+            "CRON: Found %s unassigned leads to reprocess.",
+            len(leads_to_retry),
         )
 
         for lead in leads_to_retry:
-            _logger.info(f"CRON: Re-processing lead {lead.id} synchronously...")
+            _logger.info("CRON: Re-processing lead %s synchronously...", lead.id)
             try:
                 lead._process_lead_logic()
-            except Exception as e:
-                _logger.error(
-                    f"CRON: Failed during synchronous re-process of lead {lead.id}: {e}",
-                    exc_info=True,
+            except Exception:
+                _logger.exception(
+                    "CRON: Failed during synchronous re-process of lead %s",
+                    lead.id,
                 )
 
     # --- HOUSING.COM PULL METHOD ---
@@ -625,23 +688,29 @@ class NewPortalLead(models.Model):
             response_data = response.json()
 
             if "apiErrors" in response_data:
-                _logger.error(f"Housing.com API Errors: {json.dumps(response_data)}")
+                _logger.error("Housing.com API Errors: %s", json.dumps(response_data))
                 return []
 
             if response_data.get("data"):
                 raw_leads = response_data["data"]
-                _logger.info(f"Housing.com: Found {len(raw_leads)} leads from API.")
+                _logger.info("Housing.com: Found %s leads from API.", len(raw_leads))
                 return self._parse_housing_response(raw_leads)
 
             _logger.info("Housing.com: API call successful, no new leads found.")
             return []
 
         except requests.exceptions.HTTPError as e:
+            status_code = e.response.status_code if e.response else "N/A"
+            response_text = e.response.text if e.response else ""
             _logger.error(
-                f"Housing.com HTTPError: {e.response.status_code} | Response : {e.response.text}",
+                "Housing.com HTTPError: %s | Response: %s",
+                status_code,
+                response_text,
             )
-        except Exception as e:
-            _logger.error(f"Error fetching Housing.com leads: {e!s}")
+        except requests.exceptions.RequestException as e:
+            _logger.error("Error fetching Housing.com leads: %s", e)
+        except ValueError as e:
+            _logger.error("Invalid JSON in Housing.com API response: %s", e)
 
         return []
 
@@ -671,14 +740,15 @@ class NewPortalLead(models.Model):
 
                 if not translated_lead["lead_phone"]:
                     _logger.warning(
-                        f"Housing.com lead skipped due to missing phone: {json.dumps(lead)}",
+                        "Housing.com lead skipped due to missing phone: %s",
+                        json.dumps(lead),
                     )
                     continue
 
                 leads_list.append(translated_lead)
 
-            except Exception as e:
-                _logger.warning(f"Error parsing one Housing.com lead: {e!s}")
+            except (AttributeError, TypeError, ValueError, KeyError) as e:
+                _logger.warning("Error parsing one Housing.com lead: %s", e)
 
         return leads_list
 
@@ -695,7 +765,11 @@ class NewPortalLead(models.Model):
         for portal_name, fetch_method in portal_mappers.items():
             try:
                 leads = fetch_method()
-                _logger.info(f"CRON: Found {len(leads)} leads from {portal_name} API.")
+                _logger.info(
+                    "CRON: Found %s leads from %s API.",
+                    len(leads),
+                    portal_name,
+                )
                 for lead in leads:
                     try:
                         lead_vals = {
@@ -715,19 +789,23 @@ class NewPortalLead(models.Model):
 
                         if new_lead:
                             _logger.info(
-                                f"Lead {new_lead.id} created, processing synchronously...",
+                                "Lead %s created, processing synchronously...",
+                                new_lead.id,
                             )
                             new_lead._process_lead_logic()
 
-                    except Exception as e:
-                        _logger.error(
-                            "CRON: Failed to create/process lead from %s: %s",
+                    except Exception:
+                        _logger.exception(
+                            "CRON: Failed to create/process lead from %s",
                             portal_name,
-                            e,
-                            exc_info=True,
                         )
 
-            except Exception as e:
+            except (
+                requests.exceptions.RequestException,
+                ValueError,
+                TypeError,
+                KeyError,
+            ) as e:
                 _logger.error("Failed to pull leads from %s API: %s", portal_name, e)
 
     # --- WhatsApp Button Methods ---
@@ -910,7 +988,7 @@ class NewPortalLead(models.Model):
             _logger.info("No leads to send after processing.")
             return
 
-        _logger.info(f"Sending {len(batch_payload)} new leads to n8n webhook...")
+        _logger.info("Sending %s new leads to n8n webhook...", len(batch_payload))
         try:
             headers = {"Content-Type": "application/json"}
             response = requests.post(
@@ -922,8 +1000,9 @@ class NewPortalLead(models.Model):
             response.raise_for_status()
             leads_to_send.write({"is_webhook_sent": True})
             _logger.info(
-                f"Successfully sent {len(batch_payload)} leads to n8n webhook.",
+                "Successfully sent %s leads to n8n webhook.",
+                len(batch_payload),
             )
 
         except requests.exceptions.RequestException as e:
-            _logger.error(f"Failed to send leads to n8n webhook: {e!s}")
+            _logger.error("Failed to send leads to n8n webhook: %s", e)
