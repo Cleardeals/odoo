@@ -53,9 +53,13 @@ class TestPortalLeadDuplicateDetection(PortalLeadTestCase):
     def test_03_duplicate_same_phone_and_property_recent(self):
         """Same phone + property within 30 days should be duplicate (return False)."""
         # 1. Create Base Lead
-        self.create_portal_lead(
-            phone="9876543210",
-            portal_property_id=self.mb_id,
+        self.env["leads.new"].create_lead_if_not_duplicate(
+            {
+                "name": "Base Lead",
+                "phone": "9876543210",
+                "portal_property_id": self.mb_id,
+                "portal_name": "MagicBricks",
+            },
         )
 
         # 2. Create Exact Duplicate (Same Phone, Same Property, Recent)
@@ -72,9 +76,13 @@ class TestPortalLeadDuplicateDetection(PortalLeadTestCase):
     def test_04_not_duplicate_after_30_days(self):
         """Same lead after 30 days should be allowed."""
         # 1. Create Old Lead
-        old_lead = self.create_portal_lead(
-            phone="9876543210",
-            portal_property_id=self.mb_id,
+        old_lead = self.env["leads.new"].create_lead_if_not_duplicate(
+            {
+                "name": "Old Lead",
+                "phone": "9876543210",
+                "portal_property_id": self.mb_id,
+                "portal_name": "MagicBricks",
+            },
         )
 
         # 2. Force date to 31 days ago via SQL to bypass ORM readonly check
@@ -99,9 +107,13 @@ class TestPortalLeadDuplicateDetection(PortalLeadTestCase):
     def test_05_duplicate_detection_returns_none(self):
         """Duplicate detection should return None and not create a new lead."""
         # 1. Create Base Lead
-        self.create_portal_lead(
-            phone="9876543210",
-            portal_property_id=self.mb_id,
+        self.env["leads.new"].create_lead_if_not_duplicate(
+            {
+                "name": "Base Lead",
+                "phone": "9876543210",
+                "portal_property_id": self.mb_id,
+                "portal_name": "MagicBricks",
+            },
         )
 
         # 2. Attempt Duplicate
@@ -133,14 +145,6 @@ class TestPortalLeadDuplicateDetection(PortalLeadTestCase):
         """Same phone + same mapped property via different portal IDs is duplicate."""
         listing_model = self.env["property.portal.listing"]
 
-        listing_model.create(
-            {
-                "property_base_id": self.test_property.id,
-                "portal_name": "MagicBricks",
-                "portal_listing_id": self.mb_id,
-                "listing_label": "Primary MB",
-            },
-        )
         alternate_99_id = f"99_ALT_{self.suffix}"
         listing_model.create(
             {

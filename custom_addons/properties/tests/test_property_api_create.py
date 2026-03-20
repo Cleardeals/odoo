@@ -225,19 +225,38 @@ class TestPropertyApiCreate(PropertyApiTestCase):
         record = self.env["property.base"].browse(data["id"])
         self.assertIsNotNone(record.service_expiry_date)
 
-    def test_17_portal_id_fields_accepted(self):
-        """Portal ID fields must be stored correctly."""
+    def test_17_portal_listings_accepted(self):
+        """portal_listings payload must create related property.portal.listing rows."""
         vals = self._unique_vals(
-            ninety_nine_acres_id="99a-id-001",
-            housing_id="hsng-id-001",
-            magicbricks_id="mb-id-001",
-            olx_id="olx-id-001",
+            portal_listings=[
+                {
+                    "portal_name": "99acres",
+                    "portal_listing_id": "99a-id-001",
+                    "listing_label": "99acres | 99a-id-001",
+                    "active": True,
+                },
+                {
+                    "portal_name": "housing",
+                    "portal_listing_id": "hsng-id-001",
+                    "listing_label": "Housing.com | hsng-id-001",
+                    "active": False,
+                },
+            ],
         )
         resp = self._call_create(body=vals)
         data = self.assertSuccessResponse(resp, expected_status=201)
         record = self.env["property.base"].browse(data["id"])
-        self.assertEqual(record.ninety_nine_acres_id, "99a-id-001")
-        self.assertEqual(record.olx_id, "olx-id-001")
+
+        listings = record.with_context(active_test=False).portal_listing_ids.sorted(
+            key=lambda r: (r.portal_name, r.portal_listing_id),
+        )
+        self.assertEqual(len(listings), 2)
+        self.assertEqual(listings[0].portal_name, "99acres")
+        self.assertEqual(listings[0].portal_listing_id, "99a-id-001")
+        self.assertTrue(listings[0].active)
+        self.assertEqual(listings[1].portal_name, "Housing.com")
+        self.assertEqual(listings[1].portal_listing_id, "hsng-id-001")
+        self.assertFalse(listings[1].active)
 
     # ------------------------------------------------------------------
     # Unknown fields → ignored, reported

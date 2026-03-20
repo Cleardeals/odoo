@@ -241,7 +241,10 @@ def _resolve_identifier(env, identifier: str):
     # Strategy 4: owner_phone
     # owner_phone may hold multiple numbers in one string (e.g. "9033870424 8735999816"),
     # so use 'like' to match any record whose phone field contains the supplied number.
-    if identifier.replace("+", "").replace("-", "").replace(" ", "").isdigit():
+    # Guard against accidental matches for short numeric identifiers that are intended
+    # as database IDs (e.g., deleting id "398" should not match owner_phone "...398...").
+    normalized_phone = identifier.replace("+", "").replace("-", "").replace(" ", "")
+    if normalized_phone.isdigit() and len(normalized_phone) >= 10:
         rec = Model.search([("owner_phone", "like", identifier)], limit=1)
         if rec:
             return rec
@@ -343,7 +346,9 @@ class PropertyApiController(http.Controller):
 
         portal_listing_id = params.get("portal_listing_id")
         if portal_listing_id:
-            domain.append(("portal_listing_ids.portal_listing_id", "=", portal_listing_id.strip()))
+            domain.append(
+                ("portal_listing_ids.portal_listing_id", "=", portal_listing_id.strip())
+            )
 
         search_term = params.get("search")
         if search_term:

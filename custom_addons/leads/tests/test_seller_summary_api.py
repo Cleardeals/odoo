@@ -52,10 +52,48 @@ class TestSellerSummaryAPI(PortalLeadTestCase):
                 "rm_user_id": cls.rm_user.id,
                 "is_active": True,
                 "owner_phone": "9876543210",
-                "magicbricks_id": f"MB2_{cls.suffix}",
-                "housing_id": f"HSG2_{cls.suffix}",
-                "ninety_nine_acres_id": f"99A2_{cls.suffix}",
-                "olx_id": f"OLX2_{cls.suffix}",
+                "portal_listing_ids": [
+                    (
+                        0,
+                        0,
+                        {
+                            "portal_name": "MagicBricks",
+                            "portal_listing_id": f"MB2_{cls.suffix}",
+                            "listing_label": f"MagicBricks | MB2_{cls.suffix}",
+                            "active": True,
+                        },
+                    ),
+                    (
+                        0,
+                        0,
+                        {
+                            "portal_name": "Housing.com",
+                            "portal_listing_id": f"HSG2_{cls.suffix}",
+                            "listing_label": f"Housing.com | HSG2_{cls.suffix}",
+                            "active": True,
+                        },
+                    ),
+                    (
+                        0,
+                        0,
+                        {
+                            "portal_name": "99acres",
+                            "portal_listing_id": f"99A2_{cls.suffix}",
+                            "listing_label": f"99acres | 99A2_{cls.suffix}",
+                            "active": True,
+                        },
+                    ),
+                    (
+                        0,
+                        0,
+                        {
+                            "portal_name": "OLX",
+                            "portal_listing_id": f"OLX2_{cls.suffix}",
+                            "listing_label": f"OLX | OLX2_{cls.suffix}",
+                            "active": True,
+                        },
+                    ),
+                ],
             },
         )
 
@@ -69,10 +107,48 @@ class TestSellerSummaryAPI(PortalLeadTestCase):
                 "rm_user_id": cls.rm_user.id,
                 "is_active": True,
                 "owner_phone": "9876543210",
-                "magicbricks_id": f"MB3_{cls.suffix}",
-                "housing_id": f"HSG3_{cls.suffix}",
-                "ninety_nine_acres_id": f"99A3_{cls.suffix}",
-                "olx_id": f"OLX3_{cls.suffix}",
+                "portal_listing_ids": [
+                    (
+                        0,
+                        0,
+                        {
+                            "portal_name": "MagicBricks",
+                            "portal_listing_id": f"MB3_{cls.suffix}",
+                            "listing_label": f"MagicBricks | MB3_{cls.suffix}",
+                            "active": True,
+                        },
+                    ),
+                    (
+                        0,
+                        0,
+                        {
+                            "portal_name": "Housing.com",
+                            "portal_listing_id": f"HSG3_{cls.suffix}",
+                            "listing_label": f"Housing.com | HSG3_{cls.suffix}",
+                            "active": True,
+                        },
+                    ),
+                    (
+                        0,
+                        0,
+                        {
+                            "portal_name": "99acres",
+                            "portal_listing_id": f"99A3_{cls.suffix}",
+                            "listing_label": f"99acres | 99A3_{cls.suffix}",
+                            "active": True,
+                        },
+                    ),
+                    (
+                        0,
+                        0,
+                        {
+                            "portal_name": "OLX",
+                            "portal_listing_id": f"OLX3_{cls.suffix}",
+                            "listing_label": f"OLX | OLX3_{cls.suffix}",
+                            "active": True,
+                        },
+                    ),
+                ],
             },
         )
 

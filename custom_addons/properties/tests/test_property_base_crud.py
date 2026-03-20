@@ -79,17 +79,61 @@ class TestPropertyBaseCRUD(PropertyBaseTestCase):
         """PROP-2.3/2.4 manager-editable fields should be stored correctly."""
         prop = self.make_property(
             property_tag="PREMIUM",
-            ninety_nine_acres_id="99AC-001",
-            housing_id="HSG-002",
-            magicbricks_id="MB-003",
-            olx_id="OLX-004",
+            portal_listing_ids=[
+                (
+                    0,
+                    0,
+                    {
+                        "portal_name": "99acres",
+                        "portal_listing_id": "99AC-001",
+                        "listing_label": "99acres | 99AC-001",
+                        "active": True,
+                    },
+                ),
+                (
+                    0,
+                    0,
+                    {
+                        "portal_name": "Housing.com",
+                        "portal_listing_id": "HSG-002",
+                        "listing_label": "Housing.com | HSG-002",
+                        "active": True,
+                    },
+                ),
+                (
+                    0,
+                    0,
+                    {
+                        "portal_name": "MagicBricks",
+                        "portal_listing_id": "MB-003",
+                        "listing_label": "MagicBricks | MB-003",
+                        "active": True,
+                    },
+                ),
+                (
+                    0,
+                    0,
+                    {
+                        "portal_name": "OLX",
+                        "portal_listing_id": "OLX-004",
+                        "listing_label": "OLX | OLX-004",
+                        "active": True,
+                    },
+                ),
+            ],
         )
 
         self.assertEqual(prop.property_tag, "PREMIUM")
-        self.assertEqual(prop.ninety_nine_acres_id, "99AC-001")
-        self.assertEqual(prop.housing_id, "HSG-002")
-        self.assertEqual(prop.magicbricks_id, "MB-003")
-        self.assertEqual(prop.olx_id, "OLX-004")
+        self.assertEqual(len(prop.portal_listing_ids), 4)
+
+        by_portal = {
+            rec.portal_name: rec.portal_listing_id
+            for rec in prop.portal_listing_ids
+        }
+        self.assertEqual(by_portal["99acres"], "99AC-001")
+        self.assertEqual(by_portal["Housing.com"], "HSG-002")
+        self.assertEqual(by_portal["MagicBricks"], "MB-003")
+        self.assertEqual(by_portal["OLX"], "OLX-004")
 
     def test_04_create_assigns_rm_user(self):
         """Many2one rm_user_id should be correctly linked."""

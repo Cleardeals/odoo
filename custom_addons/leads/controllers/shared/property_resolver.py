@@ -83,7 +83,7 @@ def get_property_tags(env, phone_10: str) -> list[str]:
 
 def get_primary_leads_for_tags(env, property_tags: list[str]):
     """
-    Return all leads.new records whose property_id.property_tag is in the
+    Return all leads.new records whose property_base_id.property_tag is in the
     given list. These are the *primary* inquiries on the seller's properties.
 
     Parameters

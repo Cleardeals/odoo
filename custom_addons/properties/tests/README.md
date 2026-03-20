@@ -254,7 +254,7 @@ The authentication gateway called by every API controller before any database ac
 | # | Test Name | Description |
 |---|---|---|
 | 32 | `test_32_each_result_has_id_and_name` | Every result object contains at minimum `id` and `name` |
-| 33 | `test_33_pages_calculated_correctly` | `pages` equals `ceil(total / page_size)` |
+| 33 | `test_33_pages_calculation_is_ceiling_division` | `pages` equals `ceil(total / page_size)` |
 
 ---
 
@@ -268,7 +268,7 @@ Covers two classes in one file.
 
 **Fixture**: One property with `uuid="get-test-uuid-001"`, `prop_id="GETPROP001"`, `owner_phone="9876543210"`.
 
-The controller resolves `<identifier>` through a priority chain: integer id → uuid → prop_id → owner_phone (LIKE).
+The controller resolves `<identifier>` through a priority chain: integer id → uuid → prop_id → owner_phone (LIKE for phone-like values only).
 
 | # | Test Name | Description |
 |---|---|---|
@@ -331,7 +331,7 @@ The controller resolves `<identifier>` through a priority chain: integer id → 
 | 14 | `test_14_rm_user_id_accepted_as_integer_fk` | `rm_user_id` as integer FK is accepted and linked |
 | 15 | `test_15_boolean_fields_accepted` | `for_sell` and `is_active` booleans round-trip correctly |
 | 16 | `test_16_date_fields_accepted_as_iso_strings` | ISO date strings for `service_expiry_date` / `welcome_call_date` are stored |
-| 17 | `test_17_portal_id_fields_accepted` | Portal ID fields (`ninety_nine_acres_id`, `housing_id`, `magicbricks_id`, `olx_id`) are stored |
+| 17 | `test_17_portal_listings_accepted` | `portal_listings` payload creates related `property.portal.listing` rows (including inactive entries, asserted with `active_test=False`) |
 | 18 | `test_18_unknown_fields_ignored_and_reported` | Fields not in the allow-list do not cause errors; appear in `_ignored_fields` |
 | 19 | `test_19_valid_and_unknown_fields_mixed` | Mix of valid and unknown: valid ones saved, unknown ones reported |
 | 20 | `test_20_payload_with_only_unknown_fields_returns_422` | Payload whose every field is unknown → 422 |
@@ -582,7 +582,7 @@ Format: `"N BHK"` for N > 0; `""` for N ≤ 0.
 |---|---|---|
 | 01 | `test_01_create_with_minimum_fields` | Record created with only `name` gets a database id |
 | 02 | `test_02_create_with_all_api_sourced_fields` | All API-sourced fields (PROP-2.1) are stored verbatim |
-| 03 | `test_03_create_with_manager_editable_fields` | Portal ID and tag fields (PROP-2.3/2.4) are stored correctly |
+| 03 | `test_03_create_with_manager_editable_fields` | `property_tag` and relation-based portal listings (PROP-2.3/2.4) are stored correctly |
 | 04 | `test_04_create_assigns_rm_user` | Many2one `rm_user_id` is correctly linked |
 | 05 | `test_05_default_is_active_true` | Default value for `is_active` is `True` |
 | 06 | `test_06_default_inventory_migrated_false` | Default value for `inventory_migrated` is `False` |
@@ -820,7 +820,7 @@ The `<identifier>` path parameter in GET, PATCH, and DELETE endpoints is resolve
 1. **Integer id** — if the string is all digits, attempt `browse(int(identifier)).exists()`
 2. **UUID** — exact match on `uuid` field
 3. **prop_id** — exact match on `prop_id` field
-4. **owner_phone** — LIKE match within the `owner_phone` field (supports space-separated multi-number values)
+4. **owner_phone** — LIKE match within the `owner_phone` field (supports space-separated multi-number values), only when the normalized identifier is numeric and at least 10 digits
 
 This is tested both at the controller level (integration) and at the `_resolve_identifier` unit level, giving confidence from both directions.
 

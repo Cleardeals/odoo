@@ -55,10 +55,32 @@ class PortalLeadTestCase(TransactionCase):
             'city': 'Test City',
             'rm_user_id': cls.rm_user.id,
             'is_active': True,
-            'magicbricks_id': cls.mb_id,
-            'housing_id': cls.hsg_id,
-            'ninety_nine_acres_id': cls.acres_id,
-            'olx_id': cls.olx_id,
+            'portal_listing_ids': [
+                (0, 0, {
+                    'portal_name': 'MagicBricks',
+                    'portal_listing_id': cls.mb_id,
+                    'listing_label': f'MagicBricks | {cls.mb_id}',
+                    'active': True,
+                }),
+                (0, 0, {
+                    'portal_name': 'Housing.com',
+                    'portal_listing_id': cls.hsg_id,
+                    'listing_label': f'Housing.com | {cls.hsg_id}',
+                    'active': True,
+                }),
+                (0, 0, {
+                    'portal_name': '99acres',
+                    'portal_listing_id': cls.acres_id,
+                    'listing_label': f'99acres | {cls.acres_id}',
+                    'active': True,
+                }),
+                (0, 0, {
+                    'portal_name': 'OLX',
+                    'portal_listing_id': cls.olx_id,
+                    'listing_label': f'OLX | {cls.olx_id}',
+                    'active': True,
+                }),
+            ],
         })
 
     def create_portal_lead(self, **kwargs):
