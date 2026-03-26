@@ -1,3 +1,5 @@
 id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
 access_property_base_manager,property.base manager,model_property_base,properties.group_property_manager,1,1,1,1
 access_property_base_rm,property.base rm,model_property_base,properties.group_property_rm,1,0,0,0
+access_property_portal_listing_manager,property.portal.listing manager,model_property_portal_listing,properties.group_property_manager,1,1,1,1
+access_property_portal_listing_rm,property.portal.listing rm,model_property_portal_listing,properties.group_property_rm,1,0,0,0

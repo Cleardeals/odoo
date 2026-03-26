@@ -118,7 +118,8 @@ class TestPropertyBaseWrite(PropertyBaseTestCase):
     def test_10_clearing_expiry_date_leaves_is_active_unchanged(self):
         """Setting service_expiry_date=False should not trigger auto-sync."""
         prop = self.make_property(
-            is_active=True, service_expiry_date=date.today() + timedelta(days=10)
+            is_active=True,
+            service_expiry_date=date.today() + timedelta(days=10),
         )
         prop.write({"service_expiry_date": False})
         # is_active untouched because expiry_val is falsy

@@ -117,7 +117,7 @@ pytest custom_addons/leads/tests/ -v --odoo-database=<database_name>
 | `cls.naresh_user` | `res.users` | Fallback user for Housing.com/OLX/unknown portal leads |
 | `cls.pratham_user` | `res.users` | Default RM for 99acres leads when property not found |
 | `cls.mayuri_user` | `res.users` | Default RM for MagicBricks leads when property not found |
-| `cls.test_property` | `property.inventory` | Test property with multiple portal IDs |
+| `cls.test_property` | `property.base` | Test property with multiple portal listings (`portal_listing_ids`) |
 | `cls.mb_id` | `str` | Dynamic MagicBricks property ID |
 | `cls.hsg_id` | `str` | Dynamic Housing.com property ID |
 | `cls.acres_id` | `str` | Dynamic 99acres property ID |
@@ -231,12 +231,17 @@ def create_portal_lead(self, **kwargs):
 ```
 DUPLICATE if ALL conditions met:
 ├── Same phone number (standardized)
-├── Same portal_property_id
+├── Same resolved `property_base_id` (from `property.portal.listing`)
+└── Created within last 30 days
+
+Fallback duplicate key (only when portal mapping is missing):
+├── Same phone number
+├── Same portal_name + portal_property_id
 └── Created within last 30 days
 
 NOT DUPLICATE if ANY:
 ├── Different phone number
-├── Different portal_property_id
+├── Different resolved property (or different portal tuple in fallback mode)
 └── More than 30 days old
 ```
 
@@ -286,12 +291,15 @@ NOT DUPLICATE if ANY:
 #### Property Matching Logic:
 
 ```python
-Portal Name          → Property Field Searched
-─────────────────────────────────────────────
-'MagicBricks'        → magicbricks_id
-'Housing.com'        → housing_id
-'99acres'            → ninety_nine_acres_id
-'OLX'                → olx_id
+Portal Name          → `property.portal.listing.portal_name`
+────────────────────────────────────────────────────────────
+'MagicBricks'        → 'MagicBricks'
+'Housing.com'        → 'Housing.com'
+'99acres'            → '99acres'
+'OLX'                → 'OLX'
+
+Lookup key used by lead processing:
+- `portal_property_id` → `property.portal.listing.portal_listing_id`
 ```
 
 #### Fallback RM Assignment (When Property Not Found):

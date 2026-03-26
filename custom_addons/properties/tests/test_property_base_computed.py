@@ -31,7 +31,8 @@ class TestBuildPropertyLink(PropertyBaseTestCase):
     def test_01_normal_ascii_name(self):
         result = build_property_link("Aaryan City", "GBH75X0K")
         self.assertEqual(
-            result, "https://www.cleardeals.in/property/aaryan-city-GBH75X0K"
+            result,
+            "https://www.cleardeals.in/property/aaryan-city-GBH75X0K",
         )
 
     def test_02_name_with_special_characters(self):

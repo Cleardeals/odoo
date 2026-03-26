@@ -161,15 +161,72 @@
 
                     <!-- Tabs -->
                     <notebook>
-                        <!-- Portal IDs — manager-only -->
-                        <page string="Portal IDs"
+                        <page string="Portal Listings"
                               groups="properties.group_property_manager">
-                            <group>
-                                <field name="property_tag"/>
-                                <field name="ninety_nine_acres_id"/>
-                                <field name="housing_id"/>
-                                <field name="magicbricks_id"/>
-                                <field name="olx_id"/>
+                            <group col="1">
+                                <separator string="99ACRES"/>
+                                <field name="portal_listing_99acres_ids"
+                                       context="{'default_portal_name': '99acres'}"
+                                       add-label="Add a portal ID"
+                                       nolabel="1">
+                                    <list editable="bottom" string="99acres Listings" class="table table-sm table-bordered">
+                                        <field name="portal_name" readonly="1" force_save="1" width="20%"/>
+                                        <field name="portal_listing_id" string="Portal Listing ID" width="30%"/>
+                                        <field name="listing_label" width="40%" placeholder="Example: GBH75X0K | B-505, Green Heights | 19684263"/>
+                                        <field name="active" string="Active" width="10%"/>
+                                        <control>
+                                            <create string="Add a portal ID"/>
+                                        </control>
+                                    </list>
+                                </field>
+
+                                <separator string="HOUSING.COM"/>
+                                <field name="portal_listing_housing_ids"
+                                       context="{'default_portal_name': 'Housing.com'}"
+                                       add-label="Add a portal ID"
+                                       nolabel="1">
+                                    <list editable="bottom" string="Housing.com Listings" class="table table-sm table-bordered">
+                                        <field name="portal_name" readonly="1" force_save="1" width="20%"/>
+                                        <field name="portal_listing_id" string="Portal Listing ID" width="30%"/>
+                                        <field name="listing_label" width="40%" placeholder="Example: GBH75X0K | B-505, Green Heights | 19684263"/>
+                                        <field name="active" string="Active" width="10%"/>
+                                        <control>
+                                            <create string="Add a portal ID"/>
+                                        </control>
+                                    </list>
+                                </field>
+
+                                <separator string="MAGICBRICKS"/>
+                                <field name="portal_listing_magicbricks_ids"
+                                       context="{'default_portal_name': 'MagicBricks'}"
+                                       add-label="Add a portal ID"
+                                       nolabel="1">
+                                    <list editable="bottom" string="MagicBricks Listings" class="table table-sm table-bordered">
+                                        <field name="portal_name" readonly="1" force_save="1" width="20%"/>
+                                        <field name="portal_listing_id" string="Portal Listing ID" width="30%"/>
+                                        <field name="listing_label" width="40%" placeholder="Example: GBH75X0K | B-505, Green Heights | 19684263"/>
+                                        <field name="active" string="Active" width="10%"/>
+                                        <control>
+                                            <create string="Add a portal ID"/>
+                                        </control>
+                                    </list>
+                                </field>
+
+                                <separator string="OLX"/>
+                                <field name="portal_listing_olx_ids"
+                                       context="{'default_portal_name': 'OLX'}"
+                                       add-label="Add a portal ID"
+                                       nolabel="1">
+                                    <list editable="bottom" string="OLX Listings" class="table table-sm table-bordered">
+                                        <field name="portal_name" readonly="1" force_save="1" width="20%"/>
+                                        <field name="portal_listing_id" string="Portal Listing ID" width="30%"/>
+                                        <field name="listing_label" width="40%" placeholder="Example: GBH75X0K | B-505, Green Heights | 19684263"/>
+                                        <field name="active" string="Active" width="10%"/>
+                                        <control>
+                                            <create string="Add a portal ID"/>
+                                        </control>
+                                    </list>
+                                </field>
                             </group>
                         </page>
 
@@ -212,10 +269,6 @@
                 <field name="city"/>
                 <field name="location"/>
                 <field name="rm_user_id"           string="RM"/>
-                <field name="ninety_nine_acres_id" string="99acres ID"/>
-                <field name="housing_id"/>
-                <field name="magicbricks_id"/>
-                <field name="olx_id"/>
 
                 <!-- Quick filters -->
                 <filter name="is_new"

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+import requests
+
 from odoo.tests import tagged
 from unittest.mock import patch, MagicMock
 from .test_portal_common import PortalLeadTestCase
@@ -57,7 +59,7 @@ class TestPortalLeadAPI(PortalLeadTestCase):
     @patch('requests.get')
     def test_03_housing_api_error(self, mock_get):
         """Should handle HTTP/Connection errors gracefully (return empty list)."""
-        mock_get.side_effect = Exception("Connection Refused")
+        mock_get.side_effect = requests.exceptions.ConnectionError("Connection Refused")
         
         leads = self.env['leads.new']._api_fetch_housing()
         self.assertEqual(len(leads), 0)

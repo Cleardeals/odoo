@@ -18,7 +18,6 @@ class LeadImportWizard(models.TransientModel):
     _name = "lead.csv.import.wizard"
     _description = "Lead Import Wizard (Multi-File)"
 
-    # CHANGED: Replaced single file field with Many2many to ir.attachment
     file_ids = fields.Many2many(
         "ir.attachment",
         string="Upload Files",
@@ -40,7 +39,6 @@ class LeadImportWizard(models.TransientModel):
         property_cache = {}
 
         LeadsNew = self.env["leads.new"]
-        PropertyInv = self.env["property.base"]
 
         COLUMN_MAPPING = {
             "name": "Name",
@@ -166,9 +164,9 @@ class LeadImportWizard(models.TransientModel):
                         if olx_id in property_cache:
                             prop = property_cache[olx_id]
                         else:
-                            prop = PropertyInv.search(
-                                [("olx_id", "=", olx_id)],
-                                limit=1,
+                            prop = LeadsNew._resolve_property_from_portal(
+                                "OLX",
+                                olx_id,
                             )
                             # Cache both hits AND misses (empty recordset) to
                             # avoid a repeated DB query for the same olx_id.
@@ -185,10 +183,10 @@ class LeadImportWizard(models.TransientModel):
                                 process_notes = f"Source: {attachment.name}. Matched Property {prop.name}, no RM."
                         else:
                             state = "new"
-                            process_notes = f"Source: {attachment.name}. Property ID '{olx_id}' not found."
+                            process_notes = f"Source: {attachment.name}. Portal Listing ID '{olx_id}' not found."
                     else:
                         state = "new"
-                        process_notes = f"Source: {attachment.name}. No Inventory ID."
+                        process_notes = f"Source: {attachment.name}. No Portal Listing ID."
 
                     # Create Lead
                     create_vals = {

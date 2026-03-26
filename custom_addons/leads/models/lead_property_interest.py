@@ -31,13 +31,6 @@ class LeadPropertyInterest(models.Model):
         required=True,
     )
 
-    # Keeps pointing to property.inventory — matches the existing DB column (legacy data).
-    # Never change this comodel without a proper DB migration.
-    property_id = fields.Many2one(
-        "property.inventory",
-        string="Property (Legacy)",
-    )
-
     # NEW field — links to the canonical property.base model.
     # Populated going forward; backfilled via the Lead Property Migration Wizard.
     property_base_id = fields.Many2one(
@@ -45,6 +38,7 @@ class LeadPropertyInterest(models.Model):
         string="Property",
         copy=False,
         index=True,
+        context={'search_all_properties_for_lead': True},
     )
 
     # The models own status pipelines
@@ -83,39 +77,6 @@ class LeadPropertyInterest(models.Model):
         string="Site Visit Date (Recommended Property)",
         compute="_compute_site_visit_date_only",
         store=True,  # Essential for filtering
-        readonly=True,
-    )
-
-    # # We link to the RM of the property for the security rules
-    # property_rm_user_id = fields.Many2one(
-    #     related='property_id.rm_user_id',
-    #     store=True,
-    #     readonly=True,
-    #     string="Property's RM"
-    # )
-
-    # Legacy related fields — sourced from property.inventory (property_id)
-    property_bhk = fields.Char(
-        related="property_id.bhk",
-        string="Property BHK (Legacy)",
-        readonly=True,
-        store=True,
-    )
-    property_location = fields.Char(
-        related="property_id.location",
-        string="Property Location (Legacy)",
-        readonly=True,
-        store=True,
-    )
-    property_city = fields.Char(
-        related="property_id.city",
-        string="Property City (Legacy)",
-        readonly=True,
-        store=True,
-    )
-    property_link = fields.Char(
-        related="property_id.property_link",
-        string="Property Link (Legacy)",
         readonly=True,
     )
 

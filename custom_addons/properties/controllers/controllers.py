@@ -65,10 +65,7 @@ _ALLOWED_CREATE_FIELDS = {
     "bedroom_count",
     "gmaps_url",
     "property_tag",
-    "ninety_nine_acres_id",
-    "housing_id",
-    "magicbricks_id",
-    "olx_id",
+    "portal_listings",  # list[dict] handled separately
     "service_expiry_date",
     "welcome_call_date",
     "is_active",
@@ -77,6 +74,15 @@ _ALLOWED_CREATE_FIELDS = {
 # Fields the caller may supply when *updating* a property (PATCH).
 # Computed / readonly-by-design fields are excluded.
 _ALLOWED_UPDATE_FIELDS = _ALLOWED_CREATE_FIELDS.copy()
+
+_PORTAL_NAME_MAP = {
+    "99acres": "99acres",
+    "housing.com": "Housing.com",
+    "housing": "Housing.com",
+    "magicbricks": "MagicBricks",
+    "magicbricks.com": "MagicBricks",
+    "olx": "OLX",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -125,6 +131,83 @@ def _sanitise_fields(payload: dict, allowed: set) -> tuple:
     return clean, ignored
 
 
+def _normalise_portal_name(raw_name):
+    if raw_name is None:
+        return None
+    return _PORTAL_NAME_MAP.get(str(raw_name).strip().lower())
+
+
+def _sanitise_portal_listings(portal_listings):
+    """
+    Validate and normalize portal listing payload.
+
+    Expected shape:
+      [
+        {
+          "portal_name": "99acres|Housing.com|MagicBricks|OLX",
+          "portal_listing_id": "...",
+          "listing_label": "..." (optional),
+          "active": true|false (optional, default true),
+        },
+      ]
+    """
+    if portal_listings is None:
+        return None, None
+
+    if not isinstance(portal_listings, list):
+        return None, error_response(
+            422,
+            "Field 'portal_listings' must be a JSON array.",
+        )
+
+    clean = []
+    for idx, item in enumerate(portal_listings, start=1):
+        if not isinstance(item, dict):
+            return None, error_response(
+                422,
+                f"portal_listings[{idx}] must be an object.",
+            )
+
+        canonical_portal = _normalise_portal_name(item.get("portal_name"))
+        if not canonical_portal:
+            return None, error_response(
+                422,
+                f"portal_listings[{idx}].portal_name is invalid.",
+            )
+
+        portal_listing_id = (item.get("portal_listing_id") or "").strip()
+        if not portal_listing_id:
+            return None, error_response(
+                422,
+                f"portal_listings[{idx}].portal_listing_id is required.",
+            )
+
+        clean.append(
+            {
+                "portal_name": canonical_portal,
+                "portal_listing_id": portal_listing_id,
+                "listing_label": item.get("listing_label") or False,
+                "active": bool(item.get("active", True)),
+            },
+        )
+
+    return clean, None
+
+
+def _replace_portal_listings(record, portal_listings_clean):
+    """Replace all portal listings on a property with the provided list."""
+    if portal_listings_clean is None:
+        return
+
+    listing_model = request.env["property.portal.listing"].sudo()
+    record.sudo().portal_listing_ids.unlink()
+
+    for item in portal_listings_clean:
+        values = dict(item)
+        values["property_base_id"] = record.id
+        listing_model.create(values)
+
+
 def _resolve_identifier(env, identifier: str):
     """
     Look up a ``property.base`` record by *identifier*, trying four
@@ -158,7 +241,10 @@ def _resolve_identifier(env, identifier: str):
     # Strategy 4: owner_phone
     # owner_phone may hold multiple numbers in one string (e.g. "9033870424 8735999816"),
     # so use 'like' to match any record whose phone field contains the supplied number.
-    if identifier.replace("+", "").replace("-", "").replace(" ", "").isdigit():
+    # Guard against accidental matches for short numeric identifiers that are intended
+    # as database IDs (e.g., deleting id "398" should not match owner_phone "...398...").
+    normalized_phone = identifier.replace("+", "").replace("-", "").replace(" ", "")
+    if normalized_phone.isdigit() and len(normalized_phone) >= 10:
         rec = Model.search([("owner_phone", "like", identifier)], limit=1)
         if rec:
             return rec
@@ -202,6 +288,8 @@ class PropertyApiController(http.Controller):
         prop_id     str     Exact short-code match.
         form_no     str     Exact form number match.
         owner_phone str     Exact owner phone match.
+        portal_name str     Portal source filter (99acres / Housing.com / MagicBricks / OLX).
+        portal_listing_id str Exact portal listing ID via property.portal.listing relation.
         search      str     ilike match against property name.
         """
         ok, err = validate_api_key(request)
@@ -248,6 +336,19 @@ class PropertyApiController(http.Controller):
         phone_filter = params.get("owner_phone")
         if phone_filter:
             domain.append(("owner_phone", "like", phone_filter))
+
+        portal_name = params.get("portal_name")
+        if portal_name:
+            canonical_portal = _normalise_portal_name(portal_name)
+            if not canonical_portal:
+                return error_response(400, "Invalid 'portal_name' filter value.")
+            domain.append(("portal_listing_ids.portal_name", "=", canonical_portal))
+
+        portal_listing_id = params.get("portal_listing_id")
+        if portal_listing_id:
+            domain.append(
+                ("portal_listing_ids.portal_listing_id", "=", portal_listing_id.strip())
+            )
 
         search_term = params.get("search")
         if search_term:
@@ -333,6 +434,11 @@ class PropertyApiController(http.Controller):
             return err
 
         vals, ignored = _sanitise_fields(payload, _ALLOWED_CREATE_FIELDS)
+        portal_listings_clean, err = _sanitise_portal_listings(
+            vals.pop("portal_listings", None),
+        )
+        if err:
+            return err
 
         if not vals:
             return error_response(422, "No valid fields supplied in the request body.")
@@ -343,6 +449,7 @@ class PropertyApiController(http.Controller):
 
         try:
             record = request.env["property.base"].sudo().create(vals)
+            _replace_portal_listings(record, portal_listings_clean)
         except Exception as exc:
             _logger.exception("Properties API: error creating property")
             return error_response(500, f"Failed to create property: {exc}")
@@ -393,12 +500,19 @@ class PropertyApiController(http.Controller):
             return err
 
         vals, ignored = _sanitise_fields(payload, _ALLOWED_UPDATE_FIELDS)
+        portal_listings_clean, err = _sanitise_portal_listings(
+            vals.pop("portal_listings", None),
+        )
+        if err:
+            return err
 
-        if not vals:
+        if not vals and portal_listings_clean is None:
             return error_response(422, "No valid fields supplied for update.")
 
         try:
-            record.sudo().write(vals)
+            if vals:
+                record.sudo().write(vals)
+            _replace_portal_listings(record, portal_listings_clean)
         except Exception as exc:
             _logger.exception(
                 "Properties API: error updating property id=%s",

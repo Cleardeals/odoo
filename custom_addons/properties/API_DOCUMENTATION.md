@@ -1,6 +1,6 @@
 # Properties Module — REST API Documentation
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Base URL:** `https://odoo.cleardeals.xyz/api/v1/properties`
 **Data Format:** `application/json` (request and response)
 **Authentication:** API Key via HTTP header
@@ -201,10 +201,8 @@ All endpoints that return a property return the following JSON object shape.
 | Field | Type | Description |
 |-------|------|-------------|
 | `property_tag` | `string \| null` | Short display tag used in the lead-suggestor pipeline. |
-| `ninety_nine_acres_id` | `string \| null` | Listing ID on 99acres. |
-| `housing_id` | `string \| null` | Listing ID on Housing.com. |
-| `magicbricks_id` | `string \| null` | Listing ID on Magicbricks. |
-| `olx_id` | `string \| null` | Listing ID on OLX. |
+| `portal_listings` | `array<object>` | Canonical multi-listing structure from `property.portal.listing`. Each item has `id`, `portal_name`, `portal_listing_id`, `listing_label`, `active`. |
+| `legacy_portal_ids` | `object` | Backward-visibility only. Contains old fields `ninety_nine_acres_id`, `housing_id`, `magicbricks_id`, `olx_id`. |
 
 #### Dates
 
@@ -256,13 +254,33 @@ The following fields are accepted in request bodies. All fields are optional for
 | `bedroom_count` | `integer` | Number of bedrooms. |
 | `gmaps_url` | `string` | Google Maps embed URL. |
 | `property_tag` | `string` | Short display tag. |
-| `ninety_nine_acres_id` | `string` | 99acres listing ID. |
-| `housing_id` | `string` | Housing.com listing ID. |
-| `magicbricks_id` | `string` | Magicbricks listing ID. |
-| `olx_id` | `string` | OLX listing ID. |
+| `portal_listings` | `array<object>` | Canonical relation payload. Replaces legacy single portal-id fields for writes. |
 | `service_expiry_date` | `string` | ISO-8601 date. Updates `is_active` automatically. |
 | `welcome_call_date` | `string` | ISO-8601 date. |
 | `is_active` | `boolean` | Manually override active/inactive status. |
+
+#### portal_listings payload shape
+
+```json
+[
+  {
+    "portal_name": "99acres",
+    "portal_listing_id": "T89400543",
+    "listing_label": "W36TK04R | 99acres | T89400543",
+    "active": true
+  },
+  {
+    "portal_name": "Housing.com",
+    "portal_listing_id": "19684263",
+    "listing_label": "W36TK04R | Housing.com | 19684263",
+    "active": true
+  }
+]
+```
+
+Allowed values for `portal_name`: `99acres`, `Housing.com`, `MagicBricks`, `OLX`.
+
+On `PATCH`, if `portal_listings` is supplied, the API **replaces** all existing portal listings on that property with the provided array.
 
 > Any field not in the table above is silently discarded and reported in `_ignored_fields`.
 
@@ -297,6 +315,8 @@ X-API-Key: <key>
 | `prop_id` | `string` | — | Exact short-code match. |
 | `form_no` | `string` | — | Exact form number match. |
 | `owner_phone` | `string` | — | Substring match against owner phone field. |
+| `portal_name` | `string` | — | Portal source filter via relation (`99acres`, `Housing.com`, `MagicBricks`, `OLX`). |
+| `portal_listing_id` | `string` | — | Exact portal listing ID filter via relation table. |
 | `search` | `string` | — | Case-insensitive substring search against property `name`. |
 
 Multiple filters are combined with logical `AND`.
@@ -337,10 +357,28 @@ Multiple filters are combined with logical `AND`.
         "property_link": "https://www.cleardeals.in/property/aaryan-city-GBH75X0K",
         "gmaps_url": "https://maps.google.com/embed?...",
         "property_tag": "Premium",
-        "ninety_nine_acres_id": null,
-        "housing_id": null,
-        "magicbricks_id": null,
-        "olx_id": null,
+        "portal_listings": [
+          {
+            "id": 11,
+            "portal_name": "99acres",
+            "portal_listing_id": "T89400543",
+            "listing_label": "W36TK04R | 99acres | T89400543",
+            "active": true
+          },
+          {
+            "id": 12,
+            "portal_name": "Housing.com",
+            "portal_listing_id": "19684263",
+            "listing_label": "W36TK04R | Housing.com | 19684263",
+            "active": true
+          }
+        ],
+        "legacy_portal_ids": {
+          "ninety_nine_acres_id": null,
+          "housing_id": null,
+          "magicbricks_id": null,
+          "olx_id": null
+        },
         "service_expiry_date": "2026-12-31",
         "welcome_call_date": "2025-11-22",
         "is_active": true,
@@ -436,6 +474,20 @@ Content-Type: application/json
   "owner_phone": "9033870424 8735999816",
   "owner_email": "raghuvendrarao379@gmail.com",
   "rm_user_id": 7,
+  "portal_listings": [
+    {
+      "portal_name": "99acres",
+      "portal_listing_id": "T89400543",
+      "listing_label": "W36TK04R | 99acres | T89400543",
+      "active": true
+    },
+    {
+      "portal_name": "Housing.com",
+      "portal_listing_id": "19684263",
+      "listing_label": "W36TK04R | Housing.com | 19684263",
+      "active": true
+    }
+  ],
   "service_expiry_date": "2026-12-31",
   "is_active": true
 }
@@ -495,7 +547,20 @@ Content-Type: application/json
   "pricing": 52.5,
   "pricing_unit": "lakh",
   "service_expiry_date": "2026-12-31",
-  "property_tag": "Premium"
+  "portal_listings": [
+    {
+      "portal_name": "99acres",
+      "portal_listing_id": "T89400543",
+      "listing_label": "W36TK04R | 99acres | T89400543",
+      "active": true
+    },
+    {
+      "portal_name": "MagicBricks",
+      "portal_listing_id": "MB-667788",
+      "listing_label": "W36TK04R | MagicBricks | MB-667788",
+      "active": true
+    }
+  ]
 }
 ```
 
@@ -688,6 +753,13 @@ curl -X GET "<HOST>/api/v1/properties?search=Aaryan" \
   -H "X-API-Key: <KEY>"
 ```
 
+### List — filter by portal source + listing ID
+
+```bash
+curl -X GET "<HOST>/api/v1/properties?portal_name=99acres&portal_listing_id=T89400543" \
+  -H "X-API-Key: <KEY>"
+```
+
 ### List — filter by owner phone (partial match)
 
 ```bash
@@ -746,12 +818,26 @@ curl -X PUT "<HOST>/api/v1/properties" \
     "owner_phone": "9033870424 8735999816",
     "owner_email": "raghuvendrarao379@gmail.com",
     "rm_user_id": 7,
+    "portal_listings": [
+      {
+        "portal_name": "99acres",
+        "portal_listing_id": "T89400543",
+        "listing_label": "W36TK04R | 99acres | T89400543",
+        "active": true
+      },
+      {
+        "portal_name": "Housing.com",
+        "portal_listing_id": "19684263",
+        "listing_label": "W36TK04R | Housing.com | 19684263",
+        "active": true
+      }
+    ],
     "service_expiry_date": "2026-12-31",
     "is_active": true
   }'
 ```
 
-### Update pricing and tag (PATCH by prop_id)
+### Update pricing and portal listings (PATCH by prop_id)
 
 ```bash
 curl -X PATCH "<HOST>/api/v1/properties/GBH75X0K" \
@@ -760,7 +846,20 @@ curl -X PATCH "<HOST>/api/v1/properties/GBH75X0K" \
   -d '{
     "pricing": 52.5,
     "pricing_unit": "lakh",
-    "property_tag": "Premium"
+    "portal_listings": [
+      {
+        "portal_name": "99acres",
+        "portal_listing_id": "T89400543",
+        "listing_label": "W36TK04R | 99acres | T89400543",
+        "active": true
+      },
+      {
+        "portal_name": "MagicBricks",
+        "portal_listing_id": "MB-667788",
+        "listing_label": "W36TK04R | MagicBricks | MB-667788",
+        "active": true
+      }
+    ]
   }'
 ```
 
@@ -798,4 +897,4 @@ curl -X DELETE "<HOST>/api/v1/properties/101" \
 
 ---
 
-*Documentation generated for Properties module v1.0.0 — Cleardeals Tech*
+*Documentation generated for Properties module v1.1.0 — Cleardeals Tech*

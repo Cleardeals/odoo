@@ -30,6 +30,7 @@ def _normalize_owner_phone(raw: str) -> str:
         return digits[2:]
     return raw  # unrecognised format — store as-is so data isn't lost
 
+
 # API endpoint for the Cleardeals property listing
 PROPERTY_API_URL = "https://api.cleardeals.cc/api/v1/properties"
 
