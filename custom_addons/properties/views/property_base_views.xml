@@ -161,18 +161,6 @@
 
                     <!-- Tabs -->
                     <notebook>
-                        <!-- Portal IDs — manager-only -->
-                        <page string="Portal IDs"
-                              groups="properties.group_property_manager">
-                            <group>
-                                <field name="property_tag"/>
-                                <field name="ninety_nine_acres_id"/>
-                                <field name="housing_id"/>
-                                <field name="magicbricks_id"/>
-                                <field name="olx_id"/>
-                            </group>
-                        </page>
-
                         <page string="Portal Listings"
                               groups="properties.group_property_manager">
                             <group col="1">
@@ -281,10 +269,6 @@
                 <field name="city"/>
                 <field name="location"/>
                 <field name="rm_user_id"           string="RM"/>
-                <field name="ninety_nine_acres_id" string="99acres ID"/>
-                <field name="housing_id"/>
-                <field name="magicbricks_id"/>
-                <field name="olx_id"/>
 
                 <!-- Quick filters -->
                 <filter name="is_new"
