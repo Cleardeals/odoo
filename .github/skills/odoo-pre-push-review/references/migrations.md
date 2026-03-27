@@ -3,11 +3,11 @@
 ## File naming
 
 Odoo looks for exactly two filenames inside each version folder:
-- `pre_migrate.py` — runs before the ORM applies changes
-- `post_migrate.py` — runs after the ORM applies changes
+- `pre-migrate.py` — runs before the ORM applies changes
+- `post-migrate.py` — runs after the ORM applies changes
 
 Any other filename is silently ignored. `migrate.py`, `migration.py`,
-`post_migrate.py.bak` — none of these run. The folder name must exactly
+`post-migrate.py.bak` — none of these run. The folder name must exactly
 match the version string (e.g. `19.0.1.3.0`), including all five segments.
 
 ## Pre vs post — when to use each
@@ -16,28 +16,28 @@ match the version string (e.g. `19.0.1.3.0`), including all five segments.
 Current DB state
       │
       ▼
-pre_migrate.py     ← old columns EXIST here. Rescue data before demolition.
+pr-_migrate.py     ← old columns EXIST here. Rescue data before demolition.
       │
       ▼
 ORM applies changes (adds/removes columns, creates tables)
       │
       ▼
-post_migrate.py    ← new structure is in place. Old columns may be GONE.
+post-migrate.py    ← new structure is in place. Old columns may be GONE.
 ```
 
-**Use pre_migrate for:**
+**Use -migrate for:**
 - Copying data from columns that are about to be removed
 - Renaming columns (before ORM tries to create the new name)
 - Seeding new tables from old data (new table exists, old columns exist)
 - Any operation that reads from columns the ORM will delete
 
-**Use post_migrate for:**
+**Use post-migrate for:**
 - Dropping legacy columns (after ORM no longer references them)
 - Recomputing stored fields on the new structure
 - Creating indexes on ORM-managed columns
 - Sending notifications or triggering recomputes
 
-**The classic mistake:** putting a DROP COLUMN in pre_migrate. The ORM
+**The classic mistake:** putting a DROP COLUMN in pre-migrate. The ORM
 then fails trying to manage a column that no longer exists.
 
 ## Idempotency patterns

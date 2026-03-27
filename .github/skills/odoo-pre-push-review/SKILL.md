@@ -67,10 +67,10 @@ Quick checklist:
 Read: `references/migrations.md` for detailed rules.
 
 Quick checklist:
-- File must be named `pre_migrate.py` or `post_migrate.py` — not `migrate.py`
+- File must be named `pre-migrate.py` or `post-migrate.py` — not `migrate.py`
   or any other name
-- Pre vs post placement: data rescue from columns being dropped → pre_migrate;
-  recompute stored fields / drop columns / create indexes on new ORM columns → post_migrate
+- Pre vs post placement: data rescue from columns being dropped → pre-migrate;
+  recompute stored fields / drop columns / create indexes on new ORM columns → post-migrate
 - Every INSERT must have `ON CONFLICT ... DO NOTHING` or equivalent
 - Every `ADD COLUMN` must use `IF NOT EXISTS`
 - Every `DROP COLUMN` must use `IF EXISTS`
