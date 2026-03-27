@@ -421,7 +421,7 @@ class PropertyBase(models.Model):
     # =========================================================================
 
     @api.model
-    def name_search(self, name='', domain=None, operator='ilike', limit=100):
+    def name_search(self, name="", domain=None, operator="ilike", limit=100):
         """
         When called from the leads/interest context (context flag
         'search_all_properties_for_lead'), bypass the RM-own record rule and
@@ -430,15 +430,16 @@ class PropertyBase(models.Model):
 
         Outside that context the default behaviour (and record rules) apply.
         """
-        if self.env.context.get('search_all_properties_for_lead'):
+        if self.env.context.get("search_all_properties_for_lead"):
             base_domain = list(domain or [])
             if name:
                 name_domain = [
-                    '|', '|', '|',
-                    ('property_tag', operator, name),
-                    ('olx_id', operator, name),
-                    ('location', operator, name),
-                    ('name', operator, name),
+                    "|",
+                    "|",
+                    "|",
+                    ("property_tag", operator, name),
+                    ("location", operator, name),
+                    ("name", operator, name),
                 ]
                 search_domain = name_domain + base_domain
             else:
