@@ -237,7 +237,7 @@
     </record>
 
         <record id="action_new_portal_lead" model="ir.actions.act_window">
-                <field name="name">Leads</field>
+            <field name="name">Leads</field>
                 <field name="res_model">leads.new</field>
                 <field name="view_mode">list,form</field>
                 <field name="help" type="html">
@@ -248,9 +248,9 @@
         </record>
 
         <menuitem id="menu_new_portal_lead"
-                            name="Leads"
+                            name=" Leads"
                             parent="leads.lead_score_menu_main"
                             action="action_new_portal_lead"
-                            sequence="10"
+                            sequence="5"
                             groups="leads.group_lead_score_rm"/>
 </odoo>

@@ -68,8 +68,9 @@ class LeadSource(models.Model):
     )
     default_rm_user_id = fields.Many2one(
         "res.users",
-        string="Default RM",
-        help="Fallback RM when a portal lead cannot be mapped to a property.",
+        string="Fallback RM",
+        domain="[(\"share\", \"=\", False)]",
+        help="Used when a portal lead cannot be matched to a property; the lead will be assigned to this RM.",
     )
 
     @api.constrains("source_type", "portal_code")

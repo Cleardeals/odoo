@@ -755,15 +755,24 @@ class NewPortalLead(models.Model):
                 )
 
                 rm_user = self.source_id.default_rm_user_id
+                fallback_hint = (
+                    "Set a Fallback RM in Leads > Lead Operations > Settings > Sources "
+                    "to route unmatched portal leads."
+                )
 
                 if not rm_user:
                     _logger.error(
-                        "No default RM configured for source '%s'. Assigning to Administrator.",
+                        "No fallback RM configured for source '%s'. Assigning to Administrator.",
                         source_name,
                     )
                     rm_user = self.env.ref("base.user_admin")
-
-                notes = f"{msg}\nAssigned to Default RM: {rm_user.name}.\n"
+                    notes = (
+                        f"{msg}\n"
+                        f"Assigned to Administrator because no Fallback RM is configured.\n"
+                        f"{fallback_hint}\n"
+                    )
+                else:
+                    notes = f"{msg}\nAssigned to Fallback RM: {rm_user.name}.\n"
 
             self.write(
                 {
