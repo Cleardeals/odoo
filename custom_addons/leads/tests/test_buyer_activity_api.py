@@ -67,7 +67,7 @@ class TestBuyerActivityAPI(PortalLeadTestCase):
         # ACT
         serialized = {
             "lead_name": lead.name or None,
-            "portal": lead.portal_name or None,
+            "source": lead.source_id.name or None,
             "inquiry_datetime": (
                 lead.create_date.isoformat() if lead.create_date else None
             ),
@@ -78,7 +78,7 @@ class TestBuyerActivityAPI(PortalLeadTestCase):
 
         # ASSERT
         self.assertEqual(serialized["lead_name"], "Ravi Shah")
-        self.assertEqual(serialized["portal"], "MagicBricks")
+        self.assertEqual(serialized["source"], "MagicBricks")
         self.assertEqual(serialized["current_status"], "site_visit_scheduled")
         self.assertTrue(serialized["has_property"])
         self.assertEqual(serialized["remarks"], "Wants east-facing flat")

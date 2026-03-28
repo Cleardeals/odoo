@@ -107,7 +107,7 @@ class TestSellerActivityAPI(PortalLeadTestCase):
             "lead_id": lead.id,
             "lead_name": lead.name or None,
             "lead_phone": lead.phone or None,
-            "portal": lead.portal_name or None,
+            "source": lead.source_id.name or None,
             "property_tag": lead.property_base_id.property_tag if lead.property_base_id else None,
             "property_bhk": lead.property_base_id.bhk if lead.property_base_id else None,
             "property_location": lead.property_base_id.location
@@ -122,7 +122,7 @@ class TestSellerActivityAPI(PortalLeadTestCase):
         self.assertEqual(serialized["type"], "primary")
         self.assertEqual(serialized["lead_name"], "Ravi Shah")
         self.assertEqual(serialized["lead_phone"], "9999999999")
-        self.assertEqual(serialized["portal"], "MagicBricks")
+        self.assertEqual(serialized["source"], "MagicBricks")
         self.assertEqual(serialized["property_tag"], self.test_property.property_tag)
         self.assertEqual(serialized["property_bhk"], "3 BHK")
         self.assertEqual(serialized["current_status"], "site_visit_scheduled")
@@ -206,7 +206,7 @@ class TestSellerActivityAPI(PortalLeadTestCase):
             "lead_id": parent_lead.id,
             "lead_name": parent_lead.name,
             "lead_phone": parent_lead.phone,
-            "portal": parent_lead.portal_name,
+            "source": parent_lead.source_id.name,
             "property_tag": interest.property_base_id.property_tag,
             "current_status": interest.current_status,
             "remarks": interest.remarks,
@@ -215,7 +215,7 @@ class TestSellerActivityAPI(PortalLeadTestCase):
         # ASSERT
         self.assertEqual(serialized["type"], "recommended")
         self.assertEqual(serialized["lead_name"], "Priya Patel")
-        self.assertEqual(serialized["portal"], "99acres")
+        self.assertEqual(serialized["source"], "99acres")
         self.assertEqual(serialized["property_tag"], self.test_property.property_tag)
         self.assertEqual(serialized["current_status"], "site_visit_done")
 
@@ -622,14 +622,14 @@ class TestSellerActivityAPI(PortalLeadTestCase):
             "lead_id": lead.id,
             "lead_name": lead.name,
             "lead_phone": lead.phone,
-            "portal": lead.portal_name,
+            "source": lead.source_id.name,
             "current_status": lead.current_status,
         }
 
         # ASSERT
         self.assertEqual(record["lead_name"], "Test Lead")
         self.assertEqual(record["lead_phone"], "9111111111")
-        self.assertEqual(record["portal"], "Housing.com")
+        self.assertEqual(record["source"], "Housing.com")
         self.assertEqual(record["current_status"], "site_visit_scheduled")
 
     def test_19_page_size_parameter_validation(self):

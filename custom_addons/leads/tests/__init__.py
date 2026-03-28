@@ -3,6 +3,7 @@ from . import (
     test_buyer_site_visits_api,
     test_lead_property_interest,
     test_lead_score,
+    test_lead_source,
     test_portal_common,
     test_portal_lead_api,
     test_portal_lead_cron,

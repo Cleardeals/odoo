@@ -425,7 +425,7 @@ class PropertyBase(models.Model):
         """
         When called from the leads/interest context (context flag
         'search_all_properties_for_lead'), bypass the RM-own record rule and
-        search across property_tag, olx_id, location, and name so any RM can
+        search across property_tag, location, and name so any RM can
         find and recommend any property.
 
         Outside that context the default behaviour (and record rules) apply.
@@ -434,7 +434,6 @@ class PropertyBase(models.Model):
             base_domain = list(domain or [])
             if name:
                 name_domain = [
-                    "|",
                     "|",
                     "|",
                     ("property_tag", operator, name),

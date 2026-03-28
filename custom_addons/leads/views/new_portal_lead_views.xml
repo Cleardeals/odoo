@@ -14,7 +14,7 @@
                 <field name="all_associated_properties" string="Property (Primary or Recommended)"/>
                 <field name="base_property_bhk" string="BHK"/>
                 <field name="base_property_city" string="City"/>
-                <field name="portal_name"/>
+                <field name="source_id"/>
                 <field name="current_status"/>
 
                 <separator/>
@@ -81,7 +81,7 @@
                         context="{'group_by': 'all_associated_properties'}"/>
 
                 <filter string="Main State"     name="groupby_state"  context="{'group_by': 'state'}"/>
-                <filter string="Portal"         name="groupby_portal" context="{'group_by': 'portal_name'}"/>
+                <filter string="Source"         name="groupby_source" context="{'group_by': 'source_id'}"/>
                 <filter string="Creation Date"  name="groupby_date"   context="{'group_by': 'create_date_only'}"/>
                 <filter string="Site Visit Date" name="groupby_visit" context="{'group_by': 'site_visit_date_only'}"/>
 
@@ -100,7 +100,7 @@
                     decoration-danger="state=='new'">
 
                 <field name="create_date"/>
-                <field name="portal_name"/>
+                <field name="source_id" string="Source"/>
                 <field name="name"/>
                 <field name="phone"/>
                 <button name="action_whatsapp_with_copy"
@@ -108,7 +108,6 @@
                     icon="fa-whatsapp"
                     title="Chat on WhatsApp (and copy message)"
                     invisible="phone_whatsapp_url == False"/>
-                <field name="portal_property_id"/>
                 <field name="property_base_id" string="Property"/>
                 <field name="user_id"/>
                 <field name="current_status"/>
@@ -161,7 +160,7 @@
         <field name="name">leads.new.form</field>
         <field name="model">leads.new</field>
         <field name="arch" type="xml">
-            <form string="New Portal Lead">
+            <form string="Lead">
                 <header>
                     <field name="state" widget="statusbar"
                            statusbar_visible="new,assigned,failed"
@@ -190,8 +189,8 @@
                             <field name="email"/>
                         </group>
                         <group>
-                            <field name="portal_name" readonly="1"/>
-                            <field name="portal_property_id" readonly="1"/>
+                            <field name="source_id" required="1"/>
+                            <field name="portal_property_id" invisible="source_type != 'portal'"/>
                             <field name="create_date" readonly="1"/>
                         </group>
                     </group>
@@ -237,21 +236,21 @@
         </field>
     </record>
 
-    <record id="action_new_portal_lead" model="ir.actions.act_window">
-        <field name="name">New Portal Leads</field>
-        <field name="res_model">leads.new</field>
-        <field name="view_mode">list,form</field>
-        <field name="help" type="html">
-          <p class="o_view_nocontent_smiling_face">
-            No new leads from portals... yet!
-          </p>
-        </field>
-    </record>
+        <record id="action_new_portal_lead" model="ir.actions.act_window">
+                <field name="name">Leads</field>
+                <field name="res_model">leads.new</field>
+                <field name="view_mode">list,form</field>
+                <field name="help" type="html">
+                    <p class="o_view_nocontent_smiling_face">
+                        No leads yet.
+                    </p>
+                </field>
+        </record>
 
-    <menuitem id="menu_new_portal_lead"
-              name="New Portal Leads"
-              parent="leads.lead_score_menu_main"
-              action="action_new_portal_lead"
-              sequence="10"
-              groups="leads.group_lead_score_rm"/>
+        <menuitem id="menu_new_portal_lead"
+                            name="Leads"
+                            parent="leads.lead_score_menu_main"
+                            action="action_new_portal_lead"
+                            sequence="10"
+                            groups="leads.group_lead_score_rm"/>
 </odoo>

@@ -8,8 +8,11 @@ from datetime import timedelta
 
 import pytz
 import requests
+from markupsafe import Markup
 
 from odoo import api, fields, models
+from odoo.exceptions import ValidationError
+from odoo.tools import html_escape
 
 _logger = logging.getLogger(__name__)
 
@@ -17,14 +20,30 @@ _logger = logging.getLogger(__name__)
 class NewPortalLead(models.Model):
     _name = "leads.new"
     _inherit = ["mail.thread", "mail.activity.mixin"]
-    _description = "New Leads from Portals"
+    _description = "Leads"
     _order = "create_date desc"
 
     # Lead Fields
     name = fields.Char("Lead Name", required=True, index=True, tracking=True)
     phone = fields.Char("Phone Number", index=True, tracking=True)
     email = fields.Char("Email Address", index=True, tracking=True)
-    portal_name = fields.Char("Portal Source", help="e.g., Magicbricks, 99acres")
+    source_id = fields.Many2one(
+        "lead.source",
+        string="Source",
+        index=True,
+        tracking=True,
+    )
+    source_type = fields.Selection(
+        related="source_id.source_type",
+        store=True,
+        readonly=True,
+    )
+    portal_name = fields.Char(
+        string="Legacy Portal Name",
+        related="source_id.name",
+        store=True,
+        readonly=True,
+    )
     project_name = fields.Char("Project Name", help="Project Name from portal")
     portal_property_id = fields.Char(
         "Portal Property ID",
@@ -330,6 +349,47 @@ class NewPortalLead(models.Model):
 
     @api.model_create_multi
     def create(self, vals_list):
+        automated_creation = bool(self.env.context.get("automated_lead_creation"))
+
+        normalized_vals_list = []
+        for vals in vals_list:
+            vals = dict(vals)
+            vals["phone"] = self._standardize_phone(vals.get("phone"))
+
+            if not vals.get("source_id") and vals.get("portal_name"):
+                source = self._get_or_create_source(
+                    vals.get("portal_name"),
+                    source_type="portal",
+                )
+                if source:
+                    vals["source_id"] = source.id
+
+            if not vals.get("source_id"):
+                raise ValidationError("A lead source is required.")
+
+            if not automated_creation:
+                duplicate_domain, _, _ = self._compute_duplicate_domain(vals)
+                if duplicate_domain:
+                    existing_lead = self.sudo().search(duplicate_domain, limit=1)
+                    if existing_lead:
+                        status_selection = dict(self._fields["current_status"].selection)
+                        status_label = status_selection.get(
+                            existing_lead.current_status,
+                            existing_lead.current_status or "Unknown",
+                        )
+                        rm_name = existing_lead.user_id.name or "Unassigned"
+                        raise ValidationError(
+                            "Duplicate lead detected in last 30 days for the same phone/property criteria.\n"
+                            f"Assigned RM: {rm_name}\n"
+                            f"Current Status: {status_label}",
+                        )
+
+                # Manual leads are always owned by the creator and start assigned.
+                vals["state"] = "assigned"
+                vals["user_id"] = self.env.user.id
+
+            normalized_vals_list.append(vals)
+
         # Suppress automatic chatter log on creation.
         # Context must be set on `self` before super() — calling
         # super().with_context().create() returns the same overridden method
@@ -337,7 +397,27 @@ class NewPortalLead(models.Model):
         new_leads = super(
             NewPortalLead,
             self.with_context(mail_create_nolog=True),
-        ).create(vals_list)
+        ).create(normalized_vals_list)
+
+        non_portal_leads = new_leads.filtered(
+            lambda lead: lead.source_type and lead.source_type != "portal",
+        )
+        for lead in non_portal_leads:
+            source_name = lead.source_id.name or "Unknown"
+            creator_name = lead.create_uid.name or "System"
+            body = Markup(
+                "<p><strong>Manual Lead Created</strong><br/>"
+                "Source: %s<br/>"
+                "Created By: %s</p>"
+            ) % (
+                html_escape(source_name),
+                html_escape(creator_name),
+            )
+            lead.message_post(
+                body=body,
+                subtype_xmlid="mail.mt_note",
+            )
+
         channel = "leads.new"
         notification_type = "bus_notification"
         message = {
@@ -351,32 +431,116 @@ class NewPortalLead(models.Model):
         return new_leads
 
     @api.model
-    def create_lead_if_not_duplicate(self, lead_vals):
-        """
-        Central Function to create leads.
-        Checks for duplicates before creating new lead.
-        Preferred duplicate key: same phone + same resolved property_base_id
-        in last 30 days (so multiple portal IDs on the same property don't
-        create duplicates).
+    def _canonical_portal_code(self, source_name):
+        normalized = (source_name or "").strip().lower()
+        portal_map = {
+            "99acres": "99acres",
+            "housing.com": "Housing.com",
+            "housing": "Housing.com",
+            "magicbricks": "MagicBricks",
+            "magicbricks.com": "MagicBricks",
+            "olx": "OLX",
+        }
+        return portal_map.get(normalized)
 
-        Fallback (when no portal-listing mapping exists yet):
-        same phone + same portal source + same portal_property_id in 30 days.
-        """
+    @api.model
+    def _get_or_create_source(self, source_name, source_type="portal"):
+        source_name = (source_name or "").strip()
+        if not source_name:
+            return self.env["lead.source"]
+
+        source_model = self.env["lead.source"].sudo()
+        category_model = self.env["lead.source.category"].sudo()
+
+        existing = source_model.search([("name", "=", source_name)], limit=1)
+        if existing:
+            return existing
+
+        if source_type == "portal":
+            portal_code = self._canonical_portal_code(source_name)
+            if not portal_code:
+                source_type = "manual"
+
+        if source_type == "portal":
+            category = self.env.ref(
+                "leads.lead_source_category_portal",
+                raise_if_not_found=False,
+            )
+            if not category:
+                category = category_model.search(
+                    [("code", "=", "portals")],
+                    limit=1,
+                )
+            if not category:
+                category = category_model.create(
+                    {
+                        "name": "Portals",
+                        "code": "portals",
+                        "source_type": "portal",
+                        "sequence": 10,
+                    }
+                )
+            return source_model.create(
+                {
+                    "name": source_name,
+                    "category_id": category.id,
+                    "portal_code": portal_code,
+                }
+            )
+
+        default_category = category_model.search(
+            [("source_type", "=", "manual")],
+            order="sequence, id",
+            limit=1,
+        )
+        if not default_category:
+            default_category = category_model.create(
+                {
+                    "name": "Manual",
+                    "code": "manual",
+                    "source_type": "manual",
+                    "sequence": 999,
+                }
+            )
+        return source_model.create(
+            {
+                "name": source_name,
+                "category_id": default_category.id,
+            }
+        )
+
+    @api.model
+    def _compute_duplicate_domain(self, lead_vals):
+        """Build duplicate-check domain using the same criteria for all lead inflows."""
         phone_raw = lead_vals.get("phone")
         phone_clean = self._standardize_phone(phone_raw)
-        portal_name = lead_vals.get("portal_name")
-        portal_prop_id = lead_vals.get("portal_property_id")
+        source_id = lead_vals.get("source_id")
+        if not source_id and lead_vals.get("source"):
+            source = self._get_or_create_source(lead_vals.get("source"))
+            source_id = source.id
+            lead_vals["source_id"] = source_id
+        if not source_id and lead_vals.get("portal_name"):
+            source = self._get_or_create_source(
+                lead_vals.get("portal_name"),
+                source_type="portal",
+            )
+            source_id = source.id
+            lead_vals["source_id"] = source_id
 
+        portal_prop_id = lead_vals.get("portal_property_id")
         lead_vals["phone"] = phone_clean
 
-        if not phone_clean or not portal_prop_id:
-            _logger.info(
-                "Cannot check for duplicate (missing phone/prop_id), creating lead.",
-            )
-            return self.create(lead_vals)
+        if not phone_clean:
+            return None, phone_clean, portal_prop_id
 
-        resolved_property = self._resolve_property_from_portal(
-            portal_name,
+        source = self.env["lead.source"].browse(source_id) if source_id else False
+        property_base_id = lead_vals.get("property_base_id")
+
+        if not portal_prop_id and not property_base_id:
+            return None, phone_clean, portal_prop_id
+
+        resolved_property = self._resolve_property_from_source(
+            source,
             portal_prop_id,
         )
 
@@ -390,15 +554,51 @@ class NewPortalLead(models.Model):
                 ("property_base_id", "=", resolved_property.id),
                 ("create_date", ">=", time_limit),
             ]
+        elif property_base_id:
+            domain = [
+                ("phone", "=", phone_clean),
+                ("property_base_id", "=", property_base_id),
+                ("create_date", ">=", time_limit),
+            ]
         else:
             domain = [
                 ("phone", "=", phone_clean),
-                ("portal_name", "=", portal_name),
+                ("source_id", "=", source_id),
                 ("portal_property_id", "=", portal_prop_id),
                 ("create_date", ">=", time_limit),
             ]
 
-        existing_lead = self.search(domain, limit=1)
+        return domain, phone_clean, portal_prop_id
+
+    @api.model
+    def create_lead_if_not_duplicate(self, lead_vals):
+        """
+        Central Function to create leads.
+        Checks for duplicates before creating new lead.
+        Preferred duplicate key: same phone + same resolved property_base_id
+        in last 30 days (so multiple portal IDs on the same property don't
+        create duplicates).
+
+        Fallback (when no portal-listing mapping exists yet):
+        same phone + same portal source + same portal_property_id in 30 days.
+        """
+        duplicate_domain, phone_clean, portal_prop_id = self._compute_duplicate_domain(
+            lead_vals,
+        )
+
+        if not duplicate_domain and not phone_clean:
+            _logger.info(
+                "Cannot check for duplicate (missing phone), creating lead.",
+            )
+            return self.with_context(automated_lead_creation=True).create(lead_vals)
+
+        if not duplicate_domain:
+            _logger.info(
+                "Cannot check for duplicate (no portal listing ID and no property), creating lead.",
+            )
+            return self.with_context(automated_lead_creation=True).create(lead_vals)
+
+        existing_lead = self.sudo().search(duplicate_domain, limit=1)
 
         if existing_lead:
             _logger.info(
@@ -408,7 +608,7 @@ class NewPortalLead(models.Model):
             )
             return None
         else:  # noqa: RET505
-            return self.create(lead_vals)
+            return self.with_context(automated_lead_creation=True).create(lead_vals)
 
     def write(self, vals):
         """
@@ -447,25 +647,16 @@ class NewPortalLead(models.Model):
     # --- Lead Processing & Assignment ---
 
     @api.model
-    def _resolve_property_from_portal(self, portal_name, portal_listing_id):
-        """Resolve a property.base from portal source + listing ID."""
-        portal = (portal_name or "").strip()
+    def _resolve_property_from_source(self, source, portal_listing_id):
+        """Resolve a property.base from source + listing ID."""
+        source_rec = source
+        if isinstance(source, int):
+            source_rec = self.env["lead.source"].browse(source)
+
+        portal = (source_rec.portal_code or "").strip() if source_rec else ""
         portal_pid = (portal_listing_id or "").strip()
 
         if not portal or not portal_pid:
-            return self.env["property.base"]
-
-        portal_name_map = {
-            "99acres": "99acres",
-            "housing.com": "Housing.com",
-            "housing": "Housing.com",
-            "magicbricks": "MagicBricks",
-            "magicbricks.com": "MagicBricks",
-            "olx": "OLX",
-        }
-
-        canonical_portal = portal_name_map.get(portal.lower())
-        if not canonical_portal:
             return self.env["property.base"]
 
         listing = (
@@ -473,7 +664,7 @@ class NewPortalLead(models.Model):
             .sudo()
             .search(
                 [
-                    ("portal_name", "=", canonical_portal),
+                    ("portal_name", "=", portal),
                     ("portal_listing_id", "=", portal_pid),
                     ("active", "=", True),
                 ],
@@ -486,15 +677,15 @@ class NewPortalLead(models.Model):
         """Finds the synced property from property.portal.listing."""
 
         self.ensure_one()
-        property_rec = self._resolve_property_from_portal(
-            self.portal_name,
+        property_rec = self._resolve_property_from_source(
+            self.source_id,
             self.portal_property_id,
         )
         if not property_rec:
             _logger.warning(
-                "Lead %s: No portal listing found for portal '%s' and listing ID '%s'",
+                "Lead %s: No portal listing found for source '%s' and listing ID '%s'",
                 self.id,
-                self.portal_name,
+                self.source_id.display_name,
                 self.portal_property_id,
             )
         return property_rec
@@ -555,30 +746,20 @@ class NewPortalLead(models.Model):
                 notes = f"Successfully assigned to RM {rm_user.name} for property {property_rec.property_tag}.\n"
 
             if not property_rec:
-                msg = f"Property not found for {self.portal_name} ID: {self.portal_property_id}"
+                source_name = self.source_id.display_name or "Unknown"
+                msg = f"Property not found for {source_name} ID: {self.portal_property_id}"
                 _logger.warning(
                     "⚠️ Lead %s: %s. Attempting to assign to default RM.",
                     self.id,
                     msg,
                 )
 
-                if self.portal_name == "99acres":
-                    target_name = "Pratham Bhandari"
-                elif self.portal_name == "MagicBricks":
-                    target_name = "Mayuri Malivad"
-                else:
-                    target_name = "Naresh Rojiya"
-
-                rm_user = self.env["res.users"].search(
-                    [("name", "ilike", target_name)],
-                    limit=1,
-                )
+                rm_user = self.source_id.default_rm_user_id
 
                 if not rm_user:
-                    # Safety Fallback: If Specific RM is not found in the system, assign to Admin to prevent error
                     _logger.error(
-                        "User '%s' not found. Assigning to Administrator.",
-                        target_name,
+                        "No default RM configured for source '%s'. Assigning to Administrator.",
+                        source_name,
                     )
                     rm_user = self.env.ref("base.user_admin")
 
@@ -597,7 +778,7 @@ class NewPortalLead(models.Model):
                 "🎉 Lead %s: Successfully assigned to %s for property %s",
                 self.id,
                 rm_user.name,
-                property_rec.property_tag,
+                property_rec.property_tag if property_rec else "N/A",
             )
 
         except Exception as e:
@@ -764,6 +945,7 @@ class NewPortalLead(models.Model):
         }
         for portal_name, fetch_method in portal_mappers.items():
             try:
+                source = self._get_or_create_source(portal_name, source_type="portal")
                 leads = fetch_method()
                 _logger.info(
                     "CRON: Found %s leads from %s API.",
@@ -777,7 +959,7 @@ class NewPortalLead(models.Model):
                             "phone": lead.get("lead_phone"),
                             "email": lead.get("lead_email"),
                             "project_name": lead.get("project"),
-                            "portal_name": portal_name,
+                            "source_id": source.id,
                             "portal_property_id": lead.get("property_code"),
                             "raw_data": json.dumps(
                                 lead.get("raw_json") or lead,
@@ -785,7 +967,9 @@ class NewPortalLead(models.Model):
                             ),
                             "state": "new",
                         }
-                        new_lead = self.create_lead_if_not_duplicate(lead_vals)
+                        new_lead = self.with_context(
+                            automated_lead_creation=True,
+                        ).create_lead_if_not_duplicate(lead_vals)
 
                         if new_lead:
                             _logger.info(
@@ -866,7 +1050,7 @@ class NewPortalLead(models.Model):
             return None
         whatsapp_url = self.phone_whatsapp_url
         lead_name = self.name or "there"
-        portal_name = self.portal_name or "our portal"
+        source_name = self.source_id.name or "our source"
 
         # Get Property Details
         prop = self.property_base_id
@@ -896,7 +1080,7 @@ class NewPortalLead(models.Model):
         message_parts = [
             f"Hello {lead_name},",
             "",
-            f"We've received your requirement for a {prop_bhk} property in {location_city_str} through {portal_name}.",
+            f"We've received your requirement for a {prop_bhk} property in {location_city_str} through {source_name}.",
             "",
             "With cleardeals, you can purchase this at 0% brokerage.",
         ]
@@ -971,7 +1155,7 @@ class NewPortalLead(models.Model):
                 "lead_id": lead.id,
                 "name": lead.name,
                 "phone": lead.phone,
-                "portal_name": lead.portal_name,
+                "source": lead.source_id.name,
                 "portal_property_id": lead.portal_property_id,
                 "rm_name": rm_name,
                 # Property Info

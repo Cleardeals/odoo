@@ -222,7 +222,7 @@ class TestBuyerSiteVisitsAPI(PortalLeadTestCase):
         lead.write(
             {
                 "name": "Ravi Shah",
-                "portal_name": "MagicBricks",
+                "source_id": self.source_magicbricks.id,
                 "site_visit_date": self.future_date,
                 "site_visit_date_only": self.future_date.date(),
                 "current_status": "site_visit_scheduled",
@@ -232,7 +232,7 @@ class TestBuyerSiteVisitsAPI(PortalLeadTestCase):
         )
 
         self.assertEqual(lead.name, "Ravi Shah")
-        self.assertEqual(lead.portal_name, "MagicBricks")
+        self.assertEqual(lead.source_id.name, "MagicBricks")
         self.assertIsNotNone(lead.site_visit_date)
         self.assertIsNotNone(lead.site_visit_date_only)
         self.assertEqual(lead.current_status, "site_visit_scheduled")
@@ -249,15 +249,15 @@ class TestBuyerSiteVisitsAPI(PortalLeadTestCase):
         lead.write(
             {
                 "name": False,
-                "portal_name": False,
+                "source_id": False,
                 "site_visit_date": self.future_date,
                 "current_status": "site_visit_scheduled",
             },
         )
 
-        # Odoo stores False for empty name/portal_name
+        # Odoo stores False for empty name/source_id
         self.assertFalse(lead.name)
-        self.assertFalse(lead.portal_name)
+        self.assertFalse(lead.source_id)
 
     def test_010_site_visit_datetime_iso_format(self):
         """
@@ -327,12 +327,12 @@ class TestBuyerSiteVisitsAPI(PortalLeadTestCase):
         ASSERT: Parent info accessible
         """
         lead = self.create_portal_lead()
-        lead.write({"name": "Buyer Name", "portal_name": "99acres"})
+        lead.write({"name": "Buyer Name", "source_id": self.source_99acres.id})
 
         interest = self.create_interest_for_lead(lead, self.test_property_2)
 
         self.assertEqual(interest.lead_id.name, "Buyer Name")
-        self.assertEqual(interest.lead_id.portal_name, "99acres")
+        self.assertEqual(interest.lead_id.source_id.name, "99acres")
 
     # ─────────────────────────────────────────────────────────────────────────
     # TEST: Bucket-Specific Fields

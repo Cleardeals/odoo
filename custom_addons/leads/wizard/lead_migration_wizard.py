@@ -129,7 +129,7 @@ class LeadMigrationWizard(models.TransientModel):
         Backfills property_id on all eligible leads.
 
         Eligible = portal_property_id is set AND property_id is False.
-        Uses the existing _find_property() lookup (portal name → portal field map).
+        Uses the existing _find_property() lookup (source portal code + listing ID).
         Processes in batches of 100 and commits after each batch to avoid
         cursor timeouts on large datasets.
         """
@@ -178,7 +178,7 @@ class LeadMigrationWizard(models.TransientModel):
                         _logger.warning(
                             "MIGRATION: Lead %d (%s / %s) — no matching property found.",
                             lead.id,
-                            lead.portal_name,
+                            lead.source_id.name,
                             lead.portal_property_id,
                         )
                 except Exception as e:

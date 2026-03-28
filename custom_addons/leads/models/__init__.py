@@ -2,6 +2,6 @@ from . import lead_score
 from . import lead_import_wizard
 from . import whatsapp_response
 from . import lead_score_bq_wizard
+from . import lead_source
 from . import new_portal_leads
-from . import property_base_extend
 from . import lead_property_interest

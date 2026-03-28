@@ -1,6 +1,6 @@
 {
     "name": "Lead Scoring",
-    "version": "1.0",
+    "version": "1.1.0",
     "depends": ["base", "web", "mail", "lead_suggestor"],
     "author": "Nirat Patel",
     "category": "Sales",
@@ -11,6 +11,7 @@
         "security/ir.model.access.csv",
         # 2. Data
         "data/ir_config_parameter_data.xml",
+        "data/lead_source_data.xml",
         "data/lead_score_cron.xml",
         "data/new_portal_lead_cron.xml",
         "data/pull_leads_cron.xml",
@@ -27,6 +28,7 @@
         # 6. Other Views (May depend on Menus)
         "views/whatsapp_response_views.xml",
         "views/whatsapp_response_inherit_views.xml",
+        "views/lead_source_views.xml",
         "views/new_portal_lead_views.xml",
     ],
     "assets": {

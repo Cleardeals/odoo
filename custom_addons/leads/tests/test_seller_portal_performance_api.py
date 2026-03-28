@@ -220,7 +220,7 @@ class TestSellerPortalPerformanceAPI(PortalLeadTestCase):
         )
         for lead in leads:
             portal = (
-                lead.portal_name if lead.portal_name in KNOWN_PORTALS else "Unknown"
+                lead.source_id.name if lead.source_id and lead.source_id.name in KNOWN_PORTALS else "Unknown"
             )
             portal_data[portal]["total_leads"] += 1
             portal_data[portal]["primary_leads"] += 1
@@ -259,7 +259,7 @@ class TestSellerPortalPerformanceAPI(PortalLeadTestCase):
         )
         for lead in leads:
             portal = (
-                lead.portal_name if lead.portal_name in KNOWN_PORTALS else "Unknown"
+                lead.source_id.name if lead.source_id and lead.source_id.name in KNOWN_PORTALS else "Unknown"
             )
             portal_data[portal]["primary_leads"] += 1
 
@@ -282,7 +282,7 @@ class TestSellerPortalPerformanceAPI(PortalLeadTestCase):
 
         # ACT
         portal_data = {p: _empty_portal_block() for p in KNOWN_PORTALS + ["Unknown"]}
-        portal = lead.portal_name if lead.portal_name in KNOWN_PORTALS else "Unknown"
+        portal = lead.source_id.name if lead.source_id and lead.source_id.name in KNOWN_PORTALS else "Unknown"
         portal_data[portal]["primary_leads"] += 1
 
         # ASSERT
@@ -320,8 +320,10 @@ class TestSellerPortalPerformanceAPI(PortalLeadTestCase):
         )
         for interest in interests:
             portal_name = (
-                interest.lead_id.portal_name
-                if interest.lead_id and interest.lead_id.portal_name in KNOWN_PORTALS
+                interest.lead_id.source_id.name
+                if interest.lead_id
+                and interest.lead_id.source_id
+                and interest.lead_id.source_id.name in KNOWN_PORTALS
                 else "Unknown"
             )
             portal_data[portal_name]["recommended_leads"] += 1
@@ -362,8 +364,10 @@ class TestSellerPortalPerformanceAPI(PortalLeadTestCase):
         )
         for interest in interests:
             portal_name = (
-                interest.lead_id.portal_name
-                if interest.lead_id and interest.lead_id.portal_name in KNOWN_PORTALS
+                interest.lead_id.source_id.name
+                if interest.lead_id
+                and interest.lead_id.source_id
+                and interest.lead_id.source_id.name in KNOWN_PORTALS
                 else "Unknown"
             )
             portal_data[portal_name]["recommended_leads"] += 1
@@ -394,8 +398,8 @@ class TestSellerPortalPerformanceAPI(PortalLeadTestCase):
         # ACT
         portal_data = {p: _empty_portal_block() for p in KNOWN_PORTALS + ["Unknown"]}
         portal_name = (
-            parent_lead.portal_name
-            if parent_lead.portal_name in KNOWN_PORTALS
+            parent_lead.source_id.name
+            if parent_lead.source_id and parent_lead.source_id.name in KNOWN_PORTALS
             else "Unknown"
         )
         portal_data[portal_name]["recommended_leads"] += 1
@@ -503,7 +507,7 @@ class TestSellerPortalPerformanceAPI(PortalLeadTestCase):
         )
         for lead in leads:
             portal = (
-                lead.portal_name if lead.portal_name in KNOWN_PORTALS else "Unknown"
+                lead.source_id.name if lead.source_id and lead.source_id.name in KNOWN_PORTALS else "Unknown"
             )
             portal_data[portal]["statuses"][lead.current_status or "other"] += 1
 

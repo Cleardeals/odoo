@@ -1,11 +1,11 @@
 """
 GET /api/track/property/portal-performance
 --------------------------------------------
-Returns a per-portal quality breakdown for all properties belonging to the
+Returns a per-source quality breakdown for all properties belonging to the
 owner identified by the `phone` query parameter.
 
-All portals are included in a single response. Recommended leads are
-attributed to the portal of the *parent* leads.new record.
+All sources are included in a single response. Recommended leads are
+attributed to the source of the parent leads.new record.
 
 Query params
 ------------
@@ -19,7 +19,7 @@ Response shape
   "data": {
     "owner_phone": "9876543210",
     "properties":  ["TAG1"],
-    "portals": {
+    "sources": {
       "MagicBricks": {
         "total_leads":          15,
         "primary_leads":        12,
@@ -65,10 +65,8 @@ from ..shared.response_utils import error_response, success_response
 
 _logger = logging.getLogger(__name__)
 
-KNOWN_PORTALS = ["MagicBricks", "99acres", "Housing.com", "OLX"]
 
-
-def _empty_portal_block() -> dict:
+def _empty_source_block() -> dict:
     return {
         "total_leads": 0,
         "primary_leads": 0,
@@ -115,39 +113,35 @@ class SellerPortalPerformanceController(http.Controller):
 
         tags = properties.mapped("property_tag")
 
-        portal_data: dict[str, dict] = {
-            p: _empty_portal_block() for p in KNOWN_PORTALS + ["Unknown"]
-        }
+        source_data = defaultdict(_empty_source_block)
 
         primary_leads = get_primary_leads_for_tags(request.env, tags)
         for lead in primary_leads:
-            portal = (
-                lead.portal_name if lead.portal_name in KNOWN_PORTALS else "Unknown"
-            )
-            portal_data[portal]["total_leads"] += 1
-            portal_data[portal]["primary_leads"] += 1
-            portal_data[portal]["statuses"][lead.current_status or "other"] += 1
+            source_name = lead.source_id.name if lead.source_id else "Unknown"
+            source_data[source_name]["total_leads"] += 1
+            source_data[source_name]["primary_leads"] += 1
+            source_data[source_name]["statuses"][lead.current_status or "other"] += 1
 
         recommended_interests = get_recommended_leads_for_tags(request.env, tags)
         for interest in recommended_interests:
-            portal_name = (
-                interest.lead_id.portal_name
-                if interest.lead_id and interest.lead_id.portal_name in KNOWN_PORTALS
+            source_name = (
+                interest.lead_id.source_id.name
+                if interest.lead_id and interest.lead_id.source_id
                 else "Unknown"
             )
-            portal_data[portal_name]["total_leads"] += 1
-            portal_data[portal_name]["recommended_leads"] += 1
-            portal_data[portal_name]["statuses"][
+            source_data[source_name]["total_leads"] += 1
+            source_data[source_name]["recommended_leads"] += 1
+            source_data[source_name]["statuses"][
                 interest.current_status or "other"
             ] += 1
 
         serialised = {}
-        for portal, block in portal_data.items():
+        for source_name, block in source_data.items():
             total = block["total_leads"]
             svd = block["statuses"].get("site_visit_done", 0)
             svs = block["statuses"].get("site_visit_scheduled", 0)
 
-            serialised[portal] = {
+            serialised[source_name] = {
                 "total_leads": total,
                 "primary_leads": block["primary_leads"],
                 "recommended_leads": block["recommended_leads"],
@@ -162,6 +156,6 @@ class SellerPortalPerformanceController(http.Controller):
             "owner_phone": phone,
             "properties": tags,
             "tag_filter": tag_filter,
-            "portals": serialised,
+            "sources": serialised,
         }
         return success_response(data)

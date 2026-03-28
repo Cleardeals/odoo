@@ -69,21 +69,24 @@ class PortalWebhookController(http.Controller):
                 )
 
             # 2. Translate MagicBricks fields to our leads.new fields
+            lead_model = request.env["leads.new"].sudo().with_context(
+                automated_lead_creation=True,
+            )
+            source = lead_model._get_or_create_source("MagicBricks", source_type="portal")
 
             lead_vals = {
                 "name": data.get("name"),
                 "phone": data.get("mobile"),
                 "email": data.get("email"),
                 "project_name": data.get("project"),
-                "portal_name": "MagicBricks",
+                "source_id": source.id,
                 "portal_property_id": data.get("property_id"),
                 "raw_data": json.dumps(data, indent=2),
                 "state": "new",
             }
 
             # 3. Create the basic lead record
-            LeadModel = request.env["leads.new"].sudo()
-            new_lead = LeadModel.create_lead_if_not_duplicate(lead_vals)
+            new_lead = lead_model.create_lead_if_not_duplicate(lead_vals)
 
             # 4. Process the lead synchronously (removed queue_job dependency)
             if new_lead:
@@ -174,21 +177,24 @@ class PortalWebhookController(http.Controller):
                 )
 
             # 2. Translate 99acres fields to our leads.new fields
+            lead_model = request.env["leads.new"].sudo().with_context(
+                automated_lead_creation=True,
+            )
+            source = lead_model._get_or_create_source("99acres", source_type="portal")
 
             lead_vals = {
                 "name": data.get("Name"),
                 "phone": data.get("Phone"),
                 "email": data.get("EmailId"),
                 "project_name": data.get("Project"),
-                "portal_name": "99acres",
+                "source_id": source.id,
                 "portal_property_id": data.get("ProdId"),
                 "raw_data": json.dumps(data, indent=2),
                 "state": "new",
             }
 
             # 3. Create the basic lead record
-            LeadModel = request.env["leads.new"].sudo()
-            new_lead = LeadModel.create_lead_if_not_duplicate(lead_vals)
+            new_lead = lead_model.create_lead_if_not_duplicate(lead_vals)
 
             # 4. Process the lead synchronously (removed queue_job dependency)
             if new_lead:

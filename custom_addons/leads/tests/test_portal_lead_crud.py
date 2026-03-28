@@ -15,7 +15,7 @@ class TestPortalLeadCRUD(PortalLeadTestCase):
         lead = self.create_portal_lead()
 
         self.assertEqual(lead.name, 'Test Lead')
-        self.assertEqual(lead.portal_name, 'MagicBricks')
+        self.assertEqual(lead.source_id.name, 'MagicBricks')
         self.assertEqual(lead.state, 'new')
         self.assertEqual(lead.current_status, 'lead')
         self.assertFalse(lead.is_webhook_sent)
@@ -26,17 +26,17 @@ class TestPortalLeadCRUD(PortalLeadTestCase):
         with mute_logger('odoo.sql_db'), self.assertRaises(psycopg2.IntegrityError):
             self.env['leads.new'].create({
                 'phone': '9876543210',
-                'portal_name': 'MagicBricks'
+                'source_id': self.source_magicbricks.id,
                 # 'name' is missing -> Crash expected
             })
 
         vals = {
             'name': 'Default State Test',
             'phone': '9876543210',
-            'portal_name': 'MagicBricks'
+            'source_id': self.source_magicbricks.id,
             # 'state' is omitted entirely
         }
-        lead = self.env['leads.new'].create(vals)
+        lead = self.env['leads.new'].with_context(automated_lead_creation=True).create(vals)
         self.assertEqual(lead.state, 'new')
 
     def test_04_related_property_fields(self):

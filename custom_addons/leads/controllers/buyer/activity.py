@@ -30,7 +30,7 @@ Response shape
       {
         "lead_id":             101,
         "lead_name":           "Ravi Shah",
-        "portal":              "MagicBricks",
+        "source":              "MagicBricks",
         "inquiry_datetime":    "2025-01-10T09:00:00",
         "current_status":      "site_visit_scheduled",
         "first_contacted_on":  "2025-01-11T10:00:00",
@@ -118,7 +118,7 @@ def _serialize_primary_lead(lead) -> dict:
 
     return {
         "lead_name": lead.name or None,
-        "portal": lead.portal_name or None,
+        "source": lead.source_id.name or None,
         "inquiry_datetime": (
             lead.create_date.isoformat() if lead.create_date else None
         ),

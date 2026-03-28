@@ -12,3 +12,7 @@ access_lead_recompute_wizard,lead.recompute.wizard,model_lead_recompute_wizard,l
 access_lead_property_interest_rm,lead.property.interest.rm,model_lead_property_interest,leads.group_lead_score_rm,1,1,1,1
 access_lead_import_wizard,access_lead_import_wizard,model_lead_import_wizard,leads.group_lead_score_manager,1,1,1,1
 access_lead_migration_wizard,access.lead.migration.wizard,model_lead_migration_wizard,leads.group_lead_score_manager,1,1,1,1
+access_lead_source_manager,lead.source.manager,model_lead_source,leads.group_lead_score_manager,1,1,1,1
+access_lead_source_rm,lead.source.rm,model_lead_source,leads.group_lead_score_rm,1,0,0,0
+access_lead_source_category_manager,lead.source.category.manager,model_lead_source_category,leads.group_lead_score_manager,1,1,1,1
+access_lead_source_category_rm,lead.source.category.rm,model_lead_source_category,leads.group_lead_score_rm,1,0,0,0

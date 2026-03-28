@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_lead_source_category_list" model="ir.ui.view">
+        <field name="name">lead.source.category.list</field>
+        <field name="model">lead.source.category</field>
+        <field name="arch" type="xml">
+            <list string="Lead Source Categories" editable="bottom">
+                <field name="sequence" widget="handle"/>
+                <field name="name"/>
+                <field name="code"/>
+                <field name="source_type"/>
+                <field name="active"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_lead_source_category_form" model="ir.ui.view">
+        <field name="name">lead.source.category.form</field>
+        <field name="model">lead.source.category</field>
+        <field name="arch" type="xml">
+            <form string="Lead Source Category">
+                <sheet>
+                    <group>
+                        <field name="name"/>
+                        <field name="code"/>
+                        <field name="source_type"/>
+                        <field name="sequence"/>
+                        <field name="active"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_lead_source_list" model="ir.ui.view">
+        <field name="name">lead.source.list</field>
+        <field name="model">lead.source</field>
+        <field name="arch" type="xml">
+            <list string="Lead Sources" editable="bottom">
+                <field name="sequence" widget="handle"/>
+                <field name="name"/>
+                <field name="category_id"/>
+                <field name="source_type" readonly="1"/>
+                <field name="portal_code" optional="hide"/>
+                <field name="default_rm_user_id" optional="hide"/>
+                <field name="active"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_lead_source_form" model="ir.ui.view">
+        <field name="name">lead.source.form</field>
+        <field name="model">lead.source</field>
+        <field name="arch" type="xml">
+            <form string="Lead Source">
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="name"/>
+                            <field name="category_id"/>
+                            <field name="source_type" readonly="1"/>
+                        </group>
+                        <group>
+                            <field name="portal_code" invisible="source_type != 'portal'"/>
+                            <field name="default_rm_user_id" invisible="source_type != 'portal'"/>
+                            <field name="sequence"/>
+                            <field name="active"/>
+                        </group>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_lead_source" model="ir.actions.act_window">
+        <field name="name">Lead Sources</field>
+        <field name="res_model">lead.source</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+    <record id="action_lead_source_category" model="ir.actions.act_window">
+        <field name="name">Lead Source Categories</field>
+        <field name="res_model">lead.source.category</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+    <menuitem id="lead_source_config_root"
+              name="Configuration"
+              parent="leads.lead_score_menu_main"
+              sequence="90"
+              groups="leads.group_lead_score_manager"/>
+
+    <menuitem id="menu_lead_source"
+              name="Lead Sources"
+              parent="lead_source_config_root"
+              action="action_lead_source"
+              sequence="10"
+              groups="leads.group_lead_score_manager"/>
+
+    <menuitem id="menu_lead_source_category"
+              name="Lead Source Categories"
+              parent="lead_source_config_root"
+              action="action_lead_source_category"
+              sequence="20"
+              groups="leads.group_lead_score_manager"/>
+</odoo>

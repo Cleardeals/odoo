@@ -38,7 +38,8 @@ class LeadImportWizard(models.TransientModel):
         # Cache properties to avoid repeated DB lookups across files
         property_cache = {}
 
-        LeadsNew = self.env["leads.new"]
+        LeadsNew = self.env["leads.new"].with_context(automated_lead_creation=True)
+        olx_source = LeadsNew._get_or_create_source("OLX", source_type="portal")
 
         COLUMN_MAPPING = {
             "name": "Name",
@@ -195,7 +196,7 @@ class LeadImportWizard(models.TransientModel):
                         "email": lead_email
                         if lead_email and lead_email.lower() != "null"
                         else False,
-                        "portal_name": "OLX",
+                        "source_id": olx_source.id,
                         "portal_property_id": olx_id,
                         "property_base_id": property_base_id,
                         "user_id": user_id,
