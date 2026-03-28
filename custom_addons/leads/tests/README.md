@@ -21,18 +21,20 @@
 
 ## Overview
 
-This test suite provides comprehensive coverage for the **Leads Management Module** in Odoo 19. The tests cover two main models:
+This test suite provides comprehensive coverage for the **Leads Management Module** in Odoo 19. The tests cover these core models:
 
 | Model | Description |
 |-------|-------------|
 | `leads.new` | Portal leads from external sources (MagicBricks, Housing.com, 99acres, OLX) |
 | `lead.score` | Scored/processed leads with follow-up management |
+| `lead.source` | Canonical source registry with portal/manual classification and fallback RM routing |
+| `lead.source.category` | Source categorization model used by `lead.source` |
 
 ### Test Statistics
 
-- **Total Test Files:** 17
-- **Total Tests:** ~355+
-- **Test Categories:** CRUD, Processing, API (Buyer/Seller), Webhook, Cron Jobs, WhatsApp Integration, Property Interests, Site Visits, Activity Logs, Performance
+- **Total Test Files:** 20
+- **Total Tests:** ~367+
+- **Test Categories:** CRUD, Source Models & Routing, Processing, API (Buyer/Seller), Webhook, Cron Jobs, WhatsApp Integration, Property Interests, Site Visits, Activity Logs, Performance
 - **Test Tags:** `@tagged('post_install', '-at_install')`
 
 ---
@@ -43,6 +45,7 @@ This test suite provides comprehensive coverage for the **Leads Management Modul
 tests/
 ├── __init__.py                      # Test module imports
 ├── test_portal_common.py            # Base test fixtures (PortalLeadTestCase)
+├── test_lead_source.py              # Lead source and source-routing tests (12 tests)
 ├── test_lead_score.py               # Lead scoring model tests (20 tests)
 ├── test_portal_lead_crud.py         # Basic CRUD operations (10 tests)
 ├── test_portal_lead_duplicate.py    # Duplicate detection logic (5 tests)
@@ -61,6 +64,8 @@ tests/
 ├── SELLER API ENDPOINTS
 ├── test_seller_site_visits_api.py   # Seller site visits with property filtering (32 tests)
 ├── test_seller_activity_api.py      # Seller activity logs & events (TBD tests)
+├── test_seller_ai_suggestions_api.py# Seller AI suggestion API tests
+├── test_seller_funnel_api.py        # Seller funnel API tests
 ├── test_seller_summary_api.py       # Seller dashboard summary data (25 tests)
 ├── test_seller_portal_performance_api.py  # Seller portal performance metrics (33 tests)
 │
@@ -86,6 +91,9 @@ python odoo-bin -c odoo.conf -d <database_name> --test-enable --stop-after-init 
 ```bash
 # Run only lead score tests
 python odoo-bin -c odoo.conf -d <database_name> --test-enable --stop-after-init --test-file=custom_addons/leads/tests/test_lead_score.py
+
+# Run only lead source tests
+python odoo-bin -c odoo.conf -d <database_name> --test-enable --stop-after-init --test-file=custom_addons/leads/tests/test_lead_source.py
 ```
 
 ### Run Tests by Tag
@@ -147,7 +155,47 @@ def create_portal_lead(self, **kwargs):
 
 ---
 
-### 2. `test_lead_score.py` - Lead Scoring Model Tests
+### 2. `test_lead_source.py` - Lead Source Model & Source Resolution
+
+**Class:** `TestLeadSource(TransactionCase)`
+**Models Under Test:** `lead.source`, `lead.source.category`, `leads.new`
+**Total Tests:** 12
+
+#### Test Cases:
+
+| Test ID | Method | Description |
+|---------|--------|-------------|
+| 01 | `test_01_create_manual_source` | Manual source creation with derived manual type |
+| 02 | `test_02_portal_source_requires_portal_code` | Portal source constraint: missing portal code raises `ValidationError` |
+| 03 | `test_03_manual_source_rejects_portal_code` | Manual source constraint: portal code not allowed |
+| 04 | `test_04_unique_category_code` | Category code uniqueness (`IntegrityError`) |
+| 05 | `test_05_unique_source_name` | Source name uniqueness (`IntegrityError`) |
+| 06 | `test_06_get_or_create_source_reuses_existing` | Existing source is reused; no duplicates created |
+| 07 | `test_07_get_or_create_source_creates_portal_with_canonical_code` | Canonical portal names create portal sources with canonical code |
+| 08 | `test_08_get_or_create_source_unknown_portal_becomes_manual` | Unknown portal labels fallback to manual source |
+| 09 | `test_09_canonical_portal_code_mapping` | Alias mapping validation for housing/magicbricks and unknown values |
+| 10 | `test_10_lead_create_requires_source` | Lead creation rejects missing source |
+| 11 | `test_11_lead_create_autofills_source_from_portal_name` | `portal_name` autofills `source_id` in automated lead creation |
+| 12 | `test_12_manual_source_lead_assigns_creator` | Manual leads are assigned to creator and chatter note is posted |
+
+#### Key Source-Routing Behaviors Validated:
+
+```python
+# Canonical mapping examples:
+housing, housing.com      -> Housing.com
+magicbricks, magicbricks.com -> MagicBricks
+olx                       -> OLX
+
+# Unrecognized portal labels:
+source_type fallback -> manual
+
+# Lead creation contract:
+source_id is mandatory for create()
+```
+
+---
+
+### 3. `test_lead_score.py` - Lead Scoring Model Tests
 
 **Class:** `TestLeadScore(TransactionCase)`
 **Model Under Test:** `lead.score`
@@ -192,7 +240,7 @@ def create_portal_lead(self, **kwargs):
 
 ---
 
-### 3. `test_portal_lead_crud.py` - CRUD Operations
+### 4. `test_portal_lead_crud.py` - CRUD Operations
 
 **Class:** `TestPortalLeadCRUD(PortalLeadTestCase)`
 **Model Under Test:** `leads.new`
@@ -212,7 +260,7 @@ def create_portal_lead(self, **kwargs):
 
 ---
 
-### 4. `test_portal_lead_duplicate.py` - Duplicate Detection
+### 5. `test_portal_lead_duplicate.py` - Duplicate Detection
 
 **Class:** `TestPortalLeadDuplicateDetection(PortalLeadTestCase)`
 **Model Under Test:** `leads.new`
@@ -247,7 +295,7 @@ NOT DUPLICATE if ANY:
 
 ---
 
-### 5. `test_portal_lead_phone.py` - Phone Standardization
+### 6. `test_portal_lead_phone.py` - Phone Standardization
 
 **Class:** `TestPortalLeadPhoneStandardization(PortalLeadTestCase)`
 **Model Under Test:** `leads.new`
@@ -267,7 +315,7 @@ NOT DUPLICATE if ANY:
 
 ---
 
-### 6. `test_portal_lead_processing.py` - Lead Processing
+### 7. `test_portal_lead_processing.py` - Lead Processing
 
 **Class:** `TestPortalLeadProcessing(PortalLeadTestCase)`
 **Model Under Test:** `leads.new`
@@ -305,13 +353,14 @@ Lookup key used by lead processing:
 #### Fallback RM Assignment (When Property Not Found):
 
 ```python
-Portal Name          → Default RM Assigned
-─────────────────────────────────────────────
-'99acres'            → Pratham Bhandari
-'MagicBricks'        → Mayuri Malivad
-'Housing.com'        → Naresh Rojiya
-'OLX'                → Naresh Rojiya
-(Unknown Portal)     → Naresh Rojiya (default)
+Source               → Assignment Rule
+────────────────────────────────────────────────────────────────
+Portal lead source   → `lead.source.default_rm_user_id` (Fallback RM)
+No fallback RM set   → Administrator (`base.user_admin`)
+
+Notes:
+- Fallback assignment is source-driven, not hardcoded by portal name.
+- Process notes include explicit fallback guidance for missing configuration.
 ```
 
 #### OPS Sales Lead Flag:
@@ -326,7 +375,7 @@ Portal Name          → Default RM Assigned
 
 ---
 
-### 7. `test_portal_lead_whatsapp.py` - WhatsApp Integration
+### 8. `test_portal_lead_whatsapp.py` - WhatsApp Integration
 
 **Class:** `TestPortalLeadWhatsapp(PortalLeadTestCase)`
 **Model Under Test:** `leads.new`
@@ -349,7 +398,7 @@ Output: whatsapp://send?phone=919876543210
 
 ---
 
-### 8. `test_portal_lead_cron.py` - Scheduled Jobs
+### 9. `test_portal_lead_cron.py` - Scheduled Jobs
 
 **Class:** `TestPortalLeadCron(PortalLeadTestCase)`
 **Model Under Test:** `leads.new`
@@ -372,7 +421,7 @@ Criteria for reprocessing:
 
 ---
 
-### 9. `test_portal_lead_api.py` - External API Integration
+### 10. `test_portal_lead_api.py` - External API Integration
 
 **Class:** `TestPortalLeadAPI(PortalLeadTestCase)`
 **Model Under Test:** `leads.new`
@@ -399,7 +448,7 @@ def test_01_housing_api_fetch_success(self, mock_get):
 
 ---
 
-### 10. `test_portal_lead_webhook.py` - Webhook Functionality
+### 11. `test_portal_lead_webhook.py` - Webhook Functionality
 
 **Class:** `TestPortalLeadWebhook(PortalLeadTestCase)`
 **Model Under Test:** `leads.new`
@@ -421,7 +470,7 @@ def test_01_housing_api_fetch_success(self, mock_get):
 
 ---
 
-### 11. `test_lead_property_interest.py` - Property Interests & Computed Fields
+### 12. `test_lead_property_interest.py` - Property Interests & Computed Fields
 
 **Classes:**
 - `TestLeadPropertyInterest(PortalLeadTestCase)` - 10 tests
@@ -504,7 +553,7 @@ _lead_prop_uniq = models.Constraint(
 
 ---
 
-## 12. `test_buyer_site_visits_api.py` - Buyer Site Visits API
+## 13. `test_buyer_site_visits_api.py` - Buyer Site Visits API
 
 **Class:** `TestBuyerSiteVisitsAPI(PortalLeadTestCase)`
 **Endpoint:** `/api/buyer/site_visits`
@@ -654,7 +703,7 @@ _EMPTY_FEEDBACK = {None, "", "other", False}
 
 ---
 
-## 13. `test_seller_site_visits_api.py` - Seller Site Visits API
+## 14. `test_seller_site_visits_api.py` - Seller Site Visits API
 
 **Class:** `TestSellerSiteVisitsAPI(PortalLeadTestCase)`
 **Endpoint:** `/api/seller/property/{property_tag}/site_visits`
@@ -684,7 +733,7 @@ Test suite for seller site visits endpoint that aggregates visits grouped by pro
 
 ---
 
-## 14. `test_buyer_activity_api.py` - Buyer Activity API
+## 15. `test_buyer_activity_api.py` - Buyer Activity API
 
 **Class:** `TestBuyerActivityAPI(PortalLeadTestCase)`
 **Endpoint:** `/api/buyer/activity`
@@ -706,7 +755,7 @@ Test suite for buyer activity logs endpoint that returns a chronological feed of
 
 ---
 
-## 15. `test_seller_activity_api.py` - Seller Activity API
+## 16. `test_seller_activity_api.py` - Seller Activity API
 
 **Class:** `TestSellerActivityAPI(PortalLeadTestCase)`
 **Endpoint:** `/api/seller/property/{property_tag}/activity`
@@ -727,7 +776,7 @@ Test suite for seller activity logs endpoint that tracks all interactions and ch
 
 ---
 
-## 16. `test_seller_summary_api.py` - Seller Summary API
+## 17. `test_seller_summary_api.py` - Seller Summary API
 
 **Class:** `TestSellerSummaryAPI(PortalLeadTestCase)`
 **Endpoint:** `/api/seller/summary`
@@ -801,7 +850,7 @@ Comprehensive test suite for seller dashboard summary endpoint that aggregates l
 
 ---
 
-## 17. `test_seller_portal_performance_api.py` - Seller Portal Performance API
+## 18. `test_seller_portal_performance_api.py` - Seller Portal Performance API
 
 **Class:** `TestSellerPortalPerformanceAPI(PortalLeadTestCase)`
 **Endpoint:** `/api/seller/property/{property_tag}/performance`
@@ -897,6 +946,8 @@ Performance metrics and analytics test suite for seller portal that tracks inqui
 
 | Feature | CRUD | Compute | Validation | Integration | Cron | API |
 |---------|:----:|:-------:|:----------:|:-----------:|:----:|:---:|
+| Source Registry (`lead.source`) | ✅ | ✅ | ✅ | | | |
+| Source Categories (`lead.source.category`) | ✅ | | ✅ | | | |
 | Lead Creation | ✅ | | ✅ | | | |
 | Phone Standardization | ✅ | ✅ | ✅ | | | ✅ |
 | Duplicate Detection | | ✅ | ✅ | | | |
@@ -917,18 +968,6 @@ Performance metrics and analytics test suite for seller portal that tracks inqui
 | **Seller Activity Feed** | | ✅ | | | | ✅ |
 | **Seller Summary** | ✅ | ✅ | ✅ | | | ✅ |
 | **Performance Metrics** | | ✅ | ✅ | | | ✅ |
-
-| Feature | CRUD | Compute | Validation | Integration | Cron |
-|---------|:----:|:-------:|:----------:|:-----------:|:----:|
-| Lead Creation | ✅ | | ✅ | | |
-| Phone Standardization | ✅ | ✅ | ✅ | | |
-| Duplicate Detection | | ✅ | ✅ | | |
-| Property Matching | | ✅ | | ✅ | |
-| RM Assignment | | ✅ | | ✅ | ✅ |
-| WhatsApp URLs | | ✅ | | | |
-| Follow-up Dates | | ✅ | | | ✅ |
-| External API | | | | ✅ | ✅ |
-| Webhooks | | | | ✅ | ✅ |
 ---
 
 ## Common Test Fixtures
@@ -1087,5 +1126,5 @@ This test suite is part of the Leads module and follows the same licensing as th
 
 ---
 
-*Last Updated: February 2026*
+*Last Updated: March 2026*
 *Odoo Version: 19.0*
