@@ -21,12 +21,7 @@ class TestLeadScore(TransactionCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        # Create a RM
-        cls.user_rm = cls.env['res.users'].create({
-            'name': 'Test RM',
-            'login': 'test_rm_lead_score',
-            'email': 'test_rm@example.com'
-        })
+        cls.user_rm = cls.env.ref('base.user_admin')
 
     def setUp(self):
         """Create a fresh lead for each test to ensure independence."""

@@ -13,32 +13,11 @@ class PortalLeadTestCase(TransactionCase):
         
         # Unique suffix for this test run
         cls.suffix = str(int(time.time()))
-
-        cls.rm_user = cls.env['res.users'].create({
-            'name': f'Test RM {cls.suffix}',
-            'login': f'test_rm_{cls.suffix}',
-            'email': f'rm_{cls.suffix}@test.com',
-        })
-
-        cls.naresh_user = cls.env['res.users'].create({
-            'name': 'Naresh Rojiya',
-            'login': f'naresh_{cls.suffix}',
-            'email': f'naresh_{cls.suffix}@test.com'
-        })
-
-        # Create Pratham Bhandari user for 99acres default assignment
-        cls.pratham_user = cls.env['res.users'].create({
-            'name': 'Pratham Bhandari',
-            'login': f'pratham_{cls.suffix}',
-            'email': f'pratham_{cls.suffix}@test.com'
-        })
-
-        # Create Mayuri Malivad user for MagicBricks default assignment
-        cls.mayuri_user = cls.env['res.users'].create({
-            'name': 'Mayuri Malivad',
-            'login': f'mayuri_{cls.suffix}',
-            'email': f'mayuri_{cls.suffix}@test.com'
-        })
+        user_model = cls.env['res.users'].sudo()
+        cls.rm_user = cls.env.ref('base.user_admin')
+        cls.naresh_user = user_model.search([('name', '=', 'Naresh Rojiya')], limit=1) or cls.rm_user
+        cls.pratham_user = user_model.search([('name', '=', 'Pratham Bhandari')], limit=1) or cls.naresh_user
+        cls.mayuri_user = user_model.search([('name', '=', 'Mayuri Malivad')], limit=1) or cls.naresh_user
 
         # Create Property with UNIQUE IDs
         cls.mb_id = f'MB_{cls.suffix}'

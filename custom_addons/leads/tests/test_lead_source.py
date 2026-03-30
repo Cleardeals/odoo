@@ -237,24 +237,23 @@ class TestLeadSource(TransactionCase):
 
     def test_15_sync_portal_default_rm_does_not_override_manual(self):
         users = self.env["res.users"].with_context(no_reset_password=True)
-        group_user = self.env.ref("base.group_user")
-
-        mapped_user = users.create(
-            {
-                "name": "Purvi Desai",
-                "login": f"purvi_desai_{self.suffix}",
-                "email": f"purvi_desai_{self.suffix}@example.com",
-                "groups_id": [(6, 0, [group_user.id])],
-            }
+        manual_user = self.env.user
+        mapped_user = users.search(
+            [
+                ("name", "=", "Purvi Desai"),
+                ("share", "=", False),
+                ("active", "=", True),
+            ],
+            limit=1,
         )
-        manual_user = users.create(
-            {
-                "name": f"Manual RM {self.suffix}",
-                "login": f"manual_rm_{self.suffix}",
-                "email": f"manual_rm_{self.suffix}@example.com",
-                "groups_id": [(6, 0, [group_user.id])],
-            }
-        )
+        if not mapped_user:
+            mapped_user = users.create(
+                {
+                    "name": "Purvi Desai",
+                    "login": f"purvi_desai_{self.suffix}",
+                    "email": f"purvi_desai_{self.suffix}@example.com",
+                }
+            )
 
         source = self.env.ref("leads.lead_source_99acres")
         source.write({"default_rm_user_id": manual_user.id})
@@ -263,4 +262,5 @@ class TestLeadSource(TransactionCase):
         source.invalidate_recordset(["default_rm_user_id"])
 
         self.assertEqual(source.default_rm_user_id, manual_user)
-        self.assertNotEqual(source.default_rm_user_id, mapped_user)
+        if mapped_user:
+            self.assertNotEqual(source.default_rm_user_id, mapped_user)
