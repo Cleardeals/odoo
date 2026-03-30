@@ -65,7 +65,7 @@ class TestPortalLeadWebhook(PortalLeadTestCase):
         
         # Verify Details
         self.assertEqual(target_lead_data['property_bhk'], '3 BHK')
-        self.assertIn('Test RM', target_lead_data['rm_name'])
+        self.assertIn(self.rm_user.name, target_lead_data['rm_name'])
         self.assertEqual(target_lead_data['property_tag'], self.test_property.property_tag)
 
     def test_03_webhook_skips_if_url_not_configured(self):
