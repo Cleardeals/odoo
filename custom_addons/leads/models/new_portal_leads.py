@@ -38,6 +38,11 @@ class NewPortalLead(models.Model):
         store=True,
         readonly=True,
     )
+    is_portal_source = fields.Boolean(
+        string="Is Portal Source",
+        compute="_compute_is_portal_source",
+        store=False,
+    )
     portal_name = fields.Char(
         string="Legacy Portal Name",
         related="source_id.name",
@@ -324,6 +329,16 @@ class NewPortalLead(models.Model):
                 rec.site_visit_date_only = rec.site_visit_date.date()
             else:
                 rec.site_visit_date_only = False
+
+    @api.depends("source_id", "source_id.category_id", "source_id.category_id.source_type")
+    def _compute_is_portal_source(self):
+        """Use source category type directly so migrated rows with stale stored related fields still behave correctly."""
+        for rec in self:
+            rec.is_portal_source = (
+                rec.source_id.category_id.source_type == "portal"
+                if rec.source_id and rec.source_id.category_id
+                else False
+            )
 
     @api.model
     def _standardize_phone(self, phone_number):

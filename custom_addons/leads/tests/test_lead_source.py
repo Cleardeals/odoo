@@ -189,3 +189,78 @@ class TestLeadSource(TransactionCase):
         self.assertEqual(lead.user_id, self.env.user)
         self.assertTrue(lead.message_ids)
         self.assertIn("Manual Lead Created", lead.message_ids[0].body or "")
+
+    def test_13_is_portal_source_handles_stale_lead_source_type(self):
+        source = self.lead_model._get_or_create_source(
+            "MagicBricks",
+            source_type="portal",
+        )
+        lead = self.lead_model.with_context(automated_lead_creation=True).create(
+            {
+                "name": f"Portal Visibility Lead {self.suffix}",
+                "phone": "9876543213",
+                "source_id": source.id,
+                "portal_property_id": f"MB-{self.suffix}",
+            },
+        )
+
+        self.assertTrue(lead.is_portal_source)
+
+        # Simulate migrated rows where stored related source_type is stale/null.
+        self.env.cr.execute(
+            "UPDATE leads_new SET source_type = 'manual' WHERE id = %s",
+            (lead.id,),
+        )
+        self.env.cr.execute(
+            "SELECT source_type FROM leads_new WHERE id = %s",
+            (lead.id,),
+        )
+        self.assertEqual(self.env.cr.fetchone()[0], "manual")
+
+        lead.invalidate_recordset(["is_portal_source"])
+        self.assertTrue(lead.is_portal_source)
+
+    def test_14_is_portal_source_false_for_manual(self):
+        source = self.lead_model._get_or_create_source(
+            f"Manual Visibility Source {self.suffix}",
+            source_type="manual",
+        )
+        lead = self.lead_model.with_context(automated_lead_creation=True).create(
+            {
+                "name": f"Manual Visibility Lead {self.suffix}",
+                "phone": "9876543214",
+                "source_id": source.id,
+            },
+        )
+
+        self.assertFalse(lead.is_portal_source)
+
+    def test_15_sync_portal_default_rm_does_not_override_manual(self):
+        users = self.env["res.users"].with_context(no_reset_password=True)
+        group_user = self.env.ref("base.group_user")
+
+        mapped_user = users.create(
+            {
+                "name": "Purvi Desai",
+                "login": f"purvi_desai_{self.suffix}",
+                "email": f"purvi_desai_{self.suffix}@example.com",
+                "groups_id": [(6, 0, [group_user.id])],
+            }
+        )
+        manual_user = users.create(
+            {
+                "name": f"Manual RM {self.suffix}",
+                "login": f"manual_rm_{self.suffix}",
+                "email": f"manual_rm_{self.suffix}@example.com",
+                "groups_id": [(6, 0, [group_user.id])],
+            }
+        )
+
+        source = self.env.ref("leads.lead_source_99acres")
+        source.write({"default_rm_user_id": manual_user.id})
+
+        self.source_model._sync_portal_default_rms()
+        source.invalidate_recordset(["default_rm_user_id"])
+
+        self.assertEqual(source.default_rm_user_id, manual_user)
+        self.assertNotEqual(source.default_rm_user_id, mapped_user)

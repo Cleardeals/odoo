@@ -12,6 +12,7 @@
         # 2. Data
         "data/ir_config_parameter_data.xml",
         "data/lead_source_data.xml",
+        "data/lead_source_default_rm_sync.xml",
         "data/lead_score_cron.xml",
         "data/new_portal_lead_cron.xml",
         "data/pull_leads_cron.xml",

@@ -54,6 +54,7 @@
             <field name="name">99acres</field>
             <field name="category_id" ref="lead_source_category_portal"/>
             <field name="portal_code">99acres</field>
+            <field name="default_rm_user_id" search="[('name', '=', 'Purvi Desai'), ('share', '=', False), ('active', '=', True)]"/>
             <field name="sequence">10</field>
         </record>
 
@@ -61,6 +62,7 @@
             <field name="name">MagicBricks</field>
             <field name="category_id" ref="lead_source_category_portal"/>
             <field name="portal_code">MagicBricks</field>
+            <field name="default_rm_user_id" search="[('name', '=', 'Mayuri Malivad'), ('share', '=', False), ('active', '=', True)]"/>
             <field name="sequence">20</field>
         </record>
 
@@ -68,6 +70,7 @@
             <field name="name">Housing.com</field>
             <field name="category_id" ref="lead_source_category_portal"/>
             <field name="portal_code">Housing.com</field>
+            <field name="default_rm_user_id" search="[('name', '=', 'Jatin Shah'), ('share', '=', False), ('active', '=', True)]"/>
             <field name="sequence">30</field>
         </record>
 
@@ -75,6 +78,7 @@
             <field name="name">OLX</field>
             <field name="category_id" ref="lead_source_category_portal"/>
             <field name="portal_code">OLX</field>
+            <field name="default_rm_user_id" search="[('name', '=', 'Naresh Rojiya'), ('share', '=', False), ('active', '=', True)]"/>
             <field name="sequence">40</field>
         </record>
 

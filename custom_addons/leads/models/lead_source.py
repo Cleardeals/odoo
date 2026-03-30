@@ -1,5 +1,9 @@
+import logging
+
 from odoo import api, fields, models
 from odoo.exceptions import ValidationError
+
+_logger = logging.getLogger(__name__)
 
 
 class LeadSourceCategory(models.Model):
@@ -84,3 +88,55 @@ class LeadSource(models.Model):
                 raise ValidationError(
                     "Only portal sources can have a portal code.",
                 )
+
+    @api.model
+    def _sync_portal_default_rms(self):
+        """Assign default fallback RMs for canonical portal sources by user name.
+
+        Safety: only fills missing defaults; never overwrites an existing
+        manager-configured fallback RM.
+        """
+        source_to_rm_name = {
+            "99acres": "Purvi Desai",
+            "Housing.com": "Jatin Shah",
+            "OLX": "Naresh Rojiya",
+            "MagicBricks": "Mayuri Malivad",
+        }
+
+        user_model = self.env["res.users"].sudo()
+        source_model = self.sudo()
+
+        for source_name, rm_name in source_to_rm_name.items():
+            source = source_model.search([("name", "=", source_name)], limit=1)
+            if not source:
+                _logger.info(
+                    "Default RM sync: source '%s' not found, skipping.",
+                    source_name,
+                )
+                continue
+
+            rm_user = user_model.search(
+                [
+                    ("name", "=", rm_name),
+                    ("share", "=", False),
+                    ("active", "=", True),
+                ],
+                limit=1,
+            )
+            if not rm_user:
+                _logger.warning(
+                    "Default RM sync: user '%s' not found for source '%s'.",
+                    rm_name,
+                    source_name,
+                )
+                continue
+
+            if source.default_rm_user_id:
+                _logger.info(
+                    "Default RM sync: source '%s' already has fallback RM '%s'; preserving existing value.",
+                    source_name,
+                    source.default_rm_user_id.display_name,
+                )
+                continue
+
+            source.write({"default_rm_user_id": rm_user.id})

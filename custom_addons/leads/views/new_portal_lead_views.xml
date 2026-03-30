@@ -190,7 +190,8 @@
                         </group>
                         <group>
                             <field name="source_id" required="1"/>
-                            <field name="portal_property_id" invisible="source_type != 'portal'"/>
+                            <field name="is_portal_source" invisible="1"/>
+                            <field name="portal_property_id" invisible="not is_portal_source"/>
                             <field name="create_date" readonly="1"/>
                         </group>
                     </group>
