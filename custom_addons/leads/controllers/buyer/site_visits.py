@@ -22,9 +22,15 @@ Classification rules  (mirrors seller site-visits logic exactly)
       "buyer_not_picking_call").
       Visit did not occur and the RM has logged a reason why.
 
-  rescheduled
+  rescheduled  [LEGACY PATH — new data will not populate this bucket]
       status = rescheduled.
       Previously scheduled slot was cancelled; new slot TBD or set.
+      NOTE: As of the lead.site.visit model, the reschedule flow supersedes the
+      original visit and creates a new one with status="scheduled". The inquiry
+      snapshot therefore receives current_status="site_visit_scheduled", not
+      "rescheduled". This bucket is retained for backward compatibility with
+      records that had "rescheduled" written directly before the visit model
+      existed. New reschedules will appear in the "upcoming" bucket.
 
   completed
       status = explicitly site_visit_done.
@@ -118,6 +124,8 @@ from ..shared.response_utils import error_response, success_response
 
 _logger = logging.getLogger(__name__)
 
+# "rescheduled" is included for backward compatibility with pre-visit-model data.
+# New reschedules via lead.site.visit produce current_status="site_visit_scheduled".
 _VISIT_STATUSES = {"site_visit_scheduled", "site_visit_done", "rescheduled"}
 
 _EMPTY_FEEDBACK = {None, "", "other", False}
@@ -133,10 +141,17 @@ def _classify_visit(
      Determine which bucket a visit record belongs to.
 
     Returns one of: "upcoming" | "pending_feedback" | "cancelled" | "rescheduled" | "completed"
+
+    Real-world: the "rescheduled" branch is only reachable for records whose
+    current_status was written directly (pre-visit-model or manual override).
+    Reschedules via lead.site.visit produce current_status="site_visit_scheduled"
+    so those records appear in "upcoming", not "rescheduled".
     """
     if current_status == "site_visit_done":
         return "completed"
 
+    # Legacy path: direct write of "rescheduled" on leads.new.current_status.
+    # New reschedules via lead.site.visit arrive here as "site_visit_scheduled".
     if current_status == "rescheduled":
         return "rescheduled"
 

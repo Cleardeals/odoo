@@ -15,6 +15,20 @@ Test Categories:
 - Remarks Handling: Conditional inclusion only for "other" feedback
 - Edge Cases: Null dates, missing fields, empty buckets
 - Data Integrity: Field mapping, datetime formatting
+- New Model Integration: lead.site.visit snapshot sync, reschedule contract
+
+Model integration notes
+-----------------------
+The API reads the flat snapshot fields on leads.new (site_visit_date,
+current_status, feedback_general, etc.). These are populated either:
+  • Directly by the RM (legacy path)
+  • Automatically by lead.site.visit._sync_inquiry_snapshot (new path)
+
+Under the new model, completed visits write current_status="site_visit_done"
+and scheduled/rescheduled visits both write current_status="site_visit_scheduled".
+The "rescheduled" bucket is therefore LEGACY ONLY — retained for backward
+compatibility with records written before the visit model existed.
+New reschedules always appear in the "upcoming" bucket.
 """
 
 import logging
@@ -156,9 +170,16 @@ class TestSellerSiteVisitsAPI(PortalLeadTestCase):
 
     def test_04_classify_rescheduled_visit(self):
         """
-        ARRANGE: A rescheduled status
+        ARRANGE: A rescheduled status (in-memory classification)
         ACT: Classify visit
         ASSERT: Returns 'rescheduled'
+
+        LEGACY TEST (in-memory): This tests the _classify_visit() function's
+        "rescheduled" branch in isolation. In production, this branch is only
+        reachable for records that had current_status="rescheduled" written
+        directly (pre-visit-model data or a manual override). New reschedules
+        via lead.site.visit produce current_status="site_visit_scheduled"
+        on the snapshot, so those appear in "upcoming". See test_33.
         """
         # ARRANGE
         current_status = "rescheduled"
@@ -453,9 +474,13 @@ class TestSellerSiteVisitsAPI(PortalLeadTestCase):
 
     def test_16_rescheduled_adds_note(self):
         """
-        ARRANGE: Record in rescheduled bucket
+        ARRANGE: Record in rescheduled bucket (in-memory)
         ACT: Apply bucket-specific fields
         ASSERT: Note is added
+
+        LEGACY TEST (in-memory): Tests the note that _apply_bucket_fields()
+        attaches for the "rescheduled" bucket. This bucket is now legacy-only;
+        new reschedules appear in "upcoming" via the lead.site.visit model.
         """
         # ARRANGE
         record = {}
@@ -931,3 +956,156 @@ class TestSellerSiteVisitsAPI(PortalLeadTestCase):
         self.assertEqual(date_iso, "2025-03-20")
         # Both refer to same calendar date
         self.assertTrue(datetime_iso.startswith(date_iso))
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # NEW MODEL INTEGRATION: lead.site.visit drives the snapshot
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def test_33_new_model_scheduled_visit_syncs_to_upcoming_bucket(self):
+        """
+        ARRANGE: Lead with a linked property (seller's property) and no visits.
+        ACT    : Create a lead.site.visit with 'scheduled' status and a future
+                 datetime. The model's _sync_inquiry_snapshot writes back to the
+                 leads.new flat fields automatically.
+        ASSERT : leads.new.current_status == "site_visit_scheduled"
+                 leads.new.site_visit_date  == the scheduled datetime
+                 The controller's _classify_visit() maps this to "upcoming".
+
+        This verifies that the new model drives the seller API response correctly
+        without any direct writes to leads.new snapshot fields.
+        """
+        from odoo.addons.leads.controllers.seller.site_visits import _classify_visit
+
+        now = datetime.now()
+        lead = self.create_portal_lead(
+            property_base_id=self.test_property.id,
+            user_id=self.rm_user.id,
+        )
+        scheduled_status = self.env["lead.site.visit.status"].search(
+            [("code", "=", "scheduled")], limit=1
+        )
+        future_dt = now + timedelta(days=7)
+
+        self.env["lead.site.visit"].create(
+            {
+                "inquiry_id": lead.id,
+                "status_id": scheduled_status.id,
+                "scheduled_datetime": future_dt,
+            }
+        )
+
+        # Snapshot synchronisation must have fired.
+        self.assertEqual(lead.current_status, "site_visit_scheduled")
+        self.assertEqual(lead.site_visit_date, future_dt)
+
+        # The controller classifies this as "upcoming".
+        bucket = _classify_visit(
+            current_status=lead.current_status,
+            site_visit_date=lead.site_visit_date,
+            now=now,
+            feedback_general=lead.feedback_general,
+        )
+        self.assertEqual(bucket, "upcoming")
+
+    def test_34_new_model_completed_visit_syncs_to_completed_bucket(self):
+        """
+        ARRANGE: Lead with a scheduled visit.
+        ACT    : Mark the visit 'completed'. Snapshot updates current_status
+                 to "site_visit_done".
+        ASSERT : leads.new.current_status == "site_visit_done"
+                 _classify_visit() maps this to "completed".
+
+        Normal post-visit flow: RM marks visit done, snapshot flips the inquiry
+        to site_visit_done, seller API shows it in the "completed" bucket.
+        """
+        from odoo.addons.leads.controllers.seller.site_visits import _classify_visit
+
+        now = datetime.now()
+        lead = self.create_portal_lead(
+            property_base_id=self.test_property.id,
+            user_id=self.rm_user.id,
+        )
+        scheduled_status = self.env["lead.site.visit.status"].search(
+            [("code", "=", "scheduled")], limit=1
+        )
+        completed_status = self.env["lead.site.visit.status"].search(
+            [("code", "=", "completed")], limit=1
+        )
+
+        visit = self.env["lead.site.visit"].create(
+            {
+                "inquiry_id": lead.id,
+                "status_id": scheduled_status.id,
+                "scheduled_datetime": now - timedelta(days=2),
+            }
+        )
+        visit.write({"status_id": completed_status.id})
+
+        self.assertEqual(lead.current_status, "site_visit_done")
+
+        bucket = _classify_visit(
+            current_status=lead.current_status,
+            site_visit_date=lead.site_visit_date,
+            now=now,
+            feedback_general=lead.feedback_general,
+        )
+        self.assertEqual(bucket, "completed")
+
+    def test_35_reschedule_via_new_model_appears_in_upcoming_not_rescheduled(self):
+        """
+        ARRANGE: Lead with one scheduled visit.
+        ACT    : Reschedule via lead.site.visit.write(status=rescheduled, new_datetime).
+                 The model supersedes the original and creates a new 'scheduled' visit.
+                 The snapshot receives current_status="site_visit_scheduled".
+        ASSERT : leads.new.current_status == "site_visit_scheduled" (NOT "rescheduled")
+                 _classify_visit() returns "upcoming" for the new future date.
+
+        Critical contract: the "rescheduled" bucket is NEVER populated by the new
+        visit model. Reschedules always appear in "upcoming". The "rescheduled"
+        bucket is legacy-only (pre-visit-model direct writes).
+        """
+        from odoo.addons.leads.controllers.seller.site_visits import _classify_visit
+
+        now = datetime.now()
+        lead = self.create_portal_lead(
+            property_base_id=self.test_property.id,
+            user_id=self.rm_user.id,
+        )
+        scheduled_status = self.env["lead.site.visit.status"].search(
+            [("code", "=", "scheduled")], limit=1
+        )
+        rescheduled_status = self.env["lead.site.visit.status"].search(
+            [("code", "=", "rescheduled")], limit=1
+        )
+
+        original_visit = self.env["lead.site.visit"].create(
+            {
+                "inquiry_id": lead.id,
+                "status_id": scheduled_status.id,
+                "scheduled_datetime": now - timedelta(days=1),
+            }
+        )
+
+        new_future_dt = now + timedelta(days=5)
+        original_visit.write(
+            {"status_id": rescheduled_status.id, "scheduled_datetime": new_future_dt}
+        )
+
+        self.assertEqual(
+            lead.current_status,
+            "site_visit_scheduled",
+            "Reschedule via new model must write 'site_visit_scheduled' to snapshot, "
+            "not 'rescheduled'. The 'rescheduled' bucket is legacy-only.",
+        )
+
+        bucket = _classify_visit(
+            current_status=lead.current_status,
+            site_visit_date=lead.site_visit_date,
+            now=now,
+            feedback_general=lead.feedback_general,
+        )
+        self.assertEqual(
+            bucket,
+            "upcoming",
+            "A rescheduled visit (new model) must appear in 'upcoming', not 'rescheduled'.",
+        )

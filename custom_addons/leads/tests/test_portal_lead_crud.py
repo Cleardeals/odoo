@@ -7,7 +7,15 @@ from .test_portal_common import PortalLeadTestCase
 @tagged('post_install', '-at_install')
 class TestPortalLeadCRUD(PortalLeadTestCase):
     """
-    Test basic CRUD operations and field behaviors
+    Test basic CRUD operations and field behaviors for leads.new records.
+
+    Model integration notes
+    -----------------------
+    Tests that pass current_status or site_visit_date directly to create_portal_lead()
+    or call write() on the record do so for unit-test isolation. In production,
+    current_status and site_visit_date are populated by
+    lead.site.visit._sync_inquiry_snapshot when a visit is created or updated,
+    not by direct writes on leads.new.
     """
     
     def test_01_create_lead_with_required_fields(self):
@@ -59,7 +67,13 @@ class TestPortalLeadCRUD(PortalLeadTestCase):
 
     
     def test_06_compute_site_visit_date_only(self):
-        """Test site_visit_date_only computation."""
+        """
+        Verify that site_visit_date_only (Date) is computed from site_visit_date (Datetime).
+
+        current_status and site_visit_date are set directly here for isolation.
+        In production both fields are written by lead.site.visit._sync_inquiry_snapshot
+        when a visit is created; site_visit_date_only is then computed automatically.
+        """
         from datetime import datetime
         visit_datetime = datetime(2025, 12, 25, 14, 40, 0)
 
@@ -129,6 +143,10 @@ class TestPortalLeadCRUD(PortalLeadTestCase):
         Test the feedback_site_visit_done selection field.
         1. Verifies default is False (not set).
         2. Verifies all selection options can be set.
+
+        Note: current_status is set directly here for field isolation. In
+        production the "site_visit_done" status arrives via
+        lead.site.visit._sync_inquiry_snapshot when a visit is marked completed.
         """
         # Case 1: Default should be False/empty
         lead = self.create_portal_lead(

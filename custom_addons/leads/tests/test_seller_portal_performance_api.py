@@ -15,6 +15,15 @@ Test Categories:
 - Portal Block Initialization: All portals initialized with zero counts
 - Edge Cases: No leads, multiple portals, mixed types
 - Data Integrity: Status dictionary formatting, metric accuracy
+
+Model integration notes
+-----------------------
+Tests write current_status directly on leads.new records (or via write()) for
+isolation. In production, current_status is populated by
+lead.site.visit._sync_inquiry_snapshot when a visit is created or its status
+changes ("site_visit_scheduled" for new/rescheduled, "site_visit_done" for
+completed visits). Direct writes here are intentional test isolation and do
+not reflect the production flow for visit-related state transitions.
 """
 
 import logging

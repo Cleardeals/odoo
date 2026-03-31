@@ -9,30 +9,45 @@
               parent="lead_score_menu_root"
               sequence="10"/>
 
+    <!-- ── Daily Operations group ─────────────────────────────────────── -->
+    <menuitem id="menu_daily_operations"
+              name="Daily Operations"
+              parent="lead_score_menu_main"
+              sequence="10"/>
+
     <menuitem id="lead_score_menu_action"
               name="All Scored Leads"
               parent="lead_score_menu_main"
               action="lead_score_action"
-              sequence="10"/>
+              sequence="25"/>
 
     <menuitem id="lead_score_menu_rm"
               name="My Actionable Leads"
-              parent="lead_score_menu_main"
+              parent="menu_daily_operations"
               action="lead_score_action_rm"
               groups="leads.group_lead_score_rm"
-              sequence="15"/>
+              sequence="20"/>
+
+    <!-- Site Visits is added to this group in lead_site_visit_views.xml -->
+
+    <!-- ── Import group ───────────────────────────────────────────────── -->
+    <menuitem id="menu_import_section"
+              name="Import"
+              parent="lead_score_menu_main"
+              sequence="20"
+              groups="leads.group_lead_score_manager"/>
 
     <menuitem id="menu_import_leads_from_bq"
               name="Import Scored Leads (BQ)"
-              parent="lead_score_menu_main"
+              parent="menu_import_section"
               action="action_open_lead_score_bq_wizard"
-              sequence="20"/>
+              sequence="10"/>
 
     <menuitem id="menu_import_leads_from_csv"
               name="Import Leads File"
-              parent="lead_score_menu_main"
+              parent="menu_import_section"
               action="leads.action_open_lead_csv_import_wizard"
               groups="leads.group_lead_score_manager"
-              sequence="21"/>
+              sequence="20"/>
 
 </odoo>

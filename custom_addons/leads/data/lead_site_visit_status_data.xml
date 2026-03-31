@@ -1,0 +1,162 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+        <!-- Status seed (manager editable names, immutable codes) -->
+        <record id="lead_site_visit_status_scheduled" model="lead.site.visit.status">
+            <field name="name">Scheduled</field>
+            <field name="code">scheduled</field>
+            <field name="sequence">10</field>
+            <field name="is_scheduled_status">True</field>
+            <field name="allow_feedback_note">True</field>
+        </record>
+
+        <record id="lead_site_visit_status_rescheduled" model="lead.site.visit.status">
+            <field name="name">Rescheduled</field>
+            <field name="code">rescheduled</field>
+            <field name="sequence">20</field>
+            <field name="is_reschedule_status">True</field>
+            <field name="allow_feedback_note">True</field>
+        </record>
+
+        <record id="lead_site_visit_status_completed" model="lead.site.visit.status">
+            <field name="name">Completed</field>
+            <field name="code">completed</field>
+            <field name="sequence">30</field>
+            <field name="is_completed_status">True</field>
+            <field name="is_terminal">True</field>
+            <field name="allow_feedback_note">True</field>
+        </record>
+
+        <record id="lead_site_visit_status_cancelling" model="lead.site.visit.status">
+            <field name="name">Cancelling</field>
+            <field name="code">cancelling</field>
+            <field name="sequence">40</field>
+            <field name="is_cancelled_status">True</field>
+            <field name="is_terminal">True</field>
+            <field name="allow_feedback_note">True</field>
+        </record>
+
+        <record id="lead_site_visit_status_did_not_show_up" model="lead.site.visit.status">
+            <field name="name">Did Not Show Up</field>
+            <field name="code">did_not_show_up</field>
+            <field name="sequence">50</field>
+            <field name="is_no_show_status">True</field>
+            <field name="allow_feedback_note">True</field>
+        </record>
+
+        <record id="lead_site_visit_status_superseded" model="lead.site.visit.status">
+            <field name="name">Superseded</field>
+            <field name="code">superseded</field>
+            <field name="sequence">60</field>
+            <field name="is_cancelled_status">True</field>
+            <field name="is_terminal">True</field>
+            <field name="allow_feedback_note">False</field>
+        </record>
+
+        <!-- Feedback options: Scheduled -->
+        <record id="lead_site_visit_feedback_scheduled_buyer_confirmed" model="lead.site.visit.feedback.option">
+            <field name="name">Buyer Confirmed Slot</field>
+            <field name="code">buyer_confirmed_slot</field>
+            <field name="status_id" ref="leads.lead_site_visit_status_scheduled"/>
+            <field name="category">intent</field>
+            <field name="management_signal">positive_intent</field>
+            <field name="sequence">10</field>
+        </record>
+        <record id="lead_site_visit_feedback_scheduled_awaiting_confirmation" model="lead.site.visit.feedback.option">
+            <field name="name">Awaiting Buyer Confirmation</field>
+            <field name="code">awaiting_buyer_confirmation</field>
+            <field name="status_id" ref="leads.lead_site_visit_status_scheduled"/>
+            <field name="category">operations</field>
+            <field name="management_signal">risk</field>
+            <field name="sequence">20</field>
+        </record>
+
+        <!-- Feedback options: Rescheduled -->
+        <record id="lead_site_visit_feedback_rescheduled_buyer_requested" model="lead.site.visit.feedback.option">
+            <field name="name">Buyer Requested Time Change</field>
+            <field name="code">buyer_requested_time_change</field>
+            <field name="status_id" ref="leads.lead_site_visit_status_rescheduled"/>
+            <field name="category">intent</field>
+            <field name="management_signal">neutral</field>
+            <field name="sequence">10</field>
+        </record>
+        <record id="lead_site_visit_feedback_rescheduled_owner_unavailable" model="lead.site.visit.feedback.option">
+            <field name="name">Owner Unavailable</field>
+            <field name="code">owner_unavailable</field>
+            <field name="status_id" ref="leads.lead_site_visit_status_rescheduled"/>
+            <field name="category">operations</field>
+            <field name="management_signal">risk</field>
+            <field name="sequence">20</field>
+        </record>
+
+        <!-- Feedback options: Completed -->
+        <record id="lead_site_visit_feedback_completed_negotiation_started" model="lead.site.visit.feedback.option">
+            <field name="name">Negotiation Started</field>
+            <field name="code">negotiation_started</field>
+            <field name="status_id" ref="leads.lead_site_visit_status_completed"/>
+            <field name="category">intent</field>
+            <field name="management_signal">positive_intent</field>
+            <field name="sequence">10</field>
+        </record>
+        <record id="lead_site_visit_feedback_completed_deal_closed" model="lead.site.visit.feedback.option">
+            <field name="name">Deal Closed</field>
+            <field name="code">deal_closed</field>
+            <field name="status_id" ref="leads.lead_site_visit_status_completed"/>
+            <field name="category">intent</field>
+            <field name="management_signal">positive_intent</field>
+            <field name="sequence">20</field>
+        </record>
+        <record id="lead_site_visit_feedback_completed_price_high" model="lead.site.visit.feedback.option">
+            <field name="name">Rejected: Price High</field>
+            <field name="code">rejected_price_high</field>
+            <field name="status_id" ref="leads.lead_site_visit_status_completed"/>
+            <field name="category">pricing</field>
+            <field name="management_signal">loss_reason</field>
+            <field name="sequence">30</field>
+        </record>
+        <record id="lead_site_visit_feedback_completed_legacy" model="lead.site.visit.feedback.option">
+            <field name="name">Visit Done (Legacy — Update Feedback)</field>
+            <field name="code">completed_legacy</field>
+            <field name="status_id" ref="leads.lead_site_visit_status_completed"/>
+            <field name="category">other</field>
+            <field name="management_signal">neutral</field>
+            <field name="sequence">99</field>
+        </record>
+
+        <!-- Feedback options: Cancelling -->
+        <record id="lead_site_visit_feedback_cancelling_buyer_cancelled" model="lead.site.visit.feedback.option">
+            <field name="name">Buyer Cancelled Interest</field>
+            <field name="code">buyer_cancelled_interest</field>
+            <field name="status_id" ref="leads.lead_site_visit_status_cancelling"/>
+            <field name="category">intent</field>
+            <field name="management_signal">loss_reason</field>
+            <field name="sequence">10</field>
+        </record>
+        <record id="lead_site_visit_feedback_cancelling_location_mismatch" model="lead.site.visit.feedback.option">
+            <field name="name">Location Mismatch</field>
+            <field name="code">location_mismatch</field>
+            <field name="status_id" ref="leads.lead_site_visit_status_cancelling"/>
+            <field name="category">property</field>
+            <field name="management_signal">loss_reason</field>
+            <field name="sequence">20</field>
+        </record>
+
+        <!-- Feedback options: Did Not Show Up -->
+        <record id="lead_site_visit_feedback_noshow_buyer_unreachable" model="lead.site.visit.feedback.option">
+            <field name="name">Buyer No Show (Unreachable)</field>
+            <field name="code">buyer_no_show_unreachable</field>
+            <field name="status_id" ref="leads.lead_site_visit_status_did_not_show_up"/>
+            <field name="category">operations</field>
+            <field name="management_signal">risk</field>
+            <field name="sequence">10</field>
+        </record>
+        <record id="lead_site_visit_feedback_noshow_owner_unavailable" model="lead.site.visit.feedback.option">
+            <field name="name">Owner No Show</field>
+            <field name="code">owner_no_show</field>
+            <field name="status_id" ref="leads.lead_site_visit_status_did_not_show_up"/>
+            <field name="category">operations</field>
+            <field name="management_signal">risk</field>
+            <field name="sequence">20</field>
+        </record>
+    </data>
+</odoo>

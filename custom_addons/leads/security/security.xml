@@ -65,6 +65,32 @@
             <field name="perm_unlink" eval="True"/>
             <field name="domain_force">[(1, '=', 1)]</field> 
         </record>
+
+        <record id="rule_lead_site_visit_rm_own" model="ir.rule">
+            <field name="name">Site Visit: RM Own Records</field>
+            <field name="model_id" ref="model_lead_site_visit"/>
+            <field name="groups" eval="[(4, ref('leads.group_lead_score_rm'))]"/>
+            <field name="perm_read" eval="True"/>
+            <field name="perm_write" eval="True"/>
+            <field name="perm_create" eval="True"/>
+            <field name="perm_unlink" eval="False"/>
+            <!-- Filter on the visit's own assigned_rm_id — direct lookup, no join.
+                 RMs only see visits assigned to themselves regardless of who owns
+                 the parent inquiry. Managers bypass this rule entirely via their
+                 own rule_lead_site_visit_manager_all which grants [(1,'=',1)]. -->
+            <field name="domain_force">[('assigned_rm_id', '=', user.id)]</field>
+        </record>
+
+        <record id="rule_lead_site_visit_manager_all" model="ir.rule">
+            <field name="name">Site Visit: Manager See All</field>
+            <field name="model_id" ref="model_lead_site_visit"/>
+            <field name="groups" eval="[(4, ref('leads.group_lead_score_manager'))]"/>
+            <field name="perm_read" eval="True"/>
+            <field name="perm_write" eval="True"/>
+            <field name="perm_create" eval="True"/>
+            <field name="perm_unlink" eval="True"/>
+            <field name="domain_force">[(1, '=', 1)]</field>
+        </record>
         
     </data>
 </odoo>

@@ -10,6 +10,19 @@ Test Categories:
 - Key Metrics: Contacted, site visits, closed/lost calculations
 - Edge Cases: Empty funnels, single stage leads
 - Data Integrity: Percentages, totals consistency
+
+Model integration notes
+-----------------------
+Funnel tests write current_status directly on leads.new for isolation. In
+production, current_status is set by lead.site.visit._sync_inquiry_snapshot
+for visit-related transitions ("site_visit_scheduled", "site_visit_done").
+
+The "rescheduled" stage in ALL_FUNNEL_STAGES and _CONTACTED_STAGES is a
+legacy selection value retained for backward compatibility. The new visit
+model never writes "rescheduled" to the snapshot — a reschedule triggers
+the supersede-and-replace flow and writes "site_visit_scheduled" with the
+new date instead. Records with current_status="rescheduled" therefore only
+exist as pre-v1.3.0 data or records set via direct write / BQ import.
 """
 
 import logging

@@ -1,0 +1,333 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_lead_site_visit_status_list" model="ir.ui.view">
+        <field name="name">lead.site.visit.status.list</field>
+        <field name="model">lead.site.visit.status</field>
+        <field name="arch" type="xml">
+            <list string="Site Visit Statuses" editable="bottom">
+                <field name="sequence" widget="handle"/>
+                <field name="name"/>
+                <field name="code"/>
+                <field name="status_type"/>
+                <field name="is_terminal"/>
+                <field name="active"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_lead_site_visit_status_form" model="ir.ui.view">
+        <field name="name">lead.site.visit.status.form</field>
+        <field name="model">lead.site.visit.status</field>
+        <field name="arch" type="xml">
+            <form string="Site Visit Status">
+                <sheet>
+                    <group>
+                        <div class="o_form_label text-muted">Keep setup simple: set Name, Code, and Status Type.</div>
+                    </group>
+                    <group>
+                        <group>
+                            <field name="name"/>
+                            <field name="code" readonly="id"/>
+                            <field name="status_type"/>
+                            <field name="is_terminal"/>
+                            <field name="sequence"/>
+                            <field name="active"/>
+                        </group>
+                        <group string="Optional Display Settings">
+                            <field name="allow_feedback_note"/>
+                            <field name="color"/>
+                        </group>
+                    </group>
+                    <group invisible="1">
+                        <field name="is_scheduled_status"/>
+                        <field name="is_reschedule_status"/>
+                        <field name="is_completed_status"/>
+                        <field name="is_cancelled_status"/>
+                        <field name="is_no_show_status"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_lead_site_visit_feedback_option_list" model="ir.ui.view">
+        <field name="name">lead.site.visit.feedback.option.list</field>
+        <field name="model">lead.site.visit.feedback.option</field>
+        <field name="arch" type="xml">
+            <list string="Site Visit Feedback Options" editable="bottom">
+                <field name="sequence" widget="handle"/>
+                <field name="status_id"/>
+                <field name="name"/>
+                <field name="requires_note"/>
+                <field name="active"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_lead_site_visit_feedback_option_form" model="ir.ui.view">
+        <field name="name">lead.site.visit.feedback.option.form</field>
+        <field name="model">lead.site.visit.feedback.option</field>
+        <field name="arch" type="xml">
+            <form string="Site Visit Feedback Option">
+                <sheet>
+                    <group>
+                        <div class="o_form_label text-muted">Keep setup simple: Status, Name, and Requires Note are enough for day-to-day use.</div>
+                    </group>
+                    <group>
+                        <group>
+                            <field name="status_id"/>
+                            <field name="name"/>
+                            <field name="code" readonly="id"/>
+                            <field name="requires_note"/>
+                            <field name="active"/>
+                            <field name="sequence"/>
+                        </group>
+                        <group string="Optional Analytics">
+                            <field name="category"/>
+                            <field name="management_signal"/>
+                        </group>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_lead_site_visit_list" model="ir.ui.view">
+        <field name="name">lead.site.visit.list</field>
+        <field name="model">lead.site.visit</field>
+        <field name="arch" type="xml">
+            <list string="Site Visits"
+                                    decoration-danger="is_overdue_open"
+                                    decoration-success="status_is_completed"
+                                    decoration-info="status_is_rescheduled"
+                                    decoration-muted="status_is_cancelled or status_is_no_show">
+                <field name="is_overdue_open" column_invisible="1"/>
+                <field name="status_is_completed" column_invisible="1"/>
+                <field name="status_is_rescheduled" column_invisible="1"/>
+                <field name="status_is_cancelled" column_invisible="1"/>
+                <field name="status_is_no_show" column_invisible="1"/>
+                <field name="scheduled_datetime" string="Scheduled"/>
+                <field name="inquiry_id"/>
+                <field name="inquiry_phone" string="Lead Phone"/>
+                <field name="property_base_id"/>
+                <field name="assigned_rm_id" string="RM"/>
+                <field name="status_id"/>
+                <field name="reschedule_iteration" string="Visit #"/>
+                <field name="feedback_option_id"/>
+                <field name="feedback_note" optional="hide"/>
+                <field name="inquiry_type" optional="hide"/>
+                <field name="chain_reschedule_count" optional="hide"/>
+                <field name="status_changed_on" optional="hide"/>
+                <field name="active" optional="hide"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_lead_site_visit_search" model="ir.ui.view">
+        <field name="name">lead.site.visit.search</field>
+        <field name="model">lead.site.visit</field>
+        <field name="arch" type="xml">
+            <search string="Search Site Visits">
+                <field name="inquiry_id" string="Inquiry or Lead Phone" filter_domain="['|', ('inquiry_id.name', 'ilike', self), ('inquiry_phone', 'ilike', self)]"/>
+                <field name="inquiry_phone" string="Lead Phone"/>
+                <field name="property_base_id"/>
+                <field name="assigned_rm_id"/>
+                <field name="status_id"/>
+                <field name="feedback_option_id"/>
+                <separator/>
+                <filter name="my_visits" string="My Visits" domain="[('assigned_rm_id', '=', uid)]"/>
+                <filter name="my_pending" string="My Pending" domain="[('assigned_rm_id', '=', uid), '|', ('status_id.is_scheduled_status', '=', True), ('status_id.is_reschedule_status', '=', True)]"/>
+                <separator/>
+                <filter name="today" string="Today" domain="[('scheduled_date', '=', context_today())]"/>
+                <filter name="feedback_needed" string="Feedback Needed" domain="[('scheduled_date', '&lt;', context_today()), '|', ('status_id.is_scheduled_status', '=', True), ('status_id.is_reschedule_status', '=', True)]"/>
+                <filter name="second_plus" string="Second+ Visit" domain="[('reschedule_iteration', '&gt;=', 1)]"/>
+                <filter name="positive_buyers" string="Positive Buyers" domain="[('feedback_option_id.management_signal', '=', 'positive_intent')]"/>
+                <separator/>
+                <filter name="scheduled" string="Scheduled" domain="['|', ('status_id.is_scheduled_status', '=', True), ('status_id.is_reschedule_status', '=', True)]"/>
+                <filter name="completed" string="Completed" domain="[('status_id.is_completed_status', '=', True)]"/>
+                <filter name="cancelled" string="Cancelled" domain="[('status_id.is_cancelled_status', '=', True)]"/>
+                <filter name="no_show" string="No Show" domain="[('status_id.is_no_show_status', '=', True)]"/>
+                <filter name="scheduled_date_filter" string="Scheduled Date" date="scheduled_date"/>
+                <filter name="rescheduled_2_plus" string="Rescheduled 2+" domain="[('reschedule_iteration', '&gt;=', 2)]"/>
+                <separator/>
+                <filter name="group_date" string="Date" context="{'group_by': 'scheduled_date'}"/>
+                <filter name="group_status" string="Status" context="{'group_by': 'status_id'}"/>
+                <filter name="group_rm" string="RM" context="{'group_by': 'assigned_rm_id'}"/>
+                <filter name="group_inquiry" string="Inquiry" context="{'group_by': 'inquiry_id'}"/>
+            </search>
+        </field>
+    </record>
+
+    <record id="view_lead_site_visit_pivot" model="ir.ui.view">
+        <field name="name">lead.site.visit.pivot</field>
+        <field name="model">lead.site.visit</field>
+        <field name="arch" type="xml">
+            <pivot string="Site Visit DPR">
+                <field name="assigned_rm_id" type="row"/>
+                <field name="status_id" type="col"/>
+                <field name="scheduled_date" interval="day" type="col"/>
+                <field name="id" type="measure"/>
+            </pivot>
+        </field>
+    </record>
+
+    <record id="view_lead_site_visit_graph" model="ir.ui.view">
+        <field name="name">lead.site.visit.graph</field>
+        <field name="model">lead.site.visit</field>
+        <field name="arch" type="xml">
+            <graph string="Site Visit Performance" type="bar">
+                <field name="assigned_rm_id"/>
+                <field name="status_id"/>
+                <field name="id" type="measure"/>
+            </graph>
+        </field>
+    </record>
+
+    <record id="view_lead_site_visit_calendar" model="ir.ui.view">
+        <field name="name">lead.site.visit.calendar</field>
+        <field name="model">lead.site.visit</field>
+        <field name="arch" type="xml">
+            <!-- RM view: week by default, colored by status, only shows scheduled visits by default -->
+            <!-- js_class activates the custom SiteVisitCalendarRenderer which adds the Reschedule -->
+            <!-- popover button. Boolean fields below are loaded into rawRecord for the JS guard. -->
+            <calendar string="My Site Visits"
+                      date_start="scheduled_datetime"
+                      color="status_id"
+                      mode="week"
+                      scales="day,week,month"
+                      quick_create="false"
+                      js_class="site_visit_calendar">
+                <field name="inquiry_id"/>
+                <field name="property_base_id"/>
+                <field name="assigned_rm_id"/>
+                <field name="status_id"/>
+                <!-- Status boolean helpers: loaded into rawRecord for isRescheduleVisible -->
+                <!-- invisible="1" hides them from the popover body while keeping them in rawRecord -->
+                <field name="status_is_scheduled" invisible="1"/>
+                <field name="status_is_rescheduled" invisible="1"/>
+            </calendar>
+        </field>
+    </record>
+
+
+
+    <record id="view_lead_site_visit_form" model="ir.ui.view">
+        <field name="name">lead.site.visit.form</field>
+        <field name="model">lead.site.visit</field>
+        <field name="arch" type="xml">
+            <form string="Site Visit">
+                <header>
+                    <button name="action_open_quick_update_wizard"
+                            type="object"
+                            string="Update Status"
+                            class="btn-primary"/>
+                    <button name="action_open_cancel_wizard"
+                            type="object"
+                            string="Cancel Visit"
+                            class="btn-secondary"
+                            invisible="status_is_cancelled or status_is_completed or status_is_no_show"/>
+                    <field name="status_id" widget="statusbar" clickable="0"/>
+                </header>
+                <sheet>
+                    <div class="oe_button_box" name="button_box">
+                        <button name="action_view_inquiry_visits"
+                                type="object"
+                                class="oe_stat_button"
+                                icon="fa-calendar">
+                            <field name="total_inquiry_visit_count" widget="statinfo" string="Lead Visits"/>
+                        </button>
+                        <button name="action_view_inquiry"
+                                type="object"
+                                class="oe_stat_button"
+                                icon="fa-user-circle"
+                                invisible="not inquiry_id">
+                            <span class="o_stat_text">Open Inquiry</span>
+                        </button>
+                    </div>
+                    <div class="alert alert-warning"
+                         invisible="not is_overdue_open"
+                         role="alert">
+                        <strong>Overdue Visit</strong> — This visit's scheduled date has passed without a status update. Please log the outcome.
+                    </div>
+                    <group>
+                        <group string="Lead &amp; Property">
+                            <field name="inquiry_id"/>
+                            <field name="inquiry_phone" readonly="1"/>
+                            <field name="inquiry_type" readonly="1"/>
+                            <field name="property_base_id"/>
+                            <field name="assigned_rm_id"/>
+                        </group>
+                        <group string="Scheduling">
+                            <field name="scheduled_datetime"/>
+                            <field name="scheduled_date" readonly="1"/>
+                            <field name="status_id"/>
+                            <field name="status_changed_on" readonly="1"/>
+                        </group>
+                    </group>
+                    <group>
+                        <group string="Visit Chain">
+                            <field name="reschedule_iteration" readonly="1" string="Visit Number"/>
+                            <field name="chain_reschedule_count" readonly="1"/>
+                            <field name="previous_visit_id"/>
+                            <field name="root_visit_id" readonly="1"/>
+                        </group>
+                        <group string="Feedback">
+                            <field name="feedback_option_id"/>
+                            <field name="feedback_note"/>
+                        </group>
+                    </group>
+                    <group invisible="1">
+                        <field name="is_overdue_open"/>
+                        <field name="status_is_cancelled"/>
+                        <field name="status_is_completed"/>
+                        <field name="status_is_no_show"/>
+                        <field name="active"/>
+                    </group>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_lead_site_visit" model="ir.actions.act_window">
+        <field name="name">Site Visits</field>
+        <field name="res_model">lead.site.visit</field>
+        <field name="view_mode">list,calendar,form,pivot,graph</field>
+        <!-- Default: show only scheduled/open visits. search_default_my_visits removed so managers
+             and admins see all visits; individual RMs can activate "My Visits" from the search bar. -->
+        <field name="context">{'search_default_scheduled': 1}</field>
+    </record>
+
+    <record id="action_lead_site_visit_status" model="ir.actions.act_window">
+        <field name="name">Site Visit Statuses</field>
+        <field name="res_model">lead.site.visit.status</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+    <record id="action_lead_site_visit_feedback_option" model="ir.actions.act_window">
+        <field name="name">Site Visit Feedback Options</field>
+        <field name="res_model">lead.site.visit.feedback.option</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+    <menuitem id="menu_lead_site_visits"
+              name="Site Visits"
+              parent="leads.menu_daily_operations"
+              action="action_lead_site_visit"
+              sequence="30"
+              groups="leads.group_lead_score_manager,leads.group_lead_score_rm"/>
+
+    <menuitem id="menu_lead_site_visit_status"
+              name="Site Visit Statuses"
+              parent="leads.lead_source_config_root"
+              action="action_lead_site_visit_status"
+              sequence="30"
+              groups="leads.group_lead_score_manager"/>
+
+    <menuitem id="menu_lead_site_visit_feedback_option"
+              name="Site Visit Feedback"
+              parent="leads.lead_source_config_root"
+              action="action_lead_site_visit_feedback_option"
+              sequence="40"
+              groups="leads.group_lead_score_manager"/>
+</odoo>

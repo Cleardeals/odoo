@@ -261,11 +261,11 @@
                                 <field name="latest_site_visit_id" readonly="1"/>
                                 <button name="action_view_site_visits"
                                         type="object"
-                                        string="Open Inquiry Visit List"
+                                        string="Inquiry Timeline"
                                         class="btn-secondary"/>
                                 <button name="action_view_all_phone_site_visits"
                                         type="object"
-                                        string="Open Overall Visit List"
+                                        string="Overall Lead Timeline"
                                         class="btn-secondary"
                                         invisible="not phone"/>
                             </group>
@@ -274,9 +274,12 @@
                             </group>
                             <group string="Inquiry Timeline (This Inquiry Only)">
                             <field name="inquiry_timeline_html" widget="html" sanitize="0" readonly="1" nolabel="1"/>
+                            
                             </group>
                             <group string="Overall Lead Timeline (All Inquiries)">
                                 <field name="overall_timeline_html" widget="html" sanitize="0" readonly="1" nolabel="1"/>
+                                
+                                </field>
                             </group>
                         </page>
                     </notebook>
@@ -298,8 +301,8 @@
         </record>
 
         <menuitem id="menu_new_portal_lead"
-                            name="Leads"
-                            parent="leads.menu_daily_operations"
+                            name=" Leads"
+                            parent="leads.lead_score_menu_main"
                             action="action_new_portal_lead"
                             sequence="5"
                             groups="leads.group_lead_score_rm"/>

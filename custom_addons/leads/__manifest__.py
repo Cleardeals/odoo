@@ -1,6 +1,6 @@
 {
     "name": "Lead Scoring",
-    "version": "1.1.0",
+    "version": "1.3.0",
     "depends": ["base", "web", "mail", "lead_suggestor"],
     "author": "Nirat Patel",
     "category": "Sales",
@@ -13,6 +13,7 @@
         "data/ir_config_parameter_data.xml",
         "data/lead_source_data.xml",
         "data/lead_source_default_rm_sync.xml",
+        "data/lead_site_visit_status_data.xml",
         "data/lead_score_cron.xml",
         "data/new_portal_lead_cron.xml",
         "data/pull_leads_cron.xml",
@@ -30,12 +31,16 @@
         "views/whatsapp_response_views.xml",
         "views/whatsapp_response_inherit_views.xml",
         "views/lead_source_views.xml",
+        "views/lead_site_visit_wizard_views.xml",
+        "views/lead_site_visit_views.xml",
         "views/new_portal_lead_views.xml",
     ],
     "assets": {
         "web.assets_backend": [
             "lead_suggestor/static/src/js/whatsapp_action.js",
             "leads/static/src/js/leads_list_controller.js",
+            "leads/static/src/js/site_visit_calendar.js",
+            "leads/static/src/xml/site_visit_calendar.xml",
         ],
     },
     "license": "LGPL-3",

@@ -12,6 +12,15 @@ class TestLeadPropertyInterest(PortalLeadTestCase):
     """
     Tests for the lead.property.interest model.
     This model represents recommended properties linked to a lead.
+
+    Model integration notes
+    -----------------------
+    lead.property.interest has its own independent flat snapshot fields
+    (current_status, site_visit_date, site_visit_date_only, etc.) that mirror
+    the fields on leads.new. These interest-level fields are NOT driven by
+    lead.site.visit._sync_inquiry_snapshot — that model only syncs the parent
+    leads.new record. Direct writes to interest flat fields in these tests
+    reflect the actual production pattern, not a test isolation shortcut.
     """
 
     @classmethod
