@@ -156,7 +156,7 @@ These values appear in `current_status` fields across all endpoints.
 | `detail_shared_and_interested_for_site_visit`    | Interested, site visit being arranged        |
 | `option_not_matching_requirements`               | Property doesn't match buyer's needs         |
 | `site_visit_scheduled`                           | Site visit confirmed                         |
-| `rescheduled`                                    | Previously scheduled visit was rescheduled   |
+| `rescheduled` *(legacy — not returned by API)*   | Rescheduled; superseded by new visit in v1.3 |
 | `site_visit_done`                                | Site visit completed                         |
 | `requirement_closed`                             | No More Requirement from Buyer end           |
 | `no_requirements`                                | Buyer no longer looking                      |
@@ -176,7 +176,7 @@ These values appear in `current_status` fields across all endpoints.
 
 ### 5.1 `GET /api/track/lead/site-visits`
 
-Returns all site visits for a buyer's phone number, classified into five timeline buckets.
+Returns all site visits for a buyer's phone number, classified into four timeline buckets.
 
 **Auth required:** Yes (`X-API-Key`)
 
@@ -194,13 +194,11 @@ Returns all site visits for a buyer's phone number, classified into five timelin
   "upcoming":         [ <visit-object>, ... ],
   "pending_feedback": [ <visit-object>, ... ],
   "cancelled":        [ <visit-object>, ... ],
-  "rescheduled":      [ <visit-object>, ... ],
   "completed":        [ <visit-object>, ... ],
   "totals": {
     "upcoming":         2,
     "pending_feedback": 1,
     "cancelled":        3,
-    "rescheduled":      1,
     "completed":        5
   }
 }
@@ -213,8 +211,9 @@ Returns all site visits for a buyer's phone number, classified into five timelin
 | `upcoming`         | `current_status = "site_visit_scheduled"` AND `site_visit_datetime` is in the future                              | ASC (soonest first) |
 | `pending_feedback` | `current_status = "site_visit_scheduled"` AND `site_visit_datetime` is in the past AND `feedback_general` is null/empty/`"other"` | ASC        |
 | `cancelled`        | `current_status = "site_visit_scheduled"` AND `site_visit_datetime` is in the past AND `feedback_general` is present | DESC (most recent first) |
-| `rescheduled`      | `current_status = "rescheduled"`                                                                                   | DESC       |
 | `completed`        | `current_status = "site_visit_done"`                                                                              | DESC       |
+
+> **Reschedules:** When a visit is rescheduled via `lead.site.visit`, the original visit is superseded and a new visit is created with `status="scheduled"`. `lead.site.visit._sync_inquiry_snapshot` writes `current_status="site_visit_scheduled"` with the new date to the inquiry snapshot, so the rescheduled visit surfaces in `upcoming` if its date is in the future. Records from before v1.3 with `current_status="rescheduled"` are not returned by this endpoint.
 
 #### Visit object fields
 
@@ -240,7 +239,6 @@ All buckets include this base set:
 | Bucket             | Extra fields                                                                 |
 |--------------------|------------------------------------------------------------------------------|
 | `pending_feedback` | `note` — `Visit date has passed — awaiting RM feedback`                      |
-| `rescheduled`      | `note` — `Visit was rescheduled — confirm new date with RM`                  |
 | `cancelled`        | `feedback_general`, `note` — `Visit did not occur due to buyer status`       |
 | `completed`        | `feedback_site_visit_done`; `remarks` only when `feedback_site_visit_done = "other"` |
 
@@ -269,13 +267,11 @@ All buckets include this base set:
     ],
     "pending_feedback": [],
     "cancelled": [],
-    "rescheduled": [],
     "completed": [],
     "totals": {
       "upcoming": 1,
       "pending_feedback": 0,
       "cancelled": 0,
-      "rescheduled": 0,
       "completed": 0
     }
   },
@@ -542,7 +538,7 @@ Per-source breakdown of lead statuses and key site-visit metrics. Optionally fil
 
 ### 6.3 `GET /api/track/property/site-visits`
 
-All site visits for a seller's properties, classified into five timeline buckets. Mirrors the buyer endpoint but from the seller's perspective (shows lead names/phones instead of lead IDs).
+All site visits for a seller's properties, classified into four timeline buckets. Mirrors the buyer endpoint but from the seller's perspective (shows lead names/phones instead of lead IDs).
 
 **Auth required:** Yes
 
@@ -563,13 +559,11 @@ All site visits for a seller's properties, classified into five timeline buckets
   "upcoming":         [ <visit-object>, ... ],
   "pending_feedback": [ <visit-object>, ... ],
   "cancelled":        [ <visit-object>, ... ],
-  "rescheduled":      [ <visit-object>, ... ],
   "completed":        [ <visit-object>, ... ],
   "totals": {
     "upcoming":         1,
     "pending_feedback": 2,
     "cancelled":        0,
-    "rescheduled":      1,
     "completed":        4
   }
 }

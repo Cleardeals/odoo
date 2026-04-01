@@ -28,7 +28,12 @@ _logger = logging.getLogger(__name__)
 #           defaulting to 'primary' when the source column is also NULL.
 # Step 4  — Fix root_visit_id: set to self (id) for root visits where it
 #           is currently NULL (records with no previous_visit_id).
-# Step 5  — VERIFICATION: log final NULL counts to confirm success.
+# Step 5  — Fix name: rewrite all non-standard names to match
+#           _compute_name: "{leads.new.name} | {status.name} | {datetime}".
+#           This covers the old "[Migrated]" prefix and any NULL names.
+# Step 6  — Backfill feedback_option_id for completed visits with no feedback
+#           using the "completed_legacy" placeholder option.
+# Step 7  — VERIFICATION: log final NULL counts to confirm success.
 #
 # IDEMPOTENCY
 # ───────────
@@ -83,7 +88,12 @@ def migrate(cr, version):
     # ─────────────────────────────────────────────────────────────────────────
     _logger.info("%s %s: [step 0] pre-flight checks", __name__, version)
 
-    for tbl in ("leads_new", "lead_site_visit"):
+    for tbl in (
+        "leads_new",
+        "lead_site_visit",
+        "lead_site_visit_status",
+        "lead_site_visit_feedback_option",
+    ):
         if not _table_exists(cr, tbl):
             _logger.warning(
                 "%s %s: table '%s' not found — aborting.", __name__, version, tbl
@@ -202,9 +212,10 @@ def migrate(cr, version):
                             || ' | '
                             || TO_CHAR(sv.scheduled_datetime AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS'),
                write_date = NOW() AT TIME ZONE 'UTC'
-          FROM leads_new ln
-          JOIN lead_site_visit_status s ON s.id = sv.status_id
+          FROM leads_new ln,
+               lead_site_visit_status s
          WHERE sv.inquiry_id = ln.id
+           AND sv.status_id  = s.id
            AND (
                sv.name LIKE '[Migrated]%%'
                OR sv.name IS NULL
@@ -269,7 +280,7 @@ def migrate(cr, version):
     still_null_root = cr.fetchone()[0]
 
     _logger.info(
-        "%s %s: [step 5] after migration — still null: phone=%d  type=%d  root_visit_id=%d",
+        "%s %s: [step 7] after migration — still null: phone=%d  type=%d  root_visit_id=%d",
         __name__, version, still_null_phone, still_null_type, still_null_root,
     )
 

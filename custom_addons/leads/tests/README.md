@@ -29,12 +29,13 @@ This test suite provides comprehensive coverage for the **Leads Management Modul
 | `lead.score` | Scored/processed leads with follow-up management |
 | `lead.source` | Canonical source registry with portal/manual classification and fallback RM routing |
 | `lead.source.category` | Source categorization model used by `lead.source` |
+| `lead.site.visit` | Site visit lifecycle model; drives `leads.new` snapshot fields via `_sync_inquiry_snapshot` |
 
 ### Test Statistics
 
-- **Total Test Files:** 20
-- **Total Tests:** ~367+
-- **Test Categories:** CRUD, Source Models & Routing, Processing, API (Buyer/Seller), Webhook, Cron Jobs, WhatsApp Integration, Property Interests, Site Visits, Activity Logs, Performance
+- **Total Test Files:** 21
+- **Total Tests:** 347
+- **Test Categories:** CRUD, Source Models & Routing, Processing, API (Buyer/Seller), Webhook, Cron Jobs, WhatsApp Integration, Property Interests, Site Visits, Site Visit Model, Activity Logs, Performance
 - **Test Tags:** `@tagged('post_install', '-at_install')`
 
 ---
@@ -56,14 +57,15 @@ tests/
 ├── test_portal_lead_api.py          # External API integrations (4 tests)
 ├── test_portal_lead_webhook.py      # n8n webhook functionality (3 tests)
 ├── test_lead_property_interest.py   # Property interests & computed fields (21 tests)
+├── test_lead_site_visit_models.py   # lead.site.visit model lifecycle & snapshot sync
 │
 ├── BUYER API ENDPOINTS
-├── test_buyer_site_visits_api.py    # Buyer site visits classification & serialization (35 tests)
-├── test_buyer_activity_api.py       # Buyer activity logs & feed (TBD tests)
+├── test_buyer_site_visits_api.py    # Buyer site visits classification & serialization (38 tests)
+├── test_buyer_activity_api.py       # Buyer activity logs & feed
 │
 ├── SELLER API ENDPOINTS
-├── test_seller_site_visits_api.py   # Seller site visits with property filtering (32 tests)
-├── test_seller_activity_api.py      # Seller activity logs & events (TBD tests)
+├── test_seller_site_visits_api.py   # Seller site visits with property filtering (35 tests)
+├── test_seller_activity_api.py      # Seller activity logs & events
 ├── test_seller_ai_suggestions_api.py# Seller AI suggestion API tests
 ├── test_seller_funnel_api.py        # Seller funnel API tests
 ├── test_seller_summary_api.py       # Seller dashboard summary data (25 tests)
@@ -556,43 +558,47 @@ _lead_prop_uniq = models.Constraint(
 ## 13. `test_buyer_site_visits_api.py` - Buyer Site Visits API
 
 **Class:** `TestBuyerSiteVisitsAPI(PortalLeadTestCase)`
-**Endpoint:** `/api/buyer/site_visits`
+**Endpoint:** `/api/track/lead/site-visits`
 **Models Under Test:** `leads.new`, `lead.property.interest`
-**Total Tests:** 35
+**Total Tests:** 38
 
 ### Overview
 
 Comprehensive test suite for the buyer site visits endpoint that classifies, serializes, and aggregates site visit records across primary and recommended properties. Tests the complete pipeline from visit classification through API response building.
 
+> **v1.3.1 note:** The `rescheduled` bucket has been removed from the endpoint. Tests 036–038 are integration tests added in v1.3.0 that verify the full `lead.site.visit` → snapshot → API pipeline for scheduled, rescheduled (now surfaces as `upcoming`), and completed visits.
+
 ### Visit Classification Logic
 
-Visits are classified into 5 buckets based on status, date, and feedback:
+Visits are classified into 4 buckets based on status, date, and feedback:
 
 | Bucket | Condition | Sort Order |
-|--------|-----------|-----------|
-| `upcoming` | status='site_visit_scheduled' AND date > now | Ascending (soonest first) |
-| `pending_feedback` | status='site_visit_scheduled' AND date ≤ now AND feedback in {None, "", "other", False} | Ascending (oldest first) |
-| `cancelled` | status='site_visit_scheduled' AND date ≤ now AND feedback NOT in _EMPTY_FEEDBACK | Descending (recent first) |
-| `rescheduled` | status='rescheduled' | Descending (recent first) |
-| `completed` | status='site_visit_done' | Descending (recent first) |
+|--------|-----------|---|
+| `upcoming` | status=`site_visit_scheduled` AND date > now | Ascending (soonest first) |
+| `pending_feedback` | status=`site_visit_scheduled` AND date ≤ now AND feedback in {None, "", "other", False} | Ascending (oldest first) |
+| `cancelled` | status=`site_visit_scheduled` AND date ≤ now AND feedback NOT in `_EMPTY_FEEDBACK` | Descending (recent first) |
+| `completed` | status=`site_visit_done` | Descending (recent first) |
+
+> **Reschedules:** The `lead.site.visit` reschedule flow supersedes the original visit and creates a new one with `status="scheduled"`, which syncs `current_status="site_visit_scheduled"` to the snapshot with the new date. Rescheduled visits therefore appear in `upcoming` if the new date is in the future.
 
 ### Valid Status Values
 
 ```python
-_VISIT_STATUSES = {"site_visit_scheduled", "site_visit_done", "rescheduled"}
+_VISIT_STATUSES = {"site_visit_scheduled", "site_visit_done"}
 _EMPTY_FEEDBACK = {None, "", "other", False}
 ```
 
-### Test Categories (35 tests)
+### Test Categories (38 tests)
 
-#### Category 1: Visit Classification (7 tests)
+#### Category 1: Visit Classification (6 tests)
 - test_001: upcoming (future scheduled)
 - test_002: pending_feedback (past scheduled, no feedback)
 - test_003: cancelled (past scheduled, feedback value)
-- test_004: rescheduled (status="rescheduled")
 - test_005: completed (status="site_visit_done")
 - test_006: empty string feedback → pending_feedback
 - test_007: False feedback → pending_feedback
+
+> Note: test_004 is a LEGACY TEST — it directly sets `current_status="rescheduled"` and verifies the record is excluded now that the bucket is removed. Retained as a regression guard.
 
 #### Category 2: Primary Lead Record Building (4 tests)
 - test_008: all base fields present
@@ -604,14 +610,15 @@ _EMPTY_FEEDBACK = {None, "", "other", False}
 - test_012: interest structure with parent link
 - test_013: inherits lead info via lead_id relation
 
-#### Category 4: Bucket-Specific Fields (7 tests)
+#### Category 4: Bucket-Specific Fields (6 tests)
 - test_014: pending_feedback excludes feedback_general field
 - test_015: cancelled includes feedback_general
-- test_016: rescheduled status preserved
 - test_017: completed includes feedback_site_visit_done
 - test_018: completed includes remarks when feedback="other"
 - test_019: completed excludes remarks when feedback!="other"
 - test_020: upcoming has no bucket-specific fields
+
+> Note: test_016 is a LEGACY TEST — it directly sets `current_status="rescheduled"` to verify legacy handling. Retained as a regression guard.
 
 #### Category 5: Sorting Logic (4 tests)
 - test_021: upcoming ascending (soonest first)
@@ -636,15 +643,20 @@ _EMPTY_FEEDBACK = {None, "", "other", False}
 - test_034: missing visit_date excluded
 - test_035: invalid status excluded
 
+#### Category 9: Visit model integration (3 tests)
+- test_036: `lead.site.visit` scheduled → snapshot → appears in `upcoming`
+- test_037: `lead.site.visit` reschedule → supersedes original → new date in `upcoming`
+- test_038: `lead.site.visit` completed → snapshot → appears in `completed`
+
 ### Key Fields
 
 **Base Record Fields (all buckets):**
 ```python
 {
-    "source": "primary" | "recommended",
+    "inquiry_type": "primary" | "recommended",
     "lead_id": int,
     "lead_name": str | None,
-    "portal": str | None,
+    "source": str | None,
     "property_tag": str | None,
     "property_bhk": str | None,
     "property_location": str | None,
@@ -667,9 +679,6 @@ _EMPTY_FEEDBACK = {None, "", "other", False}
     "note": "Visit did not occur due to buyer status"
 }
 
-# rescheduled bucket
-{"note": "Visit was rescheduled — confirm new date with RM"}
-
 # completed bucket
 {
     "feedback_site_visit_done": str,
@@ -688,13 +697,11 @@ _EMPTY_FEEDBACK = {None, "", "other", False}
     "upcoming": [...],
     "pending_feedback": [...],
     "cancelled": [...],
-    "rescheduled": [...],
     "completed": [...],
     "totals": {
         "upcoming": int,
         "pending_feedback": int,
         "cancelled": int,
-        "rescheduled": int,
         "completed": int
     },
     "error": null
@@ -706,30 +713,37 @@ _EMPTY_FEEDBACK = {None, "", "other", False}
 ## 14. `test_seller_site_visits_api.py` - Seller Site Visits API
 
 **Class:** `TestSellerSiteVisitsAPI(PortalLeadTestCase)`
-**Endpoint:** `/api/seller/property/{property_tag}/site_visits`
+**Endpoint:** `/api/track/property/site-visits`
 **Models Under Test:** `leads.new`, `lead.property.interest`
-**Total Tests:** 32
+**Total Tests:** 35
 
 ### Overview
 
-Test suite for seller site visits endpoint that aggregates visits grouped by property and bucket. Similar classification to buyer endpoint but filtered by property_tag and organized per-property.
+Test suite for seller site visits endpoint. Aggregates visits for properties owned by the caller's phone number, classified into 4 buckets. Mirrors the buyer endpoint classification but presents lead names and phones from the seller's perspective.
 
-### Test Categories (32 tests)
+> **v1.3.1 note:** The `rescheduled` bucket has been removed. Tests 33–35 are integration tests that verify the full `lead.site.visit` → snapshot → API pipeline.
 
-- test_01-07: Visit classification tests (upcoming, pending_feedback, cancelled, rescheduled, completed, empty_feedback variants)
-- test_08-10: Base record building and null handling
-- test_11-17: Bucket-specific fields (pending note, cancelled feedback, rescheduled note, completed feedback, remarks logic, upcoming minimal)
-- test_18-21: Sorting logic (upcoming ascending, pending ascending, cancelled descending, completed descending)
+### Test Categories (35 tests)
+
+- test_01–06: Visit classification (upcoming, pending_feedback, cancelled, completed, empty_feedback variants)
+- test_08–10: Base record building and null handling
+- test_11–16: Bucket-specific fields (pending note, cancelled feedback, completed feedback, remarks logic, upcoming minimal)
+- test_18–21: Sorting logic (upcoming ascending, pending ascending, cancelled descending, completed descending)
 - test_22: Filter by property_tag
 - test_23: No visits for property without site_visit_date
 - test_24: Visits combine primary and recommended
 - test_25: Mixed bucket distribution
 - test_26: Totals calculation
 - test_27: Empty all buckets
-- test_28-29: ISO format for datetime and date fields
+- test_28–29: ISO format for datetime and date fields
 - test_30: Property tag mapping
 - test_31: Visit with all feedback types
 - test_32: site_visit_date_only vs datetime differentiation
+- test_33: `lead.site.visit` scheduled → snapshot → appears in `upcoming`
+- test_34: `lead.site.visit` reschedule → new date → appears in `upcoming`
+- test_35: `lead.site.visit` completed → snapshot → appears in `completed`
+
+> Note: test_04 and test_16 are LEGACY TESTS — they set `current_status="rescheduled"` directly to verify the status is now excluded from API output.
 
 ---
 
