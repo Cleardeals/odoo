@@ -82,8 +82,9 @@ class TestLeadSiteVisitModels(PortalLeadTestCase):
         """
         ARRANGE: a lead with one scheduled visit.
         ACT    : write rescheduled status + a new datetime onto that visit.
-        ASSERT : the original visit is closed as 'superseded'; a new visit is
-                 created with 'scheduled' status and back-links to the original.
+        ASSERT : the original visit is closed as terminal 'Rescheduled'
+                 (code='superseded'); a new visit is created with 'scheduled'
+                 status and back-links to the original.
 
         This verifies the core reschedule contract: writing a rescheduled status
         triggers the supersede-and-replace flow rather than mutating the original
@@ -101,7 +102,9 @@ class TestLeadSiteVisitModels(PortalLeadTestCase):
             [("code", "=", "rescheduled")],
             limit=1,
         )
-        superseded = self.env["lead.site.visit.status"].search(
+        rescheduled_terminal = self.env["lead.site.visit.status"].with_context(
+            active_test=False
+        ).search(
             [("code", "=", "superseded")],
             limit=1,
         )
@@ -131,9 +134,9 @@ class TestLeadSiteVisitModels(PortalLeadTestCase):
         self.assertEqual(visits[-1].previous_visit_id, first_visit)
         # New visit is 'scheduled' (not 'rescheduled') — a fresh open slot.
         self.assertEqual(visits[-1].status_id, scheduled)
-        # Original visit is closed as 'superseded' — it no longer represents
-        # an active appointment.
-        self.assertEqual(first_visit.status_id, superseded)
+        # Original visit is closed as terminal 'Rescheduled' — it no longer
+        # represents an active appointment but shows the reason it was closed.
+        self.assertEqual(first_visit.status_id, rescheduled_terminal)
         # The inquiry snapshot still reflects an upcoming scheduled visit.
         self.assertEqual(lead.current_status, "site_visit_scheduled")
 
@@ -178,11 +181,12 @@ class TestLeadSiteVisitModels(PortalLeadTestCase):
     # Reschedule flow — supersede behaviour
     # ─────────────────────────────────────────────────────────────────────────
 
-    def test_06_reschedule_closes_original_as_superseded(self):
+    def test_06_reschedule_closes_original_as_rescheduled(self):
         """
         ARRANGE: a lead with one scheduled visit.
         ACT    : write rescheduled status onto that visit.
-        ASSERT : original visit's status changes to 'superseded'.
+        ASSERT : original visit's status changes to the terminal 'Rescheduled'
+                 status (code='superseded', active=False).
 
         Isolation: this test focuses only on the original visit's terminal
         state transition and does not assert on the new visit.
@@ -197,7 +201,9 @@ class TestLeadSiteVisitModels(PortalLeadTestCase):
         rescheduled = self.env["lead.site.visit.status"].search(
             [("code", "=", "rescheduled")], limit=1
         )
-        superseded = self.env["lead.site.visit.status"].search(
+        rescheduled_terminal = self.env["lead.site.visit.status"].with_context(
+            active_test=False
+        ).search(
             [("code", "=", "superseded")], limit=1
         )
 
@@ -214,8 +220,8 @@ class TestLeadSiteVisitModels(PortalLeadTestCase):
 
         self.assertEqual(
             visit.status_id,
-            superseded,
-            "Original visit must be superseded after a reschedule, not left as scheduled.",
+            rescheduled_terminal,
+            "Original visit must be closed as terminal 'Rescheduled' after a reschedule.",
         )
 
     def test_07_reschedule_new_visit_has_scheduled_status(self):
@@ -303,6 +309,41 @@ class TestLeadSiteVisitModels(PortalLeadTestCase):
             "A completed visit must not be flagged as overdue.",
         )
 
+    def test_08b_terminal_visit_rejects_status_change(self):
+        """
+        ARRANGE: a completed (terminal) visit.
+        ACT    : attempt to write a new status_id onto it.
+        ASSERT : ValidationError is raised — terminal visits are immutable.
+
+        This covers US-08: the model-level guard is the last line of defence
+        when the UI buttons are bypassed (e.g. direct API write).
+        """
+        lead = self.create_portal_lead(
+            property_base_id=self.test_property.id,
+            user_id=self.rm_user.id,
+        )
+        scheduled = self.env["lead.site.visit.status"].search(
+            [("code", "=", "scheduled")], limit=1
+        )
+        completed = self.env["lead.site.visit.status"].search(
+            [("code", "=", "completed")], limit=1
+        )
+
+        visit = self.env["lead.site.visit"].create(
+            {
+                "inquiry_id": lead.id,
+                "status_id": scheduled.id,
+                "scheduled_datetime": "2026-05-10 10:00:00",
+            }
+        )
+        visit.write({"status_id": completed.id})
+
+        with self.assertRaises(
+            ValidationError,
+            msg="Changing status on a terminal visit must be blocked.",
+        ):
+            visit.write({"status_id": scheduled.id})
+
     def test_09_total_inquiry_visit_count(self):
         """
         ARRANGE: a lead with no visits.
@@ -320,16 +361,22 @@ class TestLeadSiteVisitModels(PortalLeadTestCase):
         scheduled = self.env["lead.site.visit.status"].search(
             [("code", "=", "scheduled")], limit=1
         )
+        completed = self.env["lead.site.visit.status"].search(
+            [("code", "=", "completed")], limit=1
+        )
 
         self.assertEqual(lead.site_visit_count, 0)
 
-        self.env["lead.site.visit"].create(
+        first_visit = self.env["lead.site.visit"].create(
             {
                 "inquiry_id": lead.id,
                 "status_id": scheduled.id,
                 "scheduled_datetime": "2026-06-01 10:00:00",
             }
         )
+        # Close the first visit — cannot have two active visits for the same inquiry.
+        first_visit.write({"status_id": completed.id})
+
         self.env["lead.site.visit"].create(
             {
                 "inquiry_id": lead.id,
@@ -339,6 +386,122 @@ class TestLeadSiteVisitModels(PortalLeadTestCase):
         )
 
         self.assertEqual(lead.site_visit_count, 2)
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Concurrent visit enforcement
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def test_10a_cannot_create_second_active_visit_for_same_inquiry(self):
+        """
+        ARRANGE: an inquiry with one active (non-terminal) scheduled visit.
+        ACT    : attempt to create a second active visit directly for the same inquiry.
+        ASSERT : ValidationError is raised — only one active visit per inquiry allowed.
+
+        The concurrent guard ensures RMs must close or reschedule an existing
+        visit rather than silently stacking conflicting appointments.
+        """
+        lead = self.create_portal_lead(
+            property_base_id=self.test_property.id,
+            user_id=self.rm_user.id,
+        )
+        scheduled = self.env["lead.site.visit.status"].search(
+            [("code", "=", "scheduled")], limit=1
+        )
+        self.env["lead.site.visit"].create(
+            {
+                "inquiry_id": lead.id,
+                "status_id": scheduled.id,
+                "scheduled_datetime": "2026-07-01 10:00:00",
+            }
+        )
+
+        with self.assertRaises(
+            Exception,
+            msg="Creating a second active visit when one is already open must be blocked.",
+        ):
+            self.env["lead.site.visit"].create(
+                {
+                    "inquiry_id": lead.id,
+                    "status_id": scheduled.id,
+                    "scheduled_datetime": "2026-07-08 10:00:00",
+                }
+            )
+
+    def test_10b_new_visit_allowed_after_terminal_close(self):
+        """
+        ARRANGE: an inquiry with one completed (terminal) visit.
+        ACT    : create a second scheduled visit for the same inquiry.
+        ASSERT : creation succeeds — terminal visits do not block new visits.
+        """
+        lead = self.create_portal_lead(
+            property_base_id=self.test_property.id,
+            user_id=self.rm_user.id,
+        )
+        scheduled = self.env["lead.site.visit.status"].search(
+            [("code", "=", "scheduled")], limit=1
+        )
+        completed = self.env["lead.site.visit.status"].search(
+            [("code", "=", "completed")], limit=1
+        )
+        first = self.env["lead.site.visit"].create(
+            {
+                "inquiry_id": lead.id,
+                "status_id": scheduled.id,
+                "scheduled_datetime": "2026-07-01 10:00:00",
+            }
+        )
+        first.write({"status_id": completed.id})
+
+        second = self.env["lead.site.visit"].create(
+            {
+                "inquiry_id": lead.id,
+                "status_id": scheduled.id,
+                "scheduled_datetime": "2026-07-10 10:00:00",
+            }
+        )
+        self.assertTrue(second.id, "Second visit should be created after first is completed.")
+
+    def test_10c_reschedule_flow_bypasses_concurrent_guard(self):
+        """
+        ARRANGE: an inquiry with one scheduled visit.
+        ACT    : reschedule it via write(status=rescheduled, scheduled_datetime=...).
+        ASSERT : no error raised; reschedule creates a new scheduled visit and closes
+                 the old one as terminal 'Rescheduled' — even though the old visit is
+                 still non-terminal at the moment the new one is inserted.
+
+        This ensures the skip_active_visit_check context flag works correctly.
+        """
+        lead = self.create_portal_lead(
+            property_base_id=self.test_property.id,
+            user_id=self.rm_user.id,
+        )
+        scheduled = self.env["lead.site.visit.status"].search(
+            [("code", "=", "scheduled")], limit=1
+        )
+        rescheduled = self.env["lead.site.visit.status"].search(
+            [("code", "=", "rescheduled")], limit=1
+        )
+
+        visit = self.env["lead.site.visit"].create(
+            {
+                "inquiry_id": lead.id,
+                "status_id": scheduled.id,
+                "scheduled_datetime": "2026-07-01 10:00:00",
+            }
+        )
+        # Must not raise even though the old visit is still open at insert time.
+        visit.write(
+            {"status_id": rescheduled.id, "scheduled_datetime": "2026-07-08 10:00:00"}
+        )
+        # After reschedule: exactly one non-terminal visit remains (the new one).
+        active_visits = self.env["lead.site.visit"].search(
+            [
+                ("inquiry_id", "=", lead.id),
+                ("status_id.is_terminal", "=", False),
+            ]
+        )
+        self.assertEqual(len(active_visits), 1, "Exactly one active visit after reschedule.")
+        self.assertEqual(active_visits.status_id, scheduled)
 
     # ─────────────────────────────────────────────────────────────────────────
     # Wizard defaults

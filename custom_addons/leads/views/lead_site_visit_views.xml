@@ -9,6 +9,7 @@
                 <field name="name"/>
                 <field name="code"/>
                 <field name="status_type"/>
+                <field name="color" widget="color" readonly="1"/>
                 <field name="is_terminal"/>
                 <field name="active"/>
             </list>
@@ -35,7 +36,7 @@
                         </group>
                         <group string="Optional Display Settings">
                             <field name="allow_feedback_note"/>
-                            <field name="color"/>
+                            <field name="color" widget="color"/>
                         </group>
                     </group>
                     <group invisible="1">
@@ -192,8 +193,8 @@
             <!-- popover button. Boolean fields below are loaded into rawRecord for the JS guard. -->
             <calendar string="My Site Visits"
                       date_start="scheduled_datetime"
-                      color="status_id"
-                      mode="week"
+                      color="color"
+                      mode="month"
                       scales="day,week,month"
                       quick_create="false"
                       js_class="site_visit_calendar">
@@ -205,6 +206,7 @@
                 <!-- invisible="1" hides them from the popover body while keeping them in rawRecord -->
                 <field name="status_is_scheduled" invisible="1"/>
                 <field name="status_is_rescheduled" invisible="1"/>
+                <field name="status_is_terminal" invisible="1"/>
             </calendar>
         </field>
     </record>
@@ -220,12 +222,13 @@
                     <button name="action_open_quick_update_wizard"
                             type="object"
                             string="Update Status"
-                            class="btn-primary"/>
+                            class="btn-primary"
+                            invisible="status_is_terminal"/>
                     <button name="action_open_cancel_wizard"
                             type="object"
                             string="Cancel Visit"
                             class="btn-secondary"
-                            invisible="status_is_cancelled or status_is_completed or status_is_no_show"/>
+                            invisible="status_is_terminal"/>
                     <field name="status_id" widget="statusbar" clickable="0"/>
                 </header>
                 <sheet>
@@ -281,6 +284,7 @@
                         <field name="status_is_cancelled"/>
                         <field name="status_is_completed"/>
                         <field name="status_is_no_show"/>
+                        <field name="status_is_terminal"/>
                         <field name="active"/>
                     </group>
                 </sheet>

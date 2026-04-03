@@ -58,35 +58,50 @@ export class SiteVisitCalendarPopover extends CalendarCommonPopover {
     /**
      * Open the Quick Update wizard for this visit in reschedule mode.
      *
-     * Delegates entirely to the server-side action method so the wizard's
-     * default_get gets the correct visit context without coupling JS to Python
-     * internals. Returns an ir.actions.act_window which actionService opens as
-     * a dialog. The calendar reloads when the dialog closes.
+     * IMPORTANT: We capture all needed references (close, model, recordId)
+     * BEFORE awaiting the ORM call.  useService("orm") returns a proxy that is
+     * tied to the component's lifecycle — calling this.props.close() first
+     * unmounts the component, which aborts in-flight requests made through the
+     * lifecycle-bound orm proxy.  By capturing references first and closing
+     * only after the ORM call resolves, we keep the component alive long enough
+     * for the network request to complete.
      */
     async onRescheduleEvent() {
-        this.props.close();
-        const action = await this.orm.call(
-            "lead.site.visit",
-            "action_open_quick_update_wizard",
-            [[this.props.record.id]],
-        );
+        const close = this.props.close;
+        const model = this.props.model;
+        const recordId = this.props.record.id;
+
+        let action;
+        try {
+            action = await this.orm.call(
+                "lead.site.visit",
+                "action_open_quick_update_wizard",
+                [[recordId]],
+            );
+        } catch {
+            // ORM error already surfaces via the notification service; just bail.
+            return;
+        }
+
+        // Close the popover only after the ORM call has resolved so the
+        // component stays mounted (and orm alive) during the await above.
+        close();
+
         await this.actionService.doAction(action, {
-            onClose: () => {
-                this.props.model.load();
-            },
+            onClose: () => model.load(),
         });
     }
 
     /**
      * Returns true when the Reschedule button should be rendered.
      *
-     * Reads pre-loaded boolean fields from rawRecord to avoid an extra RPC.
-     * These fields are included as invisible="1" in the calendar view arch so
-     * they are always fetched and present on rawRecord.
+     * Reads status_is_terminal from rawRecord — a related field preloaded via
+     * the calendar arch (invisible="1").  Hiding the button when the visit is
+     * already terminal avoids opening the wizard on closed records.
      */
     get isRescheduleVisible() {
         const raw = this.props.record.rawRecord;
-        return raw.status_is_scheduled || raw.status_is_rescheduled;
+        return !raw.status_is_terminal;
     }
 }
 

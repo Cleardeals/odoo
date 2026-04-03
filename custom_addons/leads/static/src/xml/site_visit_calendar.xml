@@ -4,9 +4,8 @@
     File   : static/src/xml/site_visit_calendar.xml
     Purpose: OWL template override for the site-visit calendar popover footer.
              Adds a "Reschedule" button between the Edit and Delete buttons.
-             Visible only when the visit status is scheduled or rescheduled
-             (open visits). Hidden for terminal statuses (completed, cancelled,
-             superseded, did_not_show_up) via isRescheduleVisible guard.
+             Hidden for terminal visits (completed, cancelled, Rescheduled,
+             did_not_show_up) via isRescheduleVisible → status_is_terminal.
     Owner  : Cleardeals Tech
 -->
 <templates xml:space="preserve">

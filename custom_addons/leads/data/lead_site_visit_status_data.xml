@@ -45,12 +45,14 @@
         </record>
 
         <record id="lead_site_visit_status_superseded" model="lead.site.visit.status">
-            <field name="name">Superseded</field>
+            <field name="name">Rescheduled</field>
             <field name="code">superseded</field>
             <field name="sequence">60</field>
             <field name="is_cancelled_status">True</field>
             <field name="is_terminal">True</field>
             <field name="allow_feedback_note">False</field>
+            <!-- Inactive: set by system only; must not appear in user-facing status dropdowns -->
+            <field name="active">False</field>
         </record>
 
         <!-- Feedback options: Scheduled -->

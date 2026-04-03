@@ -276,6 +276,12 @@ class LeadSiteVisit(models.Model):
         store=False,
     )
 
+    status_is_terminal = fields.Boolean(
+        related="status_id.is_terminal",
+        readonly=True,
+        store=False,
+    )
+
     feedback_option_id = fields.Many2one(
         "lead.site.visit.feedback.option",
         string="Feedback",
@@ -326,6 +332,8 @@ class LeadSiteVisit(models.Model):
         compute="_compute_total_inquiry_visit_count",
         store=False,
     )
+
+    color = fields.Integer(related="status_id.color")
 
     @api.depends("inquiry_id", "scheduled_datetime", "status_id")
     def _compute_name(self):
@@ -379,6 +387,10 @@ class LeadSiteVisit(models.Model):
     @api.constrains("status_id", "feedback_option_id")
     def _check_feedback_status_match(self):
         for rec in self:
+            # Terminal visits (incl. Rescheduled/Superseded) hold the reschedule-reason
+            # feedback that was valid at the moment of transition — skip the check.
+            if rec.status_id and rec.status_id.is_terminal:
+                continue
             if rec.feedback_option_id and rec.feedback_option_id.status_id != rec.status_id:
                 raise ValidationError(
                     "Selected feedback is not valid for the chosen status.",
@@ -403,6 +415,30 @@ class LeadSiteVisit(models.Model):
             if rec.feedback_option_id and rec.feedback_option_id.requires_note and not (rec.feedback_note or "").strip():
                 raise ValidationError(
                     "Feedback note is required for the selected feedback option.",
+                )
+
+    @api.constrains("inquiry_id", "status_id")
+    def _check_no_concurrent_active_visit(self):
+        # Bypass: reschedule flow creates the new visit before closing the old one.
+        # The context flag prevents a false positive during that atomic operation.
+        if self.env.context.get("skip_active_visit_check"):
+            return
+        for rec in self:
+            # Terminal visits are closed — no conflict possible.
+            if rec.status_id.is_terminal:
+                continue
+            other = self.search(
+                [
+                    ("inquiry_id", "=", rec.inquiry_id.id),
+                    ("id", "!=", rec.id),
+                    ("status_id.is_terminal", "=", False),
+                ],
+                limit=1,
+            )
+            if other:
+                raise ValidationError(
+                    f"This inquiry already has an active visit ({other.name}). "
+                    "Update or close it before creating a new one."
                 )
 
     @api.model_create_multi
@@ -470,6 +506,16 @@ class LeadSiteVisit(models.Model):
     def write(self, vals):
         vals = dict(vals)
 
+        # Guard: terminal visits are immutable for status changes.
+        # The reschedule flow bypasses this via skip_terminal_write context.
+        if not self.env.context.get("skip_terminal_write") and "status_id" in vals:
+            for rec in self:
+                if rec.status_id.is_terminal:
+                    raise ValidationError(
+                        f"'{rec.status_id.name}' is a closed visit and cannot be updated. "
+                        "Create a new visit from the inquiry if another appointment is needed."
+                    )
+
         new_status = self.env["lead.site.visit.status"].browse(vals.get("status_id")) if vals.get("status_id") else False
 
         if new_status and new_status.is_reschedule_status:
@@ -478,8 +524,11 @@ class LeadSiteVisit(models.Model):
                     "Set a new schedule date and time while rescheduling.",
                 )
 
-            superseded_status = self.env["lead.site.visit.status"].search(
-                [("code", "=", "superseded"), ("active", "=", True)], limit=1
+            # Search with active_test=False so the system-only Rescheduled
+            # (code=superseded, active=False) status is found regardless of
+            # the active field filter that defaults to True on all searches.
+            superseded_status = self.env["lead.site.visit.status"].with_context(active_test=False).search(
+                [("code", "=", "superseded")], limit=1
             )
             scheduled_status = self.env["lead.site.visit.status"].search(
                 [("code", "=", "scheduled"), ("active", "=", True)], limit=1
@@ -487,24 +536,32 @@ class LeadSiteVisit(models.Model):
             new_visit_status = scheduled_status if scheduled_status else new_status
 
             for rec in self:
-                self.create(
+                # skip_active_visit_check: the old visit is still non-terminal at
+                # this point; suppress the concurrent-visit guard so the new
+                # scheduled visit can be inserted before we close the old one.
+                self.with_context(skip_active_visit_check=True).create(
                     {
                         "inquiry_id": rec.inquiry_id.id,
                         "property_base_id": vals.get("property_base_id") or rec.property_base_id.id,
                         "assigned_rm_id": vals.get("assigned_rm_id") or rec.assigned_rm_id.id,
                         "scheduled_datetime": vals["scheduled_datetime"],
                         "status_id": new_visit_status.id,
-                        "feedback_option_id": vals.get("feedback_option_id") or False,
-                        "feedback_note": vals.get("feedback_note") or False,
                         "previous_visit_id": rec.id,
                         "active": vals.get("active", rec.active),
                     }
                 )
+                # Feedback is the reason for rescheduling — store it on
+                # the old (Rescheduled/superseded) visit, not the fresh scheduled one.
+                # super() bypasses our terminal-write guard — correct here since
+                # we are the ones closing the old visit atomically.
+                old_visit_vals = {"status_changed_on": fields.Datetime.now()}
                 if superseded_status:
-                    super(LeadSiteVisit, rec).write({
-                        "status_id": superseded_status.id,
-                        "status_changed_on": fields.Datetime.now(),
-                    })
+                    old_visit_vals["status_id"] = superseded_status.id
+                if vals.get("feedback_option_id"):
+                    old_visit_vals["feedback_option_id"] = vals["feedback_option_id"]
+                if vals.get("feedback_note"):
+                    old_visit_vals["feedback_note"] = vals["feedback_note"]
+                super(LeadSiteVisit, rec).write(old_visit_vals)
             return True
 
         if "status_id" in vals and "status_changed_on" not in vals:

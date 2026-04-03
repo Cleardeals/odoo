@@ -69,7 +69,13 @@ class LeadAddSiteVisitWizard(models.TransientModel):
         vals["inquiry_id"] = inquiry.id
         vals["property_base_id"] = inquiry.property_base_id.id
         vals["assigned_rm_id"] = inquiry.user_id.id
-        vals["previous_visit_id"] = inquiry.latest_site_visit_id.id
+
+        # Only carry the previous_visit link when the latest visit is still
+        # active.  A terminal visit (completed / cancelled / no-show) closes
+        # one appointment attempt; the new booking should start a fresh chain.
+        latest = inquiry.latest_site_visit_id
+        if latest and not latest.status_id.is_terminal:
+            vals["previous_visit_id"] = latest.id
 
         # Pre-select "Scheduled" so the RM does not need to touch the status
         # field at all for the common case of booking a new visit.

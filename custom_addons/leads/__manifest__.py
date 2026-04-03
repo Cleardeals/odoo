@@ -1,6 +1,6 @@
 {
     "name": "Lead Scoring",
-    "version": "1.3.0",
+    "version": "1.4.0",
     "depends": ["base", "web", "mail", "lead_suggestor"],
     "author": "Nirat Patel",
     "category": "Sales",

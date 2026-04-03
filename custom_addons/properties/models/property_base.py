@@ -417,6 +417,19 @@ class PropertyBase(models.Model):
         return super().write(vals)
 
     # =========================================================================
+    # display_name — include property_tag so same-project properties are
+    # distinguishable everywhere (dropdown, form field, list column).
+    # =========================================================================
+
+    @api.depends("name", "property_tag")
+    def _compute_display_name(self):
+        for rec in self:
+            if rec.property_tag:
+                rec.display_name = f"{rec.name or ''} [{rec.property_tag}]"
+            else:
+                rec.display_name = rec.name or ""
+
+    # =========================================================================
     # name_search override — multi-field search for leads context
     # =========================================================================
 
