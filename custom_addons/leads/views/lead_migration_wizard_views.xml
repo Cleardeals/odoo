@@ -119,12 +119,12 @@
         </field>
     </record>
 
-    <!-- Server Action: appears in Action menu on the leads.new list view -->
+    <!-- Server Action: accessible via Settings → Technical → Server Actions.
+         Previously appeared in the Action menu on the leads.new list view;
+         binding_model_id removed to hide it from the UI. -->
     <record id="action_lead_migration_wizard" model="ir.actions.server">
         <field name="name">Backfill Property Links (Migration)</field>
         <field name="model_id" ref="leads.model_leads_new"/>
-        <field name="binding_model_id" ref="leads.model_leads_new"/>
-        <field name="binding_view_types">list</field>
         <field name="state">code</field>
         <field name="code">
 wizard = env['lead.migration.wizard'].create({})
