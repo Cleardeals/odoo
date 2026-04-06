@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, new_test_user
 import time
 
 class PortalLeadTestCase(TransactionCase):
@@ -92,6 +92,32 @@ class PortalLeadTestCase(TransactionCase):
             source_type='manual',
             default_rm_user=cls.naresh_user,
         )
+
+        # RM users for BDE restriction tests.
+        # Uses new_test_user (relying on field defaults for company) — same
+        # pattern as Odoo's own test suite.
+        cls.test_rm_a = new_test_user(
+            cls.env,
+            login=f'test_rm_a_{cls.suffix}',
+            name='Test RM Alpha',
+            groups='base.group_user,leads.group_lead_score_rm',
+        )
+        cls.test_rm_b = new_test_user(
+            cls.env,
+            login=f'test_rm_b_{cls.suffix}',
+            name='Test RM Beta',
+            groups='base.group_user,leads.group_lead_score_rm',
+        )
+
+        # BDE fixture: only test_rm_b is allowed, test_rm_a is not.
+        cls.test_bde_restricted = cls.env['leads.bde'].sudo().create({
+            'name': f'Test BDE Restricted {cls.suffix}',
+            'allowed_rm_ids': [(6, 0, [cls.test_rm_b.id])],
+        })
+        # BDE fixture: no restriction (allowed_rm_ids empty → all RMs allowed).
+        cls.test_bde_open = cls.env['leads.bde'].sudo().create({
+            'name': f'Test BDE Open {cls.suffix}',
+        })
 
     @classmethod
     def _ensure_source(

@@ -50,4 +50,18 @@
               groups="leads.group_lead_score_manager"
               sequence="20"/>
 
+    <!-- ── Configuration group ───────────────────────────────────────── -->
+    <menuitem id="menu_config_section"
+              name="Configuration"
+              parent="lead_score_menu_main"
+              sequence="30"
+              groups="leads.group_lead_score_manager"/>
+
+    <menuitem id="menu_bde_config"
+              name="BDE Configuration"
+              parent="menu_config_section"
+              action="leads.action_leads_bde_config"
+              sequence="10"
+              groups="leads.group_lead_score_manager"/>
+
 </odoo>

@@ -71,10 +71,15 @@
                         name="ops_sales_leads"
                         domain="[('is_ops_sale_lead', '=', True)]"/>
 
+                <filter string="Ops Sales Leads (No BDE)"
+                        name="ops_sales_leads_no_bde"
+                        domain="[('is_ops_sale_lead', '=', True), ('bde_id', '=', False)]"/>
+
                 <separator/>
 
                 <filter string="Current Status" name="groupby_status" context="{'group_by': 'current_status'}"/>
                 <filter string="RM"             name="groupby_user"   context="{'group_by': 'user_id'}"/>
+                <filter string="BDE"            name="groupby_bde"    context="{'group_by': 'bde_id'}"/>
 
                 <filter string="Property (All Associated)"
                         name="groupby_all_props"
@@ -109,6 +114,7 @@
                 <field name="property_base_id" string="Property"/>
                 <field name="user_id"/>
                 <field name="current_status"/>
+                <field name="bde_id" optional="hide"/>
                 <field name="interest_ids" widget="one2many"  optional="hide">
                     <list>
                         <field name="property_base_id" string="Property"/>
@@ -240,6 +246,11 @@
                                     <field name="base_property_city" string="City"/>
                                     <field name="base_property_owner_name" string="Owner"/>
                                     <field name="is_ops_sale_lead" widget="boolean"/>
+                                    <field name="bde_allowed_ids" invisible="1"/>
+                                    <field name="bde_id"
+                                           invisible="not is_ops_sale_lead"
+                                           required="is_ops_sale_lead"
+                                           domain="[('id', 'in', bde_allowed_ids)]"/>
                                 </group>
                             </group>
                         </page>

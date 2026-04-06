@@ -139,6 +139,22 @@ class NewPortalLead(models.Model):
         tracking=True,
     )
 
+    bde_id = fields.Many2one(
+        "leads.bde",
+        string="BDE",
+        copy=False,
+        index=True,
+        tracking=True,
+        help="Business Development Executive handling this ops sale lead.",
+    )
+
+    bde_allowed_ids = fields.Many2many(
+        "leads.bde",
+        compute="_compute_bde_allowed_ids",
+        store=False,
+        help="BDEs selectable by the current user (manager: all; RM: only their allowed ones).",
+    )
+
     site_visit_date = fields.Datetime(
         string="Site Visit Scheduled On",
         copy=False,
@@ -284,7 +300,41 @@ class NewPortalLead(models.Model):
         readonly=True,
     )
 
+    # --- Constraints ---
+
+    @api.constrains("is_ops_sale_lead", "bde_id")
+    def _check_bde_required_for_ops_sale(self):
+        for rec in self:
+            if rec.is_ops_sale_lead and not rec.bde_id:
+                raise ValidationError(
+                    "A BDE must be selected when a lead is marked as an Ops Sale Lead."
+                )
+
+    @api.constrains("bde_id", "user_id", "is_ops_sale_lead")
+    def _check_bde_allowed_for_rm(self):
+        for rec in self:
+            if not rec.is_ops_sale_lead or not rec.bde_id or not rec.user_id:
+                continue
+            # Empty allowed_rm_ids means the BDE is open to all RMs.
+            if rec.bde_id.allowed_rm_ids and rec.user_id not in rec.bde_id.allowed_rm_ids:
+                raise ValidationError(
+                    f"RM '{rec.user_id.name}' is not authorised to refer leads to "
+                    f"BDE '{rec.bde_id.name}'. Contact a manager to update the BDE configuration."
+                )
+
     # --- Compute Methods ---
+
+    @api.depends_context("uid")
+    def _compute_bde_allowed_ids(self):
+        user = self.env.user
+        all_bdes = self.env["leads.bde"].search([("active", "=", True)])
+        if not user.has_group("leads.group_lead_score_manager"):
+            # Managers see all BDEs; RMs see open BDEs + those they are approved for.
+            all_bdes = all_bdes.filtered(
+                lambda b: not b.allowed_rm_ids or user in b.allowed_rm_ids
+            )
+        for rec in self:
+            rec.bde_allowed_ids = all_bdes
 
     @api.depends("property_base_id", "interest_ids.property_base_id")
     def _compute_all_associated_properties(self):

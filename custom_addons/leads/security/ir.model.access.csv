@@ -28,3 +28,5 @@ access_lead_site_visit_quick_update_wizard_rm,lead.site.visit.quick.update.wizar
 access_lead_site_visit_quick_update_wizard_manager,lead.site.visit.quick.update.wizard.manager,model_lead_site_visit_quick_update_wizard,leads.group_lead_score_manager,1,1,1,1
 access_lead_recommend_property_wizard_rm,lead.recommend.property.wizard.rm,model_lead_recommend_property_wizard,leads.group_lead_score_rm,1,1,1,1
 access_lead_recommend_property_wizard_manager,lead.recommend.property.wizard.manager,model_lead_recommend_property_wizard,leads.group_lead_score_manager,1,1,1,1
+access_leads_bde_manager,leads.bde.manager,model_leads_bde,leads.group_lead_score_manager,1,1,1,1
+access_leads_bde_rm,leads.bde.rm,model_leads_bde,leads.group_lead_score_rm,1,0,0,0

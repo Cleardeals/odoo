@@ -3,6 +3,7 @@ from . import lead_import_wizard
 from . import whatsapp_response
 from . import lead_score_bq_wizard
 from . import lead_source
+from . import leads_bde
 from . import new_portal_leads
 from . import lead_property_interest
 from . import lead_site_visit

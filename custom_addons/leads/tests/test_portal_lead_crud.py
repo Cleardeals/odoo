@@ -98,14 +98,15 @@ class TestPortalLeadCRUD(PortalLeadTestCase):
             "is_ops_sale_lead should default to False"
         )
 
-        # Case 2: Explicit Creation
-        # We pass the new field via **kwargs to your helper
+        # Case 2: Explicit Creation — bde_id is required when is_ops_sale_lead is True
+        bde = self.env["leads.bde"].create({"name": "Test BDE"})
         lead_ops = self.create_portal_lead(
             name="OPS Specialized Lead",
-            is_ops_sale_lead=True
+            is_ops_sale_lead=True,
+            bde_id=bde.id,
         )
         self.assertTrue(
-            lead_ops.is_ops_sale_lead, 
+            lead_ops.is_ops_sale_lead,
             "is_ops_sale_lead should be True when explicitly set"
         )
     def test_08_feedback_general_field(self):
@@ -209,3 +210,47 @@ class TestPortalLeadCRUD(PortalLeadTestCase):
         })
         self.assertEqual(lead.feedback_general, 'other')
         self.assertEqual(lead.feedback_site_visit_done, 'other')
+
+    def test_11_bde_ops_sale_required(self):
+        """
+        BDE is mandatory when is_ops_sale_lead is True.
+        Setting the flag without a BDE must raise a ValidationError.
+        """
+        with self.assertRaises(ValidationError):
+            self.create_portal_lead(name="Ops Lead No BDE", is_ops_sale_lead=True)
+
+    def test_12_bde_rm_restriction_enforced(self):
+        """
+        A BDE with allowed_rm_ids set blocks any RM not on the list.
+        """
+        with self.assertRaises(ValidationError):
+            self.create_portal_lead(
+                name="Blocked Ops Lead",
+                is_ops_sale_lead=True,
+                bde_id=self.test_bde_restricted.id,
+                user_id=self.test_rm_a.id,  # not in test_bde_restricted.allowed_rm_ids
+            )
+
+    def test_13_bde_rm_restriction_allowed(self):
+        """
+        An RM in a BDE's allowed_rm_ids can be assigned that BDE successfully.
+        """
+        lead = self.create_portal_lead(
+            name="Allowed Ops Lead",
+            is_ops_sale_lead=True,
+            bde_id=self.test_bde_restricted.id,
+            user_id=self.test_rm_b.id,  # IS in test_bde_restricted.allowed_rm_ids
+        )
+        self.assertEqual(lead.bde_id, self.test_bde_restricted)
+
+    def test_14_bde_open_allows_any_rm(self):
+        """
+        A BDE with no allowed_rm_ids is open — any RM can be assigned to it.
+        """
+        lead = self.create_portal_lead(
+            name="Open BDE Lead",
+            is_ops_sale_lead=True,
+            bde_id=self.test_bde_open.id,
+            user_id=self.test_rm_a.id,  # not in any restriction list, but BDE is open
+        )
+        self.assertEqual(lead.bde_id, self.test_bde_open)

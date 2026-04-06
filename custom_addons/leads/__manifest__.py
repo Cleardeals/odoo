@@ -25,6 +25,7 @@
         "views/lead_recompute_wizard_views.xml",
         # 4. Model Views (Defines Actions) -- [MOVED UP]
         "views/lead_score_views.xml",
+        "views/leads_bde_views.xml",
         # 5. Menus (Uses Actions defined above) -- [MOVED DOWN]
         "views/lead_score_menu.xml",
         # 6. Other Views (May depend on Menus)

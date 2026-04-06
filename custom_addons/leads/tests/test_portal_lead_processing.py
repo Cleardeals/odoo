@@ -117,12 +117,14 @@ class TestPortalLeadProcessing(PortalLeadTestCase):
         Test that an OPS sales lead is processed and assigned correctly.
         Ensures the flag does not interfere with standard RM assignment.
         """
-        # Create an OPS lead
+        # Create an OPS lead — bde_id is required when is_ops_sale_lead is True
+        bde = self.env["leads.bde"].create({"name": "Test BDE"})
         lead = self.create_portal_lead(
             name="OPS Processing Test",
             portal_name='MagicBricks',
-            portal_property_id=self.mb_id, 
-            is_ops_sale_lead=True  # Ensure this matches your singular field name
+            portal_property_id=self.mb_id,
+            is_ops_sale_lead=True,
+            bde_id=bde.id,
         )
         
         # Trigger processing
