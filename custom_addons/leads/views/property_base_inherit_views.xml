@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <!--
+        Extends the property.base form view (defined in the `properties` module)
+        to add a "Property Activity" tab showing all lead activity for this
+        property — primary inquiries (leads.new) and recommended leads
+        (lead.property.interest) — powered by the property_activity_widget.
+
+        This file lives in `leads` (not `properties`) because the data being
+        displayed belongs to the leads module and the dependency arrow runs
+        leads → properties, not the other way around.
+    -->
+    <record id="view_property_base_form_activity_tab" model="ir.ui.view">
+        <field name="name">property.base.form.activity.tab</field>
+        <field name="model">property.base</field>
+        <field name="inherit_id" ref="properties.view_property_base_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//notebook" position="inside">
+                <page string="Property Activity" name="property_activity">
+                    <!--
+                        The widget uses the record's `id` (integer) as the
+                        property_id for the dashboard API call.
+                        readonly="1" prevents any accidental write-back.
+                    -->
+                    <field name="id"
+                           widget="property_activity_widget"
+                           nolabel="1"
+                           readonly="1"/>
+                </page>
+            </xpath>
+        </field>
+    </record>
+</odoo>

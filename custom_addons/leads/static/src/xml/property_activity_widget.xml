@@ -1,0 +1,353 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+<t t-name="leads.PropertyActivityWidget">
+    <div class="cd-prop-activity">
+
+        <!-- ── Loading / Error ──────────────────────────────────────────── -->
+        <t t-if="state.loading">
+            <div class="cd-pa-loading">
+                <i class="fa fa-spinner fa-spin"/> Loading property activity…
+            </div>
+        </t>
+        <t t-elif="state.error">
+            <div class="cd-pa-error">
+                <i class="fa fa-exclamation-triangle"/> <t t-esc="state.error"/>
+            </div>
+        </t>
+
+        <t t-elif="state.data">
+
+            <!-- ── KPI Cards ──────────────────────────────────────────────── -->
+            <div class="cd-pa-kpi-row">
+                <div class="cd-pa-kpi-card cd-kpi-total">
+                    <div class="cd-kpi-value"><t t-esc="kpi.total || 0"/></div>
+                    <div class="cd-kpi-label">Total Inquiries</div>
+                    <div class="cd-kpi-sub">
+                        <span><t t-esc="kpi.primary || 0"/> primary</span>
+                        · <span><t t-esc="kpi.recommended || 0"/> recommended</span>
+                    </div>
+                </div>
+                <div class="cd-pa-kpi-card cd-kpi-contacted">
+                    <div class="cd-kpi-value"><t t-esc="kpi.contacted || 0"/></div>
+                    <div class="cd-kpi-label">Contacted</div>
+                </div>
+                <div class="cd-pa-kpi-card cd-kpi-interested">
+                    <div class="cd-kpi-value"><t t-esc="kpi.details_shared || 0"/></div>
+                    <div class="cd-kpi-label">Details Shared</div>
+                </div>
+                <div class="cd-pa-kpi-card cd-kpi-sv-sched">
+                    <div class="cd-kpi-value"><t t-esc="kpi.site_visit_scheduled || 0"/></div>
+                    <div class="cd-kpi-label">SV Scheduled</div>
+                </div>
+                <div class="cd-pa-kpi-card cd-kpi-sv-done">
+                    <div class="cd-kpi-value"><t t-esc="kpi.site_visit_done || 0"/></div>
+                    <div class="cd-kpi-label">SV Done</div>
+                </div>
+                <div class="cd-pa-kpi-card cd-kpi-not-int">
+                    <div class="cd-kpi-value"><t t-esc="kpi.not_interested || 0"/></div>
+                    <div class="cd-kpi-label">Not Interested</div>
+                </div>
+            </div>
+
+            <!-- ── Tab switcher ──────────────────────────────────────────── -->
+            <div class="cd-pa-tabs">
+                <button t-att-class="'cd-pa-tab' + (state.activeTab === 'activity' ? ' active' : '')"
+                        t-on-click="() => this.setTab('activity')">
+                    <i class="fa fa-list-ul"/> All Activity
+                </button>
+                <button t-att-class="'cd-pa-tab' + (state.activeTab === 'site_visits' ? ' active' : '')"
+                        t-on-click="() => this.setTab('site_visits')">
+                    <i class="fa fa-calendar"/> Site Visits
+                    <t t-set="_sv_active" t-value="svGroupCounts.upcoming + svGroupCounts.pending_feedback"/>
+                    <span class="cd-sv-badge" t-if="_sv_active"><t t-esc="_sv_active"/></span>
+                </button>
+                <button t-att-class="'cd-pa-tab' + (state.activeTab === 'summary' ? ' active' : '')"
+                        t-on-click="() => this.setTab('summary')">
+                    <i class="fa fa-bar-chart"/> Source Breakdown
+                </button>
+            </div>
+
+            <!-- ════════════════════════════════════════════════════════════
+                 TAB 1 — ALL ACTIVITY
+            ═════════════════════════════════════════════════════════════ -->
+            <div t-if="state.activeTab === 'activity'">
+
+                <!-- Toolbar: status filters + type toggle + search -->
+                <div class="cd-pa-toolbar">
+                    <div class="cd-pa-filter-bar">
+                        <t t-foreach="filterGroups" t-as="fg" t-key="fg.key">
+                            <button
+                                t-att-class="'cd-filter-btn' + (state.activeFilter === fg.key ? ' active' : '')"
+                                t-on-click="() => this.setFilter(fg.key)">
+                                <t t-esc="fg.label"/>
+                                <t t-if="fg.key !== 'all'">
+                                    <t t-set="cnt" t-value="kpi[fg.key] || 0"/>
+                                    <span class="cd-filter-count" t-if="cnt"><t t-esc="cnt"/></span>
+                                </t>
+                            </button>
+                        </t>
+                    </div>
+                    <div class="cd-pa-toolbar-right">
+                        <div class="cd-type-toggle">
+                            <button t-att-class="state.activeType === 'all' ? 'active' : ''"       t-on-click="() => this.setType('all')">All</button>
+                            <button t-att-class="state.activeType === 'primary' ? 'active' : ''"   t-on-click="() => this.setType('primary')">Primary</button>
+                            <button t-att-class="state.activeType === 'recommended' ? 'active' : ''" t-on-click="() => this.setType('recommended')">Recommended</button>
+                        </div>
+                        <div class="cd-pa-search">
+                            <i class="fa fa-search"/>
+                            <input type="text"
+                                   placeholder="Search buyer, phone, source, RM…"
+                                   t-on-input="onSearch"/>
+                        </div>
+                        <button class="cd-export-btn" t-on-click="exportCsv"
+                                title="Download all activity as CSV">
+                            <i class="fa fa-download"/> Export CSV
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Activity table -->
+                <t t-if="filteredActivity.length === 0">
+                    <div class="cd-pa-empty">
+                        <i class="fa fa-inbox"/> No inquiries match the selected filter.
+                    </div>
+                </t>
+                <t t-else="">
+                    <div class="cd-pa-table-wrap">
+                        <table class="cd-pa-table">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Buyer</th>
+                                    <th>Phone</th>
+                                    <th>Source</th>
+                                    <th>RM</th>
+                                    <th>Status</th>
+                                    <th>Site Visit</th>
+                                    <th>Feedback</th>
+                                    <th>Type</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <t t-foreach="filteredActivity" t-as="row" t-key="row.lead_id + '_' + row.type + '_' + row_index">
+                                    <tr t-att-class="'cd-pa-row cd-row-' + row.type">
+                                        <td class="cd-cell-date">
+                                            <t t-esc="formatDate(row.inquiry_date)"/>
+                                        </td>
+                                        <td class="cd-cell-name">
+                                            <t t-esc="row.lead_name || '—'"/>
+                                        </td>
+                                        <td class="cd-cell-phone">
+                                            <t t-esc="row.lead_phone || '—'"/>
+                                        </td>
+                                        <td class="cd-cell-source">
+                                            <span class="cd-source-tag">
+                                                <t t-esc="row.source || '—'"/>
+                                            </span>
+                                        </td>
+                                        <td class="cd-cell-rm">
+                                            <t t-esc="row.assigned_rm || '—'"/>
+                                        </td>
+                                        <td class="cd-cell-status">
+                                            <span t-att-class="'cd-badge ' + statusCls(row.current_status)">
+                                                <t t-esc="statusLabel(row.current_status)"/>
+                                            </span>
+                                        </td>
+                                        <td class="cd-cell-sv">
+                                            <t t-esc="formatDate(row.site_visit_date)"/>
+                                        </td>
+                                        <td class="cd-cell-feedback">
+                                            <t t-if="row.feedback_site_visit_done">
+                                                <span class="cd-feedback-sv">
+                                                    <t t-esc="feedbackLabel(row.feedback_site_visit_done)"/>
+                                                </span>
+                                            </t>
+                                            <t t-elif="row.feedback_general">
+                                                <span class="cd-feedback-gen">
+                                                    <t t-esc="feedbackLabel(row.feedback_general)"/>
+                                                </span>
+                                            </t>
+                                            <t t-else="">—</t>
+                                        </td>
+                                        <td class="cd-cell-type">
+                                            <span t-att-class="'cd-type-pill cd-type-' + row.type">
+                                                <t t-esc="row.type"/>
+                                            </span>
+                                        </td>
+                                    </tr>
+                                    <!-- Remarks row (only when non-empty) -->
+                                    <tr t-if="row.remarks" class="cd-remarks-row">
+                                        <td colspan="9">
+                                            <i class="fa fa-comment-o"/> <t t-esc="row.remarks"/>
+                                        </td>
+                                    </tr>
+                                </t>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="cd-pa-count">
+                        Showing <strong><t t-esc="filteredActivity.length"/></strong> of
+                        <strong><t t-esc="kpi.total || 0"/></strong> inquiries
+                    </div>
+                </t>
+            </div>
+
+            <!-- ════════════════════════════════════════════════════════════
+                 TAB 2 — SITE VISITS
+            ═════════════════════════════════════════════════════════════ -->
+            <div t-if="state.activeTab === 'site_visits'">
+                <t t-set="sv" t-value="siteVisits"/>
+                <t t-set="tot" t-value="sv.totals || {}"/>
+
+                <div class="cd-sv-tab-bar">
+                    <button t-att-class="'cd-sv-tab' + (state.svTab === 'all' ? ' active' : '')"
+                            t-on-click="() => this.setSvTab('all')">
+                        <i class="fa fa-list"/> All Visits
+                        <t t-set="_sv_all" t-value="groupedSiteVisits.length"/>
+                        <span class="cd-sv-cnt" t-if="_sv_all"><t t-esc="_sv_all"/></span>
+                    </button>
+                    <button t-att-class="'cd-sv-tab' + (state.svTab === 'upcoming' ? ' active' : '')"
+                            t-on-click="() => this.setSvTab('upcoming')">
+                        <i class="fa fa-clock-o"/> Upcoming
+                        <span class="cd-sv-cnt" t-if="svGroupCounts.upcoming"><t t-esc="svGroupCounts.upcoming"/></span>
+                    </button>
+                    <button t-att-class="'cd-sv-tab cd-sv-warn' + (state.svTab === 'pending_feedback' ? ' active' : '')"
+                            t-on-click="() => this.setSvTab('pending_feedback')">
+                        <i class="fa fa-exclamation-circle"/> Pending Feedback
+                        <span class="cd-sv-cnt warn" t-if="svGroupCounts.pending_feedback"><t t-esc="svGroupCounts.pending_feedback"/></span>
+                    </button>
+                    <button t-att-class="'cd-sv-tab cd-sv-green' + (state.svTab === 'completed' ? ' active' : '')"
+                            t-on-click="() => this.setSvTab('completed')">
+                        <i class="fa fa-check-circle"/> Completed
+                        <span class="cd-sv-cnt green" t-if="svGroupCounts.completed"><t t-esc="svGroupCounts.completed"/></span>
+                    </button>
+                    <button t-att-class="'cd-sv-tab cd-sv-red' + (state.svTab === 'cancelled' ? ' active' : '')"
+                            t-on-click="() => this.setSvTab('cancelled')">
+                        <i class="fa fa-times-circle"/> Cancelled
+                        <span class="cd-sv-cnt red" t-if="svGroupCounts.cancelled"><t t-esc="svGroupCounts.cancelled"/></span>
+                    </button>
+                </div>
+
+                <t t-if="currentSvList.length === 0">
+                    <div class="cd-pa-empty">
+                        <i class="fa fa-calendar-o"/> No site visits in this category.
+                    </div>
+                </t>
+                <t t-else="">
+                    <div class="cd-pa-table-wrap">
+                        <table class="cd-pa-table">
+                            <thead>
+                                <tr>
+                                    <th>Buyer</th>
+                                    <th>Phone</th>
+                                    <th>Date</th>
+                                    <th>Reschedules</th>
+                                    <th>Status</th>
+                                    <th>Feedback</th>
+                                    <th>Notes</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <t t-foreach="currentSvList" t-as="grp" t-key="grp.rootId">
+                                    <!-- Root visit row: buyer info + CURRENT (latest) date + reschedule count badge + current status -->
+                                    <tr class="cd-pa-row cd-sv-group-root">
+                                        <td><t t-esc="grp.latest.lead_name || '\u2014'"/></td>
+                                        <td><t t-esc="grp.latest.lead_phone || '\u2014'"/></td>
+                                        <td>
+                                            <t t-esc="formatDate(grp.latest.scheduled_date)"/>
+                                            <span class="cd-badge cd-badge-orange cd-overdue-badge" t-if="grp.latest.is_overdue">Overdue</span>
+                                        </td>
+                                        <td>
+                                            <t t-if="grp.rescheduleCount > 0">
+                                                <span class="cd-sv-resch-badge">
+                                                    &#x21BB; <t t-esc="grp.rescheduleCount"/> rescheduled
+                                                </span>
+                                            </t>
+                                            <t t-else="">
+                                                <span class="cd-sv-iter">1st visit</span>
+                                            </t>
+                                        </td>
+                                        <td>
+                                            <span t-att-class="'cd-badge ' + svStatusCls(grp.latest.status_type)">
+                                                <t t-esc="grp.latest.status_name || '—'"/>
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <t t-if="grp.latest.feedback">
+                                                <span class="cd-feedback-sv"><t t-esc="grp.latest.feedback"/></span>
+                                            </t>
+                                            <t t-else="">—</t>
+                                        </td>
+                                        <td class="cd-cell-remarks">
+                                            <t t-esc="grp.latest.feedback_note || '—'"/>
+                                        </td>
+                                    </tr>
+                                    <!-- History sub-rows: prior iterations (0..N-1), no status badge — date + feedback only -->
+                                    <t t-foreach="grp.history" t-as="hist" t-key="hist.visit_id">
+                                        <tr class="cd-pa-row cd-sv-hist-row">
+                                            <td colspan="2" class="cd-sv-hist-label">
+                                                <span class="cd-sv-hist-badge">
+                                                    <t t-if="hist.reschedule_iteration === 0">&#x21B3; Original visit</t>
+                                                    <t t-else="">&#x21B3; Reschedule #<t t-esc="hist.reschedule_iteration"/></t>
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <t t-esc="formatDate(hist.scheduled_date)"/>
+                                            </td>
+                                            <td/>
+                                            <td/>
+                                            <td>
+                                                <t t-if="hist.feedback">
+                                                    <span class="cd-feedback-sv"><t t-esc="hist.feedback"/></span>
+                                                </t>
+                                                <t t-else="">—</t>
+                                            </td>
+                                            <td class="cd-cell-remarks">
+                                                <t t-esc="hist.feedback_note || '—'"/>
+                                            </td>
+                                        </tr>
+                                    </t>
+                                </t>
+                            </tbody>
+                        </table>
+                    </div>
+                </t>
+            </div>
+
+            <!-- ════════════════════════════════════════════════════════════
+                 TAB 3 — SOURCE BREAKDOWN
+            ═════════════════════════════════════════════════════════════ -->
+            <div t-if="state.activeTab === 'summary'">
+                <t t-if="sourceBreakdown.length === 0">
+                    <div class="cd-pa-empty"><i class="fa fa-bar-chart"/> No source data yet.</div>
+                </t>
+                <t t-else="">
+                    <div class="cd-source-grid">
+                        <t t-foreach="sourceBreakdown" t-as="src" t-key="src[0]">
+                            <t t-set="name" t-value="src[0]"/>
+                            <t t-set="counts" t-value="src[1]"/>
+                            <t t-set="total_count" t-value="(counts.primary || 0) + (counts.recommended || 0)"/>
+                            <t t-set="max_total" t-value="kpi.total || 1"/>
+                            <div class="cd-source-card">
+                                <div class="cd-source-name"><t t-esc="name"/></div>
+                                <div class="cd-source-bar-wrap">
+                                    <div class="cd-source-bar"
+                                         t-att-style="'width:' + Math.round(total_count / max_total * 100) + '%'"/>
+                                </div>
+                                <div class="cd-source-counts">
+                                    <span class="cd-sc-primary"><t t-esc="counts.primary || 0"/> primary</span>
+                                    <span class="cd-sc-rec"><t t-esc="counts.recommended || 0"/> recommended</span>
+                                    <span class="cd-sc-tot"><t t-esc="total_count"/> total</span>
+                                </div>
+                            </div>
+                        </t>
+                    </div>
+                </t>
+            </div>
+
+        </t><!-- end t-elif data -->
+    </div>
+</t>
+
+</templates>

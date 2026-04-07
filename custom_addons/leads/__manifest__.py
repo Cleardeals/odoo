@@ -1,7 +1,7 @@
 {
     "name": "Lead Scoring",
     "version": "1.4.0",
-    "depends": ["base", "web", "mail", "lead_suggestor"],
+    "depends": ["base", "web", "mail", "lead_suggestor", "properties"],
     "author": "Nirat Patel",
     "category": "Sales",
     "description": "Manages ML-based lead scoring and CSV lead imports for RMs.",
@@ -35,6 +35,8 @@
         "views/lead_site_visit_wizard_views.xml",
         "views/lead_site_visit_views.xml",
         "views/new_portal_lead_views.xml",
+        # Property form extension (tab added by this module)
+        "views/property_base_inherit_views.xml",
     ],
     "assets": {
         "web.assets_backend": [
@@ -42,6 +44,10 @@
             "leads/static/src/js/leads_list_controller.js",
             "leads/static/src/js/site_visit_calendar.js",
             "leads/static/src/xml/site_visit_calendar.xml",
+            # Property Activity Widget
+            "leads/static/src/css/property_activity_widget.css",
+            "leads/static/src/js/property_activity_widget.js",
+            "leads/static/src/xml/property_activity_widget.xml",
         ],
     },
     "license": "LGPL-3",
