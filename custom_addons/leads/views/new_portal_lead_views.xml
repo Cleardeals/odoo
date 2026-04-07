@@ -6,88 +6,122 @@
         <field name="model">leads.new</field>
         <field name="arch" type="xml">
             <search string="Search New Portal Leads">
-                <field name="name" string="Lead Name"/>
+
+                <!-- ── Search fields ────────────────────────────────────────── -->
+                <!-- Buyer identity -->
+                <field name="name" string="Buyer Name"/>
                 <field name="phone"/>
-                <field name="user_id" string="RM"/>
-                <field name="base_property_location" string="Location"/>
+                <!-- Property fields -->
+                <field name="all_associated_properties" string="Property"/>
                 <field name="base_property_tag" string="Property Tag"/>
-                <field name="all_associated_properties" string="Property (Primary or Recommended)"/>
-                <field name="base_property_bhk" string="BHK"/>
+                <field name="base_property_location" string="Location"/>
                 <field name="base_property_city" string="City"/>
+                <field name="base_property_bhk" string="BHK"/>
+                <!-- People -->
+                <field name="user_id" string="RM"/>
+                <field name="bde_id" string="BDE"/>
+                <!-- Lead metadata -->
                 <field name="source_id"/>
                 <field name="current_status"/>
 
+                <!-- ── My Leads (RM self-service) ───────────────────────────── -->
                 <separator/>
+                <filter string="My Leads"
+                        name="my_leads"
+                        domain="[('user_id', '=', uid)]"
+                        help="Leads assigned to me"/>
+                <filter string="My Leads — Uncontacted"
+                        name="my_leads_new"
+                        domain="[('user_id', '=', uid), ('current_status', '=', 'lead')]"
+                        help="My leads I have not yet called"/>
+                <filter string="My Leads — Active Today"
+                        name="my_leads_today"
+                        domain="[('user_id', '=', uid), ('create_date_only', '=', context_today())]"
+                        help="My leads that arrived today"/>
 
-                <filter string="Created: Today"
+                <!-- ── Pipeline health (Managers + RMs) ──────────────────────── -->
+                <separator/>
+                <filter string="Uncontacted"
+                        name="uncontacted"
+                        domain="[('current_status', '=', 'lead')]"
+                        help="Leads no one has called yet"/>
+                <filter string="Unassigned"
+                        name="unassigned"
+                        domain="[('user_id', '=', False)]"
+                        help="Leads with no RM assigned"/>
+                <filter string="Details Shared"
+                        name="details_shared"
+                        domain="[('current_status', 'in', ['details_shared_of_property', 'detail_shared_and_interested_for_site_visit'])]"
+                        help="Leads in the details-shared stage"/>
+                <filter string="Not Interested"
+                        name="not_interested"
+                        domain="[('current_status', 'in', ['option_not_matching_requirements', 'no_requirements', 'requirement_closed', 'property_sold_out', 'budget_not_sufficient', 'number_not_in_use_wrong_number'])]"
+                        help="Leads that have been closed as not interested"/>
+
+                <!-- ── Site visit pipeline ───────────────────────────────────── -->
+                <separator/>
+                <filter string="SV Scheduled"
+                        name="sv_scheduled"
+                        domain="[('current_status', 'in', ['site_visit_scheduled', 'rescheduled'])]"
+                        help="Leads whose site visit is scheduled or rescheduled"/>
+                <filter string="SV Done"
+                        name="sv_done"
+                        domain="[('current_status', '=', 'site_visit_done')]"
+                        help="Leads whose site visit is complete"/>
+                <filter string="Site Visits Today"
+                        name="site_visits_today"
+                        domain="[('site_visit_ids.scheduled_date', '=', context_today())]"
+                        help="Leads with a site visit scheduled for today"/>
+
+                <!-- ── Lead type ──────────────────────────────────────────────── -->
+                <separator/>
+                <filter string="Primary Leads"
+                        name="primary_leads"
+                        domain="[('inquiry_type', '=', 'primary')]"/>
+                <filter string="Recommended Leads"
+                        name="recommended_leads"
+                        domain="[('inquiry_type', '=', 'recommended')]"/>
+                <filter string="Ops Sales Leads"
+                        name="ops_sales_leads"
+                        domain="[('is_ops_sale_lead', '=', True)]"/>
+                <filter string="Ops Sales — No BDE"
+                        name="ops_sales_leads_no_bde"
+                        domain="[('is_ops_sale_lead', '=', True), ('bde_id', '=', False)]"
+                        groups="leads.group_lead_score_manager"
+                        help="Ops sale leads that still need a BDE assigned"/>
+
+                <!-- ── Creation date (intake volume) ──────────────────────────── -->
+                <separator/>
+                <filter string="Created Today"
                         name="created_today"
                         domain="[('create_date_only', '=', context_today())]"/>
-
-                <filter string="Created: Yesterday"
+                <filter string="Created Yesterday"
                         name="created_yesterday"
                         domain="[('create_date_only', '=', (context_today() - datetime.timedelta(days=1)).strftime('%Y-%m-%d'))]"/>
-
-                <filter string="Created: Last 7 Days"
+                <filter string="Created Last 7 Days"
                         name="created_last_7_days"
                         domain="[('create_date_only', '&gt;=', (context_today() - datetime.timedelta(days=6)).strftime('%Y-%m-%d')),
                                  ('create_date_only', '&lt;=', context_today().strftime('%Y-%m-%d'))]"/>
-
-                <filter string="Created: This Month"
+                <filter string="Created This Month"
                         name="created_this_month"
                         domain="[('create_date_only', '&gt;=', context_today().strftime('%Y-%m-01')),
                                  ('create_date_only', '&lt;=', context_today().strftime('%Y-%m-%d'))]"/>
-
-                <filter string="Created: Last 30 Days"
+                <filter string="Created Last 30 Days"
                         name="created_last_30_days"
                         domain="[('create_date_only', '&gt;=', (context_today() - datetime.timedelta(days=29)).strftime('%Y-%m-%d')),
                                  ('create_date_only', '&lt;=', context_today().strftime('%Y-%m-%d'))]"/>
 
+                <!-- ── Group-by ──────────────────────────────────────────────── -->
                 <separator/>
+                <filter string="Group by Status"      name="groupby_status"  context="{'group_by': 'current_status'}"/>
+                <filter string="Group by RM"          name="groupby_user"    context="{'group_by': 'user_id'}"/>
+                <filter string="Group by BDE"         name="groupby_bde"     context="{'group_by': 'bde_id'}"/>
+                <filter string="Group by Source"      name="groupby_source"  context="{'group_by': 'source_id'}"/>
+                <filter string="Group by Property"    name="groupby_all_props" context="{'group_by': 'all_associated_properties'}"/>
+                <filter string="Group by Type"        name="groupby_type"    context="{'group_by': 'inquiry_type'}"/>
+                <filter string="Group by State"       name="groupby_state"   context="{'group_by': 'state'}" groups="leads.group_lead_score_manager"/>
+                <filter string="Group by Date"        name="groupby_date"    context="{'group_by': 'create_date_only'}"/>
 
-                <filter string="Leads Created Today"
-                        name="my_leads_today"
-                        domain="[('create_date_only', '=', context_today())]"/>
-
-                <filter string="Pending Leads Today"
-                        name="pending_leads_today"
-                        domain="[('create_date_only', '=', context_today()),
-                                 ('current_status', '=', 'lead')]"/>
-
-                <filter string="Unassigned"
-                        name="unassigned"
-                        domain="[('user_id', '=', False)]"/>
-
-                <separator/>
-
-                <filter string="Site Visits Today"
-                        name="site_visits_today"
-                    domain="['|',
-                         ('site_visit_ids.scheduled_date', '=', context_today()),
-                         ('child_inquiry_ids.site_visit_ids.scheduled_date', '=', context_today())
-                        ]"
-                    help="Visits scheduled today across inquiry and recommended inquiry chains"/>
-
-                <filter string="Ops Sales Leads"
-                        name="ops_sales_leads"
-                        domain="[('is_ops_sale_lead', '=', True)]"/>
-
-                <filter string="Ops Sales Leads (No BDE)"
-                        name="ops_sales_leads_no_bde"
-                        domain="[('is_ops_sale_lead', '=', True), ('bde_id', '=', False)]"/>
-
-                <separator/>
-
-                <filter string="Current Status" name="groupby_status" context="{'group_by': 'current_status'}"/>
-                <filter string="RM"             name="groupby_user"   context="{'group_by': 'user_id'}"/>
-                <filter string="BDE"            name="groupby_bde"    context="{'group_by': 'bde_id'}"/>
-
-                <filter string="Property (All Associated)"
-                        name="groupby_all_props"
-                        context="{'group_by': 'all_associated_properties'}"/>
-
-                <filter string="Main State"     name="groupby_state"  context="{'group_by': 'state'}"/>
-                <filter string="Source"         name="groupby_source" context="{'group_by': 'source_id'}"/>
-                <filter string="Creation Date"  name="groupby_date"   context="{'group_by': 'create_date_only'}"/>
             </search>
         </field>
     </record>
