@@ -198,7 +198,6 @@
             ═════════════════════════════════════════════════════════════ -->
             <div t-if="state.activeTab === 'site_visits'">
                 <t t-set="sv" t-value="siteVisits"/>
-                <t t-set="tot" t-value="sv.totals || {}"/>
 
                 <div class="cd-sv-tab-bar">
                     <button t-att-class="'cd-sv-tab' + (state.svTab === 'all' ? ' active' : '')"
@@ -241,6 +240,7 @@
                                 <tr>
                                     <th>Buyer</th>
                                     <th>Phone</th>
+                                    <th>RM</th>
                                     <th>Date</th>
                                     <th>Reschedules</th>
                                     <th>Status</th>
@@ -254,6 +254,7 @@
                                     <tr class="cd-pa-row cd-sv-group-root">
                                         <td><t t-esc="grp.latest.lead_name || '\u2014'"/></td>
                                         <td><t t-esc="grp.latest.lead_phone || '\u2014'"/></td>
+                                        <td><t t-esc="grp.latest.assigned_rm || '\u2014'"/></td>
                                         <td>
                                             <t t-esc="formatDate(grp.latest.scheduled_date)"/>
                                             <span class="cd-badge cd-badge-orange cd-overdue-badge" t-if="grp.latest.is_overdue">Overdue</span>
@@ -286,7 +287,7 @@
                                     <!-- History sub-rows: prior iterations (0..N-1), no status badge — date + feedback only -->
                                     <t t-foreach="grp.history" t-as="hist" t-key="hist.visit_id">
                                         <tr class="cd-pa-row cd-sv-hist-row">
-                                            <td colspan="2" class="cd-sv-hist-label">
+                                            <td colspan="3" class="cd-sv-hist-label">
                                                 <span class="cd-sv-hist-badge">
                                                     <t t-if="hist.reschedule_iteration === 0">&#x21B3; Original visit</t>
                                                     <t t-else="">&#x21B3; Reschedule #<t t-esc="hist.reschedule_iteration"/></t>

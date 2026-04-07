@@ -192,6 +192,7 @@ export class PropertyActivityWidget extends Component {
             let cur = root;
             while (cur) {
                 chain.push(cur);
+                if (chain.length > 500) break;  // cycle guard: prevent infinite loop on corrupted data
                 cur = nextOf[cur.visit_id] || null;
             }
             const latest = chain[chain.length - 1];

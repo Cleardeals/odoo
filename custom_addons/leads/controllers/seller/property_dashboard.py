@@ -18,7 +18,7 @@ All ORM queries reuse the same resolver helpers as the public seller API.
 import csv
 import io
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 from odoo import http
 from odoo.http import request
@@ -54,7 +54,7 @@ _STATUS_BUCKET = {
 
 def _serialize_lead(lead, rec_type="primary"):
     prop = lead.property_base_id
-    parent = lead if rec_type == "primary" else lead.lead_id
+    parent = lead
     return {
         "type": rec_type,
         "lead_id": parent.id if parent else None,
@@ -80,7 +80,7 @@ def _serialize_lead(lead, rec_type="primary"):
     }
 
 
-def _serialize_site_visit(visit):
+def _serialize_site_visit(visit, now):
     """Serialize a lead.site.visit record into a dashboard-ready dict.
 
     Uses the proper site visit model fields (status flags, feedback_option_id,
@@ -119,11 +119,11 @@ def _serialize_site_visit(visit):
         # custom statuses (e.g. "Cancelling" with is_cancelled_status=True but
         # status_type="custom") are routed to the correct tab without relying
         # on status_type string matching in the browser.
-        "sv_bucket": _sv_bucket(status, visit),
+        "sv_bucket": _sv_bucket(status, visit, now),
     }
 
 
-def _sv_bucket(status, visit):
+def _sv_bucket(status, visit, now):
     """Return the display bucket string for a lead.site.visit record.
 
     Boolean flags are the primary signal; status_type string is the fallback
@@ -146,7 +146,7 @@ def _sv_bucket(status, visit):
             visit.scheduled_datetime.replace(tzinfo=None)
             if visit.scheduled_datetime else None
         )
-        return "upcoming" if sv_dt and sv_dt >= datetime.utcnow() else "pending_feedback"
+        return "upcoming" if sv_dt and sv_dt >= now else "pending_feedback"
     # True cancellation / no-show
     if (
         status.is_cancelled_status
@@ -173,25 +173,34 @@ class PropertyActivityDashboardController(http.Controller):
         if not prop.exists():
             return {"error": f"Property {property_id} not found."}
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
 
-        # ── Primary leads — direct filter by property_base_id ─────────────
+        # ── Primary leads — inquiry_type=primary only ──────────────────
         # We already have the Odoo DB id; no need to go through property_tag.
+        # Recommended inquiries (inquiry_type=recommended) are queried separately
+        # below so they surface as the correct type in the dashboard.
         primary_leads = (
             env["leads.new"]
             .sudo()
             .search(
-                [("property_base_id", "=", property_id)],
+                [
+                    ("property_base_id", "=", property_id),
+                    ("inquiry_type", "=", "primary"),
+                ],
                 order="create_date desc",
             )
         )
 
-        # ── Recommended interests — same direct filter ─────────────────────
+        # ── Recommended leads — leads.new records created via the
+        #    Recommend Property wizard (inquiry_type=recommended) ──────────
         recommended = (
-            env["lead.property.interest"]
+            env["leads.new"]
             .sudo()
             .search(
-                [("property_base_id", "=", property_id)],
+                [
+                    ("property_base_id", "=", property_id),
+                    ("inquiry_type", "=", "recommended"),
+                ],
                 order="create_date desc",
             )
         )
@@ -223,7 +232,7 @@ class PropertyActivityDashboardController(http.Controller):
             status = sv.status_id
             if not status:
                 continue
-            row = _serialize_site_visit(sv)
+            row = _serialize_site_visit(sv, now)
             site_visits["all"].append(row)
             inquiry_id = sv.inquiry_id.id if sv.inquiry_id else None
             if status.is_completed_status:
@@ -266,8 +275,7 @@ class PropertyActivityDashboardController(http.Controller):
                     continue  # uncontacted ("lead" status) — not shown in any sub-bucket
             kpi[bucket] = kpi.get(bucket, 0) + 1
         for rec in recommended:
-            primary_id = rec.lead_id.id if rec.lead_id else None
-            if primary_id and primary_id in inquiry_scheduled_sv:
+            if rec.id in inquiry_scheduled_sv:
                 bucket = "site_visit_scheduled"
             else:
                 bucket = _STATUS_BUCKET.get(rec.current_status)
@@ -282,11 +290,7 @@ class PropertyActivityDashboardController(http.Controller):
             source_counts.setdefault(src, {"primary": 0, "recommended": 0})
             source_counts[src]["primary"] += 1
         for rec in recommended:
-            src = (
-                rec.lead_id.source_id.name
-                if rec.lead_id and rec.lead_id.source_id
-                else "Unknown"
-            )
+            src = rec.source_id.name if rec.source_id else "Unknown"
             source_counts.setdefault(src, {"primary": 0, "recommended": 0})
             source_counts[src]["recommended"] += 1
 
@@ -322,19 +326,26 @@ class PropertyActivityDashboardController(http.Controller):
         if not prop.exists():
             return request.not_found()
 
+        # ── Primary + Recommended leads (both leads.new) ──────────────────
         primary_leads = (
             env["leads.new"]
             .sudo()
             .search(
-                [("property_base_id", "=", property_id)],
+                [
+                    ("property_base_id", "=", property_id),
+                    ("inquiry_type", "=", "primary"),
+                ],
                 order="create_date desc",
             )
         )
         recommended = (
-            env["lead.property.interest"]
+            env["leads.new"]
             .sudo()
             .search(
-                [("property_base_id", "=", property_id)],
+                [
+                    ("property_base_id", "=", property_id),
+                    ("inquiry_type", "=", "recommended"),
+                ],
                 order="create_date desc",
             )
         )
@@ -347,8 +358,8 @@ class PropertyActivityDashboardController(http.Controller):
         ])
 
         for row in list(primary_leads) + list(recommended):
-            rec_type = "primary" if row._name == "leads.new" else "recommended"
-            parent = row if rec_type == "primary" else row.lead_id
+            rec_type = row.inquiry_type or "primary"
+            parent = row
             writer.writerow([
                 rec_type,
                 row.create_date.strftime("%Y-%m-%d") if row.create_date else "",

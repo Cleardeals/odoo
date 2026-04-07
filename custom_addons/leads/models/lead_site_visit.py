@@ -355,17 +355,17 @@ class LeadSiteVisit(models.Model):
         "status_id.is_completed_status",
         "status_id.is_cancelled_status",
         "status_id.is_no_show_status",
-        "scheduled_date",
+        "scheduled_datetime",
     )
     def _compute_color(self):
-        today = fields.Date.today()
+        now = fields.Datetime.now()
         for rec in self:
             st = rec.status_id
             if not st:
                 rec.color = 0
                 continue
             is_open = st.is_scheduled_status or st.is_reschedule_status
-            is_overdue = is_open and bool(rec.scheduled_date) and rec.scheduled_date < today
+            is_overdue = is_open and bool(rec.scheduled_datetime) and rec.scheduled_datetime < now
             if is_overdue:
                 rec.color = 3          # yellow  — past date, feedback pending
             elif st.is_completed_status:
@@ -403,13 +403,13 @@ class LeadSiteVisit(models.Model):
                 ],
             )
 
-    @api.depends("scheduled_date", "status_id.is_scheduled_status", "status_id.is_reschedule_status")
+    @api.depends("scheduled_datetime", "status_id.is_scheduled_status", "status_id.is_reschedule_status")
     def _compute_is_overdue_open(self):
-        today = fields.Date.today()
+        now = fields.Datetime.now()
         for rec in self:
             rec.is_overdue_open = (
-                bool(rec.scheduled_date)
-                and rec.scheduled_date < today
+                bool(rec.scheduled_datetime)
+                and rec.scheduled_datetime < now
                 and (rec.status_id.is_scheduled_status or rec.status_id.is_reschedule_status)
             )
 
