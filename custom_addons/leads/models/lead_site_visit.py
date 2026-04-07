@@ -333,7 +333,51 @@ class LeadSiteVisit(models.Model):
         store=False,
     )
 
-    color = fields.Integer(related="status_id.color")
+    # Calendar color — computed automatically from status_type + overdue state so
+    # the calendar is always semantically color-coded regardless of admin setup.
+    # Palette (Odoo $o-colors-complete, index 0-based):
+    #   0  #a2a2a2  grey         → custom / unknown
+    #   1  #ee2d2d  red          → cancelled / no-show
+    #   2  #dc8534  orange       → rescheduled (upcoming)
+    #   3  #e8bb1d  yellow       → overdue (scheduled/rescheduled past date)
+    #   4  #5794dd  light blue   → scheduled (upcoming)
+    #  10  #61c36e  green        → completed
+    color = fields.Integer(
+        string="Calendar Color",
+        compute="_compute_color",
+        store=False,
+    )
+
+    @api.depends(
+        "status_id.status_type",
+        "status_id.is_scheduled_status",
+        "status_id.is_reschedule_status",
+        "status_id.is_completed_status",
+        "status_id.is_cancelled_status",
+        "status_id.is_no_show_status",
+        "scheduled_date",
+    )
+    def _compute_color(self):
+        today = fields.Date.today()
+        for rec in self:
+            st = rec.status_id
+            if not st:
+                rec.color = 0
+                continue
+            is_open = st.is_scheduled_status or st.is_reschedule_status
+            is_overdue = is_open and bool(rec.scheduled_date) and rec.scheduled_date < today
+            if is_overdue:
+                rec.color = 3          # yellow  — past date, feedback pending
+            elif st.is_completed_status:
+                rec.color = 10         # green   — done
+            elif st.is_cancelled_status or st.is_no_show_status:
+                rec.color = 1          # red     — terminated
+            elif st.is_reschedule_status:
+                rec.color = 2          # orange  — rescheduled, attention needed
+            elif st.is_scheduled_status:
+                rec.color = 4          # blue    — upcoming, neutral
+            else:
+                rec.color = 0          # grey    — custom / unknown
 
     @api.depends("inquiry_id", "scheduled_datetime", "status_id")
     def _compute_name(self):
@@ -585,6 +629,7 @@ class LeadSiteVisit(models.Model):
             "type": "ir.actions.act_window",
             "res_model": "lead.site.visit.quick.update.wizard",
             "view_mode": "form",
+            "views": [[False, "form"]],
             "target": "new",
             "context": {
                 "default_visit_id": self.id,
@@ -602,6 +647,7 @@ class LeadSiteVisit(models.Model):
             "type": "ir.actions.act_window",
             "res_model": "lead.site.visit.quick.update.wizard",
             "view_mode": "form",
+            "views": [[False, "form"]],
             "target": "new",
             "context": {
                 "default_visit_id": self.id,

@@ -202,11 +202,15 @@
                 <field name="property_base_id"/>
                 <field name="assigned_rm_id"/>
                 <field name="status_id"/>
-                <!-- Status boolean helpers: loaded into rawRecord for isRescheduleVisible -->
-                <!-- invisible="1" hides them from the popover body while keeping them in rawRecord -->
+                <!-- Reschedule iteration: shown only when > 0 (i.e. this is a rescheduled visit) -->
+                <field name="reschedule_iteration" string="Visit #" invisible="reschedule_iteration == 0"/>
+                <!-- Feedback shown if set -->
+                <field name="feedback_option_id" string="Feedback" invisible="not feedback_option_id"/>
+                <!-- Status boolean helpers: loaded into rawRecord for JS (isRescheduleVisible, overdue badge) -->
                 <field name="status_is_scheduled" invisible="1"/>
                 <field name="status_is_rescheduled" invisible="1"/>
                 <field name="status_is_terminal" invisible="1"/>
+                <field name="is_overdue_open" invisible="1"/>
             </calendar>
         </field>
     </record>
