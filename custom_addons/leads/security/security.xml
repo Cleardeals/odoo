@@ -92,5 +92,31 @@
             <field name="domain_force">[(1, '=', 1)]</field>
         </record>
 
+        <!-- property.base cross-RM read access for Leads RMs
+             ─────────────────────────────────────────────────
+             The properties module restricts property.base reads to own records
+             via [('rm_user_id','=',user.id)] for group_property_rm.
+             Odoo ORs rules across groups, so adding [(1,'=',1)] here means
+             any user in leads.group_lead_score_rm can read ANY property record.
+             This is required so that:
+               - A lead form can display a recommended/linked property that
+                 belongs to a different RM (the Many2one display_name read
+                 goes through _search/_fetch which applies rules as SQL).
+             Write/create/unlink remain governed by the properties module.
+             The Properties module list view is kept tidy by the _search
+             override in leads/models/property_base_extend.py which re-applies
+             [('rm_user_id','=',user.id)] when context key
+             'properties_module_view' is present. -->
+        <record id="rule_property_base_leads_rm_read_all" model="ir.rule">
+            <field name="name">Property Base: Leads RM can read all properties</field>
+            <field name="model_id" ref="properties.model_property_base"/>
+            <field name="groups" eval="[(4, ref('leads.group_lead_score_rm'))]"/>
+            <field name="domain_force">[(1, '=', 1)]</field>
+            <field name="perm_read"   eval="True"/>
+            <field name="perm_write"  eval="False"/>
+            <field name="perm_create" eval="False"/>
+            <field name="perm_unlink" eval="False"/>
+        </record>
+
     </data>
 </odoo>
