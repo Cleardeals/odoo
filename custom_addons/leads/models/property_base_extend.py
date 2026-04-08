@@ -1,6 +1,7 @@
 import logging
 
-from odoo import models
+from odoo import api, models
+from odoo.osv.expression import AND
 
 _logger = logging.getLogger(__name__)
 
@@ -25,31 +26,51 @@ class PropertyBaseLeadRelink(models.Model):
       1. Finds all unlinked leads.new with that portal_name + portal_property_id.
       2. Links property_base_id to this property.
       3. Reassigns user_id to the property's RM (if set).
+
+    Cross-RM read access
+    --------------------
+    Leads RMs need to read any property record to display it on a lead form
+    (e.g. a recommended property owned by a different RM).  This is handled
+    by an ir.rule (rule_property_base_leads_rm_read_all in
+    leads/security/security.xml) that ORs [(1,'=',1)] for the
+    ``leads.group_lead_score_rm`` group.  Odoo ORs rules across groups, so
+    the combined SQL domain becomes TRUE for leads RMs, letting _search()
+    return any property record.
+
+    To keep the Properties module list view showing only an RM's own
+    properties, the module's actions set the context key
+    ``properties_module_view=True``.  The _search override below detects
+    that key and injects [('rm_user_id','=',user.id)] back into the domain,
+    restoring the "own properties only" list while leaving cross-RM reads
+    unrestricted everywhere else.
     """
 
     _name = "property.base"
     _inherit = "property.base"
 
-    def _check_access(self, operation):
-        """Allow Leads RMs to read any property record.
+    @api.model
+    def _search(self, domain, offset=0, limit=None, order=None,
+                *, active_test=True, bypass_access=False):
+        """Restrict Properties module list view to own properties for RMs.
 
-        The properties module restricts RMs to their own properties via
-        ir.rule domain ``[('rm_user_id', '=', user.id)]``.  This is correct
-        for the Properties list view (controlled by ``_search`` which applies
-        the ir.rule domain in SQL — unaffected by this override).
-
-        However, when an RM opens a recommended inquiry the form must read
-        the linked property.base record which may belong to a different RM.
-        ``_check_access`` is the gate for individual record reads; bypassing
-        it here lets the read succeed without broadening ``_search`` results.
+        When the ``properties_module_view`` context key is set (injected by
+        every Properties module action), non-manager RM users only see their
+        own properties.  Outside that context (e.g. when Odoo fetches a
+        property record to display it on a lead form) the restriction is not
+        applied, so leads RMs can read any property record freely.
         """
         if (
-            operation == 'read'
-            and not self.env.su
-            and self.env.user.has_group('leads.group_lead_score_rm')
+            not self.env.su
+            and not bypass_access
+            and self.env.context.get('properties_module_view')
+            and self.env.user.has_group('properties.group_property_rm')
+            and not self.env.user.has_group('properties.group_property_manager')
         ):
-            return None
-        return super()._check_access(operation)
+            domain = AND([list(domain), [('rm_user_id', '=', self.env.user.id)]])
+        return super()._search(
+            domain, offset=offset, limit=limit, order=order,
+            active_test=active_test, bypass_access=bypass_access,
+        )
 
     def write(self, vals):
         # Collect which portal fields are being updated and their new values

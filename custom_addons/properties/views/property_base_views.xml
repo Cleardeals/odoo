@@ -326,7 +326,7 @@
         <field name="res_model">property.base</field>
         <field name="view_mode">list,form</field>
         <field name="search_view_id" ref="view_property_base_search"/>
-        <field name="context">{'search_default_active_only': 1}</field>
+        <field name="context">{'search_default_active_only': 1, 'properties_module_view': True}</field>
         <field name="help" type="html">
             <p class="o_view_nocontent_smiling_face">
                 No properties found.
@@ -358,7 +358,7 @@
         <field name="view_mode">list,form</field>
         <field name="domain">[('prop_type', '=', 'residential')]</field>
         <field name="search_view_id" ref="view_property_base_search"/>
-        <field name="context">{'search_default_active_only': 1}</field>
+        <field name="context">{'search_default_active_only': 1, 'properties_module_view': True}</field>
         <field name="help" type="html">
             <p class="o_view_nocontent_smiling_face">
                 No residential properties found.
@@ -385,7 +385,7 @@
         <field name="view_mode">list,form</field>
         <field name="domain">[('prop_type', '=', 'commercial')]</field>
         <field name="search_view_id" ref="view_property_base_search"/>
-        <field name="context">{'search_default_active_only': 1}</field>
+        <field name="context">{'search_default_active_only': 1, 'properties_module_view': True}</field>
         <field name="help" type="html">
             <p class="o_view_nocontent_smiling_face">
                 No commercial properties found.
