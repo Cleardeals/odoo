@@ -310,7 +310,15 @@
 /* Cell helpers */
 .cd-cell-date  { white-space: nowrap; color: #6c757d; }
 .cd-cell-phone { white-space: nowrap; font-family: monospace; font-size: 11px; }
-.cd-cell-remarks { font-style: italic; color: #6c757d; font-size: 11px; }
+.cd-cell-remarks {
+    font-style: italic;
+    color: #6c757d;
+    font-size: 11px;
+    max-width: 180px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
 
 .cd-pa-count {
     margin-top: 8px;
