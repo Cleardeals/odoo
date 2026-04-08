@@ -165,8 +165,8 @@ class LeadImportWizard(models.TransientModel):
                         if olx_id in property_cache:
                             prop = property_cache[olx_id]
                         else:
-                            prop = LeadsNew._resolve_property_from_portal(
-                                "OLX",
+                            prop = LeadsNew._resolve_property_from_source(
+                                olx_source,
                                 olx_id,
                             )
                             # Cache both hits AND misses (empty recordset) to
