@@ -280,7 +280,7 @@
                                             </t>
                                             <t t-else="">—</t>
                                         </td>
-                                        <td class="cd-cell-remarks">
+                                        <td class="cd-cell-remarks" t-att-title="grp.latest.feedback_note || ''">
                                             <t t-esc="grp.latest.feedback_note || '—'"/>
                                         </td>
                                     </tr>
@@ -304,7 +304,7 @@
                                                 </t>
                                                 <t t-else="">—</t>
                                             </td>
-                                            <td class="cd-cell-remarks">
+                                            <td class="cd-cell-remarks" t-att-title="hist.feedback_note || ''">
                                                 <t t-esc="hist.feedback_note || '—'"/>
                                             </td>
                                         </tr>

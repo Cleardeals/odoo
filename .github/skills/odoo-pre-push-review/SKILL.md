@@ -58,7 +58,13 @@ Read: `references/manifest.md` for detailed rules.
 Quick checklist:
 - `version` must be ≥ highest migration folder version number
 - Every new model's view file must appear in `data` list
-- Every Python model file must be imported in `models/__init__.py`
+- Every Python model file must be imported in `models/__init__.py` — **verify
+  this actively**: use `file_search` to list every `models/*.py` file in the
+  module, then read `models/__init__.py` and confirm every file (except
+  `__init__.py` itself) appears as a `from . import <name>` line. A file that
+  exists on disk but is missing from `__init__.py` is silently ignored by Odoo
+  — no error, no warning, the model simply does not load. This is the most
+  common silent omission bug and the easiest to miss in review.
 - The `controllers` key does nothing — flag it for removal and verify
   controllers are imported in `controllers/__init__.py` instead
 - `data` list load order: security XML first, then access CSV, then data XML,

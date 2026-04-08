@@ -30,6 +30,27 @@ class PropertyBaseLeadRelink(models.Model):
     _name = "property.base"
     _inherit = "property.base"
 
+    def _check_access(self, operation):
+        """Allow Leads RMs to read any property record.
+
+        The properties module restricts RMs to their own properties via
+        ir.rule domain ``[('rm_user_id', '=', user.id)]``.  This is correct
+        for the Properties list view (controlled by ``_search`` which applies
+        the ir.rule domain in SQL — unaffected by this override).
+
+        However, when an RM opens a recommended inquiry the form must read
+        the linked property.base record which may belong to a different RM.
+        ``_check_access`` is the gate for individual record reads; bypassing
+        it here lets the read succeed without broadening ``_search`` results.
+        """
+        if (
+            operation == 'read'
+            and not self.env.su
+            and self.env.user.has_group('leads.group_lead_score_rm')
+        ):
+            return None
+        return super()._check_access(operation)
+
     def write(self, vals):
         # Collect which portal fields are being updated and their new values
         changed_portals = {

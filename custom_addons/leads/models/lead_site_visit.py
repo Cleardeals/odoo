@@ -1,3 +1,5 @@
+import re
+
 from odoo import api, fields, models
 from odoo.exceptions import ValidationError
 
@@ -164,6 +166,15 @@ class LeadSiteVisitFeedbackOption(models.Model):
     requires_note = fields.Boolean(default=False)
     sequence = fields.Integer(default=10)
     active = fields.Boolean(default=True, index=True)
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        for vals in vals_list:
+            if not vals.get("code") and vals.get("name"):
+                vals["code"] = re.sub(
+                    r"[^a-z0-9]+", "_", vals["name"].strip().lower()
+                ).strip("_")
+        return super().create(vals_list)
 
     def write(self, vals):
         if "code" in vals:

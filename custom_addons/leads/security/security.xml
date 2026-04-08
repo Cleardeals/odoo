@@ -91,6 +91,6 @@
             <field name="perm_unlink" eval="True"/>
             <field name="domain_force">[(1, '=', 1)]</field>
         </record>
-        
+
     </data>
 </odoo>
