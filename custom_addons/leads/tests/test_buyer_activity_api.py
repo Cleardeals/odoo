@@ -15,6 +15,20 @@ Test Categories:
 - Property Counting: Primary properties vs recommended properties
 - Edge Cases: No inquiries, no properties, no recommended interests
 - Data Integrity: Field mapping, datetime formatting, boolean flags
+
+Model integration notes
+-----------------------
+The activity API reads the flat snapshot fields on leads.new
+(current_status, site_visit_date, feedback_general, feedback_site_visit_done, etc.).
+In production these fields are populated in two ways:
+  • Automatically by lead.site.visit._sync_inquiry_snapshot when a visit is
+    created or its status changes (the new path, v1.3.0+)
+  • Directly via write() or the BQ import wizard (legacy path)
+
+Tests here write snapshot fields directly for isolation. This is correct for
+unit-testing the serialisation logic but does not exercise the full visit model flow.
+See test_lead_site_visit_models.py for integration tests that drive the snapshot
+through the visit model.
 """
 
 import logging
@@ -46,7 +60,9 @@ class TestBuyerActivityAPI(PortalLeadTestCase):
 
     def test_01_primary_lead_serialization_all_fields(self):
         """
-        ARRANGE: Create primary lead with all fields
+        ARRANGE: Create primary lead with all fields; set current_status via
+                 direct write (unit-test isolation — in production this value
+                 arrives via lead.site.visit._sync_inquiry_snapshot).
         ACT: Serialize it
         ASSERT: All fields present and correct
         """
@@ -67,7 +83,7 @@ class TestBuyerActivityAPI(PortalLeadTestCase):
         # ACT
         serialized = {
             "lead_name": lead.name or None,
-            "portal": lead.portal_name or None,
+            "source": lead.source_id.name or None,
             "inquiry_datetime": (
                 lead.create_date.isoformat() if lead.create_date else None
             ),
@@ -78,7 +94,7 @@ class TestBuyerActivityAPI(PortalLeadTestCase):
 
         # ASSERT
         self.assertEqual(serialized["lead_name"], "Ravi Shah")
-        self.assertEqual(serialized["portal"], "MagicBricks")
+        self.assertEqual(serialized["source"], "MagicBricks")
         self.assertEqual(serialized["current_status"], "site_visit_scheduled")
         self.assertTrue(serialized["has_property"])
         self.assertEqual(serialized["remarks"], "Wants east-facing flat")
@@ -144,7 +160,11 @@ class TestBuyerActivityAPI(PortalLeadTestCase):
 
     def test_05_primary_lead_site_visit_dates(self):
         """
-        ARRANGE: Lead with site visit datetime and date_only
+        ARRANGE: Lead with site visit datetime and date_only set via direct
+                 write (unit-test isolation). In production, site_visit_date is
+                 written by lead.site.visit._sync_inquiry_snapshot when a visit
+                 is created or rescheduled; site_visit_date_only is a computed
+                 field derived from site_visit_date automatically.
         ACT: Serialize both
         ASSERT: Both formatted correctly
         """
@@ -444,7 +464,9 @@ class TestBuyerActivityAPI(PortalLeadTestCase):
 
     def test_16_summary_site_visits_scheduled_primary_only(self):
         """
-        ARRANGE: Primary lead with site_visit_scheduled status
+        ARRANGE: Primary lead with site_visit_scheduled status set via direct
+                 write. In production this status is written by the
+                 lead.site.visit snapshot when a visit is created or rescheduled.
         ACT: Count site visits scheduled
         ASSERT: Count = 1
         """
@@ -462,7 +484,9 @@ class TestBuyerActivityAPI(PortalLeadTestCase):
 
     def test_17_summary_site_visits_done_primary_only(self):
         """
-        ARRANGE: Primary lead with site_visit_done status
+        ARRANGE: Primary lead with site_visit_done status set via direct write.
+                 In production this status is written by the lead.site.visit
+                 snapshot when the visit is marked completed.
         ACT: Count site visits done
         ASSERT: Count = 1
         """

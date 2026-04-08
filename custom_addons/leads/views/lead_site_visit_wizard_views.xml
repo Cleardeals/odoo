@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_lead_add_site_visit_wizard_form" model="ir.ui.view">
+        <field name="name">lead.add.site.visit.wizard.form</field>
+        <field name="model">lead.add.site.visit.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Schedule a Visit">
+                <sheet>
+                    <group>
+                        <div class="o_form_label text-muted">For reschedule, choose a reschedule status and link the previous visit.</div>
+                    </group>
+                    <group>
+                        <group>
+                            <field name="inquiry_id" readonly="1"/>
+                            <field name="property_base_id" readonly="1"/>
+                            <field name="assigned_rm_id"/>
+                        </group>
+                        <group>
+                            <field name="scheduled_datetime"/>
+                            <field name="status_id"/>
+                            <field name="feedback_option_id"/>
+                            <field name="previous_visit_id" invisible="not status_id or not status_id.is_reschedule_status"/>
+                        </group>
+                    </group>
+                    <group>
+                        <field name="feedback_note" placeholder="Optional notes for operations and manager review"/>
+                    </group>
+                </sheet>
+                <footer>
+                    <button name="action_create_site_visit"
+                            string="Schedule Visit"
+                            type="object"
+                            class="btn-primary"/>
+                    <button string="Cancel"
+                            class="btn-secondary"
+                            special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_lead_add_site_visit_wizard" model="ir.actions.act_window">
+        <field name="name">Schedule a Visit</field>
+        <field name="res_model">lead.add.site.visit.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+
+    <record id="view_lead_recommend_property_wizard_form" model="ir.ui.view">
+        <field name="name">lead.recommend.property.wizard.form</field>
+        <field name="model">lead.recommend.property.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Recommend Property">
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="inquiry_id" readonly="1"/>
+                            <field name="source_id" readonly="1"/>
+                        </group>
+                        <group>
+                            <field name="property_base_id"/>
+                            <field name="assigned_rm_id"/>
+                        </group>
+                    </group>
+                </sheet>
+                <footer>
+                    <button name="action_create_recommended_inquiry"
+                            string="Create Recommended Inquiry"
+                            type="object"
+                            class="btn-primary"/>
+                    <button string="Cancel"
+                            class="btn-secondary"
+                            special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_lead_recommend_property_wizard" model="ir.actions.act_window">
+        <field name="name">Recommend Property</field>
+        <field name="res_model">lead.recommend.property.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+
+    <record id="view_lead_site_visit_quick_update_wizard_form" model="ir.ui.view">
+        <field name="name">lead.site.visit.quick.update.wizard.form</field>
+        <field name="model">lead.site.visit.quick.update.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Quick Visit Update">
+                <sheet>
+                    <group>
+                        <div class="o_form_label text-muted">Fast update: select new status, and only set date/time when rescheduling.</div>
+                    </group>
+                    <group>
+                        <group>
+                            <field name="visit_id" readonly="1"/>
+                            <field name="inquiry_id" readonly="1"/>
+                            <field name="property_base_id" readonly="1"/>
+                            <field name="assigned_rm_id" readonly="1"/>
+                        </group>
+                        <group>
+                            <field name="current_status_id" readonly="1"/>
+                            <field name="status_id"/>
+                            <field name="scheduled_datetime" invisible="not is_reschedule" required="is_reschedule"/>
+                            <field name="feedback_option_id"/>
+                        </group>
+                    </group>
+                    <group>
+                        <field name="feedback_note" placeholder="Optional note"/>
+                    </group>
+                </sheet>
+                <footer>
+                    <button name="action_apply_update"
+                            string="Apply Update"
+                            type="object"
+                            class="btn-primary"/>
+                    <button string="Cancel"
+                            class="btn-secondary"
+                            special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_lead_site_visit_quick_update_wizard" model="ir.actions.act_window">
+        <field name="name">Quick Visit Update</field>
+        <field name="res_model">lead.site.visit.quick.update.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+</odoo>

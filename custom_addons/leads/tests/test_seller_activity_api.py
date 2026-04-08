@@ -11,6 +11,20 @@ Test Categories:
 - Sorting: Chronological ordering by inquiry_datetime descending
 - Edge Cases: Empty results, invalid pagination params
 - Data Integrity: Field mapping, null handling
+
+Model integration notes
+-----------------------
+The activity API reads the flat snapshot fields on leads.new
+(current_status, site_visit_date, feedback_general, etc.). In production these
+fields are populated in two ways:
+  • Automatically by lead.site.visit._sync_inquiry_snapshot when a visit is
+    created or its status changes (the new path, v1.3.0+)
+  • Directly via write() or the BQ import wizard (legacy path)
+
+Tests here write snapshot fields directly for isolation. This is correct for
+unit-testing serialisation but does not exercise the full visit model flow.
+See test_lead_site_visit_models.py for integration tests that drive the snapshot
+through the visit model.
 """
 
 import logging
@@ -81,7 +95,9 @@ class TestSellerActivityAPI(PortalLeadTestCase):
 
     def test_01_primary_lead_serialization_all_fields(self):
         """
-        ARRANGE: Create a primary lead with all fields populated
+        ARRANGE: Create a primary lead with all fields populated; current_status
+                 set via direct write (unit-test isolation — in production this
+                 value arrives via lead.site.visit._sync_inquiry_snapshot).
         ACT: Serialize it
         ASSERT: All fields are present and correct
         """
@@ -107,7 +123,7 @@ class TestSellerActivityAPI(PortalLeadTestCase):
             "lead_id": lead.id,
             "lead_name": lead.name or None,
             "lead_phone": lead.phone or None,
-            "portal": lead.portal_name or None,
+            "source": lead.source_id.name or None,
             "property_tag": lead.property_base_id.property_tag if lead.property_base_id else None,
             "property_bhk": lead.property_base_id.bhk if lead.property_base_id else None,
             "property_location": lead.property_base_id.location
@@ -122,7 +138,7 @@ class TestSellerActivityAPI(PortalLeadTestCase):
         self.assertEqual(serialized["type"], "primary")
         self.assertEqual(serialized["lead_name"], "Ravi Shah")
         self.assertEqual(serialized["lead_phone"], "9999999999")
-        self.assertEqual(serialized["portal"], "MagicBricks")
+        self.assertEqual(serialized["source"], "MagicBricks")
         self.assertEqual(serialized["property_tag"], self.test_property.property_tag)
         self.assertEqual(serialized["property_bhk"], "3 BHK")
         self.assertEqual(serialized["current_status"], "site_visit_scheduled")
@@ -206,7 +222,7 @@ class TestSellerActivityAPI(PortalLeadTestCase):
             "lead_id": parent_lead.id,
             "lead_name": parent_lead.name,
             "lead_phone": parent_lead.phone,
-            "portal": parent_lead.portal_name,
+            "source": parent_lead.source_id.name,
             "property_tag": interest.property_base_id.property_tag,
             "current_status": interest.current_status,
             "remarks": interest.remarks,
@@ -215,7 +231,7 @@ class TestSellerActivityAPI(PortalLeadTestCase):
         # ASSERT
         self.assertEqual(serialized["type"], "recommended")
         self.assertEqual(serialized["lead_name"], "Priya Patel")
-        self.assertEqual(serialized["portal"], "99acres")
+        self.assertEqual(serialized["source"], "99acres")
         self.assertEqual(serialized["property_tag"], self.test_property.property_tag)
         self.assertEqual(serialized["current_status"], "site_visit_done")
 
@@ -602,7 +618,9 @@ class TestSellerActivityAPI(PortalLeadTestCase):
 
     def test_18_activity_preserves_lead_details(self):
         """
-        ARRANGE: Create primary lead with specific details
+        ARRANGE: Create primary lead with specific details; current_status set
+                 via direct write (unit-test isolation — in production this
+                 value arrives via lead.site.visit._sync_inquiry_snapshot).
         ACT: Serialize to activity record
         ASSERT: All details preserved
         """
@@ -622,14 +640,14 @@ class TestSellerActivityAPI(PortalLeadTestCase):
             "lead_id": lead.id,
             "lead_name": lead.name,
             "lead_phone": lead.phone,
-            "portal": lead.portal_name,
+            "source": lead.source_id.name,
             "current_status": lead.current_status,
         }
 
         # ASSERT
         self.assertEqual(record["lead_name"], "Test Lead")
         self.assertEqual(record["lead_phone"], "9111111111")
-        self.assertEqual(record["portal"], "Housing.com")
+        self.assertEqual(record["source"], "Housing.com")
         self.assertEqual(record["current_status"], "site_visit_scheduled")
 
     def test_19_page_size_parameter_validation(self):

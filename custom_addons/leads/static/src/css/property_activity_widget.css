@@ -1,0 +1,527 @@
+/* ============================================================
+   Property Activity Widget — custom_addons/leads
+   All cd-* classes used by property_activity_widget.xml
+   ============================================================ */
+
+/* ── Root ─────────────────────────────────────────────────── */
+.cd-prop-activity {
+    font-family: inherit;
+    font-size: 13px;
+    color: #212529;
+    padding: 12px 0;
+}
+
+/* ── State messages ───────────────────────────────────────── */
+.cd-pa-loading,
+.cd-pa-error,
+.cd-pa-empty {
+    padding: 32px;
+    text-align: center;
+    color: #6c757d;
+    font-size: 14px;
+}
+
+.cd-pa-loading .fa { margin-right: 6px; color: #0d6efd; }
+.cd-pa-error     { color: #dc3545; }
+.cd-pa-error .fa { margin-right: 6px; }
+.cd-pa-empty .fa { margin-right: 6px; font-size: 18px; }
+
+/* ── KPI Row ──────────────────────────────────────────────── */
+.cd-pa-kpi-row {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+
+.cd-pa-kpi-card {
+    flex: 1 1 130px;
+    min-width: 110px;
+    border-radius: 8px;
+    padding: 14px 16px;
+    background: #f8f9fa;
+    border-left: 4px solid #dee2e6;
+}
+
+.cd-kpi-value {
+    font-size: 26px;
+    font-weight: 700;
+    line-height: 1.1;
+}
+
+.cd-kpi-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #6c757d;
+    margin-top: 2px;
+}
+
+.cd-kpi-sub {
+    font-size: 11px;
+    color: #868e96;
+    margin-top: 4px;
+}
+
+/* Per-bucket colours */
+.cd-kpi-total    { border-left-color: #495057; background: #f1f3f5; }
+.cd-kpi-total .cd-kpi-value { color: #212529; }
+
+.cd-kpi-contacted { border-left-color: #6c757d; background: #f8f9fa; }
+.cd-kpi-contacted .cd-kpi-value { color: #495057; }
+
+.cd-kpi-interested { border-left-color: #0d6efd; background: #e7f1ff; }
+.cd-kpi-interested .cd-kpi-value { color: #0a58ca; }
+
+.cd-kpi-sv-sched { border-left-color: #6f42c1; background: #f0ebff; }
+.cd-kpi-sv-sched .cd-kpi-value { color: #5a32a3; }
+
+.cd-kpi-sv-done { border-left-color: #198754; background: #e8f5ee; }
+.cd-kpi-sv-done .cd-kpi-value { color: #146c43; }
+
+.cd-kpi-not-int { border-left-color: #dc3545; background: #fdecea; }
+.cd-kpi-not-int .cd-kpi-value { color: #b02a37; }
+
+/* ── Main Tab Bar ─────────────────────────────────────────── */
+.cd-pa-tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 2px solid #dee2e6;
+    margin-bottom: 14px;
+}
+
+.cd-pa-tab {
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    padding: 8px 18px;
+    font-size: 13px;
+    font-weight: 500;
+    color: #6c757d;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.cd-pa-tab:hover { color: #0d6efd; }
+
+.cd-pa-tab.active {
+    color: #0d6efd;
+    border-bottom-color: #0d6efd;
+}
+
+.cd-sv-badge {
+    background: #fd7e14;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    border-radius: 10px;
+    padding: 1px 6px;
+    margin-left: 4px;
+}
+
+/* ── Toolbar: filter bar + type toggle + search ───────────── */
+.cd-pa-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+}
+
+.cd-pa-filter-bar {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.cd-filter-btn {
+    background: #f1f3f5;
+    border: 1px solid #dee2e6;
+    border-radius: 20px;
+    padding: 4px 12px;
+    font-size: 12px;
+    font-weight: 500;
+    color: #495057;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+
+.cd-filter-btn:hover {
+    background: #e2e6ea;
+    border-color: #adb5bd;
+}
+
+.cd-filter-btn.active {
+    background: #0d6efd;
+    border-color: #0d6efd;
+    color: #fff;
+}
+
+.cd-filter-count {
+    background: rgba(255,255,255,0.25);
+    border-radius: 10px;
+    padding: 0 5px;
+    font-size: 10px;
+    font-weight: 700;
+}
+
+.cd-filter-btn:not(.active) .cd-filter-count {
+    background: #dee2e6;
+    color: #495057;
+}
+
+/* ── Type Toggle ──────────────────────────────────────────── */
+.cd-pa-toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.cd-type-toggle {
+    display: flex;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.cd-type-toggle button {
+    background: #fff;
+    border: none;
+    border-right: 1px solid #dee2e6;
+    padding: 4px 12px;
+    font-size: 12px;
+    font-weight: 500;
+    color: #495057;
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s;
+}
+
+.cd-type-toggle button:last-child { border-right: none; }
+.cd-type-toggle button:hover { background: #f1f3f5; }
+.cd-type-toggle button.active {
+    background: #0d6efd;
+    color: #fff;
+}
+
+/* ── Search ───────────────────────────────────────────────── */
+.cd-pa-search {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    padding: 4px 10px;
+    background: #fff;
+}
+
+.cd-pa-search .fa { color: #adb5bd; font-size: 12px; }
+
+.cd-pa-search input {
+    border: none;
+    outline: none;
+    font-size: 12px;
+    width: 180px;
+    color: #212529;
+}
+
+/* ── Export Button ────────────────────────────────────────── */
+.cd-export-btn {
+    background: #fff;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    padding: 4px 12px;
+    font-size: 12px;
+    font-weight: 500;
+    color: #495057;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    white-space: nowrap;
+    transition: background 0.12s, border-color 0.12s;
+}
+
+.cd-export-btn:hover {
+    background: #e8f5ee;
+    border-color: #198754;
+    color: #146c43;
+}
+
+/* ── Activity Table ───────────────────────────────────────── */
+.cd-pa-table-wrap {
+    overflow-x: auto;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+}
+
+.cd-pa-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+
+.cd-pa-table thead th {
+    background: #f8f9fa;
+    border-bottom: 2px solid #dee2e6;
+    padding: 8px 10px;
+    text-align: left;
+    font-weight: 600;
+    color: #495057;
+    white-space: nowrap;
+}
+
+.cd-pa-table tbody tr.cd-pa-row {
+    border-bottom: 1px solid #f1f3f5;
+    transition: background 0.1s;
+}
+
+.cd-pa-table tbody tr.cd-pa-row:hover { background: #f8f9fa; }
+
+.cd-pa-table td {
+    padding: 7px 10px;
+    vertical-align: middle;
+}
+
+/* Row colour hints by type */
+.cd-row-primary    { border-left: 3px solid #0d6efd; }
+.cd-row-recommended { border-left: 3px solid #6f42c1; }
+
+/* Remarks sub-row */
+.cd-remarks-row td {
+    background: #fffbf0;
+    color: #6c757d;
+    font-style: italic;
+    font-size: 11px;
+    padding: 4px 14px 6px 24px;
+    border-bottom: 1px solid #f1f3f5;
+}
+
+.cd-remarks-row .fa { margin-right: 4px; color: #adb5bd; }
+
+/* Cell helpers */
+.cd-cell-date  { white-space: nowrap; color: #6c757d; }
+.cd-cell-phone { white-space: nowrap; font-family: monospace; font-size: 11px; }
+.cd-cell-remarks { font-style: italic; color: #6c757d; font-size: 11px; }
+
+.cd-pa-count {
+    margin-top: 8px;
+    font-size: 12px;
+    color: #6c757d;
+    text-align: right;
+}
+
+/* ── Status Badges ────────────────────────────────────────── */
+.cd-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.cd-badge-grey   { background: #e9ecef; color: #495057; }
+.cd-badge-blue   { background: #dbeafe; color: #1d4ed8; }
+.cd-badge-purple { background: #ede9fe; color: #6d28d9; }
+.cd-badge-green  { background: #dcfce7; color: #15803d; }
+.cd-badge-red    { background: #fee2e2; color: #b91c1c; }
+.cd-badge-orange { background: #ffedd5; color: #c2410c; }
+
+/* Overdue inline badge — compact, shown next to the date */
+.cd-overdue-badge {
+    font-size: 9px;
+    padding: 1px 5px;
+    margin-left: 4px;
+    vertical-align: middle;
+}
+
+/* Visit iteration indicator — "1st visit" for non-rescheduled chains */
+.cd-sv-iter {
+    display: inline-block;
+    background: #f1f3f5;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #495057;
+}
+
+/* Reschedule count badge — "↻ N rescheduled" shown on root visit row */
+.cd-sv-resch-badge {
+    display: inline-block;
+    background: #fff3cd;
+    border: 1px solid #ffc107;
+    border-radius: 10px;
+    padding: 1px 8px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #856404;
+}
+
+/* History sub-rows — visually subordinate to root row */
+.cd-sv-hist-row {
+    background: #f8f9fa;
+    font-size: 12px;
+    color: #6c757d;
+}
+.cd-sv-hist-row td {
+    border-top: none !important;
+    padding-top: 3px !important;
+    padding-bottom: 3px !important;
+}
+
+/* Indent label cell for history sub-rows */
+.cd-sv-hist-label {
+    padding-left: 24px !important;
+}
+
+/* "↳ Reschedule #N" label badge inside history sub-rows */
+.cd-sv-hist-badge {
+    display: inline-block;
+    background: #e9ecef;
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 11px;
+    font-style: italic;
+    color: #495057;
+}
+
+/* ── Source Tag & Type Pill ───────────────────────────────── */
+.cd-source-tag {
+    display: inline-block;
+    background: #e7f1ff;
+    color: #0a58ca;
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 11px;
+    font-weight: 500;
+}
+
+.cd-type-pill {
+    display: inline-block;
+    border-radius: 4px;
+    padding: 1px 7px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.cd-type-primary     { background: #dbeafe; color: #1d4ed8; }
+.cd-type-recommended { background: #ede9fe; color: #6d28d9; }
+
+/* ── Feedback Labels ──────────────────────────────────────── */
+.cd-feedback-sv  { color: #146c43; font-weight: 500; }
+.cd-feedback-gen { color: #6c757d; }
+
+/* ── Site Visit Sub-tabs ──────────────────────────────────── */
+.cd-sv-tab-bar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+}
+
+.cd-sv-tab {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    padding: 6px 14px;
+    font-size: 12px;
+    font-weight: 500;
+    color: #495057;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: background 0.12s, border-color 0.12s;
+}
+
+.cd-sv-tab:hover  { background: #e9ecef; }
+
+.cd-sv-tab.active {
+    background: #0d6efd;
+    border-color: #0d6efd;
+    color: #fff;
+}
+
+/* Coloured variants */
+.cd-sv-warn.active  { background: #fd7e14; border-color: #fd7e14; }
+.cd-sv-green.active { background: #198754; border-color: #198754; }
+.cd-sv-red.active   { background: #dc3545; border-color: #dc3545; }
+
+.cd-sv-cnt {
+    background: rgba(0,0,0,0.12);
+    border-radius: 10px;
+    padding: 1px 6px;
+    font-size: 10px;
+    font-weight: 700;
+}
+
+.cd-sv-cnt.warn  { background: #fd7e14; color: #fff; }
+.cd-sv-cnt.green { background: #198754; color: #fff; }
+.cd-sv-cnt.red   { background: #dc3545; color: #fff; }
+
+.cd-sv-tab:not(.active) .cd-sv-cnt {
+    background: #dee2e6;
+    color: #495057;
+}
+
+/* ── Source Breakdown ─────────────────────────────────────── */
+.cd-source-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 12px;
+    padding: 4px 0;
+}
+
+.cd-source-card {
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 14px 16px;
+    background: #fff;
+}
+
+.cd-source-name {
+    font-weight: 600;
+    font-size: 13px;
+    margin-bottom: 8px;
+    color: #212529;
+}
+
+.cd-source-bar-wrap {
+    background: #e9ecef;
+    border-radius: 4px;
+    height: 8px;
+    margin-bottom: 8px;
+    overflow: hidden;
+}
+
+.cd-source-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #0d6efd, #6f42c1);
+    border-radius: 4px;
+    min-width: 4px;
+    transition: width 0.4s ease;
+}
+
+.cd-source-counts {
+    display: flex;
+    gap: 10px;
+    font-size: 11px;
+    flex-wrap: wrap;
+}
+
+.cd-sc-primary { color: #1d4ed8; font-weight: 500; }
+.cd-sc-rec     { color: #6d28d9; font-weight: 500; }
+.cd-sc-tot     { color: #495057; margin-left: auto; }

@@ -16,17 +16,26 @@ class TestLeadScore(TransactionCase):
     - UI Onchange logic (_onchange_state_set_follow_up)
     - Integration with WhatsApp Response Count
     - Edge cases and error conditions
+
+    Model integration notes
+    -----------------------
+    site_visit_scheduled_date and current_status are set directly on the model
+    in these tests for isolation. In production, current_status is updated by
+    lead.site.visit._sync_inquiry_snapshot:
+      • "site_visit_scheduled" — written when a visit is created or rescheduled
+      • "site_visit_done"      — written when a visit is marked completed
+
+    The "rescheduled" value for current_status is a legacy selection option.
+    The new visit model never writes it; a reschedule triggers the supersede-and-replace
+    flow and writes "site_visit_scheduled" to the snapshot with the new date instead.
+    Tests that set current_status="rescheduled" directly test the field's compute
+    logic in isolation, not a path reached by the current visit model.
     """
 
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        # Create a RM
-        cls.user_rm = cls.env['res.users'].create({
-            'name': 'Test RM',
-            'login': 'test_rm_lead_score',
-            'email': 'test_rm@example.com'
-        })
+        cls.user_rm = cls.env.ref('base.user_admin')
 
     def setUp(self):
         """Create a fresh lead for each test to ensure independence."""
@@ -104,6 +113,10 @@ class TestLeadScore(TransactionCase):
         """
         Verify 'next_follow_up_date' is automatically set to (Site Visit Date + 1 day)
         when status is 'site_visit_scheduled'.
+
+        Note: current_status is set directly here for isolation. In production
+        this value arrives via lead.site.visit._sync_inquiry_snapshot when a
+        visit is created or rescheduled.
         """
         visit_date = date.today() + timedelta(days=3)
 
@@ -123,8 +136,14 @@ class TestLeadScore(TransactionCase):
 
     def test_05_rescheduled_follow_up_logic(self):
         """
-        Verify that 'rescheduled' status also triggers follow-up date computation
-        similar to 'site_visit_scheduled'.
+        Verify that 'rescheduled' status triggers the same follow-up date
+        computation as 'site_visit_scheduled' (next day after visit date).
+
+        LEGACY NOTE: current_status="rescheduled" is a legacy selection value.
+        The new lead.site.visit model never writes it to the snapshot — a
+        reschedule produces current_status="site_visit_scheduled" instead.
+        This test verifies the compute logic remains correct for any records
+        that have this value set directly (BQ import, pre-v1.3 data).
         """
         visit_date = date.today() + timedelta(days=7)
         
@@ -141,6 +160,11 @@ class TestLeadScore(TransactionCase):
     def test_06_site_visit_without_date(self):
         """
         Verify behavior when site_visit_scheduled status is set but no date is provided.
+
+        Note: current_status is set directly here for isolation. In production
+        this value arrives via lead.site.visit._sync_inquiry_snapshot; the visit
+        model always writes a date when setting the status, so this edge-case
+        (status set without a date) can only arise from a direct write.
         """
         today = date.today()
         
@@ -177,7 +201,11 @@ class TestLeadScore(TransactionCase):
 
     def test_08_onchange_does_not_affect_site_visit(self):
         """
-        Verify onchange doesn't override site visit logic.
+        Verify that the UI onchange (_onchange_state_set_follow_up) does not
+        override the follow-up date when current_status is 'site_visit_scheduled'.
+
+        Note: current_status is set directly here for isolation. In production
+        this value arrives via lead.site.visit._sync_inquiry_snapshot.
         """
         visit_date = date.today() + timedelta(days=5)
         

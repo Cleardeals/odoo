@@ -506,7 +506,9 @@ class TestSellerSummaryAPI(PortalLeadTestCase):
 
         for lead in primary_leads:
             portal = (
-                lead.portal_name if lead.portal_name in KNOWN_PORTALS else "Unknown"
+                lead.source_id.name
+                if lead.source_id and lead.source_id.name in KNOWN_PORTALS
+                else "Unknown"
             )
             portal_breakdown[portal]["primary"] += 1
 
@@ -542,7 +544,9 @@ class TestSellerSummaryAPI(PortalLeadTestCase):
 
         for lead in primary_leads:
             portal = (
-                lead.portal_name if lead.portal_name in KNOWN_PORTALS else "Unknown"
+                lead.source_id.name
+                if lead.source_id and lead.source_id.name in KNOWN_PORTALS
+                else "Unknown"
             )
             portal_breakdown[portal]["primary"] += 1
 
@@ -685,7 +689,7 @@ class TestSellerSummaryAPI(PortalLeadTestCase):
         self.assertEqual(fetched_lead.phone, lead_phone)
         self.assertEqual(fetched_lead.name, lead_name)
         self.assertEqual(fetched_lead.email, lead_email)
-        self.assertEqual(fetched_lead.portal_name, "MagicBricks")
+        self.assertEqual(fetched_lead.source_id.name, "MagicBricks")
 
     def test_22_recommended_interest_links_correctly(self):
         """
@@ -744,7 +748,9 @@ class TestSellerSummaryAPI(PortalLeadTestCase):
 
         for lead in primary_leads:
             portal = (
-                lead.portal_name if lead.portal_name in KNOWN_PORTALS else "Unknown"
+                lead.source_id.name
+                if lead.source_id and lead.source_id.name in KNOWN_PORTALS
+                else "Unknown"
             )
             portal_breakdown[portal]["primary"] += 1
 
@@ -824,7 +830,9 @@ class TestSellerSummaryAPI(PortalLeadTestCase):
 
         for lead in primary_leads:
             portal = (
-                lead.portal_name if lead.portal_name in KNOWN_PORTALS else "Unknown"
+                lead.source_id.name
+                if lead.source_id and lead.source_id.name in KNOWN_PORTALS
+                else "Unknown"
             )
             portal_breakdown[portal]["primary"] += 1
 

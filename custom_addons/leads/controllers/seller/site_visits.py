@@ -26,11 +26,6 @@ Classification rules
       The visit did not occur and the RM has logged a reason why.
       The feedback_general value is always included in the record.
 
-  rescheduled
-      status = rescheduled.
-      The previously scheduled slot was cancelled and a new one is
-      pending confirmation or has been set.
-
   completed
       status = explicitly site_visit_done.
       feedback_site_visit_done is always included — it is the actual
@@ -85,14 +80,6 @@ Response shape
       }
     ],
 
-    "rescheduled": [
-      {
-        ...same base shape...,
-        "current_status": "rescheduled",
-        "note":           "Visit was rescheduled — confirm new date with RM"
-      }
-    ],
-
     "completed": [
       {
         ...same base shape...,
@@ -106,7 +93,6 @@ Response shape
       "upcoming":         2,
       "pending_feedback": 1,
       "cancelled":        1,
-      "rescheduled":      1,
       "completed":        4
     }
   },
@@ -131,8 +117,9 @@ from ..shared.response_utils import error_response, success_response
 
 _logger = logging.getLogger(__name__)
 
-# Only records with these statuses are worth surfacing
-_VISIT_STATUSES = {"site_visit_scheduled", "site_visit_done", "rescheduled"}
+# Only statuses produced by the lead.site.visit model are accepted.
+# "rescheduled" was removed in v1.3.1: the visit model never writes it.
+_VISIT_STATUSES = {"site_visit_scheduled", "site_visit_done"}
 
 # feedback_general values treated as "nothing meaningful logged yet"
 _EMPTY_FEEDBACK = {None, "", "other", False}
@@ -170,13 +157,15 @@ def _classify_visit(
     """
     Determine which bucket a visit record belongs to.
 
-    Returns one of: "upcoming" | "pending_feedback" | "cancelled" | "rescheduled" | "completed"
+    Returns one of: "upcoming" | "pending_feedback" | "cancelled" | "completed"
+
+    Both new and rescheduled visits appear as "site_visit_scheduled" in the
+    snapshot (written by lead.site.visit._sync_inquiry_snapshot). A reschedule
+    supersedes the original visit and writes a new date, so rescheduled visits
+    land in "upcoming" if the new date is in the future.
     """
     if current_status == "site_visit_done":
         return "completed"
-
-    if current_status == "rescheduled":
-        return "rescheduled"
 
     if current_status == "site_visit_scheduled":
         if site_visit_date > now:
@@ -232,7 +221,6 @@ def _apply_bucket_fields(
 
     pending_feedback — note only; no feedback value since none was logged.
     cancelled        — feedback_general (the reason) + note.
-    rescheduled      — note only.
     completed        — feedback_site_visit_done always; remarks only when "other".
     upcoming         — no extra fields.
     """
@@ -242,9 +230,6 @@ def _apply_bucket_fields(
     elif bucket == "cancelled":
         record["feedback_general"] = feedback_general
         record["note"] = "Visit did not occur due to buyer status"
-
-    elif bucket == "rescheduled":
-        record["note"] = "Visit was rescheduled — confirm new date with RM"
 
     elif bucket == "completed":
         record["feedback_site_visit_done"] = feedback_site_visit_done or None
@@ -375,7 +360,6 @@ class SellerSiteVisitsController(http.Controller):
             "upcoming": [],
             "pending_feedback": [],
             "cancelled": [],
-            "rescheduled": [],
             "completed": [],
         }
 
@@ -404,7 +388,6 @@ class SellerSiteVisitsController(http.Controller):
         # upcoming         → soonest first (ascending)
         # pending_feedback → most overdue first (ascending — oldest unresolved at top)
         # cancelled        → most recent first (descending)
-        # rescheduled      → most recent first (descending)
         # completed        → most recent first (descending)
         upcoming_sorted = [
             r for _, r in sorted(buckets["upcoming"], key=lambda x: x[0])
@@ -414,10 +397,6 @@ class SellerSiteVisitsController(http.Controller):
         ]
         cancelled_sorted = [
             r for _, r in sorted(buckets["cancelled"], key=lambda x: x[0], reverse=True)
-        ]
-        rescheduled_sorted = [
-            r
-            for _, r in sorted(buckets["rescheduled"], key=lambda x: x[0], reverse=True)
         ]
         completed_sorted = [
             r for _, r in sorted(buckets["completed"], key=lambda x: x[0], reverse=True)
@@ -430,13 +409,11 @@ class SellerSiteVisitsController(http.Controller):
             "upcoming": upcoming_sorted,
             "pending_feedback": pending_feedback_sorted,
             "cancelled": cancelled_sorted,
-            "rescheduled": rescheduled_sorted,
             "completed": completed_sorted,
             "totals": {
                 "upcoming": len(upcoming_sorted),
                 "pending_feedback": len(pending_feedback_sorted),
                 "cancelled": len(cancelled_sorted),
-                "rescheduled": len(rescheduled_sorted),
                 "completed": len(completed_sorted),
             },
         }

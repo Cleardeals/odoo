@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Module : leads
+    File   : static/src/xml/site_visit_calendar.xml
+    Purpose: OWL template override for the site-visit calendar popover footer.
+             Adds a "Reschedule" button between the Edit and Delete buttons.
+             Hidden for terminal visits (completed, cancelled, Rescheduled,
+             did_not_show_up) via isRescheduleVisible → status_is_terminal.
+    Owner  : Cleardeals Tech
+-->
+<templates xml:space="preserve">
+
+    <!--
+    leads.SiteVisitCalendarPopover.footer
+    ──────────────────────────────────────
+    Replaces web.CalendarCommonPopover.footer for the site_visit_calendar view.
+    SiteVisitCalendarPopover sets subTemplates.footer to this template name;
+    the base template (web.CalendarCommonPopover) resolves it at render time
+    via constructor.subTemplates.footer.
+
+    Contract:
+    - `isEventEditable`, `isEventViewable`, `isEventDeletable` — inherited from
+      CalendarCommonPopover, unchanged.
+    - `isRescheduleVisible` — computed getter from SiteVisitCalendarPopover;
+      returns true when visit status is scheduled or rescheduled.
+    - `onEditEvent`, `onDeleteEvent`, `onRescheduleEvent` — methods from
+      SiteVisitCalendarPopover (onRescheduleEvent is new; the other two are
+      inherited from CalendarCommonPopover).
+    -->
+    <t t-name="leads.SiteVisitCalendarPopover.footer">
+        <!-- Overdue warning shown when visit is past its scheduled date but still open -->
+        <div t-if="props.record.rawRecord.is_overdue_open" class="o_cw_popover_overdue_warn alert alert-warning py-1 px-2 mb-2 mt-1" style="font-size:12px;">
+            <i class="fa fa-exclamation-triangle me-1"/> Past scheduled date — feedback pending
+        </div>
+        <t t-if="isEventEditable or isEventViewable">
+            <a href="#" class="btn btn-primary o_cw_popover_edit" t-on-click="onEditEvent">
+                <t t-if="isEventEditable">Edit</t>
+                <t t-else="">View</t>
+            </a>
+        </t>
+        <button
+            t-if="isRescheduleVisible"
+            class="btn btn-warning o_cw_popover_reschedule"
+            t-on-click.prevent="onRescheduleEvent"
+        >
+            Reschedule
+        </button>
+        <t t-if="isEventDeletable">
+            <a href="#" class="btn btn-secondary o_cw_popover_delete" t-on-click="onDeleteEvent">
+                <i class="fa fa-trash"/>
+            </a>
+        </t>
+    </t>
+
+</templates>

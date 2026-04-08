@@ -133,12 +133,12 @@ Pagination metadata is always returned inside a `pagination` key:
 
 All datetime strings are ISO 8601 (`YYYY-MM-DDTHH:MM:SS`). Date-only fields use `YYYY-MM-DD`. All values are in the server's configured timezone (IST).
 
-### Lead sources
+### Inquiry types
 
-| `source` value    | Model                    | Meaning                                                  |
-|-------------------|--------------------------|----------------------------------------------------------|
-| `"primary"`       | `leads.new`              | The buyer directly inquired about this property          |
-| `"recommended"`   | `lead.property.interest` | The RM recommended this property to an existing buyer    |
+| `inquiry_type` value | Model                    | Meaning                                                  |
+|----------------------|--------------------------|----------------------------------------------------------|
+| `"primary"`          | `leads.new`              | The buyer directly inquired about this property          |
+| `"recommended"`      | `lead.property.interest` | The RM recommended this property to an existing buyer    |
 
 ---
 
@@ -156,7 +156,7 @@ These values appear in `current_status` fields across all endpoints.
 | `detail_shared_and_interested_for_site_visit`    | Interested, site visit being arranged        |
 | `option_not_matching_requirements`               | Property doesn't match buyer's needs         |
 | `site_visit_scheduled`                           | Site visit confirmed                         |
-| `rescheduled`                                    | Previously scheduled visit was rescheduled   |
+| `rescheduled` *(legacy — not returned by API)*   | Rescheduled; superseded by new visit in v1.3 |
 | `site_visit_done`                                | Site visit completed                         |
 | `requirement_closed`                             | No More Requirement from Buyer end           |
 | `no_requirements`                                | Buyer no longer looking                      |
@@ -168,7 +168,7 @@ These values appear in `current_status` fields across all endpoints.
 
 ### Feedback fields
 
-`feedback_general` and `feedback_site_visit_done` contain feeback selected by the RM, or `null`.
+`feedback_general` and `feedback_site_visit_done` contain feedback selected by the RM, or `null`.
 `feedback_general` is for feedback given before site visit done, mostly stored when site visit scheduled stage is present and `feedback_site_visit_done` is after the site visit has been done.
 ---
 
@@ -176,7 +176,7 @@ These values appear in `current_status` fields across all endpoints.
 
 ### 5.1 `GET /api/track/lead/site-visits`
 
-Returns all site visits for a buyer's phone number, classified into five timeline buckets.
+Returns all site visits for a buyer's phone number, classified into four timeline buckets.
 
 **Auth required:** Yes (`X-API-Key`)
 
@@ -194,13 +194,11 @@ Returns all site visits for a buyer's phone number, classified into five timelin
   "upcoming":         [ <visit-object>, ... ],
   "pending_feedback": [ <visit-object>, ... ],
   "cancelled":        [ <visit-object>, ... ],
-  "rescheduled":      [ <visit-object>, ... ],
   "completed":        [ <visit-object>, ... ],
   "totals": {
     "upcoming":         2,
     "pending_feedback": 1,
     "cancelled":        3,
-    "rescheduled":      1,
     "completed":        5
   }
 }
@@ -211,10 +209,11 @@ Returns all site visits for a buyer's phone number, classified into five timelin
 | Bucket             | Condition                                                                                                          | Sort order |
 |--------------------|---------------------------------------------------------------------------------------------------------------------|------------|
 | `upcoming`         | `current_status = "site_visit_scheduled"` AND `site_visit_datetime` is in the future                              | ASC (soonest first) |
-| `pending_feedback` | `current_status = "site_visit_scheduled"` AND `feedback_general` is null/empty/`"other"`                       | ASC        |
-| `cancelled`        | `current_status` in `{site_visit_scheduled, rescheduled}` AND `feedback_general` is present    | DESC (most recent first) |
-| `rescheduled`      | `current_status = "rescheduled"`                                                                                   | DESC       |
-| `completed`        | `current_status = "site_visit_done"` AND `feedback_site_visit_done` is non-empty                                  | DESC       |
+| `pending_feedback` | `current_status = "site_visit_scheduled"` AND `site_visit_datetime` is in the past AND `feedback_general` is null/empty/`"other"` | ASC        |
+| `cancelled`        | `current_status = "site_visit_scheduled"` AND `site_visit_datetime` is in the past AND `feedback_general` is present | DESC (most recent first) |
+| `completed`        | `current_status = "site_visit_done"`                                                                              | DESC       |
+
+> **Reschedules:** When a visit is rescheduled via `lead.site.visit`, the original visit is superseded and a new visit is created with `status="scheduled"`. `lead.site.visit._sync_inquiry_snapshot` writes `current_status="site_visit_scheduled"` with the new date to the inquiry snapshot, so the rescheduled visit surfaces in `upcoming` if its date is in the future. Records from before v1.3 with `current_status="rescheduled"` are not returned by this endpoint.
 
 #### Visit object fields
 
@@ -222,10 +221,10 @@ All buckets include this base set:
 
 | Field                  | Type              | Description                                               |
 |------------------------|-------------------|-----------------------------------------------------------|
-| `source`               | `string`          | `"primary"` or `"recommended"`                            |
+| `inquiry_type`         | `string`          | `"primary"` or `"recommended"`                            |
 | `lead_id`              | `integer`         | ID of the parent `leads.new` record                       |
 | `lead_name`            | `string \| null`  | Buyer name                                                |
-| `portal`               | `string \| null`  | Portal of origin (e.g. `"MagicBricks"`, `"99acres"`)      |
+| `source`               | `string \| null`  | Lead source of origin (e.g. `"MagicBricks"`, `"99acres"`) |
 | `property_tag`         | `string \| null`  | Unique property identifier tag                            |
 | `property_bhk`         | `string \| null`  | Property size (e.g. `"2BHK"`)                             |
 | `property_location`    | `string \| null`  | Locality / micro-location                                 |
@@ -239,10 +238,9 @@ All buckets include this base set:
 
 | Bucket             | Extra fields                                                                 |
 |--------------------|------------------------------------------------------------------------------|
-| `pending_feedback` | `note` — RM note on the interest/lead record                                 |
-| `rescheduled`      | `note` — RM note                                                             |
-| `cancelled`        | `feedback_general` — general feedback text                                   |
-| `completed`        | `feedback_site_visit_done`, and `remarks` (included again as confirmation)   |
+| `pending_feedback` | `note` — `Visit date has passed — awaiting RM feedback`                      |
+| `cancelled`        | `feedback_general`, `note` — `Visit did not occur due to buyer status`       |
+| `completed`        | `feedback_site_visit_done`; `remarks` only when `feedback_site_visit_done = "other"` |
 
 #### Success example
 
@@ -253,10 +251,10 @@ All buckets include this base set:
     "buyer_phone": "9876543210",
     "upcoming": [
       {
-        "source": "primary",
+        "inquiry_type": "primary",
         "lead_id": 101,
         "lead_name": "Ravi Shah",
-        "portal": "MagicBricks",
+        "source": "MagicBricks",
         "property_tag": "CLR-2BHK-MNG-001",
         "property_bhk": "2BHK",
         "property_location": "Maninagar",
@@ -269,13 +267,11 @@ All buckets include this base set:
     ],
     "pending_feedback": [],
     "cancelled": [],
-    "rescheduled": [],
     "completed": [],
     "totals": {
       "upcoming": 1,
       "pending_feedback": 0,
       "cancelled": 0,
-      "rescheduled": 0,
       "completed": 0
     }
   },
@@ -288,7 +284,7 @@ All buckets include this base set:
 | HTTP | `error.message`                                         | Cause                      |
 |------|---------------------------------------------------------|----------------------------|
 | `400` | `Valid 'phone' query parameter is required.`           | `phone` param missing/invalid |
-| `404` | `No leads found for phone number {phone}.`             | No records for that buyer  |
+| `404` | `No inquiries found for phone {phone}.`                | No records for that buyer  |
 | `401` | `Missing API key in X-API-Key header.`                 | Auth header absent         |
 | `403` | `Invalid API key.`                                     | Wrong key                  |
 
@@ -326,7 +322,7 @@ Returns a full activity overview for a buyer: summary counts and a list of all p
 | Field                    | Type              | Description                                              |
 |--------------------------|-------------------|----------------------------------------------------------|
 | `lead_name`              | `string \| null`  | Buyer name on this inquiry                               |
-| `portal`                 | `string \| null`  | Portal the inquiry came from                             |
+| `source`                 | `string \| null`  | Source the inquiry came from                             |
 | `inquiry_datetime`       | `string \| null`  | ISO 8601 datetime the inquiry was created                |
 | `current_status`         | `string \| null`  | Current lead status                                      |
 | `first_contacted_on`     | `string \| null`  | ISO 8601 datetime of first RM contact                    |
@@ -355,7 +351,6 @@ Returns a full activity overview for a buyer: summary counts and a list of all p
 | `location`            | `string \| null` | Locality                                 |
 | `city`                | `string \| null` | City                                     |
 | `current_status`      | `string \| null` | Status of the interest record            |
- `property_link` | `string \| null` | URL to the property listing        |
 | `site_visit_datetime` | `string \| null` | ISO 8601 datetime                        |
 | `site_visit_date`     | `string \| null` | Date-only string                         |
 
@@ -375,7 +370,7 @@ Returns a full activity overview for a buyer: summary counts and a list of all p
     "primary_inquiries": [
       {
         "lead_name": "Priya Mehta",
-        "portal": "99acres",
+        "source": "99acres",
         "inquiry_datetime": "2025-06-15T09:30:00",
         "current_status": "site_visit_scheduled",
         "first_contacted_on": "2025-06-15T11:00:00",
@@ -412,7 +407,7 @@ Returns a full activity overview for a buyer: summary counts and a list of all p
 | HTTP  | `error.message`                                       | Cause                         |
 |-------|-------------------------------------------------------|-------------------------------|
 | `400` | `Valid 'phone' query parameter is required.`          | `phone` param missing/invalid |
-| `404` | `No leads found for phone number {phone}.`            | No records for that buyer     |
+| `404` | `No Inquiries found for phone number {phone}.`        | No records for that buyer     |
 
 ---
 
@@ -424,7 +419,7 @@ All seller endpoints require the `X-API-Key` header.
 
 ### 6.1 `GET /api/track/property/summary`
 
-High-level aggregated counts for all of a seller's properties, broken down by portal and lead type.
+High-level aggregated counts for all of a seller's properties, broken down by lead source and lead type.
 
 **Auth required:** Yes
 
@@ -433,7 +428,7 @@ High-level aggregated counts for all of a seller's properties, broken down by po
 | Parameter | Type   | Required | Description              |
 |-----------|--------|----------|--------------------------|
 | `phone`   | string | ✅ Yes   | Owner phone number       |
-| `property_tag` | string  | No       | —       | Filter to a specific property      |
+| `property_tag` | string | No       | Filter to a specific property      |
 
 #### Response — `data` shape
 
@@ -441,11 +436,12 @@ High-level aggregated counts for all of a seller's properties, broken down by po
 {
   "owner_phone": "9876543210",
   "properties":  ["TAG1", "TAG2"],
+  "tag_filter":  null,
   "inquiries": {
     "total":       80,
     "primary":     55,
     "recommended": 25,
-    "portal_breakdown": {
+    "source_breakdown": {
       "MagicBricks":  { "primary": 20, "recommended": 10 },
       "99acres":      { "primary": 15, "recommended":  8 },
       "Housing.com":  { "primary": 12, "recommended":  5 },
@@ -463,22 +459,22 @@ High-level aggregated counts for all of a seller's properties, broken down by po
 | `inquiries.total`    | `integer`       | Total leads (primary + recommended)                       |
 | `inquiries.primary`  | `integer`       | Direct inquiry count                                      |
 | `inquiries.recommended` | `integer`    | Recommended interest count                                |
-| `portal_breakdown`   | `object`        | Per-portal split; always includes all 5 portal keys       |
+| `inquiries.source_breakdown` | `object` | Per-source split keyed by source name (dynamic keys)      |
 
-**Portal keys:** `MagicBricks`, `99acres`, `Housing.com`, `OLX`, `Unknown`
+**Common source keys:** `MagicBricks`, `99acres`, `Housing.com`, `OLX`, `Unknown` (plus any custom source names)
 
 #### Error responses
 
 | HTTP  | `error.message`                                          | Cause                        |
 |-------|----------------------------------------------------------|------------------------------|
 | `400` | `Valid 'phone' query parameter is required.`             | Missing phone                |
-| `404` | `No active properties found for phone number {phone}.`   | No properties on file        |
+| `404` | `No properties found for phone number {phone}.`          | No properties on file        |
 
 ---
 
 ### 6.2 `GET /api/track/property/portal-performance`
 
-Per-portal breakdown of lead statuses and key site-visit metrics. Optionally filtered to a single property.
+Per-source breakdown of lead statuses and key site-visit metrics. Optionally filtered to a single property.
 
 **Auth required:** Yes
 
@@ -496,7 +492,7 @@ Per-portal breakdown of lead statuses and key site-visit metrics. Optionally fil
   "owner_phone": "9876543210",
   "properties":  ["TAG1", "TAG2"],
   "tag_filter":  null,
-  "portals": {
+  "sources": {
     "MagicBricks": {
       "total_leads":       30,
       "primary_leads":     20,
@@ -521,12 +517,12 @@ Per-portal breakdown of lead statuses and key site-visit metrics. Optionally fil
 
 | Field                                 | Type             | Description                                                  |
 |---------------------------------------|------------------|--------------------------------------------------------------|
-| `portals`                             | `object`         | Always contains all 5 portal keys                            |
-| `portals.<portal>.total_leads`        | `integer`        | Sum of primary + recommended for this portal                 |
-| `portals.<portal>.primary_leads`      | `integer`        | Direct inquiries attributed to this portal                   |
-| `portals.<portal>.recommended_leads`  | `integer`        | Recommended interests (portal inherited from parent lead)    |
-| `portals.<portal>.statuses`           | `object`         | Dynamic dict of `{status_value: count}` — only non-zero statuses appear |
-| `portals.<portal>.key_metrics`        | `object`         | Always present; `site_visit_scheduled` and `site_visit_done` counts |
+| `sources`                             | `object`         | Dynamic source map keyed by source name                      |
+| `sources.<source>.total_leads`        | `integer`        | Sum of primary + recommended for this source                 |
+| `sources.<source>.primary_leads`      | `integer`        | Direct inquiries attributed to this source                   |
+| `sources.<source>.recommended_leads`  | `integer`        | Recommended interests (source inherited from parent lead)    |
+| `sources.<source>.statuses`           | `object`         | Dynamic dict of `{status_value: count}` — only non-zero statuses appear |
+| `sources.<source>.key_metrics`        | `object`         | Always present; `site_visit_scheduled` and `site_visit_done` counts |
 
 > **Note:** `statuses` only includes statuses with count > 0. `key_metrics` is always present even if counts are 0.
 
@@ -535,14 +531,14 @@ Per-portal breakdown of lead statuses and key site-visit metrics. Optionally fil
 | HTTP  | `error.message`                                                                       |
 |-------|---------------------------------------------------------------------------------------|
 | `400` | `Valid 'phone' query parameter is required.`                                          |
-| `404` | `No active properties found for phone number {phone}.`                                |
-| `404` | `No active properties found for phone number {phone} with tag '{property_tag}'.`      |
+| `404` | `No properties found for phone number {phone}.`                                       |
+| `404` | `No properties found for phone number {phone} with tag '{property_tag}'.`             |
 
 ---
 
 ### 6.3 `GET /api/track/property/site-visits`
 
-All site visits for a seller's properties, classified into five timeline buckets. Mirrors the buyer endpoint but from the seller's perspective (shows lead names/phones instead of lead IDs).
+All site visits for a seller's properties, classified into four timeline buckets. Mirrors the buyer endpoint but from the seller's perspective (shows lead names/phones instead of lead IDs).
 
 **Auth required:** Yes
 
@@ -563,13 +559,11 @@ All site visits for a seller's properties, classified into five timeline buckets
   "upcoming":         [ <visit-object>, ... ],
   "pending_feedback": [ <visit-object>, ... ],
   "cancelled":        [ <visit-object>, ... ],
-  "rescheduled":      [ <visit-object>, ... ],
   "completed":        [ <visit-object>, ... ],
   "totals": {
     "upcoming":         1,
     "pending_feedback": 2,
     "cancelled":        0,
-    "rescheduled":      1,
     "completed":        4
   }
 }
@@ -579,7 +573,7 @@ Bucket classification and sort order are identical to the [buyer site-visits end
 
 #### Visit object (seller perspective)
 
-> Seller records expose `lead_name` and `lead_phone` instead of `lead_id`. The `portal` and `property_city` fields are **not** included.
+> Seller records expose `lead_name` and `lead_phone` instead of `lead_id`. They include inquiry type in `source` (`primary`/`recommended`) and do not include `property_city`.
 
 | Field                  | Type              | Description                           |
 |------------------------|-------------------|---------------------------------------|
@@ -641,7 +635,7 @@ Paginated, chronologically-sorted list of every lead record (primary and recomme
 | `type`                    | `string`         | `"primary"` or `"recommended"`                                 |
 | `lead_name`               | `string \| null` | Buyer name                                                     |
 | `lead_phone`              | `string \| null` | Buyer phone                                                    |
-| `portal`                  | `string \| null` | Portal of origin (from parent lead for recommended)            |
+| `source`                  | `string \| null` | Source of origin (from parent lead for recommended)            |
 | `property_tag`            | `string \| null` | Property tag                                                   |
 | `property_bhk`            | `string \| null` | Property size                                                  |
 | `property_location`       | `string \| null` | Locality                                                       |
@@ -668,10 +662,9 @@ Paginated, chronologically-sorted list of every lead record (primary and recomme
     "items": [
       {
         "type": "primary",
-        "lead_id": 234,
         "lead_name": "Kiran Patel",
         "lead_phone": "9000000001",
-        "portal": "Housing.com",
+        "source": "Housing.com",
         "property_tag": "CLR-2BHK-MNG-001",
         "property_bhk": "2BHK",
         "property_location": "Maninagar",
@@ -718,9 +711,7 @@ Aggregated conversion funnel across all of a seller's properties. Shows how many
 | Parameter | Type   | Required | Description              |
 |-----------|--------|----------|--------------------------|
 | `phone`   | string | ✅ Yes   | Owner phone number       |
-| `property_tag` | string  | No       | —       | Filter to a specific property      |
-
-> No `property_tag` filter — funnel is always across all properties for the phone.
+| `property_tag` | string | No       | Filter to a specific property      |
 
 #### Response — `data` shape
 
@@ -728,6 +719,7 @@ Aggregated conversion funnel across all of a seller's properties. Shows how many
 {
   "owner_phone": "9876543210",
   "properties":  ["TAG1", "TAG2"],
+  "tag_filter":  null,
   "funnel": {
     "total_inquiries": 42,
     "stages": {
@@ -775,7 +767,7 @@ Aggregated conversion funnel across all of a seller's properties. Shows how many
 | HTTP  | `error.message`                                          |
 |-------|----------------------------------------------------------|
 | `400` | `Valid 'phone' query parameter is required.`             |
-| `404` | `No active properties found for phone number {phone}.`   |
+| `404` | `No properties found for phone number {phone}.`          |
 
 ---
 
@@ -792,7 +784,7 @@ Returns AI-generated lead suggestions for a seller's properties, sourced from a 
 | `phone`        | string  | ✅ Yes   | —       | Owner phone number                 |
 | `property_tag` | string  | No       | —       | Filter to a specific property      |
 | `page`         | integer | No       | `1`     | Page number (1-based)              |
-| `page_size`    | integer | No       | `20`    | Records per page (max 100)         |
+| `page_size`    | integer | No       | `20`    | Records per page (max 200)         |
 
 #### Response — `data` shape
 
@@ -889,7 +881,7 @@ Returns AI-generated lead suggestions for a seller's properties, sourced from a 
   "data":    null,
   "error": {
     "code":    404,
-    "message": "No active properties found for phone number 9876543210."
+    "message": "No properties found for phone number 9876543210."
   }
 }
 ```

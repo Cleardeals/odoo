@@ -64,12 +64,11 @@ action = {
         </field>
     </record>
 
-    <!-- Action menu entry on leads.new list view -->
+    <!-- Action menu entry removed — accessible via Settings → Technical → Server Actions.
+         binding_model_id removed to hide it from the leads list Action menu. -->
     <record id="action_lead_recompute_wizard_action_menu" model="ir.actions.server">
         <field name="name">Recompute Stored Property Fields</field>
         <field name="model_id" ref="leads.model_leads_new"/>
-        <field name="binding_model_id" ref="leads.model_leads_new"/>
-        <field name="binding_view_types">list</field>
         <field name="state">code</field>
         <field name="code">
 wizard = env['lead.recompute.wizard'].create({})

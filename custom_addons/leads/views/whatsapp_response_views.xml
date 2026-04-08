@@ -216,7 +216,7 @@
     </record>
     
     <record id="whatsapp_response_action_all" model="ir.actions.act_window">
-        <field name="name">WhatsApp Responses</field>
+        <field name="name">Inbox</field>
         <field name="res_model">whatsapp.response</field>
         <field name="view_mode">list,kanban,form</field>
         <field name="context">{
@@ -234,7 +234,7 @@
     </record>
     
     <record id="whatsapp_response_action_positive" model="ir.actions.act_window">
-        <field name="name">Positive Responses</field>
+        <field name="name">WhatsApp Positive Replies</field>
         <field name="res_model">whatsapp.response</field>
         <field name="view_mode">list,kanban,form</field>
         <field name="domain">[('response_type', '=', 'positive')]</field>
@@ -245,15 +245,20 @@
     </record>
     
     <menuitem id="whatsapp_response_menu_main" 
-              name="WhatsApp Responses" 
-              parent="leads.lead_score_menu_root" 
+              name="WhatsApp Replies" 
+              parent="leads.lead_score_menu_main" 
+              sequence="30"/>
+
+    <menuitem id="whatsapp_response_menu_all"
+              name="Inbox"
+              parent="whatsapp_response_menu_main"
               action="whatsapp_response_action_all"
-              sequence="15"/>
+              sequence="10"/>
     
     <menuitem id="whatsapp_response_menu_positive" 
-              name="Positive Responses" 
-              parent="leads.lead_score_menu_root" 
+              name="Positive Replies" 
+              parent="whatsapp_response_menu_main" 
               action="whatsapp_response_action_positive"
-              sequence="16"/>
+              sequence="20"/>
 
 </odoo>

@@ -7,7 +7,15 @@ from .test_portal_common import PortalLeadTestCase
 @tagged('post_install', '-at_install')
 class TestPortalLeadCRUD(PortalLeadTestCase):
     """
-    Test basic CRUD operations and field behaviors
+    Test basic CRUD operations and field behaviors for leads.new records.
+
+    Model integration notes
+    -----------------------
+    Tests that pass current_status or site_visit_date directly to create_portal_lead()
+    or call write() on the record do so for unit-test isolation. In production,
+    current_status and site_visit_date are populated by
+    lead.site.visit._sync_inquiry_snapshot when a visit is created or updated,
+    not by direct writes on leads.new.
     """
     
     def test_01_create_lead_with_required_fields(self):
@@ -15,7 +23,7 @@ class TestPortalLeadCRUD(PortalLeadTestCase):
         lead = self.create_portal_lead()
 
         self.assertEqual(lead.name, 'Test Lead')
-        self.assertEqual(lead.portal_name, 'MagicBricks')
+        self.assertEqual(lead.source_id.name, 'MagicBricks')
         self.assertEqual(lead.state, 'new')
         self.assertEqual(lead.current_status, 'lead')
         self.assertFalse(lead.is_webhook_sent)
@@ -26,17 +34,17 @@ class TestPortalLeadCRUD(PortalLeadTestCase):
         with mute_logger('odoo.sql_db'), self.assertRaises(psycopg2.IntegrityError):
             self.env['leads.new'].create({
                 'phone': '9876543210',
-                'portal_name': 'MagicBricks'
+                'source_id': self.source_magicbricks.id,
                 # 'name' is missing -> Crash expected
             })
 
         vals = {
             'name': 'Default State Test',
             'phone': '9876543210',
-            'portal_name': 'MagicBricks'
+            'source_id': self.source_magicbricks.id,
             # 'state' is omitted entirely
         }
-        lead = self.env['leads.new'].create(vals)
+        lead = self.env['leads.new'].with_context(automated_lead_creation=True).create(vals)
         self.assertEqual(lead.state, 'new')
 
     def test_04_related_property_fields(self):
@@ -59,7 +67,13 @@ class TestPortalLeadCRUD(PortalLeadTestCase):
 
     
     def test_06_compute_site_visit_date_only(self):
-        """Test site_visit_date_only computation."""
+        """
+        Verify that site_visit_date_only (Date) is computed from site_visit_date (Datetime).
+
+        current_status and site_visit_date are set directly here for isolation.
+        In production both fields are written by lead.site.visit._sync_inquiry_snapshot
+        when a visit is created; site_visit_date_only is then computed automatically.
+        """
         from datetime import datetime
         visit_datetime = datetime(2025, 12, 25, 14, 40, 0)
 
@@ -84,14 +98,15 @@ class TestPortalLeadCRUD(PortalLeadTestCase):
             "is_ops_sale_lead should default to False"
         )
 
-        # Case 2: Explicit Creation
-        # We pass the new field via **kwargs to your helper
+        # Case 2: Explicit Creation — bde_id is required when is_ops_sale_lead is True
+        bde = self.env["leads.bde"].create({"name": "Test BDE"})
         lead_ops = self.create_portal_lead(
             name="OPS Specialized Lead",
-            is_ops_sale_lead=True
+            is_ops_sale_lead=True,
+            bde_id=bde.id,
         )
         self.assertTrue(
-            lead_ops.is_ops_sale_lead, 
+            lead_ops.is_ops_sale_lead,
             "is_ops_sale_lead should be True when explicitly set"
         )
     def test_08_feedback_general_field(self):
@@ -129,6 +144,10 @@ class TestPortalLeadCRUD(PortalLeadTestCase):
         Test the feedback_site_visit_done selection field.
         1. Verifies default is False (not set).
         2. Verifies all selection options can be set.
+
+        Note: current_status is set directly here for field isolation. In
+        production the "site_visit_done" status arrives via
+        lead.site.visit._sync_inquiry_snapshot when a visit is marked completed.
         """
         # Case 1: Default should be False/empty
         lead = self.create_portal_lead(
@@ -191,3 +210,47 @@ class TestPortalLeadCRUD(PortalLeadTestCase):
         })
         self.assertEqual(lead.feedback_general, 'other')
         self.assertEqual(lead.feedback_site_visit_done, 'other')
+
+    def test_11_bde_ops_sale_required(self):
+        """
+        BDE is mandatory when is_ops_sale_lead is True.
+        Setting the flag without a BDE must raise a ValidationError.
+        """
+        with self.assertRaises(ValidationError):
+            self.create_portal_lead(name="Ops Lead No BDE", is_ops_sale_lead=True)
+
+    def test_12_bde_rm_restriction_enforced(self):
+        """
+        A BDE with allowed_rm_ids set blocks any RM not on the list.
+        """
+        with self.assertRaises(ValidationError):
+            self.create_portal_lead(
+                name="Blocked Ops Lead",
+                is_ops_sale_lead=True,
+                bde_id=self.test_bde_restricted.id,
+                user_id=self.test_rm_a.id,  # not in test_bde_restricted.allowed_rm_ids
+            )
+
+    def test_13_bde_rm_restriction_allowed(self):
+        """
+        An RM in a BDE's allowed_rm_ids can be assigned that BDE successfully.
+        """
+        lead = self.create_portal_lead(
+            name="Allowed Ops Lead",
+            is_ops_sale_lead=True,
+            bde_id=self.test_bde_restricted.id,
+            user_id=self.test_rm_b.id,  # IS in test_bde_restricted.allowed_rm_ids
+        )
+        self.assertEqual(lead.bde_id, self.test_bde_restricted)
+
+    def test_14_bde_open_allows_any_rm(self):
+        """
+        A BDE with no allowed_rm_ids is open — any RM can be assigned to it.
+        """
+        lead = self.create_portal_lead(
+            name="Open BDE Lead",
+            is_ops_sale_lead=True,
+            bde_id=self.test_bde_open.id,
+            user_id=self.test_rm_a.id,  # not in any restriction list, but BDE is open
+        )
+        self.assertEqual(lead.bde_id, self.test_bde_open)

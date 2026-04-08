@@ -4,13 +4,15 @@ description: >
   Reviews Odoo module code before it is pushed to production and flags all issues
   that would cause errors, data loss, or broken deployments. Use this skill whenever
   the user shares Odoo Python models, XML views, CSV security files, __manifest__.py
-  files, or migration scripts and wants them checked before deployment. Also trigger
-  when the user says things like "is this ready to deploy", "review my Odoo code",
-  "check this before I push", "what's wrong with my manifest", "will this migration
-  work", or "pre-push review". Covers: manifest version/data registration gaps,
-  migration script correctness and idempotency, model access rule completeness,
-  view/field consistency, security rule logic, and controller registration patterns.
-  Always use this skill for any Odoo deployment review — do not attempt this without it.
+  files, migration scripts, or test files and wants them checked before deployment.
+  Also trigger when the user says things like "is this ready to deploy", "review my
+  Odoo code", "check this before I push", "what's wrong with my manifest", "will this
+  migration work", or "pre-push review". Covers: manifest version/data registration
+  gaps, migration script correctness and idempotency, model access rule completeness,
+  view/field consistency, security rule logic, controller registration patterns,
+  wizard method existence and argument correctness, and test file consistency with
+  model/controller changes (helper mirrors, fixture model correctness, field path drift). Always use this skill for any Odoo deployment
+  review — do not attempt this without it.
 ---
 
 # Odoo Pre-Push Review
@@ -37,6 +39,10 @@ checks, not just one.
 - XML view files (`views/*.xml`) → run [View checks](#view-checks)
 - `security/ir.model.access.csv` → run [Access CSV checks](#access-csv-checks)
 - `security/*.xml` (ir.rule, groups) → run [Security rule checks](#security-rule-checks)
+- `wizard/*.py` → run [Wizard checks](#wizard-checks)
+- `tests/*.py` → run [Test file checks](#test-file-checks)
+- Any controller, model, or wizard change → **always** run [Test file checks](#test-file-checks)
+  even if no test file was shared — flag the gap if tests cannot be found
 
 If the user shares multiple files together, cross-check between them — many of the
 most damaging bugs are inconsistencies *between* files (e.g. a model declared in
@@ -67,10 +73,10 @@ Quick checklist:
 Read: `references/migrations.md` for detailed rules.
 
 Quick checklist:
-- File must be named `pre_migrate.py` or `post_migrate.py` — not `migrate.py`
+- File must be named `pre-migrate.py` or `post-migrate.py` — not `migrate.py`
   or any other name
-- Pre vs post placement: data rescue from columns being dropped → pre_migrate;
-  recompute stored fields / drop columns / create indexes on new ORM columns → post_migrate
+- Pre vs post placement: data rescue from columns being dropped → pre-migrate;
+  recompute stored fields / drop columns / create indexes on new ORM columns → post-migrate
 - Every INSERT must have `ON CONFLICT ... DO NOTHING` or equivalent
 - Every `ADD COLUMN` must use `IF NOT EXISTS`
 - Every `DROP COLUMN` must use `IF EXISTS`
@@ -167,6 +173,121 @@ Quick checklist:
 - Rules referencing `user.id` require the current user to have a value in the
   referenced field — if `rm_user_id` can be NULL on some records, those records
   become invisible to everyone, which may be unintentional
+
+---
+
+## Wizard checks
+
+Wizard files (`wizard/*.py`) call methods on models obtained via `self.env["model.name"]`.
+Because Python has no compile-time method resolution for ORM records, a typo in a
+method name or a wrong argument type produces a silent `AttributeError` at runtime —
+only visible when a user triggers the wizard.
+
+**These errors are never caught by syntax checks (`py_compile`) or lint tools.**
+The only way to catch them in review is to manually cross-reference every method call
+against the model's actual method definitions.
+
+### Method-existence check — REQUIRED for every wizard file reviewed
+
+For every expression of the form `SomeModel.method_name(...)` or
+`record.method_name(...)` in the wizard:
+
+1. **Find the method on the model.** Use `grep_search` for
+   `def method_name` in `models/`. If zero results → **Critical: method does not exist**.
+2. **Verify the argument signature.** Read the method signature and compare it to
+   the call site. Common mismatches:
+   - Passing a plain string (`"OLX"`) where the method expects a recordset
+     (`lead.source` record) or an int
+   - Passing positional args in the wrong order
+   - Missing required arguments
+3. **Verify the correct method name was not renamed.** If a similar method exists
+   (e.g. `_resolve_property_from_source` vs `_resolve_property_from_portal`),
+   flag which one is real and which is a typo.
+
+### Additional wizard checklist
+
+- Every `self.env["model.name"]` string must match a real `_name` value — grep
+  `_name = "model.name"` in `models/` to confirm the model exists
+- `with_context(...)` keys passed here must be honoured by a corresponding
+  `ir.rule` or compute method — grep for the key to verify
+- `sudo()` usage: confirm it is intentional and not bypassing a security check
+  that should block the operation
+- `create_lead_if_not_duplicate` or similar custom classmethods: confirm the
+  method exists on the model and accepts the dict shape being passed
+- Error messages appended to `all_failed_rows` (or equivalent): confirm the
+  `Exception` handler is catching broadly enough but not silently swallowing
+  errors that should abort the whole batch
+- If the wizard calls a method that was recently renamed or moved (visible from
+  the diff / change context), flag every call site in wizard files that has not
+  been updated
+
+---
+
+## Test file checks
+
+**Any time a controller, model query, or data model changes, the test files must
+be reviewed as part of the same pre-push cycle.** Test failures in CI are a
+pre-push review failure — they should be caught here, not in GitHub Actions.
+
+When the user shares changed controllers, models, or wizard files, immediately
+search for the corresponding test files and run the checks below.
+
+### When to read test files
+- Controller changed its ORM query (different model, added domain filter, changed
+  field path) → read every test helper that mirrors that query
+- Model renamed, removed, or merged into another model → search all test files for
+  the old `_name` string
+- New field added to a model that test fixtures create records for → check that
+  test `create()` calls include the field, or that it has a safe default
+- Wizard `action_*` method changed what it creates → check tests that call that
+  wizard method or simulate its output
+
+### Helper mirrors — the most common source of test drift
+
+Test helpers (e.g. `_run_dashboard`, `_run_api`) that reproduce controller logic
+for unit-test isolation are the **highest-risk** file in any test suite. They
+duplicate the controller, so every controller change must be reflected in them.
+
+Checklist:
+- Does the helper query the **same model** as the controller? If the controller
+  now queries `leads.new` with `("inquiry_type", "=", "recommended")`, the helper
+  must do the same — not `lead.property.interest`
+- Does the helper use the **same field paths**? If `_serialize_lead` changed from
+  `rec.lead_id.source_id.name` to `rec.source_id.name` (because `rec` is now a
+  `leads.new` record), the helper's source-counting loop must match
+- Does the helper pass the **same object type** to shared serialization functions?
+  Passing a `lead.property.interest` record to `_serialize_lead` when that function
+  now calls `.name` on `leads.new` will raise `AttributeError` at runtime
+
+### Fixture consistency
+
+When tests create records to feed into a changed flow, verify:
+- Test `create()` calls use the correct model — if recommended leads are now
+  `leads.new(inquiry_type="recommended")` records, tests must not still create
+  `lead.property.interest` records and expect them to appear in the dashboard
+- Required fields on the new model are populated — a `leads.new` record
+  typically needs `name`, `phone`, `property_base_id`, `user_id`, `inquiry_type`
+- The fixture matches what the production wizard actually writes — read the wizard's
+  `action_create_*` method and verify the test creates an equivalent record
+
+### Cross-check: controller vs. test helper
+
+When a controller file and test file are both provided (or when the controller
+change is visible in git diff):
+
+1. Find every `env["model.name"].search(...)` call in the controller
+2. Find the corresponding search call(s) in the test helper
+3. Assert: same model, same domain shape, same field access pattern after the search
+4. Find every field read on the resulting records (e.g. `rec.source_id.name`)
+5. Find the corresponding field reads in the test helper and verify they match
+
+If the test file was **not** provided by the user but the controller was changed,
+**explicitly flag this**:
+
+> `tests/test_*.py` not reviewed. Controller query path changed — test helpers
+> that mirror this query must be updated. Request the test file or search for
+> `_run_dashboard` / `_serialize_` / `env["old.model.name"]` in the test suite
+> before approving this push.
 
 ---
 

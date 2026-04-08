@@ -22,7 +22,7 @@ Response shape
       "total":       42,
       "primary":     35,
       "recommended":  7,
-      "portal_breakdown": {
+    "source_breakdown": {
         "MagicBricks":  {"primary": 10, "recommended": 3},
         "99acres":      {"primary": 15, "recommended": 2},
         "Housing.com":  {"primary":  8, "recommended": 2},
@@ -36,6 +36,7 @@ Response shape
 """
 
 import logging
+from collections import defaultdict
 
 from odoo import http
 from odoo.http import request
@@ -50,8 +51,6 @@ from ..shared.property_resolver import (
 from ..shared.response_utils import error_response, success_response
 
 _logger = logging.getLogger(__name__)
-
-KNOWN_PORTALS = ["MagicBricks", "99acres", "Housing.com", "OLX"]
 
 
 class SellerSummaryController(http.Controller):
@@ -99,25 +98,22 @@ class SellerSummaryController(http.Controller):
         # Recommended leads (lead.property.interest)
         recommended_interests = get_recommended_leads_for_tags(request.env, tags)
 
-        # Portal breakdown
-        portal_breakdown = {p: {"primary": 0, "recommended": 0} for p in KNOWN_PORTALS}
-        portal_breakdown["Unknown"] = {"primary": 0, "recommended": 0}
+        # Source breakdown
+        source_breakdown = defaultdict(lambda: {"primary": 0, "recommended": 0})
 
         for lead in primary_leads:
-            portal = (
-                lead.portal_name if lead.portal_name in KNOWN_PORTALS else "Unknown"
-            )
-            portal_breakdown[portal]["primary"] += 1
+            source_name = lead.source_id.name if lead.source_id else "Unknown"
+            source_breakdown[source_name]["primary"] += 1
 
-        # Recommended leads come via lead.property.interest; the originating
-        # portal lives on the parent leads.new record.
+        # Recommended leads come via lead.property.interest; source lives on
+        # the parent leads.new record.
         for interest in recommended_interests:
-            portal = (
-                interest.lead_id.portal_name
-                if interest.lead_id.portal_name in KNOWN_PORTALS
+            source_name = (
+                interest.lead_id.source_id.name
+                if interest.lead_id and interest.lead_id.source_id
                 else "Unknown"
             )
-            portal_breakdown[portal]["recommended"] += 1
+            source_breakdown[source_name]["recommended"] += 1
 
         data = {
             "owner_phone": phone,
@@ -127,7 +123,7 @@ class SellerSummaryController(http.Controller):
                 "total": len(primary_leads) + len(recommended_interests),
                 "primary": len(primary_leads),
                 "recommended": len(recommended_interests),
-                "portal_breakdown": portal_breakdown,
+                "source_breakdown": dict(source_breakdown),
             },
         }
         return success_response(data)

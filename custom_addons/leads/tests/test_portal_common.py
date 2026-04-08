@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from odoo.tests.common import TransactionCase
+from odoo.tests.common import TransactionCase, new_test_user
 import time
 
 class PortalLeadTestCase(TransactionCase):
@@ -13,32 +13,11 @@ class PortalLeadTestCase(TransactionCase):
         
         # Unique suffix for this test run
         cls.suffix = str(int(time.time()))
-
-        cls.rm_user = cls.env['res.users'].create({
-            'name': f'Test RM {cls.suffix}',
-            'login': f'test_rm_{cls.suffix}',
-            'email': f'rm_{cls.suffix}@test.com',
-        })
-
-        cls.naresh_user = cls.env['res.users'].create({
-            'name': 'Naresh Rojiya',
-            'login': f'naresh_{cls.suffix}',
-            'email': f'naresh_{cls.suffix}@test.com'
-        })
-
-        # Create Pratham Bhandari user for 99acres default assignment
-        cls.pratham_user = cls.env['res.users'].create({
-            'name': 'Pratham Bhandari',
-            'login': f'pratham_{cls.suffix}',
-            'email': f'pratham_{cls.suffix}@test.com'
-        })
-
-        # Create Mayuri Malivad user for MagicBricks default assignment
-        cls.mayuri_user = cls.env['res.users'].create({
-            'name': 'Mayuri Malivad',
-            'login': f'mayuri_{cls.suffix}',
-            'email': f'mayuri_{cls.suffix}@test.com'
-        })
+        user_model = cls.env['res.users'].sudo()
+        cls.rm_user = cls.env.ref('base.user_admin')
+        cls.naresh_user = user_model.search([('name', '=', 'Naresh Rojiya')], limit=1) or cls.rm_user
+        cls.pratham_user = user_model.search([('name', '=', 'Pratham Bhandari')], limit=1) or cls.naresh_user
+        cls.mayuri_user = user_model.search([('name', '=', 'Mayuri Malivad')], limit=1) or cls.naresh_user
 
         # Create Property with UNIQUE IDs
         cls.mb_id = f'MB_{cls.suffix}'
@@ -83,15 +62,147 @@ class PortalLeadTestCase(TransactionCase):
             ],
         })
 
+        # Keep source defaults aligned with processing fallback expectations.
+        cls.source_magicbricks = cls._ensure_source(
+            name='MagicBricks',
+            source_type='portal',
+            portal_code='MagicBricks',
+            default_rm_user=cls.mayuri_user,
+        )
+        cls.source_housing = cls._ensure_source(
+            name='Housing.com',
+            source_type='portal',
+            portal_code='Housing.com',
+            default_rm_user=cls.naresh_user,
+        )
+        cls.source_99acres = cls._ensure_source(
+            name='99acres',
+            source_type='portal',
+            portal_code='99acres',
+            default_rm_user=cls.pratham_user,
+        )
+        cls.source_olx = cls._ensure_source(
+            name='OLX',
+            source_type='portal',
+            portal_code='OLX',
+            default_rm_user=cls.naresh_user,
+        )
+        cls.source_unknown = cls._ensure_source(
+            name='UnknownPortal',
+            source_type='manual',
+            default_rm_user=cls.naresh_user,
+        )
+
+        # RM users for BDE restriction tests.
+        # Uses new_test_user (relying on field defaults for company) — same
+        # pattern as Odoo's own test suite.
+        cls.test_rm_a = new_test_user(
+            cls.env,
+            login=f'test_rm_a_{cls.suffix}',
+            name='Test RM Alpha',
+            groups='base.group_user,leads.group_lead_score_rm',
+        )
+        cls.test_rm_b = new_test_user(
+            cls.env,
+            login=f'test_rm_b_{cls.suffix}',
+            name='Test RM Beta',
+            groups='base.group_user,leads.group_lead_score_rm',
+        )
+
+        # BDE fixture: only test_rm_b is allowed, test_rm_a is not.
+        cls.test_bde_restricted = cls.env['leads.bde'].sudo().create({
+            'name': f'Test BDE Restricted {cls.suffix}',
+            'allowed_rm_ids': [(6, 0, [cls.test_rm_b.id])],
+        })
+        # BDE fixture: no restriction (allowed_rm_ids empty → all RMs allowed).
+        cls.test_bde_open = cls.env['leads.bde'].sudo().create({
+            'name': f'Test BDE Open {cls.suffix}',
+        })
+
+    @classmethod
+    def _ensure_source(
+        cls,
+        name,
+        source_type='portal',
+        portal_code=False,
+        default_rm_user=False,
+    ):
+        source_model = cls.env['lead.source'].sudo()
+        category_model = cls.env['lead.source.category'].sudo()
+
+        source = source_model.search([('name', '=', name)], limit=1)
+        if not source:
+            if source_type == 'portal':
+                category = cls.env.ref(
+                    'leads.lead_source_category_portal',
+                    raise_if_not_found=False,
+                ) or category_model.search([('source_type', '=', 'portal')], limit=1)
+                if not category:
+                    category = category_model.create({
+                        'name': 'Portals',
+                        'code': 'portals',
+                        'source_type': 'portal',
+                    })
+                source = source_model.create({
+                    'name': name,
+                    'category_id': category.id,
+                    'portal_code': portal_code or name,
+                })
+            else:
+                category = category_model.search(
+                    [('source_type', '=', 'manual')],
+                    order='sequence, id',
+                    limit=1,
+                )
+                if not category:
+                    category = category_model.create({
+                        'name': 'Manual',
+                        'code': 'manual',
+                        'source_type': 'manual',
+                    })
+                source = source_model.create({
+                    'name': name,
+                    'category_id': category.id,
+                })
+
+        if default_rm_user:
+            source.default_rm_user_id = default_rm_user.id
+
+        return source
+
     def create_portal_lead(self, **kwargs):
         """Helper with dynamic defaults."""
         values = {
             'name': 'Test Lead',
             'phone': '9876543210',
             'email': 'test@example.com',
-            'portal_name': 'MagicBricks',
+            'source_id': self.source_magicbricks.id,
             'portal_property_id': self.mb_id, # Dynamic default
             'state': 'new'
         }
         values.update(kwargs)
-        return self.env['leads.new'].create(values)
+
+        source_name = values.pop('source_name', False)
+        portal_name = values.pop('portal_name', False)
+
+        if source_name or portal_name:
+            source = self.env['leads.new']._get_or_create_source(
+                source_name or portal_name,
+                source_type='portal',
+            )
+            values['source_id'] = source.id
+
+            default_rm_map = {
+                'MagicBricks': self.mayuri_user,
+                '99acres': self.pratham_user,
+                'Housing.com': self.naresh_user,
+                'OLX': self.naresh_user,
+                'UnknownPortal': self.naresh_user,
+            }
+            rm_user = default_rm_map.get(source_name or portal_name)
+            if rm_user and source.default_rm_user_id != rm_user:
+                source.sudo().write({'default_rm_user_id': rm_user.id})
+
+        return self.env['leads.new'].with_context(
+            automated_lead_creation=True,
+        ).create(values)

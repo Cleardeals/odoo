@@ -117,12 +117,14 @@ class TestPortalLeadProcessing(PortalLeadTestCase):
         Test that an OPS sales lead is processed and assigned correctly.
         Ensures the flag does not interfere with standard RM assignment.
         """
-        # Create an OPS lead
+        # Create an OPS lead — bde_id is required when is_ops_sale_lead is True
+        bde = self.env["leads.bde"].create({"name": "Test BDE"})
         lead = self.create_portal_lead(
             name="OPS Processing Test",
             portal_name='MagicBricks',
-            portal_property_id=self.mb_id, 
-            is_ops_sale_lead=True  # Ensure this matches your singular field name
+            portal_property_id=self.mb_id,
+            is_ops_sale_lead=True,
+            bde_id=bde.id,
         )
         
         # Trigger processing
@@ -141,7 +143,7 @@ class TestPortalLeadProcessing(PortalLeadTestCase):
         )
 
     def test_12_process_lead_99acres_not_found_assigns_pratham(self):
-        """Should assign to Pratham Bhandari when property not found for 99acres portal."""
+        """Should assign to configured fallback user when property not found for 99acres."""
         lead = self.create_portal_lead(
             portal_name="99acres",
             portal_property_id="NON_EXISTENT_99ACRES_ID",
@@ -153,10 +155,10 @@ class TestPortalLeadProcessing(PortalLeadTestCase):
         self.assertEqual(lead.user_id, self.pratham_user)
         self.assertEqual(lead.state, 'assigned')
         self.assertFalse(lead.property_base_id)
-        self.assertIn("Pratham Bhandari", lead.process_notes)
+        self.assertIn(self.pratham_user.name, lead.process_notes)
 
     def test_13_process_lead_housing_not_found_assigns_naresh(self):
-        """Should assign to Naresh Rojiya when property not found for Housing.com portal."""
+        """Should assign to configured fallback user when property not found for Housing.com."""
         lead = self.create_portal_lead(
             portal_name="Housing.com",
             portal_property_id="NON_EXISTENT_HOUSING_ID",
@@ -168,10 +170,10 @@ class TestPortalLeadProcessing(PortalLeadTestCase):
         self.assertEqual(lead.user_id, self.naresh_user)
         self.assertEqual(lead.state, 'assigned')
         self.assertFalse(lead.property_base_id)
-        self.assertIn("Naresh Rojiya", lead.process_notes)
+        self.assertIn(self.naresh_user.name, lead.process_notes)
 
     def test_14_process_lead_olx_not_found_assigns_naresh(self):
-        """Should assign to Naresh Rojiya when property not found for OLX portal."""
+        """Should assign to configured fallback user when property not found for OLX."""
         lead = self.create_portal_lead(
             portal_name="OLX",
             portal_property_id="NON_EXISTENT_OLX_ID",
@@ -183,7 +185,7 @@ class TestPortalLeadProcessing(PortalLeadTestCase):
         self.assertEqual(lead.user_id, self.naresh_user)
         self.assertEqual(lead.state, 'assigned')
         self.assertFalse(lead.property_base_id)
-        self.assertIn("Naresh Rojiya", lead.process_notes)
+        self.assertIn(self.naresh_user.name, lead.process_notes)
 
     def test_15_process_lead_unknown_portal_not_found_assigns_naresh(self):
         """Should assign to Naresh Rojiya (default) when property not found for unknown portal."""

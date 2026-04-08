@@ -22,10 +22,6 @@ Classification rules  (mirrors seller site-visits logic exactly)
       "buyer_not_picking_call").
       Visit did not occur and the RM has logged a reason why.
 
-  rescheduled
-      status = rescheduled.
-      Previously scheduled slot was cancelled; new slot TBD or set.
-
   completed
       status = explicitly site_visit_done.
       feedback_site_visit_done is always included.
@@ -45,10 +41,10 @@ Response shape
 
     "upcoming": [
       {
-        "source":              "primary" | "recommended",
+        "inquiry_type":        "primary" | "recommended",
         "lead_id":             101,
         "lead_name":           "Ravi Shah",
-        "portal":              "MagicBricks",
+        "source":              "MagicBricks",
         "property_tag":        "TAG1",
         "property_bhk":        "2BHK",
         "property_location":   "Maninagar",
@@ -77,14 +73,6 @@ Response shape
       }
     ],
 
-    "rescheduled": [
-      {
-        ...same base shape...,
-        "current_status": "rescheduled",
-        "note":           "Visit was rescheduled — confirm new date with RM"
-      }
-    ],
-
     "completed": [
       {
         ...same base shape...,
@@ -98,7 +86,6 @@ Response shape
       "upcoming":         1,
       "pending_feedback": 1,
       "cancelled":        1,
-      "rescheduled":      1,
       "completed":        3
     }
   },
@@ -118,7 +105,9 @@ from ..shared.response_utils import error_response, success_response
 
 _logger = logging.getLogger(__name__)
 
-_VISIT_STATUSES = {"site_visit_scheduled", "site_visit_done", "rescheduled"}
+# Only statuses produced by the lead.site.visit model are accepted.
+# "rescheduled" was removed in v1.3.1: the visit model never writes it.
+_VISIT_STATUSES = {"site_visit_scheduled", "site_visit_done"}
 
 _EMPTY_FEEDBACK = {None, "", "other", False}
 
@@ -132,13 +121,15 @@ def _classify_visit(
     """
      Determine which bucket a visit record belongs to.
 
-    Returns one of: "upcoming" | "pending_feedback" | "cancelled" | "rescheduled" | "completed"
+    Returns one of: "upcoming" | "pending_feedback" | "cancelled" | "completed"
+
+    Both new and rescheduled visits appear as "site_visit_scheduled" in the
+    snapshot (written by lead.site.visit._sync_inquiry_snapshot). A reschedule
+    supersedes the original visit and writes a new date, so rescheduled visits
+    land in "upcoming" if the new date is in the future.
     """
     if current_status == "site_visit_done":
         return "completed"
-
-    if current_status == "rescheduled":
-        return "rescheduled"
 
     if current_status == "site_visit_scheduled":
         if site_visit_date > now:
@@ -155,7 +146,7 @@ def _build_base_record(
     source: str,
     lead_id: int,
     lead_name,
-    portal,
+    lead_source,
     prop,
     site_visit_date,
     site_visit_date_only,
@@ -164,10 +155,10 @@ def _build_base_record(
 ) -> dict:
     """Fields present in every bucket."""
     return {
-        "source": source,
+        "inquiry_type": source,
         "lead_id": lead_id,
         "lead_name": lead_name or None,
-        "portal": portal or None,
+        "source": lead_source or None,
         "property_tag": prop.property_tag if prop else None,
         "property_bhk": prop.bhk if prop else None,
         "property_location": prop.location if prop else None,
@@ -195,7 +186,6 @@ def _apply_bucket_fields(
 
     pending_feedback — note only; no feedback value since none was logged.
     cancelled        — feedback_general (the reason) + note.
-    rescheduled      — note only.
     completed        — feedback_site_visit_done always; remarks only when "other".
     upcoming         — no extra fields.
     """
@@ -205,9 +195,6 @@ def _apply_bucket_fields(
     elif bucket == "cancelled":
         record["feedback_general"] = feedback_general
         record["note"] = "Visit did not occur due to buyer status"
-
-    elif bucket == "rescheduled":
-        record["note"] = "Visit was rescheduled — confirm new date with RM"
 
     elif bucket == "completed":
         record["feedback_site_visit_done"] = feedback_site_visit_done or None
@@ -224,7 +211,7 @@ def _process_visit(
     source: str,
     lead_id: int,
     lead_name,
-    portal,
+    lead_source,
     prop,
     site_visit_date,
     site_visit_date_only,
@@ -244,7 +231,7 @@ def _process_visit(
         source=source,
         lead_id=lead_id,
         lead_name=lead_name,
-        portal=portal,
+        lead_source=lead_source,
         prop=prop,
         site_visit_date=site_visit_date,
         site_visit_date_only=site_visit_date_only,
@@ -268,7 +255,7 @@ def _visit_from_primary(lead, now: datetime) -> tuple[str, datetime, dict]:
         source="primary",
         lead_id=lead.id,
         lead_name=lead.name,
-        portal=lead.portal_name,
+        lead_source=lead.source_id.name,
         prop=lead.property_base_id,
         site_visit_date=lead.site_visit_date,
         site_visit_date_only=lead.site_visit_date_only,
@@ -289,7 +276,7 @@ def _visit_from_interest(
         source="recommended",
         lead_id=parent_lead.id,
         lead_name=parent_lead.name,
-        portal=parent_lead.portal_name,
+        lead_source=parent_lead.source_id.name,
         prop=interest.property_base_id,
         site_visit_date=interest.site_visit_date,
         site_visit_date_only=interest.site_visit_date_only,
@@ -333,7 +320,6 @@ class BuyerSiteVisitsController(http.Controller):
             "upcoming": [],
             "pending_feedback": [],
             "cancelled": [],
-            "rescheduled": [],
             "completed": [],
         }
 
@@ -356,7 +342,6 @@ class BuyerSiteVisitsController(http.Controller):
         # upcoming         → soonest first (ascending)
         # pending_feedback → most overdue first (ascending — oldest unresolved at top)
         # cancelled        → most recent first (descending)
-        # rescheduled      → most recent first (descending)
         # completed        → most recent first (descending)
         upcoming_sorted = [
             r for _, r in sorted(buckets["upcoming"], key=lambda x: x[0])
@@ -367,10 +352,6 @@ class BuyerSiteVisitsController(http.Controller):
         cancelled_sorted = [
             r for _, r in sorted(buckets["cancelled"], key=lambda x: x[0], reverse=True)
         ]
-        rescheduled_sorted = [
-            r
-            for _, r in sorted(buckets["rescheduled"], key=lambda x: x[0], reverse=True)
-        ]
         completed_sorted = [
             r for _, r in sorted(buckets["completed"], key=lambda x: x[0], reverse=True)
         ]
@@ -380,13 +361,11 @@ class BuyerSiteVisitsController(http.Controller):
             "upcoming": upcoming_sorted,
             "pending_feedback": pending_feedback_sorted,
             "cancelled": cancelled_sorted,
-            "rescheduled": rescheduled_sorted,
             "completed": completed_sorted,
             "totals": {
                 "upcoming": len(upcoming_sorted),
                 "pending_feedback": len(pending_feedback_sorted),
                 "cancelled": len(cancelled_sorted),
-                "rescheduled": len(rescheduled_sorted),
                 "completed": len(completed_sorted),
             },
         }

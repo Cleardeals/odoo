@@ -192,7 +192,7 @@
     </record>
 
     <record id="lead_score_action_rm" model="ir.actions.act_window">
-        <field name="name">My Actionable Leads</field>
+        <field name="name">My Follow-ups</field>
         <field name="res_model">lead.score</field>
         <field name="view_mode">list,kanban,form</field>
         <field name="context">{
@@ -210,7 +210,7 @@
     </record>
 
     <record id="lead_score_action" model="ir.actions.act_window">
-        <field name="name">Leads</field>
+        <field name="name">Scored Leads</field>
         <field name="res_model">lead.score</field>
         <field name="view_mode">list,kanban,form</field>
     </record>

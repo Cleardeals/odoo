@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_leads_bde_list" model="ir.ui.view">
+        <field name="name">leads.bde.list</field>
+        <field name="model">leads.bde</field>
+        <field name="arch" type="xml">
+            <list string="BDEs">
+                <field name="name"/>
+                <field name="phone"/>
+                <field name="email"/>
+                <field name="allowed_rm_ids" widget="many2many_tags"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_leads_bde_form" model="ir.ui.view">
+        <field name="name">leads.bde.form</field>
+        <field name="model">leads.bde</field>
+        <field name="arch" type="xml">
+            <form string="BDE">
+                <sheet>
+                    <group>
+                        <field name="name"/>
+                        <field name="phone"/>
+                        <field name="email"/>
+                        <field name="active"/>
+                    </group>
+                    <group string="Allowed RMs">
+                        <field name="allowed_rm_ids" nolabel="1" widget="many2many_tags"
+                               domain="[('share', '=', False)]"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_leads_bde_config" model="ir.actions.act_window">
+        <field name="name">BDE Configuration</field>
+        <field name="res_model">leads.bde</field>
+        <field name="view_mode">list,form</field>
+        <field name="context">{"active_test": False}</field>
+    </record>
+
+</odoo>
