@@ -14,7 +14,7 @@ Test Categories
 ---------------
 - Isolation: leads for property A never appear in property B's data
 - KPI accuracy: status bucket counts match the records created
-- Recommended leads: lead.property.interest rows surface under recommended
+- Recommended leads: leads.new(inquiry_type=recommended) rows surface under recommended
 - Source breakdown: per-source counts are correct
 - Site visit classification: upcoming / pending / completed / cancelled
 - Empty property: no leads → all zeroes, no exception
@@ -96,12 +96,24 @@ class TestPropertyActivityDashboard(PortalLeadTestCase):
         primary_leads = (
             env["leads.new"]
             .sudo()
-            .search([("property_base_id", "=", property_id)], order="create_date desc")
+            .search(
+                [
+                    ("property_base_id", "=", property_id),
+                    ("inquiry_type", "=", "primary"),
+                ],
+                order="create_date desc",
+            )
         )
         recommended = (
-            env["lead.property.interest"]
+            env["leads.new"]
             .sudo()
-            .search([("property_base_id", "=", property_id)], order="create_date desc")
+            .search(
+                [
+                    ("property_base_id", "=", property_id),
+                    ("inquiry_type", "=", "recommended"),
+                ],
+                order="create_date desc",
+            )
         )
 
         kpi = {
@@ -131,11 +143,7 @@ class TestPropertyActivityDashboard(PortalLeadTestCase):
             source_counts.setdefault(src, {"primary": 0, "recommended": 0})
             source_counts[src]["primary"] += 1
         for rec in recommended:
-            src = (
-                rec.lead_id.source_id.name
-                if rec.lead_id and rec.lead_id.source_id
-                else "Unknown"
-            )
+            src = rec.source_id.name if rec.source_id else "Unknown"
             source_counts.setdefault(src, {"primary": 0, "recommended": 0})
             source_counts[src]["recommended"] += 1
 
@@ -304,24 +312,31 @@ class TestPropertyActivityDashboard(PortalLeadTestCase):
 
     def test_06_recommended_leads_appear_in_dashboard(self):
         """
-        ARRANGE: 1 primary lead on property A (acts as the buyer lead);
-                 1 lead.property.interest on the same property.
-        ACT: Run dashboard for property A.
-        ASSERT: kpi.recommended == 1; total == 2; recommended row in activity.
+        ARRANGE: 1 primary lead on other_property (acts as the buyer lead);
+                 1 leads.new(inquiry_type=recommended) on test_property.
+        ACT: Run dashboard for test_property.
+        ASSERT: kpi.recommended == 1; total == 1; recommended row in activity.
         """
-        # create a 'buyer' lead on a DIFFERENT property so it doesn't count
-        # as primary for test_property
+        # Buyer lead lives on a DIFFERENT property so it doesn't count as
+        # primary for test_property.
         buyer_lead = self.create_portal_lead(
             name="Buyer Rec",
             phone="9111111111",
             property_base_id=self.other_property.id,
         )
-        # Recommended interest on test_property
-        rec = self.env["lead.property.interest"].sudo().create(
+        # Recommended inquiry on test_property created via the same model
+        # the Recommend Property wizard uses.
+        self.env["leads.new"].sudo().create(
             {
-                "lead_id": buyer_lead.id,
+                "name": buyer_lead.name,
+                "phone": buyer_lead.phone,
+                "source_id": buyer_lead.source_id.id,
                 "property_base_id": self.test_property.id,
+                "user_id": buyer_lead.user_id.id,
+                "state": "assigned",
                 "current_status": "site_visit_scheduled",
+                "inquiry_type": "recommended",
+                "parent_inquiry_id": buyer_lead.id,
             }
         )
 
@@ -338,7 +353,7 @@ class TestPropertyActivityDashboard(PortalLeadTestCase):
 
     def test_07_recommended_leads_for_other_property_not_included(self):
         """
-        ARRANGE: A lead.property.interest linking to other_property.
+        ARRANGE: A leads.new(inquiry_type=recommended) linking to other_property.
         ACT: Run dashboard for test_property.
         ASSERT: test_property dashboard shows 0 recommended.
         """
@@ -347,18 +362,25 @@ class TestPropertyActivityDashboard(PortalLeadTestCase):
             phone="9222222222",
             property_base_id=self.test_property.id,
         )
-        self.env["lead.property.interest"].sudo().create(
+        # Recommended inquiry on OTHER property — must not appear for test_property
+        self.env["leads.new"].sudo().create(
             {
-                "lead_id": buyer_lead.id,
+                "name": buyer_lead.name,
+                "phone": buyer_lead.phone,
+                "source_id": buyer_lead.source_id.id,
                 "property_base_id": self.other_property.id,
+                "user_id": buyer_lead.user_id.id,
+                "state": "assigned",
                 "current_status": "lead",
+                "inquiry_type": "recommended",
+                "parent_inquiry_id": buyer_lead.id,
             }
         )
 
         dash = self._run_dashboard(self.test_property.id)
 
-        # primary: 1 (buyer_lead is a primary on test_property)
-        # recommended: 0 (the interest is on other_property, not test_property)
+        # primary: 1 (buyer_lead is primary on test_property)
+        # recommended: 0 (the recommended inquiry is on other_property)
         self.assertEqual(dash["kpi"]["primary"], 1)
         self.assertEqual(dash["kpi"]["recommended"], 0)
 
