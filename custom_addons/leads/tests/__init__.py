@@ -5,6 +5,7 @@ from . import (
     test_lead_score,
     test_lead_site_visit_models,
     test_lead_source,
+    test_olx_leads,
     test_portal_common,
     test_portal_lead_api,
     test_portal_lead_cron,

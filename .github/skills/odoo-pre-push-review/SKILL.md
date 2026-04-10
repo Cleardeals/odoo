@@ -116,6 +116,14 @@ Quick checklist:
   for users without read access to the searched model
 - Context keys used in field definitions (e.g. `context={'search_all_properties_for_lead': True}`)
   must be honoured by a corresponding `ir.rule` — flag if the rule cannot be found
+- **`_check_access` is NOT a substitute for record-level filtering in Odoo 18+/19.**
+  In Odoo 18+ the `fetch()` path skips `_check_access` entirely: it calls `_search()`
+  directly, which bakes `ir.rule._compute_domain()` into the SQL WHERE clause. A
+  `_check_access` override that returns `None` early has **zero effect** on `fetch()`,
+  `web_read`, or display_name loads. If you see `_check_access` overridden to bypass
+  record rules for a group, flag it as broken — the correct fix is an `ir.rule` with
+  `[(1,'=',1)]` for that group (for read-only cross-record access) combined with a
+  `_search` override that re-applies the restriction where the list view requires it.
 
 ---
 
@@ -144,6 +152,29 @@ Quick checklist:
   exist on the model and are present in the view (Odoo 17+ uses `invisible=`
   expression syntax, not `attrs` dict — flag if mixing styles)
 - Groups referenced in `groups=` attributes must exist in `security/*.xml`
+- **Many2one fields on models with record rules — trace BOTH access paths.**
+  Every `<field name="X"/>` where `X` is a `Many2one` pointing to a model that has
+  `ir.rule` restrictions requires TWO separate access path checks:
+
+  1. **Fetch path** (form load / display_name read): Odoo calls `_search()` internally
+     with the active ir.rule domain baked in as SQL. If the rule is `[(1,'=',1)]` for
+     the user's group, the display_name renders fine. If the rule restricts by owner
+     and the linked record belongs to another user, you get an `AccessError` on form
+     load — even though the user never clicked anything.
+
+  2. **Navigation path** (clicking the internal link → arrow icon): Odoo opens the
+     linked model's form view. The context on the `<field>` in the view is passed
+     through to that form's `web_read`. If you need to restrict navigation to own
+     records only, set `context="{'some_restriction_key': True}"` on the field and
+     handle it in `_search` on the target model.
+
+  **Required action during review:** For every Many2one field on a model with
+  record rules, explicitly state:
+  - Does form load work for records the user doesn't own? (fetch path)
+  - Can the user navigate into records they don't own? (navigation path)
+  - Is there a `context=` key on the field that restricts navigation?
+  - Does that context key reach a `_search` override or `ir.rule` domain on the
+    target model, or does it only reach `_check_access` (which won't fire)?
 
 ---
 
@@ -179,6 +210,21 @@ Quick checklist:
 - Rules referencing `user.id` require the current user to have a value in the
   referenced field — if `rm_user_id` can be NULL on some records, those records
   become invisible to everyone, which may be unintentional
+- **When adding a permissive rule (`[(1,'=',1)]`) for cross-record read access,
+  verify the list view is still restricted.**
+  Adding `[(1,'=',1)]` for a group (e.g. so leads RMs can read any property) causes
+  Odoo to OR all rules for that group — meaning the list view now shows ALL records
+  for that user, not just their own. If the list view must remain restricted:
+  - Add `properties_module_view=True` (or equivalent context key) to every
+    `ir.actions.act_window` that opens the list view for that module
+  - Add a `_search` override on the model that detects the context key and injects
+    the restriction domain (`[('owner_field', '=', user.id)]`) back into the query
+  - Verify the override fires specifically in `_search`, NOT in `_check_access`
+    (which is bypassed during `fetch()`)
+  Flag any `[(1,'=',1)]` rule added to a group that previously had a restrictive
+  rule, and ask: "Does any list view for this model exist that should still be
+  restricted for this group? If yes, is there a context key + `_search` override
+  in place to enforce it?"
 
 ---
 
