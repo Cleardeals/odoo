@@ -196,7 +196,6 @@ class PropertyPortalListingLeadRelink(models.Model):
     retroactively linked and reassigned.
     """
 
-    _name = "property.portal.listing"
     _inherit = "property.portal.listing"
 
     def create(self, vals_list):

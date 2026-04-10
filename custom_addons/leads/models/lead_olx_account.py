@@ -110,6 +110,27 @@ class LeadOlxAccount(models.Model):
         key = _CONFIG_PREFIX + login + _CONFIG_SUFFIX
         return self.env["ir.config_parameter"].sudo().get_param(key, default="")
 
+    def write(self, vals):
+        """Migrate the stored password to the new config param key when login changes."""
+        if "login" in vals:
+            config = self.env["ir.config_parameter"].sudo()
+            new_login = vals["login"]
+            for rec in self:
+                if rec.login == new_login:
+                    continue
+                old_key = _CONFIG_PREFIX + rec.login + _CONFIG_SUFFIX
+                new_key = _CONFIG_PREFIX + new_login + _CONFIG_SUFFIX
+                old_password = config.get_param(old_key, default="")
+                if old_password:
+                    config.set_param(new_key, old_password)
+                    config.set_param(old_key, "")
+                    _logger.info(
+                        "OLX account '%s': login changed to '%s' — password migrated to new key.",
+                        rec.login,
+                        new_login,
+                    )
+        return super().write(vals)
+
     # ------------------------------------------------------------------
     # Failure tracking
     # ------------------------------------------------------------------

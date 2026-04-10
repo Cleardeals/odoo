@@ -1428,10 +1428,7 @@ class NewPortalLead(models.Model):
         Returns the dict, or None if the lead has no usable phone number.
         """
         raw_phone = lead.get("phoneNumber", "") or ""
-        # Strip +91 country code and whitespace; keep 10 digits
-        phone_clean = raw_phone.strip().lstrip("+").strip()
-        if phone_clean.startswith("91") and len(phone_clean) == 12:
-            phone_clean = phone_clean[2:]
+        phone_clean = self._standardize_phone(raw_phone)
 
         if not phone_clean:
             _logger.warning(
