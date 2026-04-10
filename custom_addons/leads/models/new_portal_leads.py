@@ -1311,8 +1311,8 @@ class NewPortalLead(models.Model):
 
         # --- Step 1: Authenticate ---
         auth_payload = {"login": account.login, "password": password}
-        _logger.info("OLX auth: using proxy=%s", proxies)
-        _logger.info("OLX auth: headers=%s", OLX_HEADERS)
+        _logger.debug("OLX auth: using proxy=%s", proxies)
+        _logger.debug("OLX auth: headers=%s", OLX_HEADERS)
         try:
             auth_resp = requests.post(
                 OLX_AUTH_URL,
