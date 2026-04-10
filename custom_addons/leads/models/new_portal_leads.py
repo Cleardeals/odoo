@@ -4,7 +4,7 @@ import json
 import logging
 import re
 import time
-from datetime import timedelta
+from datetime import date, timedelta
 
 import pytz
 import requests
@@ -1264,3 +1264,271 @@ class NewPortalLead(models.Model):
 
         except requests.exceptions.RequestException as e:
             _logger.error("Failed to send leads to n8n webhook: %s", e)
+
+    # --- OLX API PULL METHODS ---
+
+    def _api_fetch_olx(self, account):
+        """
+        Authenticate against the OLX Business API and fetch leads for the given account.
+
+        Returns a list of normalised lead dicts ready for create_lead_if_not_duplicate,
+        or an empty list on any error (error already recorded on the account).
+
+        Authentication tokens are held only in local variables for the duration of this
+        call and are never persisted to the database.
+        """
+        OLX_BASE = "https://business.olx.in"
+        OLX_AUTH_URL = f"{OLX_BASE}/api/v1/auth/login"
+        OLX_LEADS_URL = f"{OLX_BASE}/api/v1/leads"
+        OLX_HEADERS = {
+            "Content-Type": "application/json",
+            "client-language": "en-in",
+            "api-version": "134",
+            # Remove x-origin-panamera — we found it causes issues
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Accept": "*/*",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Connection": "keep-alive",
+        }
+        PAGE_SIZE = 100
+
+        # Read optional SOCKS5 proxy from system parameters (dev/testing only).
+        # Leave olx.socks_proxy empty in production.
+        proxy_url = (
+            self.env["ir.config_parameter"]
+            .sudo()
+            .get_param("olx.socks_proxy", default="")
+            .strip()
+        )
+        proxies = {"https": proxy_url, "http": proxy_url} if proxy_url else None
+
+        password = self.env["lead.olx.account"]._get_olx_password(account.login)
+        if not password:
+            raise ValueError(
+                f"No password configured for OLX account '{account.login}'. "
+                "Set it via Settings → OLX Accounts."
+            )
+
+        # --- Step 1: Authenticate ---
+        auth_payload = {"login": account.login, "password": password}
+        _logger.info("OLX auth: using proxy=%s", proxies)
+        _logger.info("OLX auth: headers=%s", OLX_HEADERS)
+        try:
+            auth_resp = requests.post(
+                OLX_AUTH_URL,
+                json=auth_payload,
+                headers=OLX_HEADERS,
+                proxies=proxies,
+                timeout=30,
+            )
+            auth_resp.raise_for_status()
+            auth_data = auth_resp.json()
+        except requests.exceptions.RequestException as e:
+            raise RuntimeError(f"OLX auth failed for account '{account.login}': {e}") from e
+        except ValueError as e:
+            raise RuntimeError(
+                f"OLX auth response could not be parsed for account '{account.login}': {e}"
+            ) from e
+
+        access_token = auth_data.get("access_token")
+        user_id = auth_data.get("user_id")
+
+        if not access_token or not user_id:
+            raise RuntimeError(
+                f"OLX auth succeeded but response missing access_token or user_id "
+                f"for account '{account.login}'. Response keys: {list(auth_data.keys())}"
+            )
+
+        # --- Step 2: Determine date range ---
+        if account.last_fetch_at:
+            start_date = account.last_fetch_at.date() - timedelta(days=1)
+        else:
+            start_date = date.today() - timedelta(days=1)
+        end_date = date.today()
+
+        leads_headers = {
+            **OLX_HEADERS,
+            "Authorization": f"Bearer {access_token}",
+        }
+
+        # --- Step 3: Paginate through leads ---
+        all_leads = []
+        page = 1
+        total_pages = 1  # Updated from first response
+
+        while page <= total_pages:
+            # Build URL manually — requests.get(params=...) URL-encodes '/' as '%2F'
+            # but the OLX API requires literal slashes in the date format DD/MM/YY.
+            start_str = start_date.strftime("%d/%m/%y")
+            end_str = end_date.strftime("%d/%m/%y")
+            leads_url = (
+                f"{OLX_LEADS_URL}?startDate={start_str}&endDate={end_str}"
+                f"&userId={user_id}&page={page}&pageSize={PAGE_SIZE}"
+            )
+            try:
+                leads_resp = requests.get(
+                    leads_url,
+                    headers=leads_headers,
+                    proxies=proxies,
+                    timeout=30,
+                )
+                # OLX returns 500 when there are no leads for the date range —
+                # treat it as an empty result, not an error.
+                if leads_resp.status_code == 500:
+                    _logger.info(
+                        "OLX leads API returned 500 for account '%s' (no leads in range). "
+                        "Treating as empty.",
+                        account.login,
+                    )
+                    break
+                leads_resp.raise_for_status()
+                resp_data = leads_resp.json()
+            except requests.exceptions.RequestException as e:
+                raise RuntimeError(
+                    f"OLX leads API failed on page {page} for account '{account.login}': {e}"
+                ) from e
+            except ValueError as e:
+                raise RuntimeError(
+                    f"OLX leads API response could not be parsed (page {page}) "
+                    f"for account '{account.login}': {e}"
+                ) from e
+
+            data = resp_data.get("data", {})
+            raw_leads = data.get("leads", [])
+            raw_ads = data.get("ads", [])
+            pagination = resp_data.get("pagination", {})
+            total_pages = int(pagination.get("totalPages", 1))
+
+            if not raw_leads:
+                break
+
+            # Build adId → ad object lookup for project_name and raw_data enrichment
+            ad_by_id = {str(ad.get("id")): ad for ad in raw_ads if ad.get("id")}
+
+            for lead in raw_leads:
+                parsed = self._parse_olx_lead(lead, ad_by_id)
+                if parsed:
+                    all_leads.append(parsed)
+
+            page += 1
+
+        _logger.info(
+            "OLX account '%s': fetched %d leads (date range: %s → %s).",
+            account.login,
+            len(all_leads),
+            start_date,
+            end_date,
+        )
+        return all_leads
+
+    def _parse_olx_lead(self, lead, ad_by_id):
+        """
+        Translate a single OLX lead object into the standard lead_vals dict.
+
+        Returns the dict, or None if the lead has no usable phone number.
+        """
+        raw_phone = lead.get("phoneNumber", "") or ""
+        # Strip +91 country code and whitespace; keep 10 digits
+        phone_clean = raw_phone.strip().lstrip("+").strip()
+        if phone_clean.startswith("91") and len(phone_clean) == 12:
+            phone_clean = phone_clean[2:]
+
+        if not phone_clean:
+            _logger.warning(
+                "OLX lead skipped — no phone number. adId: %s",
+                lead.get("adId"),
+            )
+            return None
+
+        ad_id = str(lead.get("adId") or "").strip()
+        matched_ad = ad_by_id.get(ad_id, {})
+        project_name = (matched_ad.get("title") or "").strip() or None
+
+        raw_data = json.dumps(
+            {
+                "lead": lead,
+                "ad": matched_ad,
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+
+        return {
+            "name": (lead.get("name") or "OLX Lead").strip(),
+            "phone": phone_clean,
+            "email": lead.get("emailId") or False,
+            "portal_property_id": ad_id or False,
+            "project_name": project_name,
+            "raw_data": raw_data,
+            "state": "new",
+        }
+
+    @api.model
+    def _cron_rotate_olx_accounts(self):
+        """
+        Called every 12 minutes. Processes the next OLX account in rotation.
+
+        Rotation order: active accounts ordered by last_fetch_at ASC NULLS FIRST,
+        then sequence ASC. One account per cron run → all 15 accounts covered
+        within a 3-hour window.
+        """
+        _logger.info("CRON: OLX account rotation starting...")
+
+        account = self.env["lead.olx.account"]._get_next_account()
+        if not account:
+            _logger.warning("CRON: No active OLX accounts configured. Skipping.")
+            return
+
+        _logger.info(
+            "CRON: Processing OLX account '%s' (login: %s).",
+            account.name,
+            account.login,
+        )
+
+        source = self._get_or_create_source("OLX", source_type="portal")
+
+        try:
+            olx_leads = self._api_fetch_olx(account)
+        except Exception as e:
+            _logger.error(
+                "CRON: OLX account '%s' failed during fetch: %s",
+                account.login,
+                e,
+            )
+            account._record_failure(str(e))
+            return
+
+        created_count = 0
+        for lead_dict in olx_leads:
+            try:
+                lead_vals = {
+                    **lead_dict,
+                    "source_id": source.id,
+                }
+                new_lead = self.with_context(
+                    automated_lead_creation=True,
+                ).create_lead_if_not_duplicate(lead_vals)
+
+                if new_lead:
+                    _logger.info(
+                        "CRON: OLX lead %s created, processing...",
+                        new_lead.id,
+                    )
+                    new_lead._process_lead_logic()
+                    created_count += 1
+
+            except Exception:
+                _logger.exception(
+                    "CRON: Failed to create/process OLX lead (adId: %s) for account '%s'.",
+                    lead_dict.get("portal_property_id"),
+                    account.login,
+                )
+
+        account._record_success()
+
+        _logger.info(
+            "CRON: OLX account '%s' done. %d new leads created from %d fetched.",
+            account.login,
+            created_count,
+            len(olx_leads),
+        )

@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- ── List view ─────────────────────────────────────────────────── -->
+    <record id="view_lead_olx_account_list" model="ir.ui.view">
+        <field name="name">lead.olx.account.list</field>
+        <field name="model">lead.olx.account</field>
+        <field name="arch" type="xml">
+            <list string="OLX Accounts" decoration-danger="consecutive_failures >= 5"
+                  decoration-warning="consecutive_failures > 0 and consecutive_failures &lt; 5">
+                <field name="sequence" widget="handle"/>
+                <field name="name"/>
+                <field name="login"/>
+                <field name="active" widget="boolean_toggle"/>
+                <field name="last_fetch_at"/>
+                <field name="consecutive_failures" string="Failures"/>
+                <field name="last_error" optional="show"/>
+            </list>
+        </field>
+    </record>
+
+    <!-- ── Form view ─────────────────────────────────────────────────── -->
+    <record id="view_lead_olx_account_form" model="ir.ui.view">
+        <field name="name">lead.olx.account.form</field>
+        <field name="model">lead.olx.account</field>
+        <field name="arch" type="xml">
+            <form string="OLX Account">
+                <sheet>
+                    <widget name="web_ribbon" title="Disabled" bg_color="bg-danger"
+                            invisible="active"/>
+                    <div class="oe_title">
+                        <label for="name"/>
+                        <h1>
+                            <field name="name" placeholder="e.g. Khushi – 8160745862"/>
+                        </h1>
+                    </div>
+                    <group>
+                        <group string="Credentials">
+                            <field name="login" placeholder="10-digit phone number"/>
+                            <field name="password" password="True"
+                                   placeholder="Enter new password to update"/>
+                            <field name="sequence"/>
+                            <field name="active"/>
+                        </group>
+                        <group string="Fetch Status">
+                            <field name="last_fetch_at" readonly="1"/>
+                            <field name="consecutive_failures" readonly="1"/>
+                        </group>
+                    </group>
+                    <group string="Diagnostics" invisible="not last_error">
+                        <field name="last_error" string="Last Error" readonly="1"
+                               widget="text"/>
+                    </group>
+                    <group string="Audit Notes" invisible="not process_notes">
+                        <field name="process_notes" string="" readonly="1"
+                               widget="text"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- ── Action ────────────────────────────────────────────────────── -->
+    <record id="action_lead_olx_accounts" model="ir.actions.act_window">
+        <field name="name">OLX Accounts</field>
+        <field name="res_model">lead.olx.account</field>
+        <field name="view_mode">list,form</field>
+        <field name="context">{'active_test': False}</field>
+    </record>
+
+    <!-- ── Menu item (under existing Configuration section) ──────────── -->
+    <menuitem id="menu_olx_accounts_config"
+              name="OLX Accounts"
+              parent="leads.menu_config_section"
+              action="action_lead_olx_accounts"
+              sequence="20"
+              groups="leads.group_lead_score_manager"/>
+
+</odoo>

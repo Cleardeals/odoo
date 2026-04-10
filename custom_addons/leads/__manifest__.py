@@ -1,6 +1,6 @@
 {
     "name": "Lead Scoring",
-    "version": "1.4.0",
+    "version": "1.5.0",
     "depends": ["base", "web", "mail", "lead_suggestor", "properties"],
     "author": "Nirat Patel",
     "category": "Sales",
@@ -18,6 +18,8 @@
         "data/new_portal_lead_cron.xml",
         "data/pull_leads_cron.xml",
         "data/webhook_cron.xml",
+        "data/olx_account_cron.xml",
+        "data/olx_accounts_data.xml",
         # 3. Wizard Views
         "views/lead_score_bq_wizard_views.xml",
         "views/lead_csv_import_wizard_views.xml",
@@ -35,6 +37,8 @@
         "views/lead_site_visit_wizard_views.xml",
         "views/lead_site_visit_views.xml",
         "views/new_portal_lead_views.xml",
+        # OLX Account management
+        "views/lead_olx_account_views.xml",
         # Property form extension (tab added by this module)
         "views/property_base_inherit_views.xml",
     ],

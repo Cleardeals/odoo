@@ -3,10 +3,10 @@
 > Centralized lead ingestion, source normalization, assignment automation, RM execution workflows, and site visit lifecycle management for Cleardeals.
 
 **Module name:** `leads`  
-**Version:** `1.4.0`  
+**Version:** `1.5.0`  
 **Odoo version:** `19.0`  
 **License:** `LGPL-3`  
-**Last updated:** `2026-04-03`  
+**Last updated:** `2026-04-10`  
 **Owner:** Cleardeals Tech
 
 ---
@@ -34,6 +34,7 @@ The module also owns the complete **site visit lifecycle**: creating, rescheduli
 | `lead.site.visit` | Individual site visit appointment (scheduled, completed, cancelled, etc.) |
 | `lead.site.visit.status` | Configurable status taxonomy with semantic flags |
 | `lead.site.visit.feedback.option` | Feedback options tied to specific statuses |
+| `lead.olx.account` | OLX dealer account credentials and polling state |
 | `whatsapp.response` | WhatsApp response tracking and RM processing |
 
 ---
@@ -156,7 +157,7 @@ Each inquiry's reschedule chain is isolated by the `_check_reschedule_lineage` c
 ## Ingestion and processing flow
 
 ```text
-Portal webhook / Housing cron / CSV import
+Portal webhook / Housing cron / OLX cron / CSV import
     -> create_lead_if_not_duplicate()
     -> leads.new.create() with normalized source
     -> _process_lead_logic()
@@ -165,6 +166,58 @@ Portal webhook / Housing cron / CSV import
        -> if none configured, assign Administrator
     -> optional webhook dispatch / analytics consumption
 ```
+
+---
+
+## OLX lead integration
+
+Leads are polled from the OLX Business API (`https://business.olx.in`) using
+a rotating cron. Up to 15 dealer accounts are cycled. One account is processed
+per cron tick to stay within a 3-hour coverage window.
+
+### Authentication flow
+
+```
+POST /api/v1/auth/login  { login, password }
+    → { access_token, user_id }
+
+GET /api/v1/leads?startDate=DD/MM/YY&endDate=DD/MM/YY&userId=...&page=1&pageSize=100
+    → { data: { leads: [...], ads: [...] }, pagination: { totalPages: N } }
+```
+
+Required headers on every request: `api-version: 134`, `client-language: en-in`.
+
+### Account records (`lead.olx.account`)
+
+- Manage via `Leads > Lead Operations > OLX Accounts`.
+- Passwords are **write-only** in the UI — typed once and stored in
+  `ir.config_parameter` under `olx.account.<login>.password`. They are never
+  stored in a DB column and never exported.
+- An account is auto-disabled after **5 consecutive failures**. Re-enable it
+  manually once credentials are fixed; the `process_notes` field explains why
+  it was disabled.
+
+### OLX 500 = no leads
+
+The OLX API returns HTTP 500 (not 404) when an account has no leads in the
+requested date range. The cron treats a 500 from the leads endpoint as an
+empty result — it does **not** count as a failure.
+
+### Property matching
+
+Each OLX lead carries an `adId`. The cron sets this as `portal_property_id`
+and the standard `_resolve_property_from_source()` function looks up a
+`property.portal.listing` record with `portal_name='OLX'` and a matching
+`portal_listing_id`. If found, the lead is linked to the property and assigned
+to its RM; otherwise it goes to the OLX source's fallback RM.
+
+### Retroactive relink
+
+`PropertyPortalListingLeadRelink` (in `models/property_base_extend.py`) hooks
+`property.portal.listing.create` and `write`. Whenever a listing is added or
+its ID is corrected, all unlinked leads (`property_base_id=False`) matching
+that portal+ID are retroactively linked and their RM is updated. Leads that
+already have a `property_base_id` are never touched.
 
 ---
 
@@ -180,6 +233,8 @@ Portal webhook / Housing cron / CSV import
 | `housing.api.key` | Housing.com API key |
 | `housing.api.id` | Housing.com profile ID |
 | `n8n.new_lead_webhook_url` | Outbound webhook endpoint |
+| `olx.socks_proxy` | SOCKS5 proxy URL for OLX API calls (dev only). Set to `socks5h://127.0.0.1:9090` in dev; leave **empty** in production — the prod server IP is whitelisted with OLX directly. |
+| `olx.account.<login>.password` | OLX account password (one key per account). Written via the `lead.olx.account` form; never stored in a DB column. |
 
 ### Source routing setup
 

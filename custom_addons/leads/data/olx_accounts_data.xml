@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- OLX Dealer Accounts — seed data.
+     Passwords are intentionally absent here.
+     After deployment, set each account's password via:
+     Settings → OLX Accounts → [record] → Password field.
+     Passwords are stored in ir.config_parameter, never in the DB column.
+-->
+<odoo>
+    <data noupdate="1">
+
+        <record id="olx_account_mayuri" model="lead.olx.account">
+            <field name="name">Mayuri – 8866122078</field>
+            <field name="login">8866122078</field>
+            <field name="sequence">10</field>
+            <field name="active">True</field>
+        </record>
+
+        <record id="olx_account_yash" model="lead.olx.account">
+            <field name="name">Yash – 8866368108</field>
+            <field name="login">8866368108</field>
+            <field name="sequence">20</field>
+            <field name="active">True</field>
+        </record>
+
+        <record id="olx_account_lakhani" model="lead.olx.account">
+            <field name="name">Lakhani – 8487958243</field>
+            <field name="login">8487958243</field>
+            <field name="sequence">30</field>
+            <field name="active">True</field>
+        </record>
+
+        <record id="olx_account_khushi" model="lead.olx.account">
+            <field name="name">Khushi – 8160745862</field>
+            <field name="login">8160745862</field>
+            <field name="sequence">40</field>
+            <field name="active">True</field>
+        </record>
+
+        <record id="olx_account_vishal" model="lead.olx.account">
+            <field name="name">Vishal – 9099652266</field>
+            <field name="login">9099652266</field>
+            <field name="sequence">50</field>
+            <field name="active">True</field>
+        </record>
+
+        <record id="olx_account_chetna" model="lead.olx.account">
+            <field name="name">Chetna – 9054120327</field>
+            <field name="login">9054120327</field>
+            <field name="sequence">60</field>
+            <field name="active">True</field>
+        </record>
+
+        <record id="olx_account_jay" model="lead.olx.account">
+            <field name="name">Jay – 9998242618</field>
+            <field name="login">9998242618</field>
+            <field name="sequence">70</field>
+            <field name="active">True</field>
+        </record>
+
+        <record id="olx_account_abhi" model="lead.olx.account">
+            <field name="name">Abhi – 7436055806</field>
+            <field name="login">7436055806</field>
+            <field name="sequence">80</field>
+            <field name="active">True</field>
+        </record>
+
+        <record id="olx_account_bhoomika" model="lead.olx.account">
+            <field name="name">Bhoomika – 7016532264</field>
+            <field name="login">7016532264</field>
+            <field name="sequence">90</field>
+            <field name="active">True</field>
+        </record>
+
+        <record id="olx_account_shivani" model="lead.olx.account">
+            <field name="name">Shivani – 9601183548</field>
+            <field name="login">9601183548</field>
+            <field name="sequence">100</field>
+            <field name="active">True</field>
+        </record>
+
+        <record id="olx_account_vivek" model="lead.olx.account">
+            <field name="name">Vivek – 8401647877</field>
+            <field name="login">8401647877</field>
+            <field name="sequence">110</field>
+            <field name="active">True</field>
+        </record>
+
+        <record id="olx_account_aneri" model="lead.olx.account">
+            <field name="name">Aneri – 8128207075</field>
+            <field name="login">8128207075</field>
+            <field name="sequence">120</field>
+            <field name="active">True</field>
+        </record>
+
+        <record id="olx_account_naresh" model="lead.olx.account">
+            <field name="name">Naresh – 8401947877</field>
+            <field name="login">8401947877</field>
+            <field name="sequence">130</field>
+            <field name="active">True</field>
+        </record>
+
+        <record id="olx_account_dhruv" model="lead.olx.account">
+            <field name="name">Dhruv – 9104452244</field>
+            <field name="login">9104452244</field>
+            <field name="sequence">140</field>
+            <field name="active">True</field>
+        </record>
+
+        <record id="olx_account_shivraj" model="lead.olx.account">
+            <field name="name">Shivraj – 9558688728</field>
+            <field name="login">9558688728</field>
+            <field name="sequence">150</field>
+            <field name="active">True</field>
+        </record>
+
+    </data>
+</odoo>

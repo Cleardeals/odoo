@@ -5,6 +5,83 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ---
 
+## [1.5.0] - 2026-04-10
+
+### Added
+
+- **OLX Business API integration** — automated lead polling for up to 15 dealer accounts.
+  - New model `lead.olx.account` stores account credentials and polling state.
+    Passwords are **write-only** — stored in `ir.config_parameter` under
+    `olx.account.<login>.password`, never in a DB column.
+  - Cron job `_cron_rotate_olx_accounts` (every 12 minutes) selects the next active
+    account by `last_fetch_at ASC NULLS FIRST` and fetches the past day's leads.
+  - Auto-disables an account after 5 consecutive failures; records timestamp and error
+    in `process_notes` for operator review.
+  - Date range uses `DD/MM/YY` format as required by the OLX API. OLX HTTP 500 on the
+    leads endpoint is treated as "no leads" (not an error) because that is what the API
+    returns for empty result sets.
+  - `olx.socks_proxy` system parameter routes traffic through a SOCKS5 proxy in dev
+    (where the local IP is not whitelisted). Leave empty in production.
+  - `lead.olx.account` management UI accessible from `Leads > Lead Operations > OLX Accounts`.
+
+- **Retroactive lead relink on portal listing changes** (`PropertyPortalListingLeadRelink`
+  in `models/property_base_extend.py`):
+  - Hooks `property.portal.listing.create` and `.write`.
+  - When a listing is created or its `portal_listing_id` / `property_base_id` is updated,
+    all unlinked `leads.new` records (`property_base_id=False`) matching that portal + ID
+    are linked to the property and reassigned to its RM.
+  - Appends an audit note to `process_notes` on every relinked lead.
+  - Leads already linked are never overwritten.
+
+- **Test suite** — `tests/test_olx_leads.py` (32 tests across 4 test classes):
+  - `TestOlxLeadParsing` — phone normalization, ad enrichment, raw_data structure.
+  - `TestOlxAccountState` — failure tracking, auto-disable, rotation ordering.
+  - `TestOlxApiMocked` — HTTP-mocked tests for `_api_fetch_olx` and cron rotation.
+  - `TestPortalListingRelink` — retroactive relink on listing create/write.
+
+### Fixed
+
+- **In-method imports removed** from `new_portal_leads.py`:
+  `from datetime import date, timedelta` and `import json as _json` were inside method
+  bodies. Both now resolved at module level — `date` added to the top-level datetime
+  import; the in-method `json` alias removed (module-level `import json` already present).
+
+### Changed
+
+- `lead_olx_account.py`: magic number `5` for consecutive failure threshold replaced
+  with named constant `_CONSECUTIVE_FAILURE_THRESHOLD = 5` at module level.
+- Module ownership headers added to `lead_olx_account.py` and `property_base_extend.py`.
+- `README.md` updated: model table, OLX integration section, system parameters, and
+  ingestion flow diagram.
+
+### Validation
+
+- Module loads without errors: `python3 odoo-bin -u leads --stop-after-init` exit 0.
+- Live cron run end-to-end: 3 OLX leads fetched, created, and assigned correctly via
+  SOCKS5 proxy tunnel in dev.
+- Property matching and RM assignment verified for matched and unmatched ad IDs.
+
+### Files Added
+
+- `models/lead_olx_account.py`
+- `data/olx_account_cron.xml`
+- `data/olx_accounts_data.xml`
+- `data/pull_leads_cron.xml`
+- `views/lead_olx_account_views.xml`
+- `tests/test_olx_leads.py`
+
+### Files Updated
+
+- `models/new_portal_leads.py`
+- `models/property_base_extend.py`
+- `models/__init__.py`
+- `tests/__init__.py`
+- `security/ir.model.access.csv`
+- `__manifest__.py`
+- `README.md`
+
+---
+
 ## [1.3.1] - 2026-04-01
 
 ### Changed
