@@ -612,7 +612,7 @@ class NewPortalLead(models.Model):
         if resolved_property:
             lead_vals.setdefault("property_base_id", resolved_property.id)
 
-        time_limit = fields.Datetime.now() - timedelta(days=30)
+        time_limit = fields.Datetime.now() - timedelta(days=180)
         if resolved_property:
             domain = [
                 ("phone", "=", phone_clean),
@@ -641,7 +641,7 @@ class NewPortalLead(models.Model):
         Central Function to create leads.
         Checks for duplicates before creating new lead.
         Preferred duplicate key: same phone + same resolved property_base_id
-        in last 30 days (so multiple portal IDs on the same property don't
+        in last 180 days (so multiple portal IDs on the same property don't
         create duplicates).
 
         Fallback (when no portal-listing mapping exists yet):
@@ -691,23 +691,90 @@ class NewPortalLead(models.Model):
         res = super().write(vals)
 
         if leads_to_stamp and first_contact_time:
-            leads_to_stamp.write(
-                {
-                    "first_contact_datetime": first_contact_time,
-                },
+            # Bypass the override so this silent internal write does not
+            # fire a second bus notification, which would trigger a second
+            # grouped list reload on every connected client and cause an
+            # OWL "Component is destroyed" race condition.
+            super(NewPortalLead, leads_to_stamp).write(
+                {"first_contact_datetime": first_contact_time}
             )
 
-        channel = "leads.new"
-        notification_type = "bus_notification"
-        message = {
-            "ids": self.ids,
-            "model": "leads.new",
-            "event": "write",
-        }
+        # Skip bus notification for internal-only field updates that have
+        # no visible effect on the list/form (webhook flag, process notes).
+        _SILENT_FIELDS = frozenset({"first_contact_datetime", "is_webhook_sent", "process_notes"})
+        if set(vals.keys()) - _SILENT_FIELDS:
+            channel = "leads.new"
+            notification_type = "bus_notification"
+            message = {
+                "ids": self.ids,
+                "model": "leads.new",
+                "event": "write",
+            }
+            self.env["bus.bus"]._sendone(channel, notification_type, message)
 
-        self.env["bus.bus"]._sendone(channel, notification_type, message)
+    def write(self, vals):
+        """
+        Override write to automatically log 'first_contact_datetime'
+        AND to send a bus notification.
+        """
+
+        leads_to_stamp = self.env["leads.new"]
+        first_contact_time = False
+        if "current_status" in vals and vals["current_status"] != "lead":
+            leads_to_stamp = self.filtered(lambda r: not r.first_contact_datetime)
+            if leads_to_stamp:
+                first_contact_time = fields.Datetime.now()
+
+        res = super().write(vals)
+
+        if leads_to_stamp and first_contact_time:
+            # Bypass the override so this silent internal write does not
+            # fire a second bus notification, which would trigger a second
+            # grouped list reload on every connected client and cause an
+            # OWL "Component is destroyed" race condition.
+            super(NewPortalLead, leads_to_stamp).write(
+                {"first_contact_datetime": first_contact_time}
+            )
+
+        # Skip bus notification for internal-only field updates that have
+        # no visible effect on the list/form (webhook flag, process notes).
+        _SILENT_FIELDS = frozenset({"first_contact_datetime", "is_webhook_sent", "process_notes"})
+        if set(vals.keys()) - _SILENT_FIELDS:
+            channel = "leads.new"
+            notification_type = "bus_notification"
+            message = {
+                "ids": self.ids,
+                "model": "leads.new",
+                "event": "write",
+            }
+            self.env["bus.bus"]._sendone(channel, notification_type, message)
 
         return res
+
+    def web_save(self, vals, specification, next_id=None):
+        """
+        Override web_save to handle lead reassignment.
+
+        When user_id is being changed (RM reassigns the lead to another RM),
+        the write succeeds because the record rule is evaluated against the
+        pre-write value (still the current user). However the immediate
+        read-back that web_save performs after the write would fail because
+        user_id now points to the new RM, violating the 'RM See Own' rule.
+
+        Using sudo() only for this one-time confirmation read keeps the strict
+        read rule intact everywhere else — the reassigning RM loses access the
+        moment they navigate away from the record.
+        """
+        reassigning = "user_id" in vals and vals["user_id"] != self.env.uid
+        if reassigning:
+            if self:
+                self.write(vals)
+            else:
+                self = self.create(vals)
+            if next_id:
+                self = self.browse(next_id)
+            return self.sudo().with_context(bin_size=True).web_read(specification)
+        return super().web_save(vals, specification, next_id=next_id)
 
     # --- Lead Processing & Assignment ---
 
@@ -1229,11 +1296,13 @@ class NewPortalLead(models.Model):
                 "lead_id": lead.id,
                 "name": lead.name,
                 "phone": lead.phone,
+                "email": lead.email or False,
                 "source": lead.source_id.name,
                 "portal_property_id": lead.portal_property_id,
+                "project_name": lead.project_name or False,
                 "rm_name": rm_name,
-                # Property Info
-                "property_id": prop_id,
+                # Property Info (property.base — the new canonical model)
+                "property_base_id": prop_id,
                 "property_tag": prop_tag,
                 "property_bhk": prop_bhk,
                 "property_location": prop_location,

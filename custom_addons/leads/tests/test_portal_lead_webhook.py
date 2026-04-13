@@ -67,6 +67,12 @@ class TestPortalLeadWebhook(PortalLeadTestCase):
         self.assertEqual(target_lead_data['property_bhk'], '3 BHK')
         self.assertIn(self.rm_user.name, target_lead_data['rm_name'])
         self.assertEqual(target_lead_data['property_tag'], self.test_property.property_tag)
+        self.assertEqual(target_lead_data['source'], self.source_magicbricks.name,
+                         "Webhook must send source name, not portal listing ID")
+        self.assertIn('email', target_lead_data, "Webhook payload must include email field")
+        self.assertIn('project_name', target_lead_data, "Webhook payload must include project_name field")
+        self.assertEqual(target_lead_data['property_base_id'], self.test_property.id,
+                         "Webhook must send property.base ID under key 'property_base_id', not legacy property.inventory ID")
 
     def test_03_webhook_skips_if_url_not_configured(self):
         """Should skip webhook if URL not configured."""
