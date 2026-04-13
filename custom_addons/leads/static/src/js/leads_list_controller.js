@@ -8,46 +8,54 @@ import { onWillUnmount } from "@odoo/owl";
 export class LeadsNewListController extends ListController {
     setup() {
         super.setup();
-        this.autoRefreshInterval = null;
+        this._refreshTimeout = null;
+        this._refreshInProgress = false;
         this.isDestroyed = false;
-        
-        // Use Owl's onWillUnmount hook
+
         onWillUnmount(() => {
             this.isDestroyed = true;
-            if (this.autoRefreshInterval) {
-                clearInterval(this.autoRefreshInterval);
-                this.autoRefreshInterval = null;
+            if (this._refreshTimeout) {
+                clearTimeout(this._refreshTimeout);
+                this._refreshTimeout = null;
             }
         });
-        
-        this.startAutoRefresh();
+
+        this._scheduleNextRefresh();
     }
 
-    startAutoRefresh() {
-        // Clear any existing interval
-        if (this.autoRefreshInterval) {
-            clearInterval(this.autoRefreshInterval);
+    _scheduleNextRefresh() {
+        if (this.isDestroyed) return;
+
+        // Schedule the next refresh AFTER the previous one completes.
+        // Using setTimeout instead of setInterval prevents overlapping loads.
+        this._refreshTimeout = setTimeout(() => this._doRefresh(), 50000);
+    }
+
+    async _doRefresh() {
+        if (
+            this.isDestroyed ||
+            this._refreshInProgress ||
+            document.visibilityState !== "visible" ||
+            !this.model?.root ||
+            this.model.root.editedRecord
+        ) {
+            // Skip this tick but schedule the next one.
+            this._scheduleNextRefresh();
+            return;
         }
 
-        // Set auto-refresh interval (50 second)
-        const refreshInterval = 50000; // 50 second in milliseconds
-        
-        this.autoRefreshInterval = setInterval(() => {
-            // Only refresh if component is not destroyed, view is visible and not in edit mode
-            if (!this.isDestroyed && 
-                document.visibilityState === "visible" && 
-                this.model?.root && 
-                !this.model.root.editedRecord) {
-                try {
-                    this.model.root.load();
-                } catch (error) {
-                    // Component was destroyed during load, clear interval
-                    console.log("Auto-refresh stopped due to component destruction");
-                    clearInterval(this.autoRefreshInterval);
-                    this.autoRefreshInterval = null;
-                }
+        this._refreshInProgress = true;
+        try {
+            await this.model.root.load();
+        } catch {
+            // Component was destroyed during load, or network error — ignore.
+        } finally {
+            this._refreshInProgress = false;
+            // Only schedule the next refresh if the component is still alive.
+            if (!this.isDestroyed) {
+                this._scheduleNextRefresh();
             }
-        }, refreshInterval);
+        }
     }
 }
 
