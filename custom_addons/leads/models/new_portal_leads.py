@@ -215,6 +215,7 @@ class NewPortalLead(models.Model):
         string="Property Tag",
         readonly=True,
         store=True,
+        compute_sudo=True,
     )
 
     base_property_bhk = fields.Char(
@@ -222,6 +223,7 @@ class NewPortalLead(models.Model):
         string="Property BHK",
         readonly=True,
         store=True,
+        compute_sudo=True,
     )
 
     base_property_location = fields.Char(
@@ -229,6 +231,7 @@ class NewPortalLead(models.Model):
         string="Property Location",
         readonly=True,
         store=True,
+        compute_sudo=True,
     )
 
     base_property_city = fields.Char(
@@ -236,6 +239,7 @@ class NewPortalLead(models.Model):
         string="Property City",
         readonly=True,
         store=True,
+        compute_sudo=True,
     )
 
     base_property_owner_name = fields.Char(
@@ -243,6 +247,7 @@ class NewPortalLead(models.Model):
         string="Property Owner",
         readonly=True,
         store=True,
+        compute_sudo=True,
     )
 
     base_property_link = fields.Char(
@@ -250,6 +255,7 @@ class NewPortalLead(models.Model):
         string="Property Link",
         readonly=True,
         store=True,
+        compute_sudo=True,
     )
 
     process_notes = fields.Text("Processing Notes")
