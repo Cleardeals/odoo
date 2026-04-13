@@ -51,7 +51,7 @@ class TestPortalLeadDuplicateDetection(PortalLeadTestCase):
         self.assertTrue(lead2, "Should create lead with different property IDs")
 
     def test_03_duplicate_same_phone_and_property_recent(self):
-        """Same phone + property within 30 days should be duplicate (return False)."""
+        """Same phone + property within 180 days should be duplicate (return False)."""
         # 1. Create Base Lead
         self.env["leads.new"].create_lead_if_not_duplicate(
             {
@@ -73,8 +73,8 @@ class TestPortalLeadDuplicateDetection(PortalLeadTestCase):
         lead2 = self.env["leads.new"].create_lead_if_not_duplicate(lead2_vals)
         self.assertFalse(lead2, "Should NOT create duplicate lead (Recent)")
 
-    def test_04_not_duplicate_after_30_days(self):
-        """Same lead after 30 days should be allowed."""
+    def test_04_not_duplicate_after_180_days(self):
+        """Same lead after 180 days should be allowed."""
         # 1. Create Old Lead
         old_lead = self.env["leads.new"].create_lead_if_not_duplicate(
             {
@@ -85,8 +85,8 @@ class TestPortalLeadDuplicateDetection(PortalLeadTestCase):
             },
         )
 
-        # 2. Force date to 31 days ago via SQL to bypass ORM readonly check
-        old_date = fields.Datetime.now() - timedelta(days=31)
+        # 2. Force date to 181 days ago via SQL to bypass ORM readonly check
+        old_date = fields.Datetime.now() - timedelta(days=181)
         self.env.cr.execute(
             "UPDATE leads_new SET create_date = %s WHERE id = %s",
             (old_date, old_lead.id),
@@ -102,7 +102,7 @@ class TestPortalLeadDuplicateDetection(PortalLeadTestCase):
         }
 
         new_lead = self.env["leads.new"].create_lead_if_not_duplicate(new_lead_vals)
-        self.assertTrue(new_lead, "Should create lead after 30 days expiration")
+        self.assertTrue(new_lead, "Should create lead after 180 days expiration")
 
     def test_05_duplicate_detection_returns_none(self):
         """Duplicate detection should return None and not create a new lead."""
