@@ -149,10 +149,13 @@ which the web client displays as a pop-up notification. The lead was successfull
 reassigned (the write did go through) but the UI shows an error, confusing the RM.
 
 **Why `sudo()` here is safe and not a security hole:** `sudo()` applies only to the
-confirmation read that returns data already visible to the RM (they just edited the record).
-The strict read rule continues to apply on every subsequent request — the reassigning RM
-loses access to the lead the moment they navigate away, because the rule checks `user_id`
-at read time and `user_id` no longer matches.
+confirmation read of the exact record that was just written (identified by `self` before
+the write). `next_id` is explicitly **not** honoured in the reassigning branch — doing so
+would allow the caller to supply an arbitrary client-controlled ID and read any record in
+the database with `sudo()`, bypassing the "RM See Own" rule entirely. The strict read rule
+continues to apply on every subsequent request — the reassigning RM loses access to the
+lead the moment they navigate away, because the rule checks `user_id` at read time and
+`user_id` no longer matches.
 
 ### Alternative approaches considered
 
