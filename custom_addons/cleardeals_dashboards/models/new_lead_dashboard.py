@@ -116,7 +116,7 @@ class NewLeadDashboard(models.Model):
             _logger.error("Google Cloud BigQuery library not installed.")
             return
 
-        days = 60
+        days = 10
         self._sync_leads_from_source(days=days)
         self.fetch_bq_events(days=days)
         self.cron_fetch_template_stats(days=days)
@@ -148,12 +148,14 @@ class NewLeadDashboard(models.Model):
     def fetch_bq_events(self, days=5):
         _logger.info(f"Starting Dashboard Sync: Fetching BQ events for the last {days} days...")
 
-        # 1. Build Phone Map via raw SQL — avoids loading all dashboard ORM objects into memory
+        # 1. Build Phone Map via raw SQL — only include leads within the same time window
+        #    as the BQ query so the IN clause stays small (avoids sending 40k+ phones to BQ)
         self.env.cr.execute("""
             SELECT id, lead_phone
             FROM leads_new_dashboard
             WHERE lead_phone IS NOT NULL AND lead_phone != ''
-        """)
+              AND lead_create_date >= NOW() - INTERVAL '%s days'
+        """, (days,))
         phone_map = {}
         for dash_id, phone in self.env.cr.fetchall():
             clean = ''.join(filter(str.isdigit, phone))[-10:]
