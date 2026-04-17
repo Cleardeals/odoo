@@ -147,29 +147,28 @@ class NewLeadDashboard(models.Model):
 
     def fetch_bq_events(self, days=5):
         _logger.info(f"Starting Dashboard Sync: Fetching BQ events for the last {days} days...")
-        
-        # 1. Fetch ALL Dashboards
-        dashboards = self.search([])
-        if not dashboards: return
 
-        # 2. Build Phone Map (One Phone -> LIST of Dashboards)
+        # 1. Build Phone Map via raw SQL — avoids loading all dashboard ORM objects into memory
+        self.env.cr.execute("""
+            SELECT id, lead_phone
+            FROM leads_new_dashboard
+            WHERE lead_phone IS NOT NULL AND lead_phone != ''
+        """)
         phone_map = {}
-        for d in dashboards:
-            if d.lead_phone:
-                clean = ''.join(filter(str.isdigit, d.lead_phone))[-10:]
-                if len(clean) == 10:
-                    if clean not in phone_map:
-                        phone_map[clean] = []
-                    phone_map[clean].append(d)
-        
-        if not phone_map: return
+        for dash_id, phone in self.env.cr.fetchall():
+            clean = ''.join(filter(str.isdigit, phone))[-10:]
+            if len(clean) == 10:
+                phone_map.setdefault(clean, []).append(dash_id)
 
-        # 3. Build SQL "IN" Clause
+        if not phone_map:
+            return
+
+        # 2. Build SQL "IN" Clause
         phones_list = ", ".join(f"'{p}'" for p in phone_map.keys())
 
         client = bigquery.Client(project=BIGQUERY_PROJECT_ID)
-        
-        # 4. QUERY BQ
+
+        # 3. QUERY BQ — buffer results once to avoid a second network round-trip
         query = f"""
             SELECT event_id, event_timestamp, event_type, message_direction, message_content, conversation_id, raw_payload, failure_reason,
                 COALESCE(
@@ -181,44 +180,40 @@ class NewLeadDashboard(models.Model):
             WHERE RIGHT(conversation_id, 10) IN ({phones_list})
             AND ingestion_timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {days} DAY)
         """
-        
+
         try:
-            results = client.query(query).result()
+            results = list(client.query(query).result())
         except Exception as e:
             _logger.error(f"BQ Query Error: {e}")
             return
 
-        # 5. Process Results
-        Event = self.env['leads.new.event'].sudo()
-        vals_list = []
-        
-        # Optimization: Fetch all event_ids present in Odoo to save memory
+        if not results:
+            return
+
+        # 4. Check existing event_ids via raw SQL in chunks — avoids loading ORM objects
         bq_event_ids = [str(r.event_id) for r in results]
-        if not bq_event_ids: return
+        existing_keys = set()
+        _CHUNK = 5000
+        for i in range(0, len(bq_event_ids), _CHUNK):
+            self.env.cr.execute(
+                "SELECT dashboard_id, event_id FROM leads_new_event WHERE event_id = ANY(%s)",
+                (bq_event_ids[i:i + _CHUNK],)
+            )
+            existing_keys.update(self.env.cr.fetchall())
 
-        # Search existing events to prevent duplicates
-        existing_records = Event.search([('event_id', 'in', bq_event_ids)])
-        # Create a "Composite Key" set: (dashboard_id, event_id)
-        existing_keys = set((r.dashboard_id.id, r.event_id) for r in existing_records)
-        
-        # Reset iterator
-        results = client.query(query).result()
-
+        # 5. Build vals list
+        vals_list = []
         for row in results:
             raw_bq_phone = str(row.conversation_id)
-            if raw_bq_phone.endswith('.0'): raw_bq_phone = raw_bq_phone[:-2]
+            if raw_bq_phone.endswith('.0'):
+                raw_bq_phone = raw_bq_phone[:-2]
             clean_bq_phone = ''.join(filter(str.isdigit, raw_bq_phone))[-10:]
-            
-            # Get ALL dashboards for this phone
-            target_dashboards = phone_map.get(clean_bq_phone, [])
-            
-            for dash_rec in target_dashboards:
-                # Check for duplicates on THIS specific dashboard
-                if (dash_rec.id, str(row.event_id)) in existing_keys:
-                    continue
 
+            for dash_id in phone_map.get(clean_bq_phone, []):
+                if (dash_id, str(row.event_id)) in existing_keys:
+                    continue
                 vals_list.append({
-                    'dashboard_id': dash_rec.id,
+                    'dashboard_id': dash_id,
                     'event_id': str(row.event_id),
                     'correlation_id': row.correlation_id or False,
                     'event_timestamp': bq_timestamp_to_odoo(row.event_timestamp),
@@ -227,12 +222,20 @@ class NewLeadDashboard(models.Model):
                     'message_content': row.message_content or "",
                     'template_name': row.template_name or False,
                     'failure_reason': row.failure_reason or False,
-                    'raw_payload': row.raw_payload or ""
+                    'raw_payload': row.raw_payload or "",
                 })
 
-        if vals_list:
-            Event.create(vals_list)
-            _logger.info(f"Synced {len(vals_list)} events across {len(phone_map)} phone numbers.")
+        if not vals_list:
+            return
+
+        # 6. Batch creates to limit peak ORM memory — 500 records per batch
+        Event = self.env['leads.new.event'].sudo()
+        _BATCH = 500
+        for i in range(0, len(vals_list), _BATCH):
+            Event.create(vals_list[i:i + _BATCH])
+            self.env.invalidate_all()
+
+        _logger.info(f"Synced {len(vals_list)} events across {len(phone_map)} phone numbers.")
 
     @api.model
     def cron_fetch_template_stats(self, days=7):
@@ -351,7 +354,11 @@ class NewLeadDashboard(models.Model):
         Stats = self.env['leads.new.template.stats'].sudo()
         updated_count = 0
         created_count = 0
-        
+
+        # Pre-load all existing (date, template_name) -> id in one query to avoid N+1
+        self.env.cr.execute("SELECT id, date::text, template_name FROM leads_new_template_stats")
+        existing_map = {(r[1], r[2]): r[0] for r in self.env.cr.fetchall()}
+
         # Calculate totals for logging
         total_sent_all = 0
         total_pending_all = 0
@@ -359,7 +366,7 @@ class NewLeadDashboard(models.Model):
         for row in results:
             if not row.template_name:
                 continue
-                
+
             vals = {
                 'date': row.date,
                 'template_name': row.template_name,
@@ -369,24 +376,20 @@ class NewLeadDashboard(models.Model):
                 'total_clicked': row.total_clicked,
                 'total_replied': row.total_replied,
                 'total_failed': row.total_failed,
-                # New Fields
                 'total_pending': row.total_pending,
                 'pending_phone_numbers': row.pending_numbers or ''
             }
-            
+
             total_sent_all += row.total_sent
             total_pending_all += row.total_pending
 
-            existing = Stats.search([
-                ('date', '=', row.date), 
-                ('template_name', '=', row.template_name)
-            ], limit=1)
-            
-            if existing:
-                existing.write(vals)
+            stat_id = existing_map.get((str(row.date), row.template_name))
+            if stat_id:
+                Stats.browse(stat_id).write(vals)
                 updated_count += 1
             else:
-                Stats.create(vals)
+                new_stat = Stats.create(vals)
+                existing_map[(str(row.date), row.template_name)] = new_stat.id
                 created_count += 1
 
         _logger.info(
