@@ -524,7 +524,7 @@ class LeadsNewInquiry(models.Model):
                 f"<td style='{td}'>{status_pill}</td>"
                 f"<td style='{td} font-weight:500;"
                 f" max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;'>"
-                f"{escape(visit.property_base_id.display_name or '—')}</td>"
+                f"{escape(visit.property_base_id.sudo().display_name or '—')}</td>"
                 f"<td style='{td} white-space:nowrap;'>"
                 f"{escape(visit.assigned_rm_id.name or '—')}</td>"
                 f"{inquiry_cell}"
