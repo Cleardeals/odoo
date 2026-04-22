@@ -357,8 +357,12 @@ class NewLeadDashboard(models.Model):
         updated_count = 0
         created_count = 0
 
-        # Pre-load all existing (date, template_name) -> id in one query to avoid N+1
-        self.env.cr.execute("SELECT id, date::text, template_name FROM leads_new_template_stats")
+        # Pre-load existing (date, template_name) -> id only for the synced date window
+        # to avoid a full-table scan as historical data accumulates
+        self.env.cr.execute(
+            "SELECT id, date::text, template_name FROM leads_new_template_stats WHERE date >= CURRENT_DATE - %s",
+            (days_int,)
+        )
         existing_map = {(r[1], r[2]): r[0] for r in self.env.cr.fetchall()}
 
         # Calculate totals for logging
