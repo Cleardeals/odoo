@@ -77,7 +77,7 @@ class LeadRecommendPropertyWizard(models.TransientModel):
                 "Source is required on the original inquiry.",
             )
 
-        duplicate = self.env["leads.new"].search(
+        duplicate = self.env["leads.new"].sudo().search(
             [
                 ("phone", "=", inquiry.phone),
                 ("property_base_id", "=", self.property_base_id.id),
