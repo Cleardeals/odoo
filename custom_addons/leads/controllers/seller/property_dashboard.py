@@ -29,13 +29,6 @@ _logger = logging.getLogger(__name__)
 
 _EMPTY_FEEDBACK = {None, "", "other", False}
 
-
-def _get_latest_active_visit(lead):
-    """Return the most recent non-superseded site visit for a leads.new record, or False."""
-    return lead.sudo().site_visit_ids.filtered(
-        lambda v: v.status_id.code != "superseded"
-    )[:1]
-
 # Status → display bucket used for KPI cards.
 # "lead" (initial / never contacted) is intentionally absent — those inquiries
 # count toward the total but not toward any specific sub-bucket KPI.
@@ -62,11 +55,6 @@ _STATUS_BUCKET = {
 def _serialize_lead(lead, rec_type="primary"):
     prop = lead.property_base_id
     parent = lead
-    visit = _get_latest_active_visit(lead)
-    s = visit.status_id if visit else None
-    feedback_code = (visit.feedback_option_id.code or None) if visit else None
-    feedback_general = feedback_code if (s and (s.is_cancelled_status or s.is_no_show_status)) else None
-    feedback_done = feedback_code if (s and s.is_completed_status) else None
     return {
         "type": rec_type,
         "lead_id": parent.id if parent else None,
@@ -86,9 +74,9 @@ def _serialize_lead(lead, rec_type="primary"):
         "site_visit_datetime": (
             lead.site_visit_date.isoformat() if lead.site_visit_date else None
         ),
-        "feedback_general": feedback_general,
-        "feedback_site_visit_done": feedback_done,
-        "remarks": (visit.feedback_note or None) if visit else None,
+        "feedback_general": lead.feedback_general or None,
+        "feedback_site_visit_done": lead.feedback_site_visit_done or None,
+        "remarks": lead.remarks or None,
     }
 
 
@@ -372,11 +360,6 @@ class PropertyActivityDashboardController(http.Controller):
         for row in list(primary_leads) + list(recommended):
             rec_type = row.inquiry_type or "primary"
             parent = row
-            visit = _get_latest_active_visit(row)
-            sv = visit.status_id if visit else None
-            feedback_code = (visit.feedback_option_id.code or None) if visit else None
-            feedback_done = feedback_code if (sv and sv.is_completed_status) else None
-            feedback_general = feedback_code if (sv and (sv.is_cancelled_status or sv.is_no_show_status)) else None
             writer.writerow([
                 rec_type,
                 row.create_date.strftime("%Y-%m-%d") if row.create_date else "",
@@ -386,9 +369,9 @@ class PropertyActivityDashboardController(http.Controller):
                 (parent.user_id.name if parent and parent.user_id else "") or "",
                 row.current_status or "",
                 row.site_visit_date_only.isoformat() if row.site_visit_date_only else "",
-                feedback_done or "",
-                feedback_general or "",
-                (visit.feedback_note or "") if visit else "",
+                row.feedback_site_visit_done or "",
+                row.feedback_general or "",
+                row.remarks or "",
             ])
 
         filename = f"property_activity_{prop.property_tag or property_id}.csv"
