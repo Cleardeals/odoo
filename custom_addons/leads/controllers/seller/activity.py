@@ -51,13 +51,26 @@ from ..shared.response_utils import error_response, paginate, success_response
 _logger = logging.getLogger(__name__)
 
 
+def _get_latest_active_visit(lead):
+    """Return the most recent non-superseded site visit for a leads.new record, or False."""
+    return lead.sudo().site_visit_ids.filtered(
+        lambda v: v.status_id.code != "superseded"
+    )[:1]
+
+
 def _serialize_primary_lead(lead) -> dict:
     """
     Serialize a leads.new record into the unified activity shape.
     """
     prop = lead.property_base_id
+    visit = _get_latest_active_visit(lead)
+    s = visit.status_id if visit else None
+    feedback_code = (visit.feedback_option_id.code or None) if visit else None
+    feedback_general = feedback_code if (s and (s.is_cancelled_status or s.is_no_show_status)) else None
+    feedback_done = feedback_code if (s and s.is_completed_status) else None
     return {
         "type": "primary",
+        "lead_id": lead.id,
         "lead_name": lead.name or None,
         "lead_phone": lead.phone or None,
         "source": lead.source_id.name or None,
@@ -77,46 +90,52 @@ def _serialize_primary_lead(lead) -> dict:
         "site_visit_date": (
             lead.site_visit_date_only.isoformat() if lead.site_visit_date_only else None
         ),
-        "remarks": lead.remarks or None,
-        "feedback_general": lead.feedback_general or None,
-        "feedback_site_visit_done": lead.feedback_site_visit_done or None,
+        "remarks": (visit.feedback_note or None) if visit else None,
+        "feedback_general": feedback_general,
+        "feedback_site_visit_done": feedback_done,
     }
 
 
-def _serialize_recommended_lead(interest) -> dict:
-    """Serialise a lead.property.interest record into the unified activity shape."""
-    prop = interest.property_base_id
-    parent_lead = interest.lead_id
+def _serialize_recommended_lead(inquiry) -> dict:
+    """Serialise a recommended leads.new record into the unified activity shape."""
+    prop = inquiry.sudo().property_base_id
+    parent_lead = inquiry.sudo().parent_inquiry_id
+    visit = _get_latest_active_visit(inquiry)
+    s = visit.status_id if visit else None
+    feedback_code = (visit.feedback_option_id.code or None) if visit else None
+    feedback_general = feedback_code if (s and (s.is_cancelled_status or s.is_no_show_status)) else None
+    feedback_done = feedback_code if (s and s.is_completed_status) else None
     return {
         "type": "recommended",
+        "lead_id": inquiry.id,
         "lead_name": parent_lead.name if parent_lead else None,
         "lead_phone": parent_lead.phone if parent_lead else None,
         "source": parent_lead.source_id.name if parent_lead else None,
         "property_tag": prop.property_tag if prop else None,
         "property_bhk": prop.bhk if prop else None,
         "property_location": prop.location if prop else None,
-        # For recommended, the inquiry datetime is when the interest record was created
+        # For recommended, inquiry_datetime is when the recommended inquiry was created
         "inquiry_datetime": (
-            interest.create_date.isoformat() if interest.create_date else None
+            inquiry.create_date.isoformat() if inquiry.create_date else None
         ),
-        "current_status": interest.current_status or None,
-        # first_contacted_on lives on the parent lead
+        "current_status": inquiry.current_status or None,
+        # first_contacted_on lives on the parent primary lead
         "first_contacted_on": (
             parent_lead.first_contact_datetime.isoformat()
             if parent_lead and parent_lead.first_contact_datetime
             else None
         ),
         "site_visit_datetime": (
-            interest.site_visit_date.isoformat() if interest.site_visit_date else None
+            inquiry.site_visit_date.isoformat() if inquiry.site_visit_date else None
         ),
         "site_visit_date": (
-            interest.site_visit_date_only.isoformat()
-            if interest.site_visit_date_only
+            inquiry.site_visit_date_only.isoformat()
+            if inquiry.site_visit_date_only
             else None
         ),
-        "remarks": interest.remarks or None,
-        "feedback_general": interest.feedback_general or None,
-        "feedback_site_visit_done": interest.feedback_site_visit_done or None,
+        "remarks": (visit.feedback_note or None) if visit else None,
+        "feedback_general": feedback_general,
+        "feedback_site_visit_done": feedback_done,
     }
 
 

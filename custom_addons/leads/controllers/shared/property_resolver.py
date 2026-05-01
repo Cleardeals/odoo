@@ -114,6 +114,7 @@ def get_primary_leads_for_tags(env, property_tags: list[str]):
         .search(
             [
                 ("property_base_id", "in", props.ids),
+                ("inquiry_type", "=", "primary"),
             ],
         )
     )
@@ -121,8 +122,8 @@ def get_primary_leads_for_tags(env, property_tags: list[str]):
 
 def get_recommended_leads_for_tags(env, property_tags: list[str]):
     """
-    Return all lead.property.interest records where the recommended
-    property belongs to the seller's portfolio.
+    Return all leads.new records with inquiry_type='recommended' where the
+    recommended property belongs to the seller's portfolio.
 
     Parameters
     ----------
@@ -131,10 +132,10 @@ def get_recommended_leads_for_tags(env, property_tags: list[str]):
 
     Returns
     -------
-    lead.property.interest recordset
+    leads.new recordset  (inquiry_type='recommended')
     """
     if not property_tags:
-        return env["lead.property.interest"].sudo().browse([])
+        return env["leads.new"].sudo().browse([])
 
     props = (
         env["property.base"]
@@ -147,11 +148,12 @@ def get_recommended_leads_for_tags(env, property_tags: list[str]):
     )
 
     return (
-        env["lead.property.interest"]
+        env["leads.new"]
         .sudo()
         .search(
             [
                 ("property_base_id", "in", props.ids),
+                ("inquiry_type", "=", "recommended"),
             ],
         )
     )

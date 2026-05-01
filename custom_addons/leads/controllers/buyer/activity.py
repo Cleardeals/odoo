@@ -80,6 +80,13 @@ from ..shared.response_utils import error_response, success_response
 _logger = logging.getLogger(__name__)
 
 
+def _get_latest_active_visit(lead):
+    """Return the most recent non-superseded site visit for a leads.new record, or False."""
+    return lead.sudo().site_visit_ids.filtered(
+        lambda v: v.status_id.code != "superseded"
+    )[:1]
+
+
 def _serialize_property(prop) -> dict | None:
     if not prop:
         return None
@@ -92,31 +99,42 @@ def _serialize_property(prop) -> dict | None:
     }
 
 
-def _serialize_recommended_interest(interest) -> dict:
-    prop = interest.property_base_id
+def _serialize_recommended_lead(inquiry) -> dict:
+    prop = inquiry.sudo().property_base_id or None
+    visit = _get_latest_active_visit(inquiry)
     return {
+        "interest_id": inquiry.id,
         "property_tag": prop.property_tag if prop else None,
         "bhk": prop.bhk if prop else None,
         "location": prop.location if prop else None,
         "city": prop.city if prop else None,
-        "current_status": interest.current_status or None,
+        "property_link": prop.property_link if prop else None,
+        "current_status": inquiry.current_status or None,
         "site_visit_datetime": (
-            interest.site_visit_date.isoformat() if interest.site_visit_date else None
+            inquiry.site_visit_date.isoformat() if inquiry.site_visit_date else None
         ),
         "site_visit_date": (
-            interest.site_visit_date_only.isoformat()
-            if interest.site_visit_date_only
+            inquiry.site_visit_date_only.isoformat()
+            if inquiry.site_visit_date_only
             else None
         ),
+        "remarks": (visit.feedback_note or None) if visit else None,
     }
 
 
 def _serialize_primary_lead(lead) -> dict:
     prop = lead.property_base_id or None
+    visit = _get_latest_active_visit(lead)
 
-    recommended = [_serialize_recommended_interest(i) for i in lead.interest_ids]
+    s = visit.status_id if visit else None
+    feedback_code = (visit.feedback_option_id.code or None) if visit else None
+    feedback_general = feedback_code if (s and (s.is_cancelled_status or s.is_no_show_status)) else None
+    feedback_done = feedback_code if (s and s.is_completed_status) else None
+
+    recommended = [_serialize_recommended_lead(c) for c in lead.sudo().child_inquiry_ids]
 
     return {
+        "lead_id": lead.id,
         "lead_name": lead.name or None,
         "source": lead.source_id.name or None,
         "inquiry_datetime": (
@@ -128,6 +146,9 @@ def _serialize_primary_lead(lead) -> dict:
             if lead.first_contact_datetime
             else None
         ),
+        "remarks": (visit.feedback_note or None) if visit else None,
+        "feedback_general": feedback_general,
+        "feedback_site_visit_done": feedback_done,
         "has_property": bool(prop),
         "property": _serialize_property(prop),
         "site_visit_datetime": (
@@ -163,7 +184,10 @@ class BuyerActivityController(http.Controller):
         leads = (
             request.env["leads.new"]
             .sudo()
-            .search([("phone", "=", phone)], order="create_date desc")
+            .search(
+                [("phone", "=", phone), ("inquiry_type", "=", "primary")],
+                order="create_date desc",
+            )
         )
 
         if not leads:
@@ -184,20 +208,26 @@ class BuyerActivityController(http.Controller):
             # Count property touchpoints
             if lead.property_base_id:
                 total_properties += 1
-            total_properties += len(lead.interest_ids)
+            total_properties += len(lead.sudo().child_inquiry_ids)
 
-            # Count visit milestones across primary lead
-            if lead.current_status == "site_visit_scheduled":
-                site_visits_scheduled += 1
-            if lead.current_status == "site_visit_done":
-                site_visits_done += 1
-
-            # Count visit milestones across recommended interests
-            for interest in lead.interest_ids:
-                if interest.current_status == "site_visit_scheduled":
+            # Count visit milestones for the primary lead using live visit status flags
+            primary_visit = _get_latest_active_visit(lead)
+            if primary_visit:
+                ps = primary_visit.status_id
+                if ps.is_scheduled_status or ps.is_reschedule_status:
                     site_visits_scheduled += 1
-                if interest.current_status == "site_visit_done":
+                elif ps.is_completed_status:
                     site_visits_done += 1
+
+            # Count visit milestones for each recommended child inquiry
+            for child in lead.sudo().child_inquiry_ids:
+                child_visit = _get_latest_active_visit(child)
+                if child_visit:
+                    cs = child_visit.status_id
+                    if cs.is_scheduled_status or cs.is_reschedule_status:
+                        site_visits_scheduled += 1
+                    elif cs.is_completed_status:
+                        site_visits_done += 1
 
         data = {
             "buyer_phone": phone,

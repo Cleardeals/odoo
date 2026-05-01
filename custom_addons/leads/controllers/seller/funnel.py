@@ -164,12 +164,12 @@ class SellerFunnelController(http.Controller):
             status = lead.current_status or "other"
             stage_counts[status] += 1
 
-        recommended_interests = get_recommended_leads_for_tags(request.env, tags)
-        for interest in recommended_interests:
-            status = interest.current_status or "other"
+        recommended_leads = get_recommended_leads_for_tags(request.env, tags)
+        for inquiry in recommended_leads:
+            status = inquiry.current_status or "other"
             stage_counts[status] += 1
 
-        total = len(primary_leads) + len(recommended_interests)
+        total = len(primary_leads) + len(recommended_leads)
 
         # Build stages dict — ensure all known stages are present even if zero
         def pct(count):

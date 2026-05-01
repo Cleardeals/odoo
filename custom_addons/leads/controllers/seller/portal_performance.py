@@ -122,18 +122,12 @@ class SellerPortalPerformanceController(http.Controller):
             source_data[source_name]["primary_leads"] += 1
             source_data[source_name]["statuses"][lead.current_status or "other"] += 1
 
-        recommended_interests = get_recommended_leads_for_tags(request.env, tags)
-        for interest in recommended_interests:
-            source_name = (
-                interest.lead_id.source_id.name
-                if interest.lead_id and interest.lead_id.source_id
-                else "Unknown"
-            )
+        recommended_leads = get_recommended_leads_for_tags(request.env, tags)
+        for inquiry in recommended_leads:
+            source_name = inquiry.source_id.name if inquiry.source_id else "Unknown"
             source_data[source_name]["total_leads"] += 1
             source_data[source_name]["recommended_leads"] += 1
-            source_data[source_name]["statuses"][
-                interest.current_status or "other"
-            ] += 1
+            source_data[source_name]["statuses"][inquiry.current_status or "other"] += 1
 
         serialised = {}
         for source_name, block in source_data.items():

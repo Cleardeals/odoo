@@ -95,8 +95,8 @@ class SellerSummaryController(http.Controller):
         # Primary leads (leads.new records linked to the owner's properties)
         primary_leads = get_primary_leads_for_tags(request.env, tags)
 
-        # Recommended leads (lead.property.interest)
-        recommended_interests = get_recommended_leads_for_tags(request.env, tags)
+        # Recommended leads — leads.new records with inquiry_type='recommended'
+        recommended_leads = get_recommended_leads_for_tags(request.env, tags)
 
         # Source breakdown
         source_breakdown = defaultdict(lambda: {"primary": 0, "recommended": 0})
@@ -105,14 +105,8 @@ class SellerSummaryController(http.Controller):
             source_name = lead.source_id.name if lead.source_id else "Unknown"
             source_breakdown[source_name]["primary"] += 1
 
-        # Recommended leads come via lead.property.interest; source lives on
-        # the parent leads.new record.
-        for interest in recommended_interests:
-            source_name = (
-                interest.lead_id.source_id.name
-                if interest.lead_id and interest.lead_id.source_id
-                else "Unknown"
-            )
+        for inquiry in recommended_leads:
+            source_name = inquiry.source_id.name if inquiry.source_id else "Unknown"
             source_breakdown[source_name]["recommended"] += 1
 
         data = {
@@ -120,9 +114,9 @@ class SellerSummaryController(http.Controller):
             "properties": tags,
             "tag_filter": tag_filter,
             "inquiries": {
-                "total": len(primary_leads) + len(recommended_interests),
+                "total": len(primary_leads) + len(recommended_leads),
                 "primary": len(primary_leads),
-                "recommended": len(recommended_interests),
+                "recommended": len(recommended_leads),
                 "source_breakdown": dict(source_breakdown),
             },
         }
