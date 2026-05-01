@@ -969,12 +969,12 @@ class TestSellerSiteVisitsAPI(PortalLeadTestCase):
                  leads.new flat fields automatically.
         ASSERT : leads.new.current_status == "site_visit_scheduled"
                  leads.new.site_visit_date  == the scheduled datetime
-                 The controller's _classify_visit() maps this to "upcoming".
+                 _classify_visit_new(visit, now) maps the visit to "upcoming".
 
         This verifies that the new model drives the seller API response correctly
         without any direct writes to leads.new snapshot fields.
         """
-        from odoo.addons.leads.controllers.seller.site_visits import _classify_visit
+        from odoo.addons.leads.controllers.seller.site_visits import _classify_visit_new
 
         now = datetime.now()
         lead = self.create_portal_lead(
@@ -986,7 +986,7 @@ class TestSellerSiteVisitsAPI(PortalLeadTestCase):
         )
         future_dt = now + timedelta(days=7)
 
-        self.env["lead.site.visit"].create(
+        visit = self.env["lead.site.visit"].create(
             {
                 "inquiry_id": lead.id,
                 "status_id": scheduled_status.id,
@@ -998,13 +998,8 @@ class TestSellerSiteVisitsAPI(PortalLeadTestCase):
         self.assertEqual(lead.current_status, "site_visit_scheduled")
         self.assertEqual(lead.site_visit_date, future_dt)
 
-        # The controller classifies this as "upcoming".
-        bucket = _classify_visit(
-            current_status=lead.current_status,
-            site_visit_date=lead.site_visit_date,
-            now=now,
-            feedback_general=lead.feedback_general,
-        )
+        # The controller classifies this as "upcoming" using the visit record directly.
+        bucket = _classify_visit_new(visit, now)
         self.assertEqual(bucket, "upcoming")
 
     def test_34_new_model_completed_visit_syncs_to_completed_bucket(self):
@@ -1013,12 +1008,12 @@ class TestSellerSiteVisitsAPI(PortalLeadTestCase):
         ACT    : Mark the visit 'completed'. Snapshot updates current_status
                  to "site_visit_done".
         ASSERT : leads.new.current_status == "site_visit_done"
-                 _classify_visit() maps this to "completed".
+                 _classify_visit_new(visit, now) maps it to "completed".
 
         Normal post-visit flow: RM marks visit done, snapshot flips the inquiry
         to site_visit_done, seller API shows it in the "completed" bucket.
         """
-        from odoo.addons.leads.controllers.seller.site_visits import _classify_visit
+        from odoo.addons.leads.controllers.seller.site_visits import _classify_visit_new
 
         now = datetime.now()
         lead = self.create_portal_lead(
@@ -1043,12 +1038,7 @@ class TestSellerSiteVisitsAPI(PortalLeadTestCase):
 
         self.assertEqual(lead.current_status, "site_visit_done")
 
-        bucket = _classify_visit(
-            current_status=lead.current_status,
-            site_visit_date=lead.site_visit_date,
-            now=now,
-            feedback_general=lead.feedback_general,
-        )
+        bucket = _classify_visit_new(visit, now)
         self.assertEqual(bucket, "completed")
 
     def test_35_reschedule_via_new_model_appears_in_upcoming_not_rescheduled(self):
@@ -1058,13 +1048,16 @@ class TestSellerSiteVisitsAPI(PortalLeadTestCase):
                  The model supersedes the original and creates a new 'scheduled' visit.
                  The snapshot receives current_status="site_visit_scheduled".
         ASSERT : leads.new.current_status == "site_visit_scheduled" (NOT "rescheduled")
-                 _classify_visit() returns "upcoming" for the new future date.
+                 _classify_visit_new(active_visit, now) returns "upcoming".
 
         Critical contract: the "rescheduled" bucket is NEVER populated by the new
         visit model. Reschedules always appear in "upcoming". The "rescheduled"
         bucket is legacy-only (pre-visit-model direct writes).
         """
-        from odoo.addons.leads.controllers.seller.site_visits import _classify_visit
+        from odoo.addons.leads.controllers.seller.site_visits import (
+            _classify_visit_new,
+            _get_latest_active_visit,
+        )
 
         now = datetime.now()
         lead = self.create_portal_lead(
@@ -1098,12 +1091,9 @@ class TestSellerSiteVisitsAPI(PortalLeadTestCase):
             "not 'rescheduled'. The 'rescheduled' bucket is legacy-only.",
         )
 
-        bucket = _classify_visit(
-            current_status=lead.current_status,
-            site_visit_date=lead.site_visit_date,
-            now=now,
-            feedback_general=lead.feedback_general,
-        )
+        # The controller gets the latest non-superseded visit and classifies it.
+        active_visit = _get_latest_active_visit(lead)
+        bucket = _classify_visit_new(active_visit, now)
         self.assertEqual(
             bucket,
             "upcoming",

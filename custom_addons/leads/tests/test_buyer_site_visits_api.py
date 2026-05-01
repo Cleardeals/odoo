@@ -888,7 +888,7 @@ class TestBuyerSiteVisitsAPI(PortalLeadTestCase):
                  leads.new flat fields automatically.
         ASSERT : leads.new.current_status == "site_visit_scheduled"
                  leads.new.site_visit_date  == the scheduled datetime
-                 The controller's _classify_visit() maps this to "upcoming".
+                 _classify_visit(visit, now) maps the visit to "upcoming".
 
         This verifies that the new model drives the API response correctly without
         any direct writes to leads.new snapshot fields.
@@ -904,7 +904,7 @@ class TestBuyerSiteVisitsAPI(PortalLeadTestCase):
         )
 
         future_dt = self.future_date
-        self.env["lead.site.visit"].create(
+        visit = self.env["lead.site.visit"].create(
             {
                 "inquiry_id": lead.id,
                 "status_id": scheduled_status.id,
@@ -916,13 +916,8 @@ class TestBuyerSiteVisitsAPI(PortalLeadTestCase):
         self.assertEqual(lead.current_status, "site_visit_scheduled")
         self.assertEqual(lead.site_visit_date, future_dt)
 
-        # The controller classifies this as "upcoming".
-        bucket = _classify_visit(
-            current_status=lead.current_status,
-            site_visit_date=lead.site_visit_date,
-            now=self.now,
-            feedback_general=lead.feedback_general,
-        )
+        # The controller classifies this as "upcoming" using the visit record directly.
+        bucket = _classify_visit(visit, self.now)
         self.assertEqual(bucket, "upcoming")
 
     def test_037_new_model_completed_visit_syncs_to_completed_bucket(self):
@@ -962,12 +957,8 @@ class TestBuyerSiteVisitsAPI(PortalLeadTestCase):
         # Snapshot must reflect the completed outcome.
         self.assertEqual(lead.current_status, "site_visit_done")
 
-        bucket = _classify_visit(
-            current_status=lead.current_status,
-            site_visit_date=lead.site_visit_date,
-            now=self.now,
-            feedback_general=lead.feedback_general,
-        )
+        # The controller classifies this as "completed" using the visit record directly.
+        bucket = _classify_visit(visit, self.now)
         self.assertEqual(bucket, "completed")
 
     def test_038_reschedule_via_new_model_appears_in_upcoming_not_rescheduled(self):
@@ -1019,13 +1010,11 @@ class TestBuyerSiteVisitsAPI(PortalLeadTestCase):
             "not 'rescheduled'. The 'rescheduled' bucket is legacy-only.",
         )
 
-        # The API classifies this as "upcoming" because the new visit is in the future.
-        bucket = _classify_visit(
-            current_status=lead.current_status,
-            site_visit_date=lead.site_visit_date,
-            now=self.now,
-            feedback_general=lead.feedback_general,
-        )
+        # The API classifies this as "upcoming" because the new (non-superseded) visit
+        # has a future datetime.  The controller reads from lead.site.visit directly.
+        from odoo.addons.leads.controllers.buyer.site_visits import _get_latest_active_visit
+        active_visit = _get_latest_active_visit(lead)
+        bucket = _classify_visit(active_visit, self.now)
         self.assertEqual(
             bucket,
             "upcoming",

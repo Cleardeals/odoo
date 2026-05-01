@@ -168,8 +168,16 @@ These values appear in `current_status` fields across all endpoints.
 
 ### Feedback fields
 
-`feedback_general` and `feedback_site_visit_done` contain feedback selected by the RM, or `null`.
-`feedback_general` is for feedback given before site visit done, mostly stored when site visit scheduled stage is present and `feedback_site_visit_done` is after the site visit has been done.
+Site-visit endpoints populate feedback from the `lead.site.visit` model:
+
+| Response field              | Source                                  | Description |
+|-----------------------------|-----------------------------------------|-------------|
+| `feedback_general`          | `visit.feedback_option_id.code`         | Feedback code for non-completed visits (cancelled / no-show reason) |
+| `feedback_site_visit_done`  | `visit.feedback_option_id.code`         | Feedback code when the visit is completed |
+| `remarks`                   | `visit.feedback_note`                   | Free-text note recorded by the RM |
+
+Both `feedback_general` and `feedback_site_visit_done` are populated from the same underlying field (`feedback_option_id.code`) — the response key used depends on which bucket the visit is classified into. Values are feedback option codes (e.g. `"negotiation_started"`, `"buyer_cancelled_interest"`).
+
 ---
 
 ## 5. Endpoints — Buyer
@@ -177,6 +185,8 @@ These values appear in `current_status` fields across all endpoints.
 ### 5.1 `GET /api/track/lead/site-visits`
 
 Returns all site visits for a buyer's phone number, classified into four timeline buckets.
+
+Data is read directly from the `lead.site.visit` model (not from the snapshot fields on `leads.new`), so feedback, cancellation reasons, and no-show statuses are always accurate.
 
 **Auth required:** Yes (`X-API-Key`)
 
@@ -206,41 +216,45 @@ Returns all site visits for a buyer's phone number, classified into four timelin
 
 #### Bucket classification logic
 
-| Bucket             | Condition                                                                                                          | Sort order |
-|--------------------|---------------------------------------------------------------------------------------------------------------------|------------|
-| `upcoming`         | `current_status = "site_visit_scheduled"` AND `site_visit_datetime` is in the future                              | ASC (soonest first) |
-| `pending_feedback` | `current_status = "site_visit_scheduled"` AND `site_visit_datetime` is in the past AND `feedback_general` is null/empty/`"other"` | ASC        |
-| `cancelled`        | `current_status = "site_visit_scheduled"` AND `site_visit_datetime` is in the past AND `feedback_general` is present | DESC (most recent first) |
-| `completed`        | `current_status = "site_visit_done"`                                                                              | DESC       |
+Classification is driven by the **status-type flags** on `lead.site.visit.status`, not by the `current_status` string snapshot on `leads.new`.
 
-> **Reschedules:** When a visit is rescheduled via `lead.site.visit`, the original visit is superseded and a new visit is created with `status="scheduled"`. `lead.site.visit._sync_inquiry_snapshot` writes `current_status="site_visit_scheduled"` with the new date to the inquiry snapshot, so the rescheduled visit surfaces in `upcoming` if its date is in the future. Records from before v1.3 with `current_status="rescheduled"` are not returned by this endpoint.
+| Bucket             | Status condition                                         | Date condition                  | Sort order |
+|--------------------|----------------------------------------------------------|---------------------------------|------------|
+| `upcoming`         | `status.is_scheduled` OR `status.is_rescheduled`         | `site_visit_datetime` in future | ASC (soonest first) |
+| `pending_feedback` | `status.is_scheduled` OR `status.is_rescheduled`         | `site_visit_datetime` in past   | ASC (oldest first) |
+| `cancelled`        | `status.is_cancelled` OR `status.is_no_show`             | —                               | DESC (most recent first) |
+| `completed`        | `status.is_completed`                                    | —                               | DESC       |
+
+> **Reschedules:** When a visit is rescheduled, the original visit is superseded and a new `lead.site.visit` record is created with `status="scheduled"` and the new datetime. The new visit appears in `upcoming` if its date is in the future. The superseded visit is excluded from results.
+>
+> **No-show:** A visit marked as "Did Not Show Up" is classified as `cancelled`, not `pending_feedback`. This was not correctly handled before v2.0.
 
 #### Visit object fields
 
 All buckets include this base set:
 
-| Field                  | Type              | Description                                               |
-|------------------------|-------------------|-----------------------------------------------------------|
-| `inquiry_type`         | `string`          | `"primary"` or `"recommended"`                            |
-| `lead_id`              | `integer`         | ID of the parent `leads.new` record                       |
-| `lead_name`            | `string \| null`  | Buyer name                                                |
-| `source`               | `string \| null`  | Lead source of origin (e.g. `"MagicBricks"`, `"99acres"`) |
-| `property_tag`         | `string \| null`  | Unique property identifier tag                            |
-| `property_bhk`         | `string \| null`  | Property size (e.g. `"2BHK"`)                             |
-| `property_location`    | `string \| null`  | Locality / micro-location                                 |
-| `property_city`        | `string \| null`  | City                                                      |
-| `site_visit_datetime`  | `string \| null`  | ISO 8601 datetime of the visit                            |
-| `site_visit_date`      | `string \| null`  | Date-only string (`YYYY-MM-DD`)                           |
-| `current_status`       | `string \| null`  | See [Lead Status Reference](#4-lead-status-reference)     |
-| `remarks`              | `string \| null`  | RM notes                                                  |
+| Field                  | Type              | Source                              | Description                                               |
+|------------------------|-------------------|-------------------------------------|-----------------------------------------------------------|
+| `inquiry_type`         | `string`          | `leads.new.inquiry_type`            | `"primary"` or `"recommended"`                            |
+| `lead_id`              | `integer`         | `leads.new.id`                      | ID of the parent `leads.new` record                       |
+| `lead_name`            | `string \| null`  | `leads.new.name`                    | Buyer name                                                |
+| `source`               | `string \| null`  | `leads.new.source_id.name`          | Lead source of origin (e.g. `"MagicBricks"`, `"99acres"`) |
+| `property_tag`         | `string \| null`  | `lead.site.visit.property_base_id`  | Unique property identifier tag                            |
+| `property_bhk`         | `string \| null`  | `property_base.bhk`                 | Property size (e.g. `"2BHK"`)                             |
+| `property_location`    | `string \| null`  | `property_base.location`            | Locality / micro-location                                 |
+| `property_city`        | `string \| null`  | `property_base.city`                | City                                                      |
+| `site_visit_datetime`  | `string \| null`  | `lead.site.visit.scheduled_datetime`| ISO 8601 datetime of the visit                            |
+| `site_visit_date`      | `string \| null`  | `lead.site.visit.scheduled_date`    | Date-only string (`YYYY-MM-DD`)                           |
+| `current_status`       | `string \| null`  | Derived from `status_id` flags      | `"site_visit_scheduled"` or `"site_visit_done"` (for display only — use bucket name for routing) |
+| `remarks`              | `string \| null`  | `lead.site.visit.feedback_note`     | Free-text RM note                                         |
 
 **Additional fields by bucket:**
 
-| Bucket             | Extra fields                                                                 |
-|--------------------|------------------------------------------------------------------------------|
-| `pending_feedback` | `note` — `Visit date has passed — awaiting RM feedback`                      |
-| `cancelled`        | `feedback_general`, `note` — `Visit did not occur due to buyer status`       |
-| `completed`        | `feedback_site_visit_done`; `remarks` only when `feedback_site_visit_done = "other"` |
+| Bucket             | Extra fields                                                                                  |
+|--------------------|-----------------------------------------------------------------------------------------------|
+| `pending_feedback` | `note` — `"Visit date has passed — awaiting RM feedback"`                                    |
+| `cancelled`        | `feedback_general` (`visit.feedback_option_id.code`), `note` — `"Visit did not occur due to buyer status"` |
+| `completed`        | `feedback_site_visit_done` (`visit.feedback_option_id.code`)                                  |
 
 #### Success example
 
@@ -569,24 +583,24 @@ All site visits for a seller's properties, classified into four timeline buckets
 }
 ```
 
-Bucket classification and sort order are identical to the [buyer site-visits endpoint](#51-get-apitrackleadsite-visits).
+Bucket classification and sort order are identical to the [buyer site-visits endpoint](#51-get-apitrackleadsite-visits). Data is read directly from `lead.site.visit` — not from the snapshot fields on `leads.new`.
 
 #### Visit object (seller perspective)
 
-> Seller records expose `lead_name` and `lead_phone` instead of `lead_id`. They include inquiry type in `source` (`primary`/`recommended`) and do not include `property_city`.
+> Seller records expose `lead_name` and `lead_phone` instead of `lead_id`. The `source` field carries the inquiry type (`"primary"`/`"recommended"`). Both primary and recommended inquiries managed via `leads.new` + `lead.site.visit` are returned. Legacy `lead.property.interest` records (pre-visit-model) are returned on the legacy snapshot path if they have a visit date.
 
-| Field                  | Type              | Description                           |
-|------------------------|-------------------|---------------------------------------|
-| `source`               | `string`          | `"primary"` or `"recommended"`        |
-| `lead_name`            | `string \| null`  | Buyer name                            |
-| `lead_phone`           | `string \| null`  | Buyer phone number                    |
-| `property_tag`         | `string \| null`  | Property tag                          |
-| `property_bhk`         | `string \| null`  | Property size                         |
-| `property_location`    | `string \| null`  | Locality                              |
-| `site_visit_datetime`  | `string \| null`  | ISO 8601 datetime                     |
-| `site_visit_date`      | `string \| null`  | Date-only string                      |
-| `current_status`       | `string \| null`  | Lead status                           |
-| `remarks`              | `string \| null`  | RM notes                              |
+| Field                  | Type              | Source                                | Description                           |
+|------------------------|-------------------|---------------------------------------|---------------------------------------|
+| `source`               | `string`          | `leads.new.inquiry_type`              | `"primary"` or `"recommended"`        |
+| `lead_name`            | `string \| null`  | `leads.new.name`                      | Buyer name                            |
+| `lead_phone`           | `string \| null`  | `leads.new.phone`                     | Buyer phone number                    |
+| `property_tag`         | `string \| null`  | `lead.site.visit.property_base_id`    | Property tag                          |
+| `property_bhk`         | `string \| null`  | `property_base.bhk`                   | Property size                         |
+| `property_location`    | `string \| null`  | `property_base.location`              | Locality                              |
+| `site_visit_datetime`  | `string \| null`  | `lead.site.visit.scheduled_datetime`  | ISO 8601 datetime                     |
+| `site_visit_date`      | `string \| null`  | `lead.site.visit.scheduled_date`      | Date-only string                      |
+| `current_status`       | `string \| null`  | Derived from `status_id` flags        | `"site_visit_scheduled"` or `"site_visit_done"` |
+| `remarks`              | `string \| null`  | `lead.site.visit.feedback_note`       | Free-text RM note                     |
 
 Additional per-bucket fields are the same as the buyer endpoint (`note`, `feedback_general`, `feedback_site_visit_done`).
 

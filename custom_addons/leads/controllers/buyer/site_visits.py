@@ -105,187 +105,94 @@ from ..shared.response_utils import error_response, success_response
 
 _logger = logging.getLogger(__name__)
 
-# Only statuses produced by the lead.site.visit model are accepted.
-# "rescheduled" was removed in v1.3.1: the visit model never writes it.
-_VISIT_STATUSES = {"site_visit_scheduled", "site_visit_done"}
 
-_EMPTY_FEEDBACK = {None, "", "other", False}
-
-
-def _classify_visit(
-    current_status: str,
-    site_visit_date: datetime | None,
-    now: datetime,
-    feedback_general: str | None,
-) -> str:
+def _get_latest_active_visit(lead):
     """
-     Determine which bucket a visit record belongs to.
+    Return the latest non-superseded lead.site.visit for this inquiry.
+
+    "Superseded" visits are the old, now-closed leg of a reschedule chain.
+    They carry historical context but do not represent a current appointment.
+    We filter them out so the API always reflects the actual current state.
+    """
+    return lead.sudo().site_visit_ids.filtered(
+        lambda v: v.status_id.code != "superseded"
+    )[:1]
+
+
+def _classify_visit(visit, now: datetime) -> str:
+    """
+    Classify a lead.site.visit record into an API bucket.
 
     Returns one of: "upcoming" | "pending_feedback" | "cancelled" | "completed"
 
-    Both new and rescheduled visits appear as "site_visit_scheduled" in the
-    snapshot (written by lead.site.visit._sync_inquiry_snapshot). A reschedule
-    supersedes the original visit and writes a new date, so rescheduled visits
-    land in "upcoming" if the new date is in the future.
+    Relies on the status-type flags on lead.site.visit.status rather than
+    comparing string codes.  This is robust to status name changes and covers
+    all terminal states correctly — including no-show, which the old snapshot-
+    based approach could not represent at all.
     """
-    if current_status == "site_visit_done":
+    s = visit.status_id
+    if s.is_completed_status:
         return "completed"
-
-    if current_status == "site_visit_scheduled":
-        if site_visit_date > now:
-            return "upcoming"
-
-        if feedback_general in _EMPTY_FEEDBACK:
-            return "pending_feedback"
+    if s.is_cancelled_status or s.is_no_show_status:
         return "cancelled"
-
+    # Scheduled or rescheduled: gate on future/past datetime
+    if visit.scheduled_datetime and visit.scheduled_datetime > now:
+        return "upcoming"
     return "pending_feedback"
 
 
-def _build_base_record(
-    source: str,
-    lead_id: int,
-    lead_name,
-    lead_source,
-    prop,
-    site_visit_date,
-    site_visit_date_only,
-    current_status: str,
-    remarks,
-) -> dict:
-    """Fields present in every bucket."""
-    return {
-        "inquiry_type": source,
-        "lead_id": lead_id,
-        "lead_name": lead_name or None,
-        "source": lead_source or None,
+def _visit_from_lead(lead, visit, now: datetime) -> tuple[str, datetime, dict]:
+    """
+    Build (bucket, sort_key, record_dict) for a leads.new inquiry and its
+    latest lead.site.visit record.
+
+    Reads directly from lead.site.visit to avoid the stale snapshot problem:
+      - feedback_option_id / feedback_note are never written back to leads.new
+        by _sync_inquiry_snapshot, so reading leads.new.feedback_* always
+        returns empty for visits managed through the new visit model.
+      - cancelled / no-show statuses are not synced to leads.new.current_status
+        at all, so reading that field misclassifies them as pending_feedback.
+    """
+    bucket = _classify_visit(visit, now)
+    prop = visit.property_base_id
+    s = visit.status_id
+
+    # Map to the legacy current_status strings for response backward compat.
+    # Clients key on the bucket name for routing, but current_status is kept
+    # for informational display.
+    current_status_str = "site_visit_done" if s.is_completed_status else "site_visit_scheduled"
+
+    feedback_code = visit.feedback_option_id.code or None
+    feedback_note = visit.feedback_note or None
+
+    record = {
+        "inquiry_type": lead.inquiry_type or "primary",
+        "lead_id": lead.id,
+        "lead_name": lead.name or None,
+        "source": lead.source_id.name if lead.source_id else None,
         "property_tag": prop.property_tag if prop else None,
         "property_bhk": prop.bhk if prop else None,
         "property_location": prop.location if prop else None,
         "property_city": prop.city if prop else None,
         "site_visit_datetime": (
-            site_visit_date.isoformat() if site_visit_date else None
+            visit.scheduled_datetime.isoformat() if visit.scheduled_datetime else None
         ),
         "site_visit_date": (
-            site_visit_date_only.isoformat() if site_visit_date_only else None
+            visit.scheduled_date.isoformat() if visit.scheduled_date else None
         ),
-        "current_status": current_status or None,
-        "remarks": remarks or None,
+        "current_status": current_status_str,
+        "remarks": feedback_note,
     }
 
-
-def _apply_bucket_fields(
-    record: dict,
-    bucket: str,
-    feedback_general: str | None,
-    feedback_site_visit_done: str | None,
-    remarks,
-) -> dict:
-    """
-    Add bucket-specific fields to the record in-place and return it.
-
-    pending_feedback — note only; no feedback value since none was logged.
-    cancelled        — feedback_general (the reason) + note.
-    completed        — feedback_site_visit_done always; remarks only when "other".
-    upcoming         — no extra fields.
-    """
     if bucket == "pending_feedback":
         record["note"] = "Visit date has passed — awaiting RM feedback"
-
     elif bucket == "cancelled":
-        record["feedback_general"] = feedback_general
+        record["feedback_general"] = feedback_code
         record["note"] = "Visit did not occur due to buyer status"
-
     elif bucket == "completed":
-        record["feedback_site_visit_done"] = feedback_site_visit_done or None
-        if feedback_site_visit_done == "other":
-            record["remarks"] = remarks or None
-        else:
-            # Keep payload clean — remarks only matter when feedback is "other"
-            record["remarks"] = None
+        record["feedback_site_visit_done"] = feedback_code
 
-    return record
-
-
-def _process_visit(
-    source: str,
-    lead_id: int,
-    lead_name,
-    lead_source,
-    prop,
-    site_visit_date,
-    site_visit_date_only,
-    current_status: str,
-    remarks,
-    feedback_general,
-    feedback_site_visit_done,
-    now: datetime,
-) -> tuple[str, datetime, dict]:
-    """
-    Full pipeline for one record: classify → build base → apply bucket fields.
-    Returns (bucket, sort_key, record_dict).
-    """
-    bucket = _classify_visit(current_status, site_visit_date, now, feedback_general)
-
-    record = _build_base_record(
-        source=source,
-        lead_id=lead_id,
-        lead_name=lead_name,
-        lead_source=lead_source,
-        prop=prop,
-        site_visit_date=site_visit_date,
-        site_visit_date_only=site_visit_date_only,
-        current_status=current_status,
-        remarks=remarks,
-    )
-
-    _apply_bucket_fields(
-        record=record,
-        bucket=bucket,
-        feedback_general=feedback_general,
-        feedback_site_visit_done=feedback_site_visit_done,
-        remarks=remarks,
-    )
-
-    return bucket, site_visit_date, record
-
-
-def _visit_from_primary(lead, now: datetime) -> tuple[str, datetime, dict]:
-    return _process_visit(
-        source="primary",
-        lead_id=lead.id,
-        lead_name=lead.name,
-        lead_source=lead.source_id.name,
-        prop=lead.property_base_id,
-        site_visit_date=lead.site_visit_date,
-        site_visit_date_only=lead.site_visit_date_only,
-        current_status=lead.current_status,
-        remarks=lead.remarks,
-        feedback_general=lead.feedback_general,
-        feedback_site_visit_done=lead.feedback_site_visit_done,
-        now=now,
-    )
-
-
-def _visit_from_interest(
-    interest,
-    parent_lead,
-    now: datetime,
-) -> tuple[str, datetime, dict]:
-    return _process_visit(
-        source="recommended",
-        lead_id=parent_lead.id,
-        lead_name=parent_lead.name,
-        lead_source=parent_lead.source_id.name,
-        prop=interest.property_base_id,
-        site_visit_date=interest.site_visit_date,
-        site_visit_date_only=interest.site_visit_date_only,
-        current_status=interest.current_status,
-        remarks=interest.remarks,
-        feedback_general=interest.feedback_general,
-        feedback_site_visit_done=interest.feedback_site_visit_done,
-        now=now,
-    )
+    return bucket, visit.scheduled_datetime, record
 
 
 class BuyerSiteVisitsController(http.Controller):
@@ -324,19 +231,16 @@ class BuyerSiteVisitsController(http.Controller):
         }
 
         for lead in leads:
-            # ── Primary lead site visit ───────────────────────────────────────
-            if lead.site_visit_date and lead.current_status in _VISIT_STATUSES:
-                bucket, sort_key, record = _visit_from_primary(lead, now)
-                buckets[bucket].append((sort_key, record))
-
-            # ── Recommended property site visits on this lead ─────────────────
-            for interest in lead.interest_ids:
-                if (
-                    interest.site_visit_date
-                    and interest.current_status in _VISIT_STATUSES
-                ):
-                    bucket, sort_key, record = _visit_from_interest(interest, lead, now)
-                    buckets[bucket].append((sort_key, record))
+            # Covers both primary and recommended inquiries: each leads.new
+            # record (regardless of inquiry_type) owns its own site visits
+            # through the lead.site.visit model.  Legacy lead.property.interest
+            # recommended visits are not shown here — they predate the visit
+            # model and have no lead.site.visit records.
+            visit = _get_latest_active_visit(lead)
+            if not visit:
+                continue
+            bucket, sort_key, record = _visit_from_lead(lead, visit, now)
+            buckets[bucket].append((sort_key, record))
 
         # ── Sort each bucket ──────────────────────────────────────────────────
         # upcoming         → soonest first (ascending)
