@@ -545,10 +545,17 @@ class LeadSiteVisit(models.Model):
         vals = {
             "site_visit_date": self.scheduled_datetime,
         }
-        if self.status_id.is_completed_status:
+
+        s = self.status_id
+        if s.is_completed_status:
             vals["current_status"] = "site_visit_done"
-        elif self.status_id.is_scheduled_status or self.status_id.is_reschedule_status:
+        elif s.is_scheduled_status or s.is_reschedule_status:
             vals["current_status"] = "site_visit_scheduled"
+        # Cancelled / no-show: leave current_status on leads.new unchanged.
+        # There is no matching selection value in leads.new.current_status for
+        # these states; the APIs read from lead.site.visit directly.  The UI
+        # status badge will remain at the last known scheduled/completed value,
+        # which is acceptable — the RM can see the true state on the visit form.
 
         return vals
 

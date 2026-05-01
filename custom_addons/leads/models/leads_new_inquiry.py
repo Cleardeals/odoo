@@ -78,22 +78,39 @@ class LeadsNewInquiry(models.Model):
     @api.depends("site_visit_ids.scheduled_datetime")
     def _compute_latest_site_visit(self):
         for rec in self:
-            rec.latest_site_visit_id = rec.site_visit_ids[:1]
+            rec.latest_site_visit_id = rec.sudo().site_visit_ids[:1]
 
     @api.depends("site_visit_ids")
     def _compute_site_visit_count(self):
         for rec in self:
-            rec.site_visit_count = len(rec.site_visit_ids)
+            rec.site_visit_count = len(rec.sudo().site_visit_ids)
 
     @api.depends("phone")
     def _compute_all_phone_site_visit_ids(self):
-        site_visit_model = self.env["lead.site.visit"]
+        # Both queries must use sudo() explicitly.
+        #
+        # Using a cross-model domain like ("inquiry_id.phone", "=", phone) on a
+        # sudo()'d lead.site.visit search is NOT sufficient: Odoo applies the
+        # leads.new record rule (user_id = user.id) to the JOIN subquery even
+        # when the outer model is queried with sudo().  This silently excludes
+        # inquiries owned by other RMs, making the overall timeline show only
+        # the current RM's visits.
+        #
+        # Solution: two separate sudo() queries so each model's record rules are
+        # fully bypassed — first resolve all inquiry IDs for the phone, then
+        # fetch all visits for those inquiry IDs.
+        site_visit_model = self.env["lead.site.visit"].sudo()
+        inquiry_model = self.env["leads.new"].sudo()
         for rec in self:
             if not rec.phone:
                 rec.all_phone_site_visit_ids = site_visit_model
                 continue
+            inquiry_ids = inquiry_model.search([("phone", "=", rec.phone)]).ids
+            if not inquiry_ids:
+                rec.all_phone_site_visit_ids = site_visit_model
+                continue
             rec.all_phone_site_visit_ids = site_visit_model.search(
-                [("inquiry_id.phone", "=", rec.phone)],
+                [("inquiry_id", "in", inquiry_ids)],
                 order="scheduled_datetime desc, id desc",
             )
 
@@ -107,12 +124,32 @@ class LeadsNewInquiry(models.Model):
     )
     def _compute_timeline_html(self):
         for rec in self:
+            # All visit data is fetched via rec.sudo() throughout.
+            #
+            # Two reasons:
+            # 1. Record rules: rule_lead_site_visit_rm_own appends
+            #    "assigned_rm_id = user.id" to every lead.site.visit query.
+            #    Visits assigned to other RMs (e.g. a manager scheduled the
+            #    visit, or inquiry.user_id was blank) would be silently hidden.
+            # 2. Model-level ACL: when the Many2many result from
+            #    _compute_all_phone_site_visit_ids (fetched with sudo) is
+            #    accessed on the non-sudo rec, Odoo reconstructs the recordset
+            #    using rec.env (non-sudo).  Subsequent field reads inside
+            #    _build_timeline_html then trigger a model-level access check
+            #    for lead.site.visit on the calling user, raising AccessError
+            #    for users who do not hold the RM group (e.g. test accounts).
+            #
+            # Using rec_sudo for all visit reads ensures the sudo env flows
+            # through to every field access inside _build_timeline_html.
+            # _build_timeline_html is still called on rec (not rec_sudo) so
+            # that self.env.user.has_group() reflects the actual user.
+            rec_sudo = rec.sudo()
             rec.inquiry_timeline_html = rec._build_timeline_html(
-                rec.site_visit_ids,
+                rec_sudo.site_visit_ids,
                 show_inquiry=False,
             )
             rec.overall_timeline_html = rec._build_timeline_html(
-                rec.all_phone_site_visit_ids,
+                rec_sudo.all_phone_site_visit_ids,
                 show_inquiry=True,
             )
 
