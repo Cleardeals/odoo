@@ -335,16 +335,20 @@ Returns a full activity overview for a buyer: summary counts and a list of all p
 
 | Field                    | Type              | Description                                              |
 |--------------------------|-------------------|----------------------------------------------------------|
+| `lead_id`                | `integer`         | Odoo ID of the inquiry record                            |
 | `lead_name`              | `string \| null`  | Buyer name on this inquiry                               |
 | `source`                 | `string \| null`  | Source the inquiry came from                             |
 | `inquiry_datetime`       | `string \| null`  | ISO 8601 datetime the inquiry was created                |
 | `current_status`         | `string \| null`  | Current lead status                                      |
 | `first_contacted_on`     | `string \| null`  | ISO 8601 datetime of first RM contact                    |
+| `remarks`                | `string \| null`  | RM free-text note from the latest site visit             |
+| `feedback_general`       | `string \| null`  | Feedback option code when visit is cancelled/no-show     |
+| `feedback_site_visit_done` | `string \| null` | Feedback option code when visit is completed            |
 | `has_property`           | `boolean`         | Whether a property is linked to this lead                |
 | `property`               | `object \| null`  | Property details (see below)                             |
 | `site_visit_datetime`    | `string \| null`  | ISO 8601 datetime of the scheduled/completed site visit  |
 | `site_visit_date`        | `string \| null`  | Date-only string                                         |
-| `recommended_properties` | `array`           | List of recommended property interest records            |
+| `recommended_properties` | `array`           | Recommended child inquiries for this lead                |
 
 **`property` object (when `has_property: true`):**
 
@@ -358,15 +362,18 @@ Returns a full activity overview for a buyer: summary counts and a list of all p
 
 **Each item in `recommended_properties`:**
 
-| Field                 | Type             | Description                              |
-|-----------------------|------------------|------------------------------------------|
-| `property_tag`        | `string \| null` | Tag of the recommended property          |
-| `bhk`                 | `string \| null` | Size                                     |
-| `location`            | `string \| null` | Locality                                 |
-| `city`                | `string \| null` | City                                     |
-| `current_status`      | `string \| null` | Status of the interest record            |
-| `site_visit_datetime` | `string \| null` | ISO 8601 datetime                        |
-| `site_visit_date`     | `string \| null` | Date-only string                         |
+| Field                 | Type             | Description                                              |
+|-----------------------|------------------|----------------------------------------------------------|
+| `interest_id`         | `integer`        | Odoo ID of the recommended inquiry record                |
+| `property_tag`        | `string \| null` | Tag of the recommended property                          |
+| `bhk`                 | `string \| null` | Size                                                     |
+| `location`            | `string \| null` | Locality                                                 |
+| `city`                | `string \| null` | City                                                     |
+| `property_link`       | `string \| null` | URL to the property listing                              |
+| `current_status`      | `string \| null` | Status snapshot of the recommended inquiry               |
+| `site_visit_datetime` | `string \| null` | ISO 8601 datetime                                        |
+| `site_visit_date`     | `string \| null` | Date-only string                                         |
+| `remarks`             | `string \| null` | RM free-text note from the latest site visit             |
 
 #### Success example
 
@@ -383,11 +390,15 @@ Returns a full activity overview for a buyer: summary counts and a list of all p
     },
     "primary_inquiries": [
       {
+        "lead_id": 12,
         "lead_name": "Priya Mehta",
         "source": "99acres",
         "inquiry_datetime": "2025-06-15T09:30:00",
         "current_status": "site_visit_scheduled",
         "first_contacted_on": "2025-06-15T11:00:00",
+        "remarks": null,
+        "feedback_general": null,
+        "feedback_site_visit_done": null,
         "has_property": true,
         "property": {
           "property_tag": "CLR-3BHK-BOD-007",
@@ -400,13 +411,16 @@ Returns a full activity overview for a buyer: summary counts and a list of all p
         "site_visit_date": "2025-07-22",
         "recommended_properties": [
           {
+            "interest_id": 55,
             "property_tag": "CLR-3BHK-PRH-012",
             "bhk": "3BHK",
             "location": "Prahladnagar",
             "city": "Ahmedabad",
+            "property_link": "https://example.com/listing/012",
             "current_status": "details_shared_of_property",
             "site_visit_datetime": null,
-            "site_visit_date": null
+            "site_visit_date": null,
+            "remarks": null
           }
         ]
       }
@@ -647,20 +661,21 @@ Paginated, chronologically-sorted list of every lead record (primary and recomme
 | Field                     | Type             | Description                                                    |
 |---------------------------|------------------|----------------------------------------------------------------|
 | `type`                    | `string`         | `"primary"` or `"recommended"`                                 |
+| `lead_id`                 | `integer`        | Odoo ID of the inquiry record                                  |
 | `lead_name`               | `string \| null` | Buyer name                                                     |
 | `lead_phone`              | `string \| null` | Buyer phone                                                    |
 | `source`                  | `string \| null` | Source of origin (from parent lead for recommended)            |
 | `property_tag`            | `string \| null` | Property tag                                                   |
 | `property_bhk`            | `string \| null` | Property size                                                  |
 | `property_location`       | `string \| null` | Locality                                                       |
-| `inquiry_datetime`        | `string \| null` | ISO 8601 — `create_date` of the lead or interest record        |
+| `inquiry_datetime`        | `string \| null` | ISO 8601 — `create_date` of the inquiry record                 |
 | `current_status`          | `string \| null` | Current status                                                 |
 | `first_contacted_on`      | `string \| null` | ISO 8601 — first RM contact datetime (from parent lead for recommended) |
 | `site_visit_datetime`     | `string \| null` | ISO 8601 datetime                                              |
 | `site_visit_date`         | `string \| null` | Date-only string                                               |
-| `remarks`                 | `string \| null` | RM notes                                                       |
-| `feedback_general`        | `string \| null` | General feedback                                               |
-| `feedback_site_visit_done`| `string \| null` | Post-visit feedback                                            |
+| `remarks`                 | `string \| null` | RM free-text note from the latest site visit                   |
+| `feedback_general`        | `string \| null` | Feedback option code when visit is cancelled/no-show           |
+| `feedback_site_visit_done`| `string \| null` | Feedback option code when visit is completed                   |
 
 > Results are sorted by `inquiry_datetime` descending (most recent first). Records with `null` datetime sort last.
 
@@ -676,6 +691,7 @@ Paginated, chronologically-sorted list of every lead record (primary and recomme
     "items": [
       {
         "type": "primary",
+        "lead_id": 42,
         "lead_name": "Kiran Patel",
         "lead_phone": "9000000001",
         "source": "Housing.com",

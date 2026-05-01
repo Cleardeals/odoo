@@ -522,14 +522,12 @@ class TestSellerActivityAPI(PortalLeadTestCase):
                 property_base_id=self.test_property.id,
             )
 
-        # Create 2 recommended
+        # Create 2 recommended inquiries (leads.new with inquiry_type='recommended')
         for i in range(2):
-            lead = self.create_portal_lead(phone=f"71717171{i:02d}")
-            self.env["lead.property.interest"].create(
-                {
-                    "lead_id": lead.id,
-                    "property_base_id": self.test_property.id,
-                },
+            self.create_portal_lead(
+                phone=f"71717171{i:02d}",
+                inquiry_type="recommended",
+                property_base_id=self.test_property.id,
             )
 
         primary_leads = get_primary_leads_for_tags(self.env, tags)

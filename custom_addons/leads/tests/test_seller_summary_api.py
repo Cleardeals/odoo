@@ -429,18 +429,18 @@ class TestSellerSummaryAPI(PortalLeadTestCase):
         lead_1 = self.create_portal_lead(phone="6666666666")
         lead_2 = self.create_portal_lead(phone="5555555555")
 
-        # Create interests
-        interest_1 = self.env["lead.property.interest"].create(
-            {
-                "lead_id": lead_1.id,
-                "property_base_id": self.test_property.id,
-            },
+        # Create recommended inquiries (leads.new with inquiry_type='recommended')
+        rec_1 = self.create_portal_lead(
+            phone="6666666666",
+            inquiry_type="recommended",
+            parent_inquiry_id=lead_1.id,
+            property_base_id=self.test_property.id,
         )
-        interest_2 = self.env["lead.property.interest"].create(
-            {
-                "lead_id": lead_2.id,
-                "property_base_id": self.test_property_2.id,
-            },
+        rec_2 = self.create_portal_lead(
+            phone="5555555555",
+            inquiry_type="recommended",
+            parent_inquiry_id=lead_2.id,
+            property_base_id=self.test_property_2.id,
         )
 
         # ACT
@@ -448,9 +448,9 @@ class TestSellerSummaryAPI(PortalLeadTestCase):
 
         # ASSERT
         self.assertEqual(len(recommended), 2, "Should return 2 recommended interests")
-        interest_ids = set(recommended.ids)
-        self.assertTrue(interest_1.id in interest_ids)
-        self.assertTrue(interest_2.id in interest_ids)
+        rec_ids = set(recommended.ids)
+        self.assertTrue(rec_1.id in rec_ids)
+        self.assertTrue(rec_2.id in rec_ids)
 
     def test_15_get_recommended_leads_empty_tags(self):
         """
@@ -580,20 +580,16 @@ class TestSellerSummaryAPI(PortalLeadTestCase):
                 property_base_id=self.test_property.id,
             )
 
-        # Create 2 recommended interests
-        lead = self.create_portal_lead(phone="4444444444")
-        self.env["lead.property.interest"].create(
-            {
-                "lead_id": lead.id,
-                "property_base_id": self.test_property_2.id,
-            },
+        # Create 2 recommended inquiries (leads.new with inquiry_type='recommended')
+        self.create_portal_lead(
+            phone="4444444444",
+            inquiry_type="recommended",
+            property_base_id=self.test_property_2.id,
         )
-        lead_2 = self.create_portal_lead(phone="3333333333")
-        self.env["lead.property.interest"].create(
-            {
-                "lead_id": lead_2.id,
-                "property_base_id": self.test_property.id,
-            },
+        self.create_portal_lead(
+            phone="3333333333",
+            inquiry_type="recommended",
+            property_base_id=self.test_property.id,
         )
 
         # ACT
