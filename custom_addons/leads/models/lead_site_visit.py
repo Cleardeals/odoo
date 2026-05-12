@@ -479,9 +479,6 @@ class LeadSiteVisit(models.Model):
         if self.env.context.get("skip_active_visit_check"):
             return
         for rec in self:
-            # Terminal visits are closed — no conflict possible.
-            if rec.status_id.is_terminal:
-                continue
             other = self.search(
                 [
                     ("inquiry_id", "=", rec.inquiry_id.id),

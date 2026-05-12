@@ -58,7 +58,7 @@
         </record>
 
         <record id="olx_account_abhi" model="lead.olx.account">
-            <field name="name">Abhi – 7436055806</field>
+            <field name="name">Abhishek – 7436055806</field>
             <field name="login">7436055806</field>
             <field name="sequence">80</field>
             <field name="active">True</field>
@@ -99,8 +99,8 @@
             <field name="active">True</field>
         </record>
 
-        <record id="olx_account_dhruv" model="lead.olx.account">
-            <field name="name">Dhruv – 9104452244</field>
+        <record id="olx_account_pratham" model="lead.olx.account">
+            <field name="name">Pratham – 9104452244</field>
             <field name="login">9104452244</field>
             <field name="sequence">140</field>
             <field name="active">True</field>
