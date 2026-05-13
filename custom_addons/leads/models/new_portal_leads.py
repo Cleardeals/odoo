@@ -687,6 +687,29 @@ class NewPortalLead(models.Model):
         AND to send a bus notification.
         """
 
+        if "phone" in vals:
+            vals = dict(vals)
+            vals["phone"] = self._standardize_phone(vals.get("phone"))
+            new_phone = vals["phone"]
+            if new_phone:
+                duplicate = self.sudo().search(
+                    [("phone", "=", new_phone), ("id", "not in", self.ids)],
+                    limit=1,
+                )
+                if duplicate:
+                    status_selection = dict(self._fields["current_status"].selection)
+                    status_label = status_selection.get(
+                        duplicate.current_status,
+                        duplicate.current_status or "Unknown",
+                    )
+                    rm_name = duplicate.user_id.name or "Unassigned"
+                    raise ValidationError(
+                        f"Phone number {new_phone} is already assigned to another inquiry.\n"
+                        f"Lead: {duplicate.name}\n"
+                        f"Assigned RM: {rm_name}\n"
+                        f"Current Status: {status_label}",
+                    )
+
         leads_to_stamp = self.env["leads.new"]
         first_contact_time = False
         if "current_status" in vals and vals["current_status"] != "lead":
