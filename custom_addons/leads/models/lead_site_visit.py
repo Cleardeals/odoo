@@ -1,7 +1,11 @@
 import re
 
+import pytz
+
 from odoo import api, fields, models
 from odoo.exceptions import ValidationError
+
+_IST = pytz.timezone("Asia/Kolkata")
 
 
 # ---------------------------------------------------------------------------
@@ -395,7 +399,11 @@ class LeadSiteVisit(models.Model):
         for rec in self:
             inquiry_name = rec.inquiry_id.display_name or "Inquiry"
             status_name = rec.status_id.name or "Visit"
-            when = fields.Datetime.to_string(rec.scheduled_datetime) if rec.scheduled_datetime else "No Date"
+            if rec.scheduled_datetime:
+                ist_dt = pytz.utc.localize(rec.scheduled_datetime).astimezone(_IST)
+                when = ist_dt.strftime("%d/%m/%Y %I:%M %p IST")
+            else:
+                when = "No Date"
             rec.name = f"{inquiry_name} | {status_name} | {when}"
 
     @api.depends("scheduled_datetime")
@@ -620,7 +628,7 @@ class LeadSiteVisit(models.Model):
                     old_visit_vals["feedback_option_id"] = vals["feedback_option_id"]
                 if vals.get("feedback_note"):
                     old_visit_vals["feedback_note"] = vals["feedback_note"]
-                super(LeadSiteVisit, rec).write(old_visit_vals)
+                super(LeadSiteVisit, rec.with_context(skip_active_visit_check=True)).write(old_visit_vals)
             return True
 
         if "status_id" in vals and "status_changed_on" not in vals:
