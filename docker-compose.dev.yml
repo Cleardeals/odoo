@@ -70,6 +70,7 @@ services:
       # Separate data dir — never shares state with the production bind mount
       - ./odoo-dev-db-data:/var/lib/postgresql/data
 
+    ports:
       # Connect from your Mac with TablePlus / pgAdmin:
       # host=localhost  port=5434  user=odoo  password=odoo  db=cleardeals_19_dev
       - "5434:5432"
