@@ -65,6 +65,8 @@ venv
 
 odoo-db-data/
 odoo-web-data/
+odoo-dev-db-data/
+odoo-dev-web-data/
 
 docker-compose.override.yml
 
