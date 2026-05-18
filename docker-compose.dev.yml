@@ -131,9 +131,33 @@ services:
       # on Python changes (subject to VirtioFS note above).
       - ./custom_addons:/mnt/extra-addons/custom
 
+    # Ports are NOT exposed directly to the host — nginx (below) owns port 8069
+    # and routes /websocket + /longpolling to the gevent worker (8072) and
+    # everything else to the HTTP workers (8069).  Add the ports back here only
+    # if you need to bypass nginx for low-level debugging.
+
+    networks:
+      - dev
+
+  # ----------------------------------------------------------------------------
+  # Nginx — dev reverse proxy (mirrors Traefik routing from production)
+  # Routes /websocket and /longpolling → odoo:8072 (gevent)
+  # Routes everything else             → odoo:8069 (HTTP workers)
+  # Required when workers > 0 in odoo.dev.conf.
+  # ----------------------------------------------------------------------------
+  nginx:
+    image: nginx:alpine
+    container_name: odoo-dev-nginx
+    restart: unless-stopped
+
+    depends_on:
+      - odoo
+
+    volumes:
+      - ./nginx.dev.conf:/etc/nginx/conf.d/default.conf:ro
+
     ports:
-      - "8069:8069"   # Odoo web UI → http://localhost:8069
-      - "8072:8072"   # Gevent (only active when workers > 0 in odoo.dev.conf)
+      - "8069:80"   # Odoo web UI → http://localhost:8069 (same URL as before)
 
     networks:
       - dev
