@@ -117,49 +117,25 @@ from ..shared.response_utils import error_response, success_response
 
 _logger = logging.getLogger(__name__)
 
-# Only statuses used by the legacy lead.property.interest snapshot path.
-_LEGACY_VISIT_STATUSES = {"site_visit_scheduled", "site_visit_done"}
 
-# feedback_general values treated as "nothing meaningful logged yet"
-_EMPTY_FEEDBACK = {None, "", "other", False}
-
-FEEDBACK_GENERAL_MAP = {
-    "buyer_did_not_visit_property": "Buyer Did Not Visit Property",
-    "buyer_not_interested": "Buyer Not Interested",
-    "buyer_not_picking_call": "Buyer Not Picking Call",
-    "visit_needs_to_be_rescheduled": "Visit Needs to be Rescheduled",
-    "other": "Other",
-}
-
-FEEDBACK_DONE_MAP = {
-    "buyer_liked_property": "Buyer Liked Property",
-    "buyer_requirement_closed": "Buyer Requirement Closed",
-    "buyer_visit_from_outside": "Buyer Visit From Outside",
-    "buyer_not_pickup_call": "Buyer Not Picking Call",
-    "planning_for_second_visit": "Planning for Second Visit",
-    "negotiation_stage": "Negotiation Stage",
-    "visit_done_confirmed_by_owner": "Visit Done - Confirmed by Owner",
-    "looking_for_more_options": "Looking for More Options",
-    "price_is_high": "Price is High",
-    "location_mismatch": "Location Mismatch",
-    "deal_closed": "Deal Closed",
-    "other": "Other",
-}
 
 
 # ── New visit-model helpers ────────────────────────────────────────────────
 
 
-def _get_latest_active_visit(lead):
+def _get_active_visits(lead):
     """
-    Return the latest non-superseded lead.site.visit for this inquiry.
+    Return all non-superseded lead.site.visit records for this inquiry.
 
     Superseded visits are the closed leg of a reschedule chain and must be
-    skipped so the API reflects the actual current appointment state.
+    skipped so the API does not double-count rescheduled appointments.
+    All other visits (scheduled, rescheduled, completed, cancelled, no-show)
+    are included — a lead may have multiple active visits (e.g. one completed
+    visit followed by a second scheduled visit).
     """
     return lead.sudo().site_visit_ids.filtered(
         lambda v: v.status_id.code != "superseded"
-    )[:1]
+    )
 
 
 def _classify_visit_new(visit, now: datetime) -> str:
@@ -192,8 +168,25 @@ def _visit_from_lead_model(lead, visit, now: datetime) -> tuple[str, datetime, d
     s = visit.status_id
 
     current_status_str = "site_visit_done" if s.is_completed_status else "site_visit_scheduled"
-    feedback_code = visit.feedback_option_id.code or None
+
+    # Primary source: feedback_option_id on the visit record (new model).
+    # Fallback: legacy Selection fields on leads.new for visits where the RM
+    # set feedback directly on the lead form rather than through the visit.
+    feedback_option = visit.feedback_option_id
+    feedback_code = feedback_option.code or None
+    feedback_label = feedback_option.name or None
     feedback_note = visit.feedback_note or None
+
+    if not feedback_code:
+        _general_map = dict(lead._fields["feedback_general"].selection)
+        _done_map = dict(lead._fields["feedback_site_visit_done"].selection)
+        fallback_general_code = lead.feedback_general or None
+        fallback_general_label = _general_map.get(fallback_general_code) if fallback_general_code else None
+        fallback_done_code = lead.feedback_site_visit_done or None
+        fallback_done_label = _done_map.get(fallback_done_code) if fallback_done_code else None
+    else:
+        fallback_general_code = fallback_general_label = None
+        fallback_done_code = fallback_done_label = None
 
     record = {
         "source": lead.inquiry_type or "primary",
@@ -209,91 +202,21 @@ def _visit_from_lead_model(lead, visit, now: datetime) -> tuple[str, datetime, d
             visit.scheduled_date.isoformat() if visit.scheduled_date else None
         ),
         "current_status": current_status_str,
+        "status_name": s.name or None,
         "remarks": feedback_note,
     }
 
     if bucket == "pending_feedback":
         record["note"] = "Visit date has passed — awaiting RM feedback"
     elif bucket == "cancelled":
-        record["feedback_general"] = feedback_code
+        record["feedback_general"] = feedback_code or fallback_general_code
+        record["feedback_general_label"] = feedback_label or fallback_general_label
         record["note"] = "Visit did not occur due to buyer status"
     elif bucket == "completed":
-        record["feedback_site_visit_done"] = feedback_code
+        record["feedback_site_visit_done"] = feedback_code or fallback_done_code
+        record["feedback_site_visit_done_label"] = feedback_label or fallback_done_label
 
     return bucket, visit.scheduled_datetime, record
-
-
-# ── Legacy snapshot helpers (lead.property.interest) ──────────────────────
-
-
-def _classify_legacy_visit(
-    current_status: str,
-    site_visit_date: datetime,
-    now: datetime,
-    feedback_general: str | None,
-) -> str:
-    """
-    Classify a legacy lead.property.interest record.
-
-    This path is retained for backward compatibility with interest records that
-    predate the lead.site.visit model.  New visits are handled by
-    _classify_visit_new / _visit_from_lead_model instead.
-    """
-    if current_status == "site_visit_done":
-        return "completed"
-
-    if current_status == "site_visit_scheduled":
-        if site_visit_date > now:
-            return "upcoming"
-        if feedback_general in _EMPTY_FEEDBACK:
-            return "pending_feedback"
-        return "cancelled"
-
-    return "pending_feedback"
-
-
-def _visit_from_recommended_legacy(interest, now: datetime) -> tuple[str, datetime, dict]:
-    """
-    Build (bucket, sort_key, record_dict) from a legacy lead.property.interest record.
-
-    Retained for backward compatibility with interest records that predate the
-    lead.site.visit model.  New recommended inquiries use leads.new +
-    lead.site.visit and are handled by _visit_from_lead_model instead.
-    """
-    parent = interest.lead_id
-    current_status = interest.current_status
-    site_visit_date = interest.site_visit_date
-    feedback_general = interest.feedback_general
-    feedback_site_visit_done = interest.feedback_site_visit_done
-
-    bucket = _classify_legacy_visit(current_status, site_visit_date, now, feedback_general)
-
-    record = {
-        "source": "recommended",
-        "lead_name": parent.name if parent else None,
-        "lead_phone": parent.phone if parent else None,
-        "property_tag": interest.property_base_id.property_tag if interest.property_base_id else None,
-        "property_bhk": interest.property_base_id.bhk if interest.property_base_id else None,
-        "property_location": interest.property_base_id.location if interest.property_base_id else None,
-        "site_visit_datetime": site_visit_date.isoformat() if site_visit_date else None,
-        "site_visit_date": interest.site_visit_date_only.isoformat() if interest.site_visit_date_only else None,
-        "current_status": current_status or None,
-        "remarks": interest.remarks or None,
-    }
-
-    if bucket == "pending_feedback":
-        record["note"] = "Visit date has passed — awaiting RM feedback"
-    elif bucket == "cancelled":
-        record["feedback_general"] = feedback_general
-        record["note"] = "Visit did not occur due to buyer status"
-    elif bucket == "completed":
-        record["feedback_site_visit_done"] = feedback_site_visit_done or None
-        if feedback_site_visit_done == "other":
-            record["remarks"] = interest.remarks or None
-        else:
-            record["remarks"] = None
-
-    return bucket, site_visit_date, record
 
 
 class SellerSiteVisitsController(http.Controller):
@@ -344,23 +267,14 @@ class SellerSiteVisitsController(http.Controller):
         }
 
         # ── All leads.new for the seller's properties (primary + recommended) ─
-        # get_primary_leads_for_tags returns all leads.new with property_base_id
-        # in the seller's property set — this covers both inquiry_type='primary'
-        # and inquiry_type='recommended' records transparently.
-        for lead in get_primary_leads_for_tags(request.env, tags):
-            visit = _get_latest_active_visit(lead)
-            if not visit:
-                continue
-            bucket, sort_key, record = _visit_from_lead_model(lead, visit, now)
-            buckets[bucket].append((sort_key, record))
-
-        # ── Legacy lead.property.interest records ─────────────────────────────
-        # Retained for visits created before the lead.site.visit model existed.
-        for interest in get_recommended_leads_for_tags(request.env, tags).filtered(
-            lambda i: i.site_visit_date and i.current_status in _LEGACY_VISIT_STATUSES,
-        ):
-            bucket, sort_key, record = _visit_from_recommended_legacy(interest, now)
-            buckets[bucket].append((sort_key, record))
+        all_leads = (
+            get_primary_leads_for_tags(request.env, tags)
+            | get_recommended_leads_for_tags(request.env, tags)
+        )
+        for lead in all_leads:
+            for visit in _get_active_visits(lead):
+                bucket, sort_key, record = _visit_from_lead_model(lead, visit, now)
+                buckets[bucket].append((sort_key, record))
 
         # ── Sort each bucket ──────────────────────────────────────────────────
         # upcoming         → soonest first (ascending)
