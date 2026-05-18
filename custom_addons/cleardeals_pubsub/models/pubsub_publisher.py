@@ -55,6 +55,38 @@ except ImportError:
         'Install it with: pip install google-cloud-pubsub'
     )
 
+# ── Batch settings — tuned for GCP e2-medium (2 vCPU / 4 GiB RAM) ──────────
+#
+# Production stack: 2 WorkerHTTP + 1 WorkerCron (separate OS processes).
+# Each worker owns an independent PublisherClient with its own BatchThread,
+# so per-worker memory pressure multiplies with worker count.
+#
+# Defaults (upstream):  max_bytes=1 MiB  max_latency=10 ms  max_messages=100
+# Tuned values below reduce per-worker buffer size and flush quickly, which
+# suits the low-to-medium throughput of a CRM event stream.
+#
+#   max_bytes   = 512 KiB  — halves the per-worker in-flight buffer ceiling;
+#                            3 workers × 512 KiB = 1.5 MiB worst-case total
+#                            vs. 3 MiB with defaults.
+#   max_latency = 0.05 s   — 50 ms flush interval; CRM status-change events
+#                            are not latency-critical but 10 ms is wasteful on
+#                            a low-traffic system that rarely fills a batch.
+#   max_messages = 50      — halved from default; keeps batch processing time
+#                            predictable on a shared-core CPU.
+
+_BATCH_SETTINGS = None  # resolved lazily after library import
+
+
+def _make_batch_settings():
+    """Build a ``BatchSettings`` instance using the VM-tuned values above."""
+    from google.cloud.pubsub_v1.types import BatchSettings  # noqa: PLC0415
+    return BatchSettings(
+        max_bytes=512 * 1024,   # 512 KiB
+        max_latency=0.05,       # 50 ms
+        max_messages=50,
+    )
+
+
 # ── Process-level singleton ───────────────────────────────────────────────────
 # In PreforkServer each WorkerHTTP/WorkerCron is a separate OS process.
 # In threaded mode (workers=0) all request-threads share one process.
@@ -69,15 +101,20 @@ def _get_publisher_client():
 
     ``pubsub_v1.PublisherClient()`` is thread-safe and automatically uses the
     local emulator when ``PUBSUB_EMULATOR_HOST`` is set in the environment.
+    The client is initialised with VM-tuned ``_BATCH_SETTINGS``.
     """
-    global _publisher_client
+    global _publisher_client, _BATCH_SETTINGS
     if not _PUBSUB_AVAILABLE:
         return None
     if _publisher_client is None:
         with _publisher_lock:
             if _publisher_client is None:
-                from google.cloud import pubsub_v1
-                _publisher_client = pubsub_v1.PublisherClient()
+                from google.cloud import pubsub_v1  # noqa: PLC0415
+                if _BATCH_SETTINGS is None:
+                    _BATCH_SETTINGS = _make_batch_settings()
+                _publisher_client = pubsub_v1.PublisherClient(
+                    batch_settings=_BATCH_SETTINGS,
+                )
     return _publisher_client
 
 
