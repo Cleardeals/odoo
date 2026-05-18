@@ -161,7 +161,7 @@ class PropertyActivityDashboardController(http.Controller):
 
     @http.route(
         "/web/leads/property_activity/<int:property_id>",
-        type="json",
+        type="jsonrpc",
         auth="user",
         methods=["POST"],
         csrf=False,

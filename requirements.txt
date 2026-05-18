@@ -98,6 +98,15 @@ xlwt==1.3.0
 zeep==4.1.0 ; python_version < '3.11'  # (jammy)
 zeep==4.2.1 ; python_version >= '3.11' and python_version < '3.13'
 zeep==4.3.1 ; python_version >= '3.13'
+
+# ── Cleardeals custom dependencies ────────────────────────────────────────────
+# google-cloud-pubsub: GCP Pub/Sub publisher + push-subscription support.
+# google-auth:         OIDC token verification for Pub/Sub push deliveries.
+#                      Included transitively by google-cloud-pubsub but pinned
+#                      here explicitly so the minimum is enforced for the OIDC
+#                      verify_oauth2_token() API used in cleardeals_pubsub.
+google-cloud-pubsub>=2.21.0
+google-auth>=2.28.0
 google-cloud-bigquery==3.37.0
 typing-extensions>=4.0.0
 pandas
