@@ -1,76 +1,186 @@
-version: '3.8'
+# ==============================================================================
+# Cleardeals — Odoo 19 Production Docker Compose
+# Optimized for e2-medium (2 shared vCPUs, 4 GiB RAM)
+# Stack: Traefik v3.2 + PostgreSQL 17 + Odoo 19
+# Domain: odoo.cleardeals.xyz
+# ==============================================================================
+
 services:
-  # 1. The Traefik Reverse Proxy
+
+  # ----------------------------------------------------------------------------
+  # Traefik Reverse Proxy
+  # ----------------------------------------------------------------------------
   traefik:
-    image: traefik:v2.10
+    image: traefik:v3.2
     container_name: traefik
+    restart: unless-stopped
+
     command:
+      # API & Dashboard — restrict port 8080 in GCP firewall if not needed
       - "--api.insecure=true"
+
+      # Docker Provider — scope to 'web' network so Traefik only resolves
+      # containers explicitly attached to it
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.network=web"
+
+      # Entrypoints
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
+
+      # Permanent HTTP → HTTPS redirect
       - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
       - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+      - "--entrypoints.web.http.redirections.entrypoint.permanent=true"
+
+      # Let's Encrypt (TLS challenge)
       - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
       - "--certificatesresolvers.myresolver.acme.email=cdgcphub@gmail.com"
       - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
+
+      # Logging
+      - "--log.level=INFO"
+      - "--accesslog=true"
+
     ports:
-      - "80:80"
-      - "443:443"
-      - "8080:8080"
+      - "80:80"       # HTTP (redirected to HTTPS)
+      - "443:443"     # HTTPS
+      - "8080:8080"   # Traefik dashboard
+
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
       - "./letsencrypt:/letsencrypt"
+
     networks:
       - web
-    restart: unless-stopped
 
-  # 2. Your Database Service
+  # ----------------------------------------------------------------------------
+  # PostgreSQL 17
+  # ----------------------------------------------------------------------------
   db:
     image: postgres:17
-    environment:
-      - POSTGRES_DB=postgres
-      - POSTGRES_PASSWORD=odoo
-      - POSTGRES_USER=odoo
-    volumes:
-      - ./odoo-db-data:/var/lib/postgresql/data
-    networks:
-      - web
+    container_name: odoo-db
     restart: unless-stopped
 
-  # 3. Your Odoo 19 Service
-  odoo:
-    build: .
-    depends_on:
-      - db
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: odoo
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-odoo}
+
+    # Performance tuning for e2-medium (4 GiB RAM, ~1 GiB allocated to Postgres).
+    # max_connections=60 covers db_maxconn=10 (odoo.conf) × workers with room to spare.
+    # synchronous_commit=off improves write throughput; tiny crash-recovery risk
+    # (last ~1 WAL record may be lost — acceptable for an Odoo CRM workload).
+    command: >
+      postgres
+      -c max_connections=60
+      -c shared_buffers=512MB
+      -c effective_cache_size=1536MB
+      -c work_mem=32MB
+      -c maintenance_work_mem=128MB
+      -c wal_buffers=16MB
+      -c synchronous_commit=off
+      -c checkpoint_completion_target=0.9
+      -c random_page_cost=1.1
+
     volumes:
-      # CHANGED: Mapping single config file from root to the default Odoo location
-      - ./odoo.conf:/etc/odoo/odoo.conf
-      - ./odoo-web-data:/var/lib/odoo
-      - ./custom_addons:/mnt/extra-addons/custom
+      - ./odoo-db-data:/var/lib/postgresql/data
+
     networks:
       - web
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U odoo -d postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      # Allow extra time on first boot when Postgres initialises the data dir
+      start_period: 60s
+
+  # ----------------------------------------------------------------------------
+  # Odoo 19 Application
+  # ----------------------------------------------------------------------------
+  odoo:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: odoo-cleardeals:latest
+    container_name: odoo-app
+    restart: unless-stopped
+
+    depends_on:
+      db:
+        condition: service_healthy
+
     environment:
       - ODOO_PROXY=true
       - WEB_BASE_URL=https://odoo.cleardeals.xyz
+      # ── Google Cloud Pub/Sub ────────────────────────────────────────────────
+      # GCP project that owns the Pub/Sub topics.
+      # Required by cleardeals_pubsub, wa_pubsub, and wa_communication modules.
+      - PUBSUB_PROJECT_ID=cleardeals-prod
+      # On a GCP VM with the correct IAM service account attached, Application
+      # Default Credentials (ADC) resolve automatically via the metadata server —
+      # you do NOT need to set GOOGLE_APPLICATION_CREDENTIALS.
+      #
+      # If running outside GCP (staging VM, local Docker) uncomment both lines:
+      # - GOOGLE_APPLICATION_CREDENTIALS=/run/secrets/gcp-sa-key.json
+      #
+      # PUBSUB_EMULATOR_HOST must NOT be set in production. Only set it in
+      # local/staging environments that run the Pub/Sub emulator.
+      # - PUBSUB_EMULATOR_HOST=pubsub-emulator:8085
+
+    volumes:
+      # Read-only: all config is baked into odoo.conf, never mutated at runtime
+      - ./odoo.conf:/etc/odoo/odoo.conf:ro
+      # Persistent filestore (attachments, sessions)
+      - ./odoo-web-data:/var/lib/odoo
+      # Custom modules
+      - ./custom_addons:/mnt/extra-addons/custom
+      # Optional: GCP service-account key (only needed outside GCP Workload Identity)
+      # - ./gcp-credentials.json:/run/secrets/gcp-sa-key.json:ro
+
+    networks:
+      - web
+
     labels:
       - "traefik.enable=true"
-      # --- Main Odoo Router ---
-      # Ensure DNS for this domain points to the NEW VM IP
+
+      # ── Main Odoo Router — lower priority, catches all paths ──────────────
       - "traefik.http.routers.odoo.rule=Host(`odoo.cleardeals.xyz`)"
       - "traefik.http.routers.odoo.entrypoints=websecure"
       - "traefik.http.routers.odoo.tls.certresolver=myresolver"
       - "traefik.http.routers.odoo.service=odoo-service"
+      - "traefik.http.routers.odoo.priority=1"
+      - "traefik.http.routers.odoo.middlewares=security-headers@docker"
       - "traefik.http.services.odoo-service.loadbalancer.server.port=8069"
-      # --- Longpolling Router ---
-      - "traefik.http.routers.odoo-chat.rule=Host(`odoo.cleardeals.xyz`) && PathPrefix(`/longpolling`)"
+
+      # ── Longpolling / WebSocket Router — higher priority, path-specific ───
+      # /websocket: Odoo 17+ bus (real-time messaging)
+      # /longpolling: legacy path kept for older clients
+      - "traefik.http.routers.odoo-chat.rule=Host(`odoo.cleardeals.xyz`) && (PathPrefix(`/websocket`) || PathPrefix(`/longpolling`))"
       - "traefik.http.routers.odoo-chat.entrypoints=websecure"
       - "traefik.http.routers.odoo-chat.tls.certresolver=myresolver"
       - "traefik.http.routers.odoo-chat.service=odoo-chat-service"
+      - "traefik.http.routers.odoo-chat.priority=2"
+      - "traefik.http.routers.odoo-chat.middlewares=security-headers@docker"
       - "traefik.http.services.odoo-chat-service.loadbalancer.server.port=8072"
-    restart: unless-stopped
 
+      # ── Security Headers Middleware ────────────────────────────────────────
+      # X-Frame-Options: prevent clickjacking (SAMEORIGIN allows Odoo iframes)
+      - "traefik.http.middlewares.security-headers.headers.customFrameOptionsValue=SAMEORIGIN"
+      # X-Content-Type-Options: prevent MIME sniffing
+      - "traefik.http.middlewares.security-headers.headers.contentTypeNosniff=true"
+      # HSTS: force HTTPS for 1 year, including subdomains
+      - "traefik.http.middlewares.security-headers.headers.stsSeconds=31536000"
+      - "traefik.http.middlewares.security-headers.headers.stsIncludeSubdomains=true"
+      - "traefik.http.middlewares.security-headers.headers.stsPreload=true"
+
+# ==============================================================================
+# Networks
+# ==============================================================================
 networks:
   web:
     driver: bridge
+    name: web
