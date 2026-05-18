@@ -1,0 +1,146 @@
+# ==============================================================================
+# Cleardeals — Odoo 19 Local Development Docker Compose
+# ==============================================================================
+# Mirrors the production stack (same Dockerfile, same config format) without
+# Traefik or TLS. Ports are exposed directly.
+#
+# The Pub/Sub emulator is NOT defined here — it runs in the WhatsApp
+# communications module's own Docker Compose stack. Odoo reaches it via
+# host.docker.internal:8085 (Docker Desktop routes this to the Mac host,
+# where the emulator's port is exposed). No network coordination needed.
+#
+# ── Quick start ───────────────────────────────────────────────────────────────
+#   docker compose -f docker-compose.dev.yml up --build
+#   # Odoo    → http://localhost:8069   (master password: admin)
+#   # Postgres → localhost:5434         (user: odoo  password: odoo)
+#
+# ── First-time DB migration (run once to copy your Mac Postgres data) ─────────
+#   # Step 1: start only the DB container and wait for it to be ready
+#   docker compose -f docker-compose.dev.yml up db -d
+#
+#   # Step 2: create the target database inside the container
+#   docker exec odoo-dev-db createdb -U odoo cleardeals_19_dev
+#
+#   # Step 3: dump from your Mac Postgres (port 5432) and pipe straight in
+#   pg_dump -U odoo -h 127.0.0.1 -p 5432 cleardeals_19_dev \
+#     | docker exec -i odoo-dev-db psql -U odoo -d cleardeals_19_dev
+#
+#   # Step 4: bring everything up
+#   docker compose -f docker-compose.dev.yml up -d
+#
+#   After this, data lives in ./odoo-dev-db-data on your Mac. It survives
+#   docker compose down / up indefinitely. Only 'rm -rf odoo-dev-db-data'
+#   would destroy it.
+#
+# ── Tear down (keep data) ─────────────────────────────────────────────────────
+#   docker compose -f docker-compose.dev.yml down
+#
+# ── Update a module after code change ─────────────────────────────────────────
+#   docker exec odoo-dev-app python3 /usr/bin/odoo \
+#     -d cleardeals_19_dev -u my_module --stop-after-init
+#
+# ── Open a Python shell against the running DB ───────────────────────────────
+#   docker exec -it odoo-dev-app python3 /usr/bin/odoo shell \
+#     -d cleardeals_19_dev
+#
+# ── Note on dev_mode auto-reload ──────────────────────────────────────────────
+#   ODOO_DEV=all enables file-change watching (reload,qweb,xml,access).
+#   On macOS + Docker Desktop this requires VirtioFS to be enabled:
+#   Docker Desktop → Settings → Resources → File Sharing → VirtioFS
+#   Without VirtioFS, inotify events don't cross the VM boundary.
+#   If auto-reload is unreliable, use the module update command above.
+# ==============================================================================
+
+services:
+
+  # ----------------------------------------------------------------------------
+  # PostgreSQL 17 — dev instance (simple config, no performance tuning needed)
+  # ----------------------------------------------------------------------------
+  db:
+    image: postgres:17
+    container_name: odoo-dev-db
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: odoo
+      POSTGRES_PASSWORD: odoo
+
+    volumes:
+      # Separate data dir — never shares state with the production bind mount
+      - ./odoo-dev-db-data:/var/lib/postgresql/data
+
+      # Connect from your Mac with TablePlus / pgAdmin:
+      # host=localhost  port=5434  user=odoo  password=odoo  db=cleardeals_19_dev
+      - "5434:5432"
+
+    networks:
+      - dev
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U odoo -d postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      # On a cold start Postgres must initialise the data dir before pg_isready works
+      start_period: 30s
+
+  # ----------------------------------------------------------------------------
+  # Odoo 19 — same Dockerfile and entrypoint as production
+  # ----------------------------------------------------------------------------
+  odoo:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: odoo-cleardeals:dev
+    container_name: odoo-dev-app
+    restart: unless-stopped
+
+    depends_on:
+      db:
+        condition: service_healthy
+
+    environment:
+      # ── Odoo dev mode ────────────────────────────────────────────────────────
+      # file_exportable=False means this cannot go in odoo.dev.conf.
+      # 'all' expands to: access, reload, qweb, xml
+      #   access  → log traceback of permission errors
+      #   reload  → restart server on Python file changes (needs VirtioFS on macOS)
+      #   qweb    → log compiled XML on QWeb template errors
+      #   xml     → reload XML view definitions without restart
+      - ODOO_DEV=all
+
+      # ── Pub/Sub ──────────────────────────────────────────────────────────────
+      # The emulator runs in the WhatsApp communications module's Docker stack.
+      # host.docker.internal resolves to the Mac host IP inside any container,
+      # so this reaches whatever is listening on port 8085 on your Mac —
+      # whether that's the emulator container or a real GCP push receiver.
+      - PUBSUB_EMULATOR_HOST=host.docker.internal:8085
+      - PUBSUB_PROJECT_ID=cleardeals-dev
+
+    volumes:
+      # Dev config — read-only (same as production, different content)
+      - ./odoo.dev.conf:/etc/odoo/odoo.conf:ro
+
+      # Separate filestore — never shares attachments with production data
+      - ./odoo-dev-web-data:/var/lib/odoo
+
+      # Live mount — edit files on your Mac, changes are immediately visible
+      # inside the container. With ODOO_DEV=reload, Odoo restarts automatically
+      # on Python changes (subject to VirtioFS note above).
+      - ./custom_addons:/mnt/extra-addons/custom
+
+    ports:
+      - "8069:8069"   # Odoo web UI → http://localhost:8069
+      - "8072:8072"   # Gevent (only active when workers > 0 in odoo.dev.conf)
+
+    networks:
+      - dev
+
+# ==============================================================================
+# Networks
+# ==============================================================================
+networks:
+  dev:
+    driver: bridge
+    name: odoo-dev
