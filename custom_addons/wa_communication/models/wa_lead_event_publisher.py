@@ -14,7 +14,6 @@ Configurable topics (ir.config_parameter):
   ``wa_communication.topic_customer_events`` — customer data updates
 """
 
-import json
 import logging
 
 from odoo import api, models
@@ -64,7 +63,7 @@ class WaLeadEventPublisher(models.Model):
         for rec in records:
             rec._wa_schedule_publish(
                 _TOPIC_ACTOR,
-                rec._wa_lead_payload('lead_created'),
+                rec._wa_lead_payload('actor.created'),
             )
         return records
 
@@ -168,12 +167,14 @@ class WaLeadEventPublisher(models.Model):
     def _wa_lead_payload(self, event_type: str) -> dict:
         """Build a standard outbound event payload dict for this lead.
 
-        :param event_type: Snake_case event identifier, e.g. ``'lead_created'``.
+        :param event_type: Snake_case event identifier, e.g. ``'actor.created'``.
         :return:           Payload dict ready to be JSON-serialised.
         """
         self.ensure_one()
         return {
             'event_type': event_type,
+            'actor_type': 'buyer_inquiry',
+            'actor_id': self.id,
             'lead_id': self.id,
             'customer_name': self.name,
             'phone': self.phone or '',
@@ -205,11 +206,9 @@ class WaLeadEventPublisher(models.Model):
             )
             return
 
-        data = json.dumps(payload).encode()
-
         def _publish():
             try:
-                self.env['cleardeals.pubsub'].publish_async(topic, data)
+                self.env['cleardeals.pubsub'].publish_async(topic, payload)
             except Exception:
                 _logger.exception(
                     "wa_lead_event: publish_async failed for event=%r lead=%s topic=%s",
