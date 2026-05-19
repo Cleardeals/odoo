@@ -208,7 +208,7 @@ def pull_matching_message(lead_id: int, timeout_s: int = 20) -> dict | None:
                 payload = json.loads(received.message.data.decode('utf-8'))
             except Exception:
                 continue
-            if payload.get('actor_id') == lead_id or payload.get('lead_id') == lead_id:
+            if payload.get('actor_id') == lead_id or payload.get('payload', {}).get('lead_id') == lead_id:
                 print(f'[pubsub] received message  message_id={received.message.message_id}')
                 subscriber.close()
                 return payload
@@ -278,12 +278,15 @@ def main() -> None:
         errors.append(f'expected actor_type="buyer_inquiry", got {payload.get("actor_type")!r}')
     if payload.get('actor_id') != lead_id:
         errors.append(f'expected actor_id={lead_id}, got {payload.get("actor_id")!r}')
-    if payload.get('lead_id') != lead_id:
-        errors.append(f'expected lead_id={lead_id}, got {payload.get("lead_id")!r}')
+    nested = payload.get('payload') or {}
+    if nested.get('lead_id') != lead_id:
+        errors.append(f'expected payload.lead_id={lead_id}, got {nested.get("lead_id")!r}')
     if payload.get('phone') != TEST_PHONE:
         errors.append(f'expected phone={TEST_PHONE!r}, got {payload.get("phone")!r}')
-    if not payload.get('customer_name'):
-        errors.append('expected non-empty customer_name')
+    if not nested.get('customer_name'):
+        errors.append('expected non-empty payload.customer_name')
+    if not isinstance(nested.get('actor'), dict):
+        errors.append('expected payload.actor to be a dict (actor snapshot missing)')
 
     if errors:
         print('FAIL — payload validation errors:')

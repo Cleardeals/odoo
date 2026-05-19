@@ -534,11 +534,23 @@ class WaConversation(models.Model):
         return self.sudo()._get_or_create_for_phone(phone)
 
     def _owa_find_message(
-        self, wa_message_id: str = '', request_id: str = ''
+        self,
+        wa_message_id: str = '',
+        request_id: str = '',
+        enrollment_id: str = '',
+        step_id: str = '',
     ) -> 'models.Model':
-        """Find an existing ``wa.message`` by ``wa_message_id`` or ``request_id``.
+        """Find an existing ``wa.message`` by identity keys.
 
-        Returns an empty recordset if neither key matches.
+        Tries three keys in priority order:
+        1. ``wa_message_id`` — WA-assigned message ID (most specific).
+        2. ``request_id``    — OdooWaRequest UUID (RM-initiated sends).
+        3. ``enrollment_id`` + ``step_id`` — workflow-initiated sends where
+           Interakt may return a null message ID (e.g. in emulator / sandbox).
+           This prevents duplicate records when the same ``message_sent`` event
+           is delivered multiple times (fan-out from several engine replicas).
+
+        Returns an empty recordset if no key matches.
         """
         WaMsg = self.env['wa.message'].sudo()
         if wa_message_id:
@@ -547,6 +559,13 @@ class WaConversation(models.Model):
                 return msg
         if request_id:
             msg = WaMsg.search([('request_id', '=', request_id)], limit=1)
+            if msg:
+                return msg
+        if enrollment_id and step_id:
+            msg = WaMsg.search(
+                [('enrollment_id', '=', enrollment_id), ('step_id', '=', step_id)],
+                limit=1,
+            )
             if msg:
                 return msg
         return WaMsg.browse()
@@ -597,7 +616,12 @@ class WaConversation(models.Model):
         initiator      = 'workflow' if workflow_slug else 'rm'
         kind           = 'template' if template_name else 'freetext'
 
-        msg = self._owa_find_message(wa_message_id=wa_message_id, request_id=request_id)
+        msg = self._owa_find_message(
+            wa_message_id=wa_message_id,
+            request_id=request_id,
+            enrollment_id=enrollment_id,
+            step_id=step_id,
+        )
         if msg:
             # RM-initiated send: update the queued record created by send_message()
             msg.write({

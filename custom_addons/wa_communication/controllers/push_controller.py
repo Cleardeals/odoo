@@ -26,6 +26,7 @@ Security model
 import base64
 import json
 import logging
+import os
 
 from odoo import http
 from odoo.http import request
@@ -59,13 +60,20 @@ class WaPubSubPushController(http.Controller):
         """
         # ----------------------------------------------------------------
         # 1. Verify OIDC bearer token
+        #
+        # When PUBSUB_EMULATOR_HOST is set the local emulator never issues
+        # real OIDC tokens, so we bypass the Authorization header check
+        # entirely and let verify_push_token return its emulator sentinel.
         # ----------------------------------------------------------------
-        auth_header = request.httprequest.headers.get('Authorization', '')
-        if not auth_header.startswith('Bearer '):
-            _logger.warning("wa_push: missing or malformed Authorization header")
-            return request.make_response('Unauthorized', status=401)
-
-        bearer_token = auth_header[len('Bearer '):]
+        is_emulator = bool(os.environ.get('PUBSUB_EMULATOR_HOST'))
+        if is_emulator:
+            bearer_token = ''
+        else:
+            auth_header = request.httprequest.headers.get('Authorization', '')
+            if not auth_header.startswith('Bearer '):
+                _logger.warning("wa_push: missing or malformed Authorization header")
+                return request.make_response('Unauthorized', status=401)
+            bearer_token = auth_header[len('Bearer '):]
 
         ICP = request.env['ir.config_parameter'].sudo()
         audience = ICP.get_param(_AUDIENCE_KEY, '')
