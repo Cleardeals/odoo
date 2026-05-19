@@ -1,0 +1,7 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_wa_conversation_manager,wa.conversation manager,model_wa_conversation,base.group_system,1,1,1,1
+access_wa_conversation_user,wa.conversation user,model_wa_conversation,base.group_user,1,1,1,0
+access_wa_message_manager,wa.message manager,model_wa_message,base.group_system,1,1,1,1
+access_wa_message_user,wa.message user,model_wa_message,base.group_user,1,1,1,0
+access_wa_event_log_manager,wa.event.log manager,model_wa_event_log,base.group_system,1,0,1,0
+access_wa_event_log_user,wa.event.log user,model_wa_event_log,base.group_user,1,0,1,0

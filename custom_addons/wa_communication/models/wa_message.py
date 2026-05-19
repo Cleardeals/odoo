@@ -1,0 +1,304 @@
+"""WhatsApp Message model — append-only log of every WA message in either direction.
+
+Architecture notes
+------------------
+This table is the single source of truth for all WhatsApp message events in
+Odoo.  It is intentionally **append-only**: core structural fields (direction,
+kind, occurred_at, body, conversation_id, lead_id) are immutable after
+creation.  Only lifecycle fields (status, status_updated_at, wa_message_id,
+cost_inr) are written after the initial insert.
+
+Timestamps
+----------
+``occurred_at`` records the *actual event time* from the Interakt/WA webhook
+(delivered_at_utc, seen_at_utc, received_at_utc, etc.).  It is NOT the time
+the Odoo record was created.  Use this field for timeline ordering and all
+time-based analytics.
+
+``received_at`` records when this Odoo record was created.  The delta
+``occurred_at - received_at`` measures webhook processing latency.
+
+Status lifecycle for outbound messages::
+
+    queued → sent → delivered → read
+                  ↘ failed | meta_blocked | invalid_number | opted_out
+                    | rate_limited | template_error | expired | skipped
+
+Inbound messages are created with ``status='delivered'`` (WA guarantees
+delivery when we receive the inbound push event).
+
+Actor fields
+------------
+``lead_id`` links to ``leads.new`` for ``actor_type='buyer_inquiry'`` actors.
+When ``customer.base`` is built, add ``customer_id = Many2one('customer.base')``
+alongside it — exactly one of the two should be set per row.
+
+``platform_actor_id`` stores the WA platform's internal actor record ID
+(e.g. ``workflow_enrollments.inquiry_id``) for cross-referencing event logs.
+It is an integer, not a FK.
+"""
+
+from odoo import fields, models
+from odoo.exceptions import UserError, ValidationError
+
+# Structural fields that must never change after a record is created.
+# Lifecycle fields (status, status_updated_at, wa_message_id, cost_inr)
+# are deliberately excluded — they are updated by the delivery pipeline.
+_IMMUTABLE_FIELDS = frozenset({
+    'direction',
+    'kind',
+    'occurred_at',
+    'conversation_id',
+    'body',
+    'lead_id',
+})
+
+
+class WaMessage(models.Model):
+    """A single WhatsApp message in either direction.
+
+    The ``kind`` and ``initiator`` fields together describe what happened:
+
+    ==================  ===========  ============================================
+    kind                initiator    Meaning
+    ==================  ===========  ============================================
+    template            workflow     Automated template step in a workflow
+    template            rm           RM manually sent a template
+    freetext            rm           RM typed a free-text reply
+    image/document/…    rm           RM sent a media attachment
+    text_reply          buyer        Buyer typed a message
+    button_reply        buyer        Buyer tapped a quick-reply button
+    system              system       Enrollment / assignment pill in timeline
+    ==================  ===========  ============================================
+    """
+
+    _name = 'wa.message'
+    _description = 'WhatsApp Message'
+    _order = 'occurred_at desc, id desc'
+    _rec_name = 'wa_message_id'
+
+    # ------------------------------------------------------------------
+    # Core identity
+    # ------------------------------------------------------------------
+
+    conversation_id = fields.Many2one(
+        'wa.conversation',
+        string='Conversation',
+        required=True,
+        ondelete='cascade',
+        index=True,
+    )
+    wa_message_id = fields.Char(
+        'WA Message ID',
+        index=True,
+        copy=False,
+        help="WhatsApp-assigned message ID (wamid.*).  Null for outbound "
+             "messages until the bridge ACKs the send.",
+    )
+    request_id = fields.Char(
+        'Request ID',
+        index=True,
+        copy=False,
+        help="OdooWaRequest.request_id UUID for outbound sends.  "
+             "Used to correlate the Odoo send request with delivery receipts.",
+    )
+
+    # ------------------------------------------------------------------
+    # Direction and initiator
+    # ------------------------------------------------------------------
+
+    direction = fields.Selection(
+        [('inbound', 'Inbound'), ('outbound', 'Outbound')],
+        required=True,
+        index=True,
+    )
+    initiator = fields.Selection(
+        [
+            ('buyer',    'Buyer'),
+            ('rm',       'RM (Manual)'),
+            ('workflow', 'Workflow Automation'),
+            ('system',   'System'),
+        ],
+        required=True,
+        index=True,
+        help="Who initiated this message.\n"
+             "buyer    — inbound from the lead / customer.\n"
+             "rm       — RM sent manually from the WA activity tab.\n"
+             "workflow — automated template step executed by the workflow engine.\n"
+             "system   — internal event pill (enrollment, assignment, etc.).",
+    )
+
+    # ------------------------------------------------------------------
+    # Message type
+    # ------------------------------------------------------------------
+
+    kind = fields.Selection(
+        [
+            ('template',     'Template'),       # outbound automated / RM template
+            ('freetext',     'Free Text'),       # outbound RM plain-text reply
+            ('image',        'Image'),           # media: JPG / PNG / WebP
+            ('document',     'Document'),        # media: PDF / Office file
+            ('video',        'Video'),           # media: MP4 / 3GP
+            ('audio',        'Audio'),           # media: audio / voice note
+            ('button_reply', 'Button Reply'),    # inbound: buyer tapped a button
+            ('text_reply',   'Text Reply'),      # inbound: buyer typed text
+            ('system',       'System Event'),    # enrollment / assignment pill
+            ('unknown',      'Unknown'),         # unrecognised WA message type
+        ],
+        string='Type',
+        required=True,
+        index=True,
+    )
+
+    # ------------------------------------------------------------------
+    # Content
+    # ------------------------------------------------------------------
+
+    body = fields.Text('Body')
+    sender_name = fields.Char(
+        'Sender Name',
+        help="Display name from the WA contact profile (inbound only).",
+    )
+
+    # ------------------------------------------------------------------
+    # Template / workflow context
+    # ------------------------------------------------------------------
+
+    template_name = fields.Char(
+        'Template Name',
+        help="WA template identifier (e.g. 'site_visit_reminder_v2').  "
+             "Populated for kind='template'.",
+    )
+    workflow_slug = fields.Char(
+        'Workflow',
+        help="Slug of the WA workflow that triggered this message "
+             "(from OdooWaEvent.workflow_slug).  Null for RM-initiated sends.",
+    )
+    step_id = fields.Char(
+        'Workflow Step',
+        help="Internal step ID within the workflow "
+             "(from OdooWaEvent.step_id).",
+    )
+    enrollment_id = fields.Char(
+        'Enrollment ID',
+        help="UUID of the workflow_enrollments row on the WA platform "
+             "(from OdooWaEvent.enrollment_id).",
+    )
+
+    # ------------------------------------------------------------------
+    # Actor link
+    # ------------------------------------------------------------------
+
+    lead_id = fields.Many2one(
+        'leads.new',
+        string='Lead',
+        index=True,
+        ondelete='set null',
+        copy=False,
+        help="The leads.new record for this actor (actor_type='buyer_inquiry').  "
+             "Null until auto-linked by the push handler or _get_or_create_for_phone.  "
+             "TODO: add customer_id = Many2one('customer.base') once that module exists.",
+    )
+    platform_actor_id = fields.Integer(
+        'Platform Actor ID',
+        help="WA platform's internal actor record ID (workflow_enrollments.inquiry_id).  "
+             "Integer, not a FK — used to cross-reference WA platform event logs.",
+    )
+
+    # ------------------------------------------------------------------
+    # Delivery status
+    # ------------------------------------------------------------------
+
+    status = fields.Selection(
+        [
+            ('queued',         'Queued'),          # inserted before API call
+            ('sent',           'Sent'),             # Interakt accepted
+            ('delivered',      'Delivered'),        # webhook: message_api_delivered
+            ('read',           'Read'),             # webhook: message_api_read
+            ('failed',         'Failed'),           # retryable failure
+            ('meta_blocked',   'Meta Blocked'),     # error code 131026 — permanent
+            ('invalid_number', 'Invalid Number'),   # error code 131052 — permanent
+            ('opted_out',      'Opted Out'),        # error code 131047
+            ('rate_limited',   'Rate Limited'),     # error code 130429 — transient
+            ('template_error', 'Template Error'),   # error codes 132000 / 132001
+            ('skipped',        'Skipped'),          # pre-send check blocked
+            ('expired',        'Expired'),          # 24-hour window passed
+        ],
+        required=True,
+        default='queued',
+        index=True,
+    )
+    status_updated_at = fields.Datetime('Status Updated At', readonly=True)
+
+    # ------------------------------------------------------------------
+    # Cost
+    # ------------------------------------------------------------------
+
+    cost_inr = fields.Float(
+        'Cost (INR)',
+        digits=(10, 4),
+        help="Delivery cost in INR from the Interakt webhook.  "
+             "Stored to 4 decimal places to match NUMERIC(8,4) on the WA platform.",
+    )
+
+    # ------------------------------------------------------------------
+    # Timestamps
+    # ------------------------------------------------------------------
+
+    occurred_at = fields.Datetime(
+        'Occurred At (UTC)',
+        required=True,
+        index=True,
+        help="Time of the actual event from Interakt/WA (delivered_at_utc, "
+             "seen_at_utc, received_at_utc, etc.).  NOT the time this record "
+             "was created.  Use this field for timeline ordering and all "
+             "time-based analytics.",
+    )
+    received_at = fields.Datetime(
+        'Received At (Odoo)',
+        default=fields.Datetime.now,
+        readonly=True,
+        copy=False,
+        help="When this Odoo record was created.  "
+             "occurred_at − received_at = webhook processing latency.",
+    )
+
+    # ------------------------------------------------------------------
+    # Raw audit data
+    # ------------------------------------------------------------------
+
+    raw_payload = fields.Json(
+        'Raw Payload',
+        help="Full event payload for debugging.  Not indexed.  "
+             "Do not use in domain filters — use structured fields instead.",
+    )
+
+    # ------------------------------------------------------------------
+    # Append-only enforcement
+    # ------------------------------------------------------------------
+
+    def write(self, vals):
+        """Reject writes to immutable structural fields after creation."""
+        immutable_attempted = _IMMUTABLE_FIELDS & vals.keys()
+        if immutable_attempted and not self.env.context.get('_wa_message_allow_write'):
+            raise ValidationError(
+                "wa.message records are append-only.  "
+                "The following fields cannot be changed after creation: %s"
+                % sorted(immutable_attempted)
+            )
+        return super().write(vals)
+
+    def unlink(self):
+        """Block direct ORM deletion to protect the audit trail.
+
+        Records are only removed via DB-level cascade when their parent
+        ``wa.conversation`` is deleted.  Direct ORM deletes are rejected.
+        Pass ``{'_wa_message_allow_delete': True}`` in context only for
+        test teardown or data-migration scripts.
+        """
+        if not self.env.context.get('_wa_message_allow_delete'):
+            raise UserError(
+                "WhatsApp message records cannot be deleted individually.  "
+                "Delete the parent conversation to remove all its messages."
+            )
+        return super().unlink()

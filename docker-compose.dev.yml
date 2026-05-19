@@ -117,7 +117,7 @@ services:
       # so this reaches whatever is listening on port 8085 on your Mac —
       # whether that's the emulator container or a real GCP push receiver.
       - PUBSUB_EMULATOR_HOST=host.docker.internal:8085
-      - PUBSUB_PROJECT_ID=cleardeals-dev
+      - PUBSUB_PROJECT_ID=cleardeals-wa-local
 
     volumes:
       # Dev config — read-only (same as production, different content)

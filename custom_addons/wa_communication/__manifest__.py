@@ -1,0 +1,51 @@
+{
+    'name': 'WhatsApp Communication',
+    'version': '1.0.0',
+    'summary': 'WA messaging layer: push receiver, conversation threads, outbound publishing.',
+    'description': """
+WhatsApp ↔ Odoo communication layer built on GCP Pub/Sub transport.
+
+**Inbound (GCP → Odoo)**
+Receives push deliveries from the ``cd-prod-wa-odoo-events`` subscription at
+``POST /wa/pubsub/push``, verifies the OIDC bearer token, parses the WA Cloud
+API webhook envelope, and routes events to the appropriate handler:
+
+- Inbound WA messages  → create/update ``wa.conversation`` + ``wa.message``
+- Delivery/read status updates → update ``wa.message.status``
+- Unknown events → log to ``wa.event.log``
+
+**Outbound (Odoo → GCP → WA)**
+``wa.conversation.send_message()`` creates a pending ``wa.message`` and
+publishes a send request to the ``cd-prod-odoo-wa-requests`` topic.  The WA
+bridge picks it up, sends the actual WA message, and delivers status receipts
+back via the inbound push path.
+
+**Lead event publishing**
+Inherits ``leads.new`` to publish configurable Pub/Sub events whenever
+relevant lead state changes occur (lead created, site visit scheduled/done,
+etc.).  Each event category has its own configurable topic.
+
+**Configuration** (Settings → Technical → System Parameters):
+  ``wa_communication.inbound_push_audience``         — OIDC ``aud`` claim
+  ``wa_communication.inbound_push_sa_email``         — optional SA email
+  ``wa_communication.topic_odoo_wa_requests``        — outbound WA sends
+  ``wa_communication.topic_actor_events``            — lead/RM events
+  ``wa_communication.topic_visit_events``            — site-visit events
+  ``wa_communication.topic_property_events``         — property events
+  ``wa_communication.topic_customer_events``         — customer events
+    """,
+    'author': 'Cleardeals Technology',
+    'category': 'Technical',
+    'license': 'LGPL-3',
+    'depends': ['cleardeals_pubsub', 'leads'],
+    'data': [
+        'security/ir.model.access.csv',
+        'data/wa_communication_config_data.xml',
+    ],
+    'external_dependencies': {
+        'python': ['google-cloud-pubsub', 'google-auth'],
+    },
+    'installable': True,
+    'auto_install': False,
+    'application': False,
+}

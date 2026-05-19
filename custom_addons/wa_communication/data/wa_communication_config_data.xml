@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!--
+        Default system parameters for wa_communication.
+
+        IMPORTANT: override all values in each environment's server config or
+        via Settings → Technical → System Parameters before activating Pub/Sub
+        push subscriptions.
+
+        Topic names follow the convention:
+            cd-{env}-{topic-alias}
+        e.g. cd-prod-odoo-wa-requests, cd-staging-actor-events, …
+
+        Inbound OIDC:
+            wa_communication.inbound_push_audience   — full push endpoint URL
+            wa_communication.inbound_push_sa_email   — optional SA email assertion
+
+        Outbound topics:
+            wa_communication.topic_odoo_wa_requests  — WA send requests
+            wa_communication.topic_actor_events      — lead / RM events
+            wa_communication.topic_visit_events      — site-visit events
+            wa_communication.topic_property_events   — property events
+            wa_communication.topic_customer_events   — customer data events
+    -->
+
+    <!--
+        noupdate="1": these records are created on first install only.
+        Module upgrades (-u) do NOT overwrite environment-specific values
+        that have been customised via the Settings UI or direct SQL.
+    -->
+    <data noupdate="1">
+
+    <!-- Inbound push verification -->
+    <record id="param_inbound_push_audience" model="ir.config_parameter">
+        <field name="key">wa_communication.inbound_push_audience</field>
+        <field name="value">https://odoo.cleardeals.xyz/wa/pubsub/push</field>
+    </record>
+
+    <record id="param_inbound_push_sa_email" model="ir.config_parameter">
+        <field name="key">wa_communication.inbound_push_sa_email</field>
+        <field name="value"></field>
+    </record>
+
+    <!-- Outbound — WA send requests -->
+    <record id="param_topic_odoo_wa_requests" model="ir.config_parameter">
+        <field name="key">wa_communication.topic_odoo_wa_requests</field>
+        <field name="value">cd-prod-odoo-wa-requests</field>
+    </record>
+
+    <!-- Outbound — lead / actor events -->
+    <record id="param_topic_actor_events" model="ir.config_parameter">
+        <field name="key">wa_communication.topic_actor_events</field>
+        <field name="value">cd-prod-actor-events</field>
+    </record>
+
+    <!-- Outbound — site-visit events -->
+    <record id="param_topic_visit_events" model="ir.config_parameter">
+        <field name="key">wa_communication.topic_visit_events</field>
+        <field name="value">cd-prod-visit-events</field>
+    </record>
+
+    <!-- Outbound — property events -->
+    <record id="param_topic_property_events" model="ir.config_parameter">
+        <field name="key">wa_communication.topic_property_events</field>
+        <field name="value">cd-prod-property-events</field>
+    </record>
+
+    <!-- Outbound — customer events -->
+    <record id="param_topic_customer_events" model="ir.config_parameter">
+        <field name="key">wa_communication.topic_customer_events</field>
+        <field name="value">cd-prod-customer-events</field>
+    </record>
+
+    </data>
+</odoo>
