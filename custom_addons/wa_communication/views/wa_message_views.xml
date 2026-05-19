@@ -1,0 +1,186 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- ================================================================
+         wa.message — Search View
+         ================================================================ -->
+    <record id="view_wa_message_search" model="ir.ui.view">
+        <field name="name">wa.message.search</field>
+        <field name="model">wa.message</field>
+        <field name="arch" type="xml">
+            <search string="WhatsApp Messages">
+
+                <field name="lead_id" string="Lead"/>
+                <field name="conversation_id" string="Conversation"/>
+                <field name="body" string="Message Body"/>
+                <field name="wa_message_id" string="WA Message ID"/>
+                <field name="template_name" string="Template"/>
+                <field name="workflow_slug" string="Workflow"/>
+
+                <separator/>
+
+                <!-- Direction -->
+                <filter name="filter_inbound"  string="Inbound"  domain="[('direction','=','inbound')]"/>
+                <filter name="filter_outbound" string="Outbound" domain="[('direction','=','outbound')]"/>
+
+                <separator/>
+
+                <!-- Status -->
+                <filter name="filter_queued"    string="Queued"    domain="[('status','=','queued')]"/>
+                <filter name="filter_sent"      string="Sent"      domain="[('status','=','sent')]"/>
+                <filter name="filter_delivered" string="Delivered" domain="[('status','=','delivered')]"/>
+                <filter name="filter_read"      string="Read"      domain="[('status','=','read')]"/>
+                <filter name="filter_failed"    string="Failed"
+                    domain="[('status','in',['failed','meta_blocked','invalid_number','opted_out','rate_limited','template_error','expired'])]"/>
+
+                <separator/>
+
+                <!-- Kind -->
+                <filter name="filter_template"  string="Template"  domain="[('kind','=','template')]"/>
+                <filter name="filter_freetext"  string="Free Text" domain="[('kind','=','freetext')]"/>
+
+                <separator/>
+
+                <filter name="group_direction" string="Direction" context="{'group_by': 'direction'}"/>
+                <filter name="group_status"    string="Status"    context="{'group_by': 'status'}"/>
+                <filter name="group_kind"      string="Type"      context="{'group_by': 'kind'}"/>
+                <filter name="group_initiator" string="Initiator" context="{'group_by': 'initiator'}"/>
+                <filter name="group_lead"      string="Lead"      context="{'group_by': 'lead_id'}"/>
+                <filter name="group_occurred"  string="Date"
+                    context="{'group_by': 'occurred_at:day'}"/>
+
+            </search>
+        </field>
+    </record>
+
+    <!-- ================================================================
+         wa.message — List View
+         ================================================================ -->
+    <record id="view_wa_message_list" model="ir.ui.view">
+        <field name="name">wa.message.list</field>
+        <field name="model">wa.message</field>
+        <field name="arch" type="xml">
+            <list string="WhatsApp Message Log"
+                  default_order="occurred_at desc"
+                  create="false"
+                  delete="false"
+                  decoration-danger="status in ('failed','meta_blocked','invalid_number','opted_out','rate_limited','template_error','expired')"
+                  decoration-success="status in ('delivered','read')"
+                  decoration-muted="status == 'queued'">
+
+                <field name="occurred_at" string="Time" optional="show"/>
+                <field name="direction"   widget="badge"
+                       decoration-info="direction == 'inbound'"/>
+                <field name="lead_id"     string="Lead"    optional="show"/>
+                <field name="conversation_id" string="Phone" optional="show"/>
+                <field name="kind"        widget="badge" optional="show"/>
+                <field name="initiator"   optional="hide"/>
+                <field name="body"        string="Message"
+                       optional="show"/>
+                <field name="template_name" string="Template"  optional="hide"/>
+                <field name="workflow_slug" string="Workflow"   optional="hide"/>
+                <field name="status"      widget="badge"
+                       decoration-success="status in ('delivered','read')"
+                       decoration-warning="status in ('sent','queued')"
+                       decoration-danger="status in ('failed','meta_blocked','invalid_number','opted_out','rate_limited','template_error','expired')"
+                       decoration-muted="status == 'skipped'"/>
+                <field name="cost_inr"    string="Cost (₹)" optional="hide"/>
+                <field name="received_at" string="Logged At"  optional="hide"/>
+
+            </list>
+        </field>
+    </record>
+
+    <!-- ================================================================
+         wa.message — Form View
+         ================================================================ -->
+    <record id="view_wa_message_form" model="ir.ui.view">
+        <field name="name">wa.message.form</field>
+        <field name="model">wa.message</field>
+        <field name="arch" type="xml">
+            <form string="WhatsApp Message" create="false">
+
+                <header>
+                    <field name="status" widget="statusbar"
+                           statusbar_visible="queued,sent,delivered,read"
+                           readonly="1"/>
+                </header>
+
+                <sheet>
+                    <div class="oe_title">
+                        <h1>
+                            <field name="direction" widget="badge"
+                                   decoration-info="direction == 'inbound'"/>
+                            <field name="kind" widget="badge" class="ms-2"/>
+                        </h1>
+                    </div>
+
+                    <group>
+                        <group string="Actor">
+                            <field name="conversation_id" string="Conversation (Phone)"/>
+                            <field name="lead_id"/>
+                            <field name="initiator"/>
+                            <field name="sender_name" invisible="direction == 'outbound'"/>
+                        </group>
+                        <group string="Delivery">
+                            <field name="status"/>
+                            <field name="status_updated_at" readonly="1"/>
+                            <field name="occurred_at" readonly="1"/>
+                            <field name="received_at"  readonly="1"/>
+                            <field name="cost_inr"     readonly="1"/>
+                        </group>
+                    </group>
+
+                    <group string="Message Content">
+                        <field name="body" nolabel="1" widget="text" readonly="1"
+                               invisible="not body"/>
+                    </group>
+
+                    <group string="Identifiers">
+                        <group>
+                            <field name="wa_message_id"  readonly="1"/>
+                            <field name="request_id"     readonly="1"/>
+                        </group>
+                        <group>
+                            <field name="platform_actor_id" readonly="1"/>
+                            <field name="enrollment_id"  readonly="1"/>
+                        </group>
+                    </group>
+
+                    <group string="Workflow / Template"
+                           invisible="not template_name and not workflow_slug">
+                        <field name="template_name" readonly="1"/>
+                        <field name="workflow_slug"  readonly="1"/>
+                        <field name="step_id"        readonly="1"/>
+                    </group>
+
+                    <group string="Raw Payload" groups="base.group_system">
+                        <field name="raw_payload" nolabel="1" widget="text" readonly="1"/>
+                    </group>
+
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- ================================================================
+         Action — wa.message
+         ================================================================ -->
+    <record id="action_wa_message_log" model="ir.actions.act_window">
+        <field name="name">Message Log</field>
+        <field name="res_model">wa.message</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="view_wa_message_search"/>
+        <field name="context">{'search_default_filter_outbound': 0}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                No WhatsApp messages yet.
+            </p>
+            <p>
+                Messages are logged here automatically whenever a WhatsApp
+                message is sent or received via the Pub/Sub pipeline.
+            </p>
+        </field>
+    </record>
+
+</odoo>

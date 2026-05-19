@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- Top-level WhatsApp menu -->
+    <menuitem id="menu_wa_communication_root"
+              name="WhatsApp"
+              sequence="90"/>
+
+    <!-- Messaging sub-menu -->
+    <menuitem id="menu_wa_communication_messaging"
+              name="Messaging"
+              parent="menu_wa_communication_root"
+              sequence="10"/>
+
+    <menuitem id="menu_wa_message_log"
+              name="Message Log"
+              parent="menu_wa_communication_messaging"
+              action="action_wa_message_log"
+              sequence="10"/>
+
+</odoo>

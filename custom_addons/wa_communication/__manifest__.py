@@ -41,6 +41,8 @@ etc.).  Each event category has its own configurable topic.
     'data': [
         'security/ir.model.access.csv',
         'data/wa_communication_config_data.xml',
+        'views/wa_message_views.xml',
+        'views/wa_communication_menus.xml',
     ],
     'external_dependencies': {
         'python': ['google-cloud-pubsub', 'google-auth'],
