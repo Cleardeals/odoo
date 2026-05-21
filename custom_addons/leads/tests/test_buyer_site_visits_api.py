@@ -1012,8 +1012,8 @@ class TestBuyerSiteVisitsAPI(PortalLeadTestCase):
 
         # The API classifies this as "upcoming" because the new (non-superseded) visit
         # has a future datetime.  The controller reads from lead.site.visit directly.
-        from odoo.addons.leads.controllers.buyer.site_visits import _get_latest_active_visit
-        active_visit = _get_latest_active_visit(lead)
+        from odoo.addons.leads.controllers.buyer.site_visits import _get_active_visits
+        active_visit = _get_active_visits(lead)[:1]
         bucket = _classify_visit(active_visit, self.now)
         self.assertEqual(
             bucket,

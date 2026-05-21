@@ -1056,7 +1056,7 @@ class TestSellerSiteVisitsAPI(PortalLeadTestCase):
         """
         from odoo.addons.leads.controllers.seller.site_visits import (
             _classify_visit_new,
-            _get_latest_active_visit,
+            _get_active_visits,
         )
 
         now = datetime.now()
@@ -1092,7 +1092,7 @@ class TestSellerSiteVisitsAPI(PortalLeadTestCase):
         )
 
         # The controller gets the latest non-superseded visit and classifies it.
-        active_visit = _get_latest_active_visit(lead)
+        active_visit = _get_active_visits(lead)[:1]
         bucket = _classify_visit_new(active_visit, now)
         self.assertEqual(
             bucket,
