@@ -704,6 +704,7 @@ class NewPortalLead(models.Model):
                     )
                     if not effective_property_id:
                         continue
+                    duplicate = self.sudo().search(
                         [
                             ("phone", "=", new_phone),
                             ("property_base_id", "=", effective_property_id),
