@@ -16,7 +16,13 @@ Response shape
   "success": true,
   "data": {
     "owner_phone": "9876543210",
-    "properties": ["TAG1", "TAG2"],
+    "properties": [
+      {
+        "property_tag": "TAG1",
+        "name": "Sunrise Residency",
+        "rm_name": "Bhoomika Prajapati"
+      }
+    ],
     "tag_filter": null | "TAG1",
     "inquiries": {
       "total":       42,
@@ -92,6 +98,16 @@ class SellerSummaryController(http.Controller):
 
         tags = properties.mapped("property_tag")
 
+        # Build per-property detail list
+        property_details = [
+            {
+                "property_tag": prop.property_tag,
+                "name": prop.name or None,
+                "rm_name": prop.rm_user_id.name if prop.rm_user_id else None,
+            }
+            for prop in properties
+        ]
+
         # Primary leads (leads.new records linked to the owner's properties)
         primary_leads = get_primary_leads_for_tags(request.env, tags)
 
@@ -111,7 +127,7 @@ class SellerSummaryController(http.Controller):
 
         data = {
             "owner_phone": phone,
-            "properties": tags,
+            "properties": property_details,
             "tag_filter": tag_filter,
             "inquiries": {
                 "total": len(primary_leads) + len(recommended_leads),
