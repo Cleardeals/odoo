@@ -3,14 +3,14 @@
 
     <!--
         cleardeals_ui.StatusBadge
-        ─────────────────────────
+
         Renders a pill badge for the current field value.
 
-        · Skipped entirely when the field value is falsy (empty / False / None).
-        · `colorIndex` drives the `cd-status-badge--color-N` modifier class
+        - Skipped entirely when the field value is falsy (empty / False / None).
+        - colorIndex drives the cd-status-badge color-N modifier class
           which maps to the 12-step Cleardeals colour palette defined in
           status_badge.scss.
-        · Bootstrap's `badge` and `rounded-pill` classes handle sizing/shape so
+        - Bootstrap's badge and rounded-pill classes handle sizing/shape so
           the component inherits the host theme automatically.
     -->
     <t t-name="cleardeals_ui.StatusBadge">
