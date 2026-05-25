@@ -5,3 +5,8 @@ access_wa_message_manager,wa.message manager,model_wa_message,base.group_system,
 access_wa_message_user,wa.message user,model_wa_message,base.group_user,1,1,1,0
 access_wa_event_log_manager,wa.event.log manager,model_wa_event_log,base.group_system,1,0,1,0
 access_wa_event_log_user,wa.event.log user,model_wa_event_log,base.group_user,1,0,1,0
+access_wa_workflow_manager,wa.workflow manager,model_wa_workflow,base.group_system,1,1,1,1
+access_wa_workflow_user,wa.workflow user,model_wa_workflow,base.group_user,1,1,1,0
+access_wa_enrollment_manager,wa.enrollment manager,model_wa_enrollment,base.group_system,1,1,1,1
+access_wa_enrollment_user,wa.enrollment user,model_wa_enrollment,base.group_user,1,0,0,0
+access_wa_dashboard_user,wa.dashboard user,model_wa_dashboard,base.group_user,1,0,0,0

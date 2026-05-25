@@ -494,6 +494,8 @@ class WaConversation(models.Model):
             'enrollment_created':      self._handle_odoo_enrollment_created,
             'enrollment_completed':    self._handle_odoo_enrollment_completed,
             'enrollment_step_changed': self._handle_odoo_enrollment_step_changed,
+            # Workflow registry sync — routes to wa.workflow model
+            'workflow.registry.synced': self._handle_workflow_registry_synced,
         }
         handler = _ODOO_WA_HANDLERS.get(event_type)
         try:
@@ -897,7 +899,7 @@ class WaConversation(models.Model):
     def _handle_odoo_enrollment_created(
         self, event: dict, pubsub_message_id: str
     ) -> None:
-        """Handle enrollment_created — insert a system pill in the message timeline."""
+        """Handle enrollment_created — system pill + wa.enrollment record."""
         phone         = event.get('phone', '')
         actor_id      = event.get('actor_id')
         actor_type    = event.get('actor_type', '')
@@ -922,10 +924,21 @@ class WaConversation(models.Model):
             'occurred_at':     occurred_at,
         })
 
+        # Track enrollment lifecycle for the Active Enrollments KPI.
+        if enrollment_id:
+            self.env['wa.enrollment'].sudo()._get_or_create(
+                enrollment_id=enrollment_id,
+                workflow_slug=workflow_slug,
+                lead=lead,
+                phone=phone,
+                platform_actor_id=actor_id or 0,
+                started_at=occurred_at,
+            )
+
     def _handle_odoo_enrollment_completed(
         self, event: dict, pubsub_message_id: str
     ) -> None:
-        """Handle enrollment_completed — insert a system pill in the message timeline."""
+        """Handle enrollment_completed — system pill + mark wa.enrollment complete."""
         phone         = event.get('phone', '')
         actor_id      = event.get('actor_id')
         actor_type    = event.get('actor_type', '')
@@ -950,17 +963,36 @@ class WaConversation(models.Model):
             'occurred_at':     occurred_at,
         })
 
+        # Mark enrollment as completed so it drops from the Active Enrollments count.
+        if enrollment_id:
+            enroll = self.env['wa.enrollment'].sudo().search(
+                [('enrollment_id', '=', enrollment_id)], limit=1
+            )
+            if enroll:
+                enroll.write({'state': 'completed', 'completed_at': occurred_at})
+
     def _handle_odoo_enrollment_step_changed(
         self, event: dict, pubsub_message_id: str
     ) -> None:
-        """Handle enrollment_step_changed — currently a no-op (logged only).
+        """Handle enrollment_step_changed — no state change needed, debug log only.
 
-        Step transitions are high-frequency and not surfaced in the UI today.
-        Future: update wa.enrollment model once it exists.
+        Step transitions are high-frequency and do not change the enrollment
+        lifecycle state (active → completed).  Logged at DEBUG level only.
         """
         _logger.debug(
             "wa_push: enrollment_step_changed — enrollment_id=%r step_id=%r",
             event.get('enrollment_id'), event.get('step_id'),
+        )
+
+    def _handle_workflow_registry_synced(
+        self, event: dict, pubsub_message_id: str
+    ) -> None:
+        """Handle workflow.registry.synced — upsert the wa.workflow registry.
+
+        Delegates to :meth:`wa.workflow._process_registry_sync_event`.
+        """
+        self.env['wa.workflow'].sudo()._process_registry_sync_event(
+            event, pubsub_message_id
         )
 
     # ------------------------------------------------------------------

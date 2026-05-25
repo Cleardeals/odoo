@@ -1,0 +1,279 @@
+// WA Dashboard — page-level layout styles
+
+.o-wa-dashboard {
+    padding: 24px;
+    background: #f9fafb;
+    min-height: 100%;
+    font-family: inherit;
+
+    // ── Header ──────────────────────────────────────────────────────────────
+
+    &__header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 16px;
+    }
+
+    &__header-left {
+        display: flex;
+        align-items: baseline;
+        gap: 12px;
+    }
+
+    &__title {
+        font-size: 1.4rem;
+        font-weight: 700;
+        color: #111827;
+        margin: 0;
+    }
+
+    &__last-fetched {
+        font-size: 0.75rem;
+        color: #9ca3af;
+    }
+
+    &__refresh-btn {
+        background: #7c3aed;
+        border-color: #7c3aed;
+        color: #fff;
+
+        &:hover {
+            background: #5b21b6;
+            border-color: #5b21b6;
+        }
+    }
+
+    // ── Filters ─────────────────────────────────────────────────────────────
+
+    &__filters {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+
+    &__dropdown-wrap {
+        position: relative;
+    }
+
+    &__dropdown {
+        position: absolute;
+        top: calc(100% + 6px);
+        left: 0;
+        z-index: 200;
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+        padding: 12px;
+        min-width: 280px;
+    }
+
+    &__date-inputs {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 10px;
+
+        label {
+            display: flex;
+            flex-direction: column;
+            font-size: 0.78rem;
+            color: #374151;
+            gap: 3px;
+            flex: 1;
+
+            input {
+                border: 1px solid #d1d5db;
+                border-radius: 4px;
+                padding: 4px 8px;
+                font-size: 0.82rem;
+            }
+        }
+    }
+
+    &__presets {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
+
+        button {
+            background: #f3f4f6;
+            border: none;
+            border-radius: 4px;
+            padding: 6px 8px;
+            font-size: 0.78rem;
+            cursor: pointer;
+            text-align: left;
+            color: #374151;
+
+            &:hover {
+                background: #e5e7eb;
+            }
+        }
+    }
+
+    &__apply-btn {
+        grid-column: 1 / -1;
+        background: #7c3aed !important;
+        color: #fff !important;
+        font-weight: 600;
+        text-align: center !important;
+    }
+
+    &__workflow-menu {
+        min-width: 240px;
+        padding: 8px 0;
+
+        ul {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+            max-height: 240px;
+            overflow-y: auto;
+        }
+
+        li {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 7px 14px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            color: #374151;
+
+            &:hover {
+                background: #f9fafb;
+            }
+        }
+    }
+
+    &__wf-item--active {
+        background: #fdf4ff !important;
+        color: #7c3aed !important;
+        font-weight: 600;
+    }
+
+    &__workflow-search {
+        width: 100%;
+        border: 1px solid #e5e7eb;
+        border-radius: 4px;
+        padding: 6px 10px;
+        font-size: 0.82rem;
+        margin-bottom: 4px;
+        outline: none;
+
+        &:focus {
+            border-color: #7c3aed;
+        }
+    }
+
+    &__wf-dot {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        flex-shrink: 0;
+
+        &--active { background: #16a34a; }
+        &--paused { background: #d1d5db; }
+    }
+
+    // ── Loading ─────────────────────────────────────────────────────────────
+
+    &__loading {
+        text-align: center;
+        color: #9ca3af;
+        padding: 40px;
+        font-size: 0.95rem;
+    }
+
+    // ── Metric cards grid (3 cols × 2 rows) ─────────────────────────────────
+
+    &__metrics-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 14px;
+        margin-bottom: 20px;
+
+        @media (max-width: 900px) {
+            grid-template-columns: repeat(2, 1fr);
+        }
+
+        @media (max-width: 600px) {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    // ── Two-panel row ────────────────────────────────────────────────────────
+
+    &__panels {
+        display: grid;
+        grid-template-columns: 3fr 2fr;
+        gap: 16px;
+        margin-bottom: 20px;
+
+        @media (max-width: 900px) {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    // ── Section card ────────────────────────────────────────────────────────
+
+    &__section {
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 16px 20px;
+        margin-bottom: 16px;
+
+        &--failures {
+            margin-bottom: 0;
+        }
+    }
+
+    &__section-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 12px;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    &__section-title {
+        font-size: 0.9rem;
+        font-weight: 700;
+        color: #374151;
+    }
+
+    // ── Time range tabs ──────────────────────────────────────────────────────
+
+    &__time-range-tabs {
+        display: flex;
+        gap: 4px;
+    }
+
+    &__range-tab {
+        padding: 3px 10px;
+        border: 1px solid #e5e7eb;
+        border-radius: 4px;
+        background: #f3f4f6;
+        font-size: 0.75rem;
+        cursor: pointer;
+        color: #6b7280;
+        font-weight: 500;
+
+        &:hover {
+            background: #e5e7eb;
+        }
+
+        &--active {
+            background: #ede9fe;
+            color: #7c3aed;
+            border-color: #c4b5fd;
+            font-weight: 700;
+        }
+    }
+}

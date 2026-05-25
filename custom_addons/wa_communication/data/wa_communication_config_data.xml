@@ -71,5 +71,11 @@
         <field name="value">cd-prod-customer-events</field>
     </record>
 
+    <!-- Outbound — workflow control (manager toggle: pause / resume a workflow) -->
+    <record id="param_topic_workflow_control" model="ir.config_parameter">
+        <field name="key">wa_communication.topic_workflow_control</field>
+        <field name="value">cd-prod-workflow-control</field>
+    </record>
+
     </data>
 </odoo>

@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<templates xml:space="preserve">
+
+  <t t-name="cleardeals_ui.MetricCard">
+    <div t-att-class="'cd-metric-card ' + variantClass">
+
+      <div class="cd-metric-card__label">
+        <t t-esc="props.label"/>
+      </div>
+
+      <div class="cd-metric-card__value-row">
+        <span class="cd-metric-card__value">
+          <t t-esc="props.value"/>
+        </span>
+        <t t-if="props.subValue">
+          <span class="cd-metric-card__sub-value">
+            &#xB7; <t t-esc="props.subValue"/>
+          </span>
+        </t>
+      </div>
+
+      <t t-if="trendDirection">
+        <div t-att-class="'cd-metric-card__trend cd-metric-card__trend--' + trendDirection">
+          <span class="cd-metric-card__trend-arrow">
+            <t t-if="trendDirection === 'up'">&#x25B2;</t>
+            <t t-else="">&#x25BC;</t>
+          </span>
+          <span class="cd-metric-card__trend-value">
+            <t t-esc="trendDisplay"/>
+          </span>
+          <t t-if="props.trendLabel">
+            <span class="cd-metric-card__trend-label">
+              <t t-esc="props.trendLabel"/>
+            </span>
+          </t>
+        </div>
+      </t>
+
+      <t t-if="props.breakdown">
+        <div class="cd-metric-card__breakdown">
+          <t t-esc="props.breakdown"/>
+        </div>
+      </t>
+
+    </div>
+  </t>
+
+</templates>

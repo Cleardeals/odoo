@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<templates xml:space="preserve">
+
+  <t t-name="cleardeals_ui.BarChart">
+    <div class="cd-bar-chart">
+
+      <t t-if="props.title">
+        <div class="cd-bar-chart__title">
+          <t t-esc="props.title"/>
+        </div>
+      </t>
+
+      <t t-if="props.bars.length === 0">
+        <div class="cd-bar-chart__empty">No data for this period.</div>
+      </t>
+
+      <t t-else="">
+        <div class="cd-bar-chart__legend">
+          <span class="cd-bar-chart__legend-dot cd-bar-chart__legend-dot--sent"/>
+          <span class="cd-bar-chart__legend-text">Sent</span>
+          <span class="cd-bar-chart__legend-dot cd-bar-chart__legend-dot--failed"/>
+          <span class="cd-bar-chart__legend-text">Failed</span>
+        </div>
+
+        <div class="cd-bar-chart__bars">
+          <t t-foreach="enrichedBars" t-as="bar" t-key="bar.hour">
+            <div class="cd-bar-chart__group">
+              <div class="cd-bar-chart__stacks">
+                <div
+                  class="cd-bar-chart__bar cd-bar-chart__bar--sent"
+                  t-att-style="'height: ' + bar.sentPct + '%'"
+                  t-att-title="'Sent: ' + bar.sent"
+                />
+                <div
+                  class="cd-bar-chart__bar cd-bar-chart__bar--failed"
+                  t-att-style="'height: ' + bar.failedPct + '%'"
+                  t-att-title="'Failed: ' + bar.failed"
+                />
+              </div>
+              <div class="cd-bar-chart__label">
+                <t t-esc="bar.hour_label"/>
+              </div>
+            </div>
+          </t>
+        </div>
+      </t>
+
+    </div>
+  </t>
+
+</templates>

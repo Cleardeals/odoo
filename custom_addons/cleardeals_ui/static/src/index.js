@@ -23,3 +23,9 @@
 
 // ── fields ──────────────────────────────────────────────────────────────────
 export { CdStatusBadge, cdStatusBadgeField } from "./fields/status_badge/status_badge";
+
+// ── components ──────────────────────────────────────────────────────────────
+export { CdMetricCard }            from "./components/metric_card/metric_card";
+export { CdWorkflowHealthTable }   from "./components/workflow_health_table/workflow_health_table";
+export { CdBarChart }              from "./components/bar_chart/bar_chart";
+export { CdRecentFailuresTable }   from "./components/recent_failures_table/recent_failures_table";

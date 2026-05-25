@@ -1,0 +1,208 @@
+<?xml version="1.0" encoding="utf-8"?>
+<templates xml:space="preserve">
+
+  <t t-name="wa_communication.WaDashboard">
+    <div class="o-wa-dashboard">
+
+      <!-- ── Header ──────────────────────────────────────────────────── -->
+      <div class="o-wa-dashboard__header">
+        <div class="o-wa-dashboard__header-left">
+          <h1 class="o-wa-dashboard__title">WhatsApp Dashboard</h1>
+          <t t-if="state.lastFetched">
+            <span class="o-wa-dashboard__last-fetched">
+              Last fetched: <t t-esc="state.lastFetched"/>
+            </span>
+          </t>
+        </div>
+        <div class="o-wa-dashboard__header-right">
+          <button class="btn btn-sm btn-primary o-wa-dashboard__refresh-btn"
+                  t-on-click="onRefresh">
+            &#x21BB; Refresh
+          </button>
+        </div>
+      </div>
+
+      <!-- ── Filters ─────────────────────────────────────────────────── -->
+      <div class="o-wa-dashboard__filters">
+
+        <!-- Date picker trigger -->
+        <div class="o-wa-dashboard__dropdown-wrap">
+          <button class="btn btn-sm btn-outline-secondary"
+                  t-on-click="() => { state.showDatePicker = !state.showDatePicker; state.showWorkflowMenu = false; }">
+            &#x1F4C5; <t t-esc="state.dateLabel"/>
+          </button>
+
+          <t t-if="state.showDatePicker">
+            <div class="o-wa-dashboard__dropdown o-wa-dashboard__date-picker">
+              <div class="o-wa-dashboard__date-inputs">
+                <label>From
+                  <input type="date"
+                         t-att-value="state.customFrom"
+                         t-on-change="(e) => state.customFrom = e.target.value"/>
+                </label>
+                <label>To
+                  <input type="date"
+                         t-att-value="state.customTo"
+                         t-on-change="(e) => state.customTo = e.target.value"/>
+                </label>
+              </div>
+              <div class="o-wa-dashboard__presets">
+                <button t-on-click="onPresetToday">Today</button>
+                <button t-on-click="onPresetYesterday">Yesterday</button>
+                <button t-on-click="onPresetCurrentMonth">Current Month</button>
+                <button t-on-click="onPresetLastMonth">Last Month</button>
+                <button t-on-click="onPresetLast30Days">Last 30 Days</button>
+                <button t-on-click="onPresetLast90Days">Last 90 Days</button>
+                <button t-on-click="onPresetYearToDate">Year to Date</button>
+                <button class="o-wa-dashboard__apply-btn"
+                        t-on-click="onApplyCustomRange">
+                  Apply Custom Range
+                </button>
+              </div>
+            </div>
+          </t>
+        </div>
+
+        <!-- Workflow filter trigger -->
+        <div class="o-wa-dashboard__dropdown-wrap">
+          <button class="btn btn-sm btn-outline-secondary"
+                  t-on-click="() => { state.showWorkflowMenu = !state.showWorkflowMenu; state.showDatePicker = false; }">
+            &#x1F500; <t t-esc="state.workflowName"/>
+          </button>
+
+          <t t-if="state.showWorkflowMenu">
+            <div class="o-wa-dashboard__dropdown o-wa-dashboard__workflow-menu">
+              <input type="text"
+                     class="o-wa-dashboard__workflow-search"
+                     placeholder="Search workflows..."
+                     t-att-value="state.workflowSearch"
+                     t-on-input="(e) => state.workflowSearch = e.target.value"/>
+              <ul>
+                <li t-on-click="() => this.onSelectWorkflow(null)"
+                    t-att-class="state.workflowSlug === '' ? 'o-wa-dashboard__wf-item--active' : ''">
+                  All Workflows
+                </li>
+                <t t-foreach="filteredWorkflows" t-as="wf" t-key="wf.id">
+                  <li t-on-click="() => this.onSelectWorkflow(wf)"
+                      t-att-class="state.workflowSlug === wf.slug ? 'o-wa-dashboard__wf-item--active' : ''">
+                    <t t-esc="wf.name"/>
+                    <span t-if="wf.is_active"  class="o-wa-dashboard__wf-dot o-wa-dashboard__wf-dot--active"/>
+                    <span t-if="!wf.is_active" class="o-wa-dashboard__wf-dot o-wa-dashboard__wf-dot--paused"/>
+                  </li>
+                </t>
+              </ul>
+            </div>
+          </t>
+        </div>
+
+      </div>
+
+      <!-- ── Loading state ───────────────────────────────────────────── -->
+      <t t-if="state.loading and !metricsReady">
+        <div class="o-wa-dashboard__loading">Loading dashboard data...</div>
+      </t>
+
+      <!-- ── Metric cards grid ────────────────────────────────────────── -->
+      <t t-if="metricsReady">
+        <div class="o-wa-dashboard__metrics-grid">
+
+          <CdMetricCard
+            label="'Messages Sent'"
+            value="fmt(state.metrics.sent)"
+            trend="state.metrics.trend.sent"
+            trendLabel="'vs previous period'"
+          />
+
+          <CdMetricCard
+            label="'Delivered'"
+            value="fmt(state.metrics.delivered)"
+            subValue="fmtRate(state.metrics.delivery_rate)"
+          />
+
+          <CdMetricCard
+            label="'Read'"
+            value="fmt(state.metrics.read)"
+            subValue="fmtRate(state.metrics.read_rate)"
+          />
+
+          <CdMetricCard
+            label="'Failed'"
+            value="fmt(state.metrics.failed)"
+            variant="failedVariant"
+            trend="state.metrics.trend.failed"
+            breakdown="failedBreakdownText"
+          />
+
+          <CdMetricCard
+            label="'Active Enrollments'"
+            value="fmt(state.metrics.active_enrollments)"
+          />
+
+          <CdMetricCard
+            label="'Replied'"
+            value="fmt(state.metrics.replied)"
+            subValue="fmtRate(state.metrics.reply_rate) + ' Reply Rate'"
+            trend="state.metrics.trend.replied"
+          />
+
+        </div>
+      </t>
+
+      <!-- ── Two-panel section (Workflow Health + Bar Chart) ──────────── -->
+      <div class="o-wa-dashboard__panels">
+
+        <!-- Workflow Health -->
+        <div class="o-wa-dashboard__section o-wa-dashboard__section--health">
+          <div class="o-wa-dashboard__section-header">
+            <span class="o-wa-dashboard__section-title">Workflow Health</span>
+            <div class="o-wa-dashboard__time-range-tabs">
+              <t t-foreach="['12h','24h','7d','30d']" t-as="r" t-key="r">
+                <button
+                  t-att-class="'o-wa-dashboard__range-tab ' + (state.healthTimeRange === r ? 'o-wa-dashboard__range-tab--active' : '')"
+                  t-on-click="() => this.onHealthTimeRangeChange(r)">
+                  <t t-esc="r"/>
+                </button>
+              </t>
+            </div>
+          </div>
+          <CdWorkflowHealthTable
+            rows="state.workflowHealth"
+            onToggle="(id) => this.onToggleWorkflow(id)"
+            loading="state.loading"
+          />
+        </div>
+
+        <!-- Bar Chart -->
+        <div class="o-wa-dashboard__section o-wa-dashboard__section--chart">
+          <div class="o-wa-dashboard__section-header">
+            <span class="o-wa-dashboard__section-title">Hourly Send Volume</span>
+            <div class="o-wa-dashboard__time-range-tabs">
+              <t t-foreach="['12h','24h','7d','30d']" t-as="r" t-key="r">
+                <button
+                  t-att-class="'o-wa-dashboard__range-tab ' + (state.chartTimeRange === r ? 'o-wa-dashboard__range-tab--active' : '')"
+                  t-on-click="() => this.onChartTimeRangeChange(r)">
+                  <t t-esc="r"/>
+                </button>
+              </t>
+            </div>
+          </div>
+          <CdBarChart bars="state.hourlyData"/>
+        </div>
+
+      </div>
+
+      <!-- ── Recent Failures ──────────────────────────────────────────── -->
+      <div class="o-wa-dashboard__section o-wa-dashboard__section--failures">
+        <div class="o-wa-dashboard__section-header">
+          <span class="o-wa-dashboard__section-title">Recent Failures</span>
+        </div>
+        <CdRecentFailuresTable
+          rows="state.failures"
+          onOpenLead="(leadId) => this.onOpenLead(leadId)"
+        />
+      </div>
+
+    </div>
+  </t>
+
+</templates>

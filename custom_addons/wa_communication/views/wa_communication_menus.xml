@@ -6,6 +6,13 @@
               name="WhatsApp"
               sequence="90"/>
 
+    <!-- Dashboard -->
+    <menuitem id="menu_wa_dashboard"
+              name="Dashboard"
+              parent="menu_wa_communication_root"
+              action="action_wa_dashboard"
+              sequence="5"/>
+
     <!-- Messaging sub-menu -->
     <menuitem id="menu_wa_communication_messaging"
               name="Messaging"

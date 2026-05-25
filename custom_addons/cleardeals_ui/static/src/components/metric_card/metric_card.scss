@@ -1,0 +1,100 @@
+.cd-metric-card {
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 16px 20px;
+    min-width: 0;
+
+    &__label {
+        font-size: 0.78rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: #6b7280;
+        margin-bottom: 6px;
+    }
+
+    &__value-row {
+        display: flex;
+        align-items: baseline;
+        gap: 6px;
+        flex-wrap: wrap;
+    }
+
+    &__value {
+        font-size: 1.9rem;
+        font-weight: 700;
+        line-height: 1.15;
+        color: #111827;
+    }
+
+    &__sub-value {
+        font-size: 0.9rem;
+        color: #6b7280;
+        font-weight: 500;
+    }
+
+    &__trend {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        margin-top: 6px;
+        font-size: 0.8rem;
+        font-weight: 600;
+
+        &--up {
+            color: #16a34a;
+        }
+
+        &--down {
+            color: #dc2626;
+        }
+    }
+
+    &__trend-arrow {
+        font-size: 0.65rem;
+    }
+
+    &__trend-label {
+        font-weight: 400;
+        color: #6b7280;
+    }
+
+    &__breakdown {
+        margin-top: 4px;
+        font-size: 0.75rem;
+        color: #9ca3af;
+    }
+
+    // ── Variants ──────────────────────────────────────────────────────────
+
+    &--default {
+        // inherits base styles above
+    }
+
+    &--warning {
+        border-color: #fca5a5;
+        background: #fff5f5;
+
+        .cd-metric-card__label {
+            color: #dc2626;
+        }
+
+        .cd-metric-card__value {
+            color: #dc2626;
+        }
+    }
+
+    &--danger {
+        border-color: #ef4444;
+        background: #fee2e2;
+
+        .cd-metric-card__label {
+            color: #991b1b;
+        }
+
+        .cd-metric-card__value {
+            color: #991b1b;
+        }
+    }
+}

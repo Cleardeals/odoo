@@ -25,6 +25,13 @@ Inherits ``leads.new`` to publish configurable Pub/Sub events whenever
 relevant lead state changes occur (lead created, site visit scheduled/done,
 etc.).  Each event category has its own configurable topic.
 
+**WA Dashboard**
+Client action at WhatsApp → Dashboard providing:
+- Headline KPI cards (Sent, Delivered, Read, Failed, Active Enrollments, Replied)
+- Workflow Health table with manager-controlled active/pause toggle
+- Hourly Send Volume bar chart
+- Recent Failures table with direct lead navigation
+
 **Configuration** (Settings → Technical → System Parameters):
   ``wa_communication.inbound_push_audience``         — OIDC ``aud`` claim
   ``wa_communication.inbound_push_sa_email``         — optional SA email
@@ -33,17 +40,26 @@ etc.).  Each event category has its own configurable topic.
   ``wa_communication.topic_visit_events``            — site-visit events
   ``wa_communication.topic_property_events``         — property events
   ``wa_communication.topic_customer_events``         — customer events
+  ``wa_communication.topic_workflow_control``        — workflow pause/resume toggle
     """,
     'author': 'Cleardeals Technology',
     'category': 'Technical',
     'license': 'LGPL-3',
-    'depends': ['cleardeals_pubsub', 'leads'],
+    'depends': ['cleardeals_pubsub', 'leads', 'cleardeals_ui'],
     'data': [
         'security/ir.model.access.csv',
         'data/wa_communication_config_data.xml',
         'views/wa_message_views.xml',
+        'views/wa_dashboard_action.xml',
         'views/wa_communication_menus.xml',
     ],
+    'assets': {
+        'web.assets_backend': [
+            'wa_communication/static/src/**/*.js',
+            'wa_communication/static/src/**/*.xml',
+            'wa_communication/static/src/**/*.scss',
+        ],
+    },
     'external_dependencies': {
         'python': ['google-cloud-pubsub', 'google-auth'],
     },
