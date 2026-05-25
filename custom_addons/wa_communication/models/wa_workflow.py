@@ -77,6 +77,11 @@ class WaWorkflow(models.Model):
     is_active = fields.Boolean('Active', default=True)
     version = fields.Integer('Version', default=1, readonly=True)
     platform_updated_at = fields.Datetime('Last Updated on Platform', readonly=True)
+    last_synced_at = fields.Datetime(
+        'Last Toggle Synced At', readonly=True,
+        help="Timestamp of the most recent workflow.synced ACK received from "
+             "the WA platform confirming that a toggle was applied.",
+    )
     updated_by = fields.Char(
         'Updated By', readonly=True,
         help="Email of the Odoo user who last toggled is_active.",
@@ -104,6 +109,10 @@ class WaWorkflow(models.Model):
         """
         for rec in self:
             new_state = not rec.is_active
+            _logger.info(
+                "wa_workflow: toggle requested slug=%r %s → %s by user=%s",
+                rec.slug, rec.is_active, new_state, self.env.user.login,
+            )
             rec.write({
                 'is_active':  new_state,
                 'updated_by': self.env.user.login,
@@ -114,22 +123,35 @@ class WaWorkflow(models.Model):
     def _wa_publish_workflow_toggle(self, is_active: bool) -> None:
         """Defer a ``workflow.toggled`` Pub/Sub publish to after TX commit.
 
-        :param is_active: The new ``is_active`` value just written.
+        The config param ``wa_communication.topic_workflow_control`` stores the
+        **topic alias** (e.g. ``workflow-control``) without any environment
+        prefix.  The full topic name is built here using ``GCP_ENV``, mirroring
+        the WA platform's ``shared.pubsub.publish()`` naming convention::
 
-        Postconditions:
-            - A ``workflow.toggled`` message is queued for delivery after commit.
-            - If the topic is not configured, a warning is logged and no event fires.
+            local       → cd-local-workflow-control
+            staging     → cd-staging-workflow-control
+            production  → cd-prod-workflow-control
+
+        :param is_active: The new ``is_active`` value just written.
         """
+        import os
+
+        _ENV_PREFIX = {'local': 'local', 'staging': 'staging', 'production': 'prod'}
+
         self.ensure_one()
-        topic = self.env['ir.config_parameter'].sudo().get_param(
+        alias = self.env['ir.config_parameter'].sudo().get_param(
             _TOPIC_WORKFLOW_CONTROL, ''
         )
-        if not topic:
+        if not alias:
             _logger.warning(
                 "wa_workflow: %r not configured — toggle event skipped for slug=%s",
                 _TOPIC_WORKFLOW_CONTROL, self.slug,
             )
             return
+
+        gcp_env   = os.environ.get('GCP_ENV', 'local')
+        env_pfx   = _ENV_PREFIX.get(gcp_env, gcp_env)   # unknown env → use as-is
+        topic     = f'cd-{env_pfx}-{alias}'
 
         payload = {
             'event_type':    'workflow.toggled',
@@ -138,12 +160,25 @@ class WaWorkflow(models.Model):
             'updated_by':    self.env.user.login,
         }
 
+        _logger.info(
+            "wa_workflow: toggle event queued for postcommit slug=%r is_active=%s topic=%r gcp_env=%s",
+            self.slug, is_active, topic, gcp_env,
+        )
+
         def _publish():
+            _logger.info(
+                "wa_workflow: [postcommit] firing workflow.toggled publish slug=%r is_active=%s topic=%r",
+                self.slug, is_active, topic,
+            )
             try:
                 self.env['cleardeals.pubsub'].publish_async(topic, payload)
+                _logger.info(
+                    "wa_workflow: [postcommit] workflow.toggled handed to publisher slug=%r topic=%r",
+                    self.slug, topic,
+                )
             except Exception:
                 _logger.exception(
-                    "wa_workflow: publish_async failed for slug=%s topic=%s",
+                    "wa_workflow: [postcommit] publish_async raised for slug=%r topic=%r",
                     self.slug, topic,
                 )
 
@@ -232,3 +267,112 @@ class WaWorkflow(models.Model):
             "wa_workflow: registry.synced processed — created=%d updated=%d",
             created, updated,
         )
+
+    @api.model
+    def _process_workflow_synced_event(self, event: dict, pubsub_message_id: str) -> None:
+        """Handle ``workflow.synced`` — from odoo-bridge after a toggle OR initial sync.
+
+        Two callers produce this event type with different payload shapes:
+
+        **Toggle confirmation** (from ``handle_workflow_toggled`` in odoo-bridge)::
+
+            {
+                "event_type":    "workflow.synced",
+                "workflow_slug": "nurturing_v2",
+                "is_active":     false,
+                "updated_by":    "admin@cleardeals.in"
+            }
+
+        **Initial / bulk sync** (from ``sync_initial.py`` in odoo-bridge)::
+
+            {
+                "event_type":    "workflow.synced",
+                "workflow_slug": "nurturing_v2",
+                "name":          "Lead Nurturing",
+                "description":   "...",
+                "campaign_id":   "C1",
+                "pubsub_topic":  "lead-events",
+                "trigger_type":  "event_driven",
+                "actor_scope":   "buyer_inquiry",
+                "is_active":     true,
+                "version":       1,
+                "updated_by":    "system:initial_sync"
+            }
+
+        When ``name`` is present the handler performs a full upsert (identical
+        behaviour to ``workflow.registry.synced``) so that ``sync_initial.py``
+        can seed Odoo's ``wa.workflow`` table.
+
+        When ``name`` is absent (toggle confirmation) the handler only records
+        ``last_synced_at``.  Odoo never overwrites its own ``is_active`` from
+        either payload — Odoo remains the source of truth for the toggle state.
+        If the platform-reported ``is_active`` diverges a warning is logged.
+
+        :param event:             Decoded Pub/Sub payload.
+        :param pubsub_message_id: GCP message ID for the audit log.
+        """
+        from datetime import datetime, timezone
+
+        slug = (event.get('workflow_slug') or '').strip()
+        if not slug:
+            _logger.warning(
+                "wa_workflow: workflow.synced received without workflow_slug — msg=%s",
+                pubsub_message_id,
+            )
+            return
+
+        is_active     = event.get('is_active')
+        has_full_data = bool(event.get('name'))
+
+        if has_full_data:
+            # ── Full upsert (initial sync or re-sync from odoo-bridge) ──────
+            vals = {
+                'slug':         slug,
+                'name':         event.get('name') or slug,
+                'description':  event.get('description') or '',
+                'campaign_id':  event.get('campaign_id') or '',
+                'pubsub_topic': event.get('pubsub_topic') or '',
+                'trigger_type': event.get('trigger_type') or False,
+                'actor_scope':  event.get('actor_scope') or 'buyer_inquiry',
+                'version':      int(event.get('version') or 1),
+                'last_synced_at': fields.Datetime.now(),
+            }
+            existing = self.sudo().search([('slug', '=', slug)], limit=1)
+            if existing:
+                # Never overwrite is_active — Odoo manager owns it
+                existing.write(vals)
+                _logger.info(
+                    "wa_workflow: workflow.synced updated slug=%r msg=%s",
+                    slug, pubsub_message_id,
+                )
+            else:
+                vals['is_active'] = bool(is_active) if is_active is not None else True
+                self.sudo().create(vals)
+                _logger.info(
+                    "wa_workflow: workflow.synced created slug=%r is_active=%s msg=%s",
+                    slug, vals['is_active'], pubsub_message_id,
+                )
+            return
+
+        # ── Toggle confirmation (minimal payload) ────────────────────────────
+        rec = self.sudo().search([('slug', '=', slug)], limit=1)
+        if not rec:
+            _logger.warning(
+                "wa_workflow: workflow.synced (toggle ack) for unknown slug=%r — msg=%s",
+                slug, pubsub_message_id,
+            )
+            return
+
+        rec.write({'last_synced_at': fields.Datetime.now()})
+
+        if is_active is not None and bool(is_active) != rec.is_active:
+            _logger.warning(
+                "wa_workflow: is_active divergence after toggle sync — "
+                "slug=%r odoo=%s platform=%s msg=%s",
+                slug, rec.is_active, is_active, pubsub_message_id,
+            )
+        else:
+            _logger.info(
+                "wa_workflow: workflow.synced toggle confirmed — slug=%r is_active=%s msg=%s",
+                slug, rec.is_active, pubsub_message_id,
+            )

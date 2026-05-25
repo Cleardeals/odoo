@@ -496,6 +496,8 @@ class WaConversation(models.Model):
             'enrollment_step_changed': self._handle_odoo_enrollment_step_changed,
             # Workflow registry sync — routes to wa.workflow model
             'workflow.registry.synced': self._handle_workflow_registry_synced,
+            # Workflow toggle ACK — WA platform confirms toggle was applied
+            'workflow.synced':          self._handle_workflow_synced,
         }
         handler = _ODOO_WA_HANDLERS.get(event_type)
         try:
@@ -992,6 +994,19 @@ class WaConversation(models.Model):
         Delegates to :meth:`wa.workflow._process_registry_sync_event`.
         """
         self.env['wa.workflow'].sudo()._process_registry_sync_event(
+            event, pubsub_message_id
+        )
+
+    def _handle_workflow_synced(
+        self, event: dict, pubsub_message_id: str
+    ) -> None:
+        """Handle workflow.synced — WA platform ACK after applying a toggle.
+
+        Published by the odoo-bridge service on the ``wa-workflow-sync`` topic
+        after it processes a ``workflow.toggled`` control event.  Delegates to
+        :meth:`wa.workflow._process_workflow_synced_event`.
+        """
+        self.env['wa.workflow'].sudo()._process_workflow_synced_event(
             event, pubsub_message_id
         )
 

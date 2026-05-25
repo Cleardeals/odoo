@@ -71,10 +71,17 @@
         <field name="value">cd-prod-customer-events</field>
     </record>
 
-    <!-- Outbound — workflow control (manager toggle: pause / resume a workflow) -->
+    </data>
+
+    <!-- noupdate="0": code constants that must always be applied on upgrade. -->
+    <data noupdate="0">
+
+    <!-- Outbound — workflow control (manager toggle: pause / resume a workflow)
+         Value: topic alias WITHOUT environment prefix. The code adds cd-{env}- at
+         runtime based on GCP_ENV (local / staging / production). -->
     <record id="param_topic_workflow_control" model="ir.config_parameter">
         <field name="key">wa_communication.topic_workflow_control</field>
-        <field name="value">cd-prod-workflow-control</field>
+        <field name="value">workflow-control</field>
     </record>
 
     </data>
