@@ -3,7 +3,9 @@
 .o-wa-dashboard {
     padding: 24px;
     background: #f9fafb;
-    min-height: 100%;
+    // Enable scrolling within the Odoo client-action container
+    height: 100%;
+    overflow-y: auto;
     font-family: inherit;
 
     // ── Header ──────────────────────────────────────────────────────────────
@@ -48,10 +50,61 @@
 
     &__filters {
         display: flex;
-        gap: 10px;
-        margin-bottom: 20px;
+        justify-content: center;
+        margin-bottom: 24px;
+    }
+
+    &__filter-group {
+        display: flex;
+        gap: 16px;
         flex-wrap: wrap;
+        justify-content: center;
+    }
+
+    // Large pill-shaped filter button
+    &__filter-btn {
+        display: inline-flex;
         align-items: center;
+        gap: 8px;
+        padding: 11px 22px;
+        min-width: 200px;
+        border-radius: 10px;
+        border: 1.5px solid #e5e7eb;
+        background: #fff;
+        cursor: pointer;
+        font-size: 0.9rem;
+        font-weight: 500;
+        color: #374151;
+        justify-content: center;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+        transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+
+        &:hover {
+            border-color: #7c3aed;
+            box-shadow: 0 2px 8px rgba(124, 58, 237, 0.12);
+        }
+
+        &--active, &--open {
+            border-color: #7c3aed;
+            background: #fdf4ff;
+            color: #7c3aed;
+        }
+    }
+
+    &__filter-icon {
+        font-size: 0.9rem;
+        opacity: 0.7;
+    }
+
+    &__filter-label {
+        flex: 1;
+        text-align: left;
+    }
+
+    &__filter-chevron {
+        font-size: 0.7rem;
+        opacity: 0.5;
+        margin-left: 2px;
     }
 
     &__dropdown-wrap {
@@ -60,12 +113,13 @@
 
     &__dropdown {
         position: absolute;
-        top: calc(100% + 6px);
-        left: 0;
+        top: calc(100% + 8px);
+        left: 50%;
+        transform: translateX(-50%);
         z-index: 200;
         background: #fff;
         border: 1px solid #e5e7eb;
-        border-radius: 8px;
+        border-radius: 10px;
         box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
         padding: 12px;
         min-width: 280px;
@@ -122,51 +176,84 @@
         text-align: center !important;
     }
 
+    // Workflow multi-select menu
     &__workflow-menu {
-        min-width: 240px;
-        padding: 8px 0;
-
-        ul {
-            list-style: none;
-            margin: 0;
-            padding: 0;
-            max-height: 240px;
-            overflow-y: auto;
-        }
-
-        li {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 7px 14px;
-            cursor: pointer;
-            font-size: 0.85rem;
-            color: #374151;
-
-            &:hover {
-                background: #f9fafb;
-            }
-        }
+        min-width: 260px;
+        padding: 8px 0 0;
     }
 
-    &__wf-item--active {
-        background: #fdf4ff !important;
-        color: #7c3aed !important;
-        font-weight: 600;
+    &__workflow-search-wrap {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 0 10px 6px;
+        border-bottom: 1px solid #f3f4f6;
+    }
+
+    &__workflow-search-icon {
+        color: #9ca3af;
+        font-size: 0.8rem;
+        flex-shrink: 0;
     }
 
     &__workflow-search {
-        width: 100%;
-        border: 1px solid #e5e7eb;
-        border-radius: 4px;
-        padding: 6px 10px;
-        font-size: 0.82rem;
-        margin-bottom: 4px;
+        flex: 1;
+        border: none;
         outline: none;
+        font-size: 0.82rem;
+        color: #374151;
+        background: transparent;
+        padding: 2px 0;
 
-        &:focus {
-            border-color: #7c3aed;
+        &::placeholder {
+            color: #9ca3af;
         }
+    }
+
+    &__workflow-list {
+        list-style: none;
+        margin: 0;
+        padding: 4px 0;
+        max-height: 260px;
+        overflow-y: auto;
+    }
+
+    &__wf-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 7px 12px;
+        cursor: pointer;
+        font-size: 0.85rem;
+        color: #374151;
+
+        &:hover {
+            background: #f9fafb;
+        }
+    }
+
+    // Checkbox-style check indicator
+    &__wf-check {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 16px;
+        height: 16px;
+        border: 1.5px solid #d1d5db;
+        border-radius: 4px;
+        flex-shrink: 0;
+        font-size: 0.65rem;
+        color: transparent;
+
+        &--checked {
+            background: #7c3aed;
+            border-color: #7c3aed;
+            color: #fff;
+        }
+    }
+
+    &__wf-name {
+        flex: 1;
     }
 
     &__wf-dot {
@@ -178,6 +265,27 @@
 
         &--active { background: #16a34a; }
         &--paused { background: #d1d5db; }
+    }
+
+    &__workflow-footer {
+        border-top: 1px solid #f3f4f6;
+        padding: 8px 12px;
+        text-align: right;
+    }
+
+    &__workflow-done-btn {
+        background: #7c3aed;
+        color: #fff;
+        border: none;
+        border-radius: 6px;
+        padding: 6px 18px;
+        font-size: 0.82rem;
+        font-weight: 600;
+        cursor: pointer;
+
+        &:hover {
+            background: #5b21b6;
+        }
     }
 
     // ── Loading ─────────────────────────────────────────────────────────────
@@ -253,6 +361,7 @@
     &__time-range-tabs {
         display: flex;
         gap: 4px;
+        flex-wrap: wrap;
     }
 
     &__range-tab {
@@ -274,6 +383,59 @@
             color: #7c3aed;
             border-color: #c4b5fd;
             font-weight: 700;
+        }
+
+        &--custom {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+    }
+
+    // ── Inline custom date range bar (below section headers) ────────────────
+
+    &__custom-range-bar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 10px;
+        background: #f9fafb;
+        border: 1px solid #e5e7eb;
+        border-radius: 6px;
+        margin-bottom: 12px;
+        flex-wrap: wrap;
+
+        input[type="date"] {
+            border: 1px solid #d1d5db;
+            border-radius: 4px;
+            padding: 4px 8px;
+            font-size: 0.82rem;
+            color: #374151;
+
+            &:focus {
+                outline: none;
+                border-color: #7c3aed;
+            }
+        }
+    }
+
+    &__custom-range-sep {
+        font-size: 0.78rem;
+        color: #9ca3af;
+    }
+
+    &__custom-range-apply {
+        background: #7c3aed;
+        color: #fff;
+        border: none;
+        border-radius: 5px;
+        padding: 5px 14px;
+        font-size: 0.78rem;
+        font-weight: 600;
+        cursor: pointer;
+
+        &:hover {
+            background: #5b21b6;
         }
     }
 }

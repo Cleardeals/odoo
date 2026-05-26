@@ -80,7 +80,7 @@ class WaDashboard(models.Model):
                 continue
         raise ValueError(f"Cannot parse date: {val!r}")
 
-    def _outbound_domain(self, dt_from, dt_to, workflow_slug=None):
+    def _outbound_domain(self, dt_from, dt_to, workflow_slugs=None):
         """ORM domain for non-system outbound messages in the given window."""
         domain = [
             ('direction', '=', 'outbound'),
@@ -88,9 +88,7 @@ class WaDashboard(models.Model):
             ('occurred_at', '>=', dt_from),
             ('occurred_at', '<', dt_to),
         ]
-        if workflow_slug:
-            domain.append(('workflow_slug', '=', workflow_slug))
-        return domain
+        return domain + self._slug_domain(workflow_slugs or [])
 
     @staticmethod
     def _pct_change(current, previous):
@@ -106,25 +104,53 @@ class WaDashboard(models.Model):
             return 0.0
         return round(numerator / denominator * 100, 1)
 
+    @staticmethod
+    def _slug_domain(slugs):
+        """Return an ORM domain fragment for workflow_slug filtering."""
+        if not slugs:
+            return []
+        if len(slugs) == 1:
+            return [('workflow_slug', '=', slugs[0])]
+        return [('workflow_slug', 'in', list(slugs))]
+
+    @staticmethod
+    def _sql_slug_clause(wf_slugs, params):
+        """Append slug values to *params* and return a SQL WHERE fragment."""
+        if not wf_slugs:
+            return ''
+        if len(wf_slugs) == 1:
+            params.append(wf_slugs[0])
+            return 'AND workflow_slug = %s'
+        params.extend(wf_slugs)
+        ph = ', '.join(['%s'] * len(wf_slugs))
+        return f'AND workflow_slug IN ({ph})'
+
     # --- Public API -------------------------------------------------------
 
     @api.model
-    def get_metrics(self, date_from=None, date_to=None, workflow_slug=None):
+    def get_metrics(self, date_from=None, date_to=None, workflow_slug=None, workflow_slugs=None):
         """Return headline KPI metrics for the dashboard header cards.
 
         Computes counts for the current period and a comparison to the
         preceding period of equal duration.
 
-        :param date_from:     Start of window (inclusive). ISO string.
-        :param date_to:       End of window (exclusive). ISO string.
-        :param workflow_slug: Filter to one workflow. Empty string = all.
+        :param date_from:      Start of window (inclusive). ISO string.
+        :param date_to:        End of window (exclusive). ISO string.
+        :param workflow_slug:  Legacy single-slug filter (backward compat).
+        :param workflow_slugs: Multi-slug filter list (preferred).
         :returns: Dict with keys: sent, delivered, read, failed,
                   active_enrollments, replied, delivery_rate, read_rate,
-                  reply_rate, failed_breakdown, trend, date_from, date_to.
+                  reply_rate, failed_breakdown, trend, date_from, date_to,
+                  comparison_from, comparison_to.
         """
         dt_from = self._parse_date(date_from)
         dt_to   = self._parse_date(date_to) if date_to else datetime.utcnow()
-        wf_slug = (workflow_slug or '').strip() or None
+
+        # Normalise slugs: accept legacy single string or new list
+        slugs = [s for s in (workflow_slugs or []) if s]
+        if not slugs and workflow_slug:
+            slugs = [str(workflow_slug).strip()]
+        slugs = [s for s in slugs if s]
 
         # Previous period: same duration, shifted back
         delta        = dt_to - dt_from
@@ -132,7 +158,7 @@ class WaDashboard(models.Model):
         dt_prev_to   = dt_from
 
         WaMsg = self.env['wa.message'].sudo()
-        base  = self._outbound_domain(dt_from, dt_to, wf_slug)
+        base  = self._outbound_domain(dt_from, dt_to, slugs)
 
         # --- Current period ---
         sent      = WaMsg.search_count(base + [('status', 'not in', ['queued'])])
@@ -153,19 +179,15 @@ class WaDashboard(models.Model):
             ('initiator', '=', 'buyer'),
             ('occurred_at', '>=', dt_from),
             ('occurred_at', '<', dt_to),
-        ]
-        if wf_slug:
-            inbound_domain.append(('workflow_slug', '=', wf_slug))
+        ] + self._slug_domain(slugs)
         replied = WaMsg.search_count(inbound_domain)
 
         # Active enrollments — current snapshot, not bounded to date range
-        enroll_domain = [('state', '=', 'active')]
-        if wf_slug:
-            enroll_domain.append(('workflow_slug', '=', wf_slug))
+        enroll_domain = [('state', '=', 'active')] + self._slug_domain(slugs)
         active_enrollments = self.env['wa.enrollment'].sudo().search_count(enroll_domain)
 
         # --- Previous period ---
-        prev_base    = self._outbound_domain(dt_prev_from, dt_prev_to, wf_slug)
+        prev_base    = self._outbound_domain(dt_prev_from, dt_prev_to, slugs)
         prev_sent    = WaMsg.search_count(prev_base + [('status', 'not in', ['queued'])])
         prev_failed  = WaMsg.search_count(prev_base + [('status', 'in', _FAILED_STATUSES)])
         prev_replied = WaMsg.search_count([
@@ -173,7 +195,7 @@ class WaDashboard(models.Model):
             ('initiator', '=', 'buyer'),
             ('occurred_at', '>=', dt_prev_from),
             ('occurred_at', '<', dt_prev_to),
-        ] + ([('workflow_slug', '=', wf_slug)] if wf_slug else []))
+        ] + self._slug_domain(slugs))
 
         return {
             'sent':               sent,
@@ -191,8 +213,10 @@ class WaDashboard(models.Model):
                 'failed':  self._pct_change(failed, prev_failed),
                 'replied': self._pct_change(replied, prev_replied),
             },
-            'date_from': dt_from.isoformat(),
-            'date_to':   dt_to.isoformat(),
+            'date_from':        dt_from.isoformat(),
+            'date_to':          dt_to.isoformat(),
+            'comparison_from':  dt_prev_from.isoformat(),
+            'comparison_to':    dt_prev_to.isoformat(),
         }
 
     @api.model
@@ -234,31 +258,48 @@ class WaDashboard(models.Model):
         return rows
 
     @api.model
-    def get_hourly_volume(self, date_from=None, date_to=None, workflow_slug=None):
-        """Return per-hour sent/failed counts for the bar chart.
+    def get_hourly_volume(
+        self, date_from=None, date_to=None,
+        workflow_slug=None, workflow_slugs=None, time_range='12h',
+    ):
+        """Return time-bucketed sent/failed counts for the line chart.
 
-        Uses a single raw SQL query for efficiency.  Results cover all
-        hours in the window, ordered ascending.
+        Groups by hour for short ranges (12h/24h/custom ≤3 days) and by day
+        for longer ranges (7d/30d/custom >3 days).  Results are ordered
+        ascending by bucket timestamp.
 
-        Preconditions:
-            - ``date_from`` and ``date_to`` define the window.
-            - ``workflow_slug`` (optional) filters to one workflow.
-
+        :param date_from:      Start of window. ISO string.
+        :param date_to:        End of window. ISO string.
+        :param workflow_slug:  Legacy single-slug filter (backward compat).
+        :param workflow_slugs: Multi-slug filter list.
+        :param time_range:     '12h' | '24h' | '7d' | '30d' | 'custom'.
         :returns: List of dicts: [{hour (int), hour_label (str), sent, failed}].
         """
         dt_from = self._parse_date(date_from)
         dt_to   = self._parse_date(date_to) if date_to else datetime.utcnow()
-        wf_slug = (workflow_slug or '').strip() or None
 
-        wf_clause = "AND workflow_slug = %s" if wf_slug else ""
+        # Normalise slugs
+        wf_slugs = [s for s in (workflow_slugs or []) if s]
+        if not wf_slugs and workflow_slug:
+            wf_slugs = [str(workflow_slug).strip()]
+        wf_slugs = [s for s in wf_slugs if s]
+
+        # Choose time-bucket granularity
+        if time_range in ('7d', '30d'):
+            bucket = 'day'
+        elif time_range == 'custom':
+            delta_days = max(1, (dt_to - dt_from).days)
+            bucket = 'day' if delta_days > 3 else 'hour'
+        else:
+            bucket = 'hour'  # 12h, 24h
+
         params = [dt_from, dt_to]
-        if wf_slug:
-            params.append(wf_slug)
+        wf_clause = self._sql_slug_clause(wf_slugs, params)
 
         self.env.cr.execute(
             f"""
             SELECT
-                EXTRACT(HOUR FROM occurred_at)::int AS hour,
+                DATE_TRUNC('{bucket}', occurred_at) AS bucket_time,
                 SUM(CASE WHEN status NOT IN (
                     'failed','meta_blocked','invalid_number','opted_out',
                     'rate_limited','template_error','expired'
@@ -273,39 +314,48 @@ class WaDashboard(models.Model):
               AND occurred_at >= %s
               AND occurred_at < %s
               {wf_clause}
-            GROUP BY EXTRACT(HOUR FROM occurred_at)
-            ORDER BY hour
+            GROUP BY DATE_TRUNC('{bucket}', occurred_at)
+            ORDER BY bucket_time
             """,
             params,
         )
-        return [
-            {
-                'hour':       row[0],
-                'hour_label': f"{row[0]:02d}",
-                'sent':       row[1],
-                'failed':     row[2],
-            }
-            for row in self.env.cr.fetchall()
-        ]
+        result = []
+        for i, row in enumerate(self.env.cr.fetchall()):
+            bucket_time = row[0]
+            if bucket_time is None:
+                label = ''
+            elif bucket == 'day':
+                label = bucket_time.strftime('%Y-%m-%d')
+            else:
+                label = bucket_time.strftime('%Y-%m-%dT%H:00:00')
+            result.append({
+                'hour':       i,
+                'hour_label': label,
+                'sent':       row[1] or 0,
+                'failed':     row[2] or 0,
+            })
+        return result
 
     @api.model
-    def get_recent_failures(self, limit=20, workflow_slug=None):
+    def get_recent_failures(self, limit=20, workflow_slug=None, workflow_slugs=None):
         """Return the most recent delivery failures for the Failures table.
 
-        :param limit:         Maximum rows (default 20).
-        :param workflow_slug: Optional workflow filter.
+        :param limit:          Maximum rows (default 20).
+        :param workflow_slug:  Legacy single-slug filter (backward compat).
+        :param workflow_slugs: Multi-slug filter list.
         :returns: List of dicts ordered by occurred_at desc. Each dict:
                   {id, lead_id, lead_name, phone, workflow_name,
                    failure_reason, failure_status, occurred_at}.
         """
-        wf_slug = (workflow_slug or '').strip() or None
+        slugs = [s for s in (workflow_slugs or []) if s]
+        if not slugs and workflow_slug:
+            slugs = [str(workflow_slug).strip()]
+        slugs = [s for s in slugs if s]
         domain = [
             ('direction', '=', 'outbound'),
             ('status',    'in', _FAILED_STATUSES),
             ('kind',      '!=', 'system'),
-        ]
-        if wf_slug:
-            domain.append(('workflow_slug', '=', wf_slug))
+        ] + self._slug_domain(slugs)
 
         failures = self.env['wa.message'].sudo().search(
             domain, order='occurred_at desc', limit=int(limit)

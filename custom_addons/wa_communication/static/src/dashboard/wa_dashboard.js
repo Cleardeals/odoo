@@ -7,7 +7,7 @@ import { useService } from "@web/core/utils/hooks";
 import {
     CdMetricCard,
     CdWorkflowHealthTable,
-    CdBarChart,
+    CdLineChart,
     CdRecentFailuresTable,
 } from "@cleardeals_ui/index";
 
@@ -25,7 +25,7 @@ export class WaDashboard extends Component {
     static components = {
         CdMetricCard,
         CdWorkflowHealthTable,
-        CdBarChart,
+        CdLineChart,
         CdRecentFailuresTable,
     };
 
@@ -46,19 +46,25 @@ export class WaDashboard extends Component {
             dateFrom:          this._todayStart(),
             dateTo:            this._todayEnd(),
             dateLabel:         "Today",
-            // Workflow filter
-            workflowSlug:      "",
-            workflowName:      "All Workflows",
+            // Workflow multi-select filter (empty array = all workflows)
+            workflowSlugs:     [],
             workflowSearch:    "",
             // Dropdown visibility
             showDatePicker:    false,
             showWorkflowMenu:  false,
-            // Custom date range inputs (ISO date strings)
+            // Global custom date range inputs
             customFrom:        "",
             customTo:          "",
             // Section-level time range selectors
             healthTimeRange:   "12h",
             chartTimeRange:    "12h",
+            // Section custom date pickers
+            showHealthCustomPicker: false,
+            healthCustomFrom:  "",
+            healthCustomTo:    "",
+            showChartCustomPicker: false,
+            chartCustomFrom:   "",
+            chartCustomTo:     "",
             // Last refresh timestamp
             lastFetched:       null,
         });
@@ -133,6 +139,17 @@ export class WaDashboard extends Component {
         }
     }
 
+    /**
+     * Return {from, to} for a section, using custom dates when rangeKey === 'custom'
+     * and the custom fields are filled, otherwise falling back to the preset range.
+     */
+    _sectionDates(rangeKey, customFrom, customTo) {
+        if (rangeKey === "custom" && customFrom && customTo) {
+            return { from: customFrom, to: customTo };
+        }
+        return this._timeRangeDates(rangeKey);
+    }
+
     /** Format a Date as a local ISO datetime string (no timezone suffix). */
     _isoLocal(d) {
         const pad = (n) => String(n).padStart(2, "0");
@@ -140,6 +157,14 @@ export class WaDashboard extends Component {
             `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
             `T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
         );
+    }
+
+    /** Format an ISO date/datetime as "25 Apr" for display in trend labels. */
+    _fmtDateShort(isoStr) {
+        if (!isoStr) return "—";
+        const s = isoStr.includes("T") ? isoStr : isoStr + "T00:00:00";
+        const d = new Date(s);
+        return d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
     }
 
     // ── Data loaders ─────────────────────────────────────────────────────────
@@ -164,15 +189,19 @@ export class WaDashboard extends Component {
         this.state.metrics = await this.orm.call(
             "wa.dashboard", "get_metrics", [],
             {
-                date_from:     this.state.dateFrom,
-                date_to:       this.state.dateTo,
-                workflow_slug: this.state.workflowSlug,
+                date_from:      this.state.dateFrom,
+                date_to:        this.state.dateTo,
+                workflow_slugs: this.state.workflowSlugs,
             }
         );
     }
 
     async _loadWorkflowHealth() {
-        const { from, to } = this._timeRangeDates(this.state.healthTimeRange);
+        const { from, to } = this._sectionDates(
+            this.state.healthTimeRange,
+            this.state.healthCustomFrom,
+            this.state.healthCustomTo,
+        );
         this.state.workflowHealth = await this.orm.call(
             "wa.dashboard", "get_workflow_health", [],
             { date_from: from, date_to: to }
@@ -180,13 +209,18 @@ export class WaDashboard extends Component {
     }
 
     async _loadHourlyData() {
-        const { from, to } = this._timeRangeDates(this.state.chartTimeRange);
+        const { from, to } = this._sectionDates(
+            this.state.chartTimeRange,
+            this.state.chartCustomFrom,
+            this.state.chartCustomTo,
+        );
         this.state.hourlyData = await this.orm.call(
             "wa.dashboard", "get_hourly_volume", [],
             {
-                date_from:     from,
-                date_to:       to,
-                workflow_slug: this.state.workflowSlug,
+                date_from:      from,
+                date_to:        to,
+                workflow_slugs: this.state.workflowSlugs,
+                time_range:     this.state.chartTimeRange,
             }
         );
     }
@@ -194,7 +228,7 @@ export class WaDashboard extends Component {
     async _loadFailures() {
         this.state.failures = await this.orm.call(
             "wa.dashboard", "get_recent_failures", [],
-            { workflow_slug: this.state.workflowSlug }
+            { workflow_slugs: this.state.workflowSlugs }
         );
     }
 
@@ -216,9 +250,9 @@ export class WaDashboard extends Component {
     // --- Date picker presets ---
 
     _applyPreset(label, dateFrom, dateTo) {
-        this.state.dateLabel    = label;
-        this.state.dateFrom     = dateFrom;
-        this.state.dateTo       = dateTo;
+        this.state.dateLabel      = label;
+        this.state.dateFrom       = dateFrom;
+        this.state.dateTo         = dateTo;
         this.state.showDatePicker = false;
         this._loadMetrics();
         this._loadHourlyData();
@@ -238,16 +272,40 @@ export class WaDashboard extends Component {
         this._applyPreset("Custom", this.state.customFrom, this.state.customTo);
     }
 
-    // --- Workflow filter ---
+    // --- Workflow multi-select filter ---
 
-    onSelectWorkflow(wf) {
-        this.state.workflowSlug      = wf ? wf.slug : "";
-        this.state.workflowName      = wf ? wf.name : "All Workflows";
-        this.state.showWorkflowMenu  = false;
-        this.state.workflowSearch    = "";
+    /**
+     * Toggle a single workflow slug in/out of the active filter set.
+     * Menu stays open to allow multi-selection.
+     */
+    onFilterWorkflow(wf) {
+        const slugs = [...this.state.workflowSlugs];
+        const idx   = slugs.indexOf(wf.slug);
+        if (idx >= 0) {
+            slugs.splice(idx, 1);
+        } else {
+            slugs.push(wf.slug);
+        }
+        this.state.workflowSlugs = slugs;
         this._loadMetrics();
         this._loadHourlyData();
         this._loadFailures();
+    }
+
+    /** Clear all workflow filters and close the dropdown. */
+    onClearWorkflowFilter() {
+        this.state.workflowSlugs   = [];
+        this.state.showWorkflowMenu = false;
+        this.state.workflowSearch   = "";
+        this._loadMetrics();
+        this._loadHourlyData();
+        this._loadFailures();
+    }
+
+    /** Close the workflow dropdown without changing selection. */
+    onCloseWorkflowMenu() {
+        this.state.showWorkflowMenu = false;
+        this.state.workflowSearch   = "";
     }
 
     get filteredWorkflows() {
@@ -258,23 +316,40 @@ export class WaDashboard extends Component {
         );
     }
 
-    // --- Workflow toggle ---
+    // --- Workflow toggle (active/inactive state) ---
 
     async onToggleWorkflow(workflowId) {
         await this.orm.call("wa.workflow", "action_toggle_active", [[workflowId]]);
-        // Refresh health table and local workflow list so toggle state updates
         await Promise.all([this._loadWorkflowHealth(), this._loadWorkflows()]);
     }
 
     // --- Section time-range selectors ---
 
     async onHealthTimeRangeChange(range) {
-        this.state.healthTimeRange = range;
+        this.state.healthTimeRange        = range;
+        this.state.showHealthCustomPicker = false;
         await this._loadWorkflowHealth();
     }
 
     async onChartTimeRangeChange(range) {
-        this.state.chartTimeRange = range;
+        this.state.chartTimeRange        = range;
+        this.state.showChartCustomPicker = false;
+        await this._loadHourlyData();
+    }
+
+    // --- Section custom date range ---
+
+    async onApplyHealthCustomRange() {
+        if (!this.state.healthCustomFrom || !this.state.healthCustomTo) return;
+        this.state.healthTimeRange        = "custom";
+        this.state.showHealthCustomPicker = false;
+        await this._loadWorkflowHealth();
+    }
+
+    async onApplyChartCustomRange() {
+        if (!this.state.chartCustomFrom || !this.state.chartCustomTo) return;
+        this.state.chartTimeRange        = "custom";
+        this.state.showChartCustomPicker = false;
         await this._loadHourlyData();
     }
 
@@ -288,6 +363,39 @@ export class WaDashboard extends Component {
             views:     [[false, "form"]],
             target:    "current",
         });
+    }
+
+    // ── Computed getters ─────────────────────────────────────────────────────
+
+    /**
+     * Label shown on the workflow filter button:
+     *   0 selected → "All Workflows"
+     *   1 selected → workflow name
+     *   n selected → "n Workflows"
+     */
+    get workflowFilterLabel() {
+        const n = this.state.workflowSlugs.length;
+        if (n === 0) return "All Workflows";
+        if (n === 1) {
+            const wf = this.state.workflows.find(
+                (w) => w.slug === this.state.workflowSlugs[0]
+            );
+            return wf ? wf.name : "1 Workflow";
+        }
+        return `${n} Workflows`;
+    }
+
+    /**
+     * Dynamic comparison period label shown below each metric card.
+     * Uses the comparison_from / comparison_to dates returned by get_metrics.
+     * Falls back to "vs previous period" until metrics load.
+     */
+    get trendLabel() {
+        const m = this.state.metrics;
+        if (!m || !m.comparison_from) return "vs previous period";
+        const from = this._fmtDateShort(m.comparison_from);
+        const to   = this._fmtDateShort(m.comparison_to);
+        return `vs ${from} – ${to}`;
     }
 
     // ── Template helpers ─────────────────────────────────────────────────────
