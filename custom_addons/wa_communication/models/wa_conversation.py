@@ -909,6 +909,19 @@ class WaConversation(models.Model):
         enrollment_id = event.get('enrollment_id') or ''
         occurred_at   = _parse_iso_dt(event.get('occurred_at', ''))
 
+        # Idempotency guard — Pub/Sub delivers at-least-once; skip if a system
+        # pill for this enrollment_id already exists (duplicate delivery or push
+        # subscription misconfiguration).
+        if enrollment_id and self.env['wa.message'].sudo().search(
+            [('enrollment_id', '=', enrollment_id), ('kind', '=', 'system')],
+            limit=1,
+        ):
+            _logger.info(
+                "wa_push: enrollment_created duplicate skipped enrollment_id=%s message=%s",
+                enrollment_id, pubsub_message_id,
+            )
+            return
+
         conv = self._owa_get_conversation(phone)
         lead = self._owa_resolve_lead(actor_id, actor_type, phone)
 
@@ -947,6 +960,21 @@ class WaConversation(models.Model):
         workflow_slug = event.get('workflow_slug') or ''
         enrollment_id = event.get('enrollment_id') or ''
         occurred_at   = _parse_iso_dt(event.get('occurred_at', ''))
+
+        # Idempotency guard — skip if a 'completed' system pill already exists.
+        if enrollment_id and self.env['wa.message'].sudo().search(
+            [
+                ('enrollment_id', '=', enrollment_id),
+                ('kind', '=', 'system'),
+                ('body', 'like', 'Workflow completed:'),
+            ],
+            limit=1,
+        ):
+            _logger.info(
+                "wa_push: enrollment_completed duplicate skipped enrollment_id=%s message=%s",
+                enrollment_id, pubsub_message_id,
+            )
+            return
 
         conv = self._owa_get_conversation(phone)
         lead = self._owa_resolve_lead(actor_id, actor_type, phone)
