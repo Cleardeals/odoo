@@ -173,16 +173,41 @@ class WaLeadEventPublisher(models.Model):
 
         Used both as ``payload.actor`` (for ``actor.*`` var sources) and
         spread into the top of ``payload`` (for ``event.*`` var sources).
+
+        Flat keys (``assigned_rm_email``, ``assigned_rm_id``, ``property_id``,
+        ``portal_source``) are included so the workflow engine can capture them
+        as ``meta.*`` fields via the ``meta_fields`` YAML list.
+
+        Nested ``rm`` and ``property`` sub-dicts allow YAML vars to reference
+        ``actor.rm.email``, ``actor.property.tag``, etc.
         """
         self.ensure_one()
+        prop = self.property_base_id
+        rm = self.user_id
         return {
-            'lead_id':        self.id,
-            'customer_name':  self.name,
+            # ── Core identity ──────────────────────────────────────────────
+            'id':             self.id,
+            'name':           self.name or '',
             'phone':          self.phone or '',
             'current_status': self.current_status or '',
-            'rm_user_id':     self.user_id.id or None,
-            'rm_name':        self.user_id.name or '',
-            'source':         self.source_id.name or '',
+            # ── Flat keys for meta_fields capture ─────────────────────────
+            'assigned_rm_id':    rm.id or None,
+            'assigned_rm_email': rm.email or '',
+            'property_id':       prop.id or None,
+            'portal_source':     self.source_id.name or '',
+            # ── Nested RM dict — actor.rm.* var resolution ─────────────────
+            'rm': {
+                'id':    rm.id or None,
+                'name':  rm.name or '',
+                'email': rm.email or '',
+            },
+            # ── Nested property dict — actor.property.* var resolution ──────
+            'property': {
+                'id':       prop.id or None,
+                'tag':      prop.property_tag or '',
+                'locality': prop.location or '',
+                'link':     prop.property_link or '',
+            },
         }
 
     def _wa_build_event(self, event_type: str) -> dict:
