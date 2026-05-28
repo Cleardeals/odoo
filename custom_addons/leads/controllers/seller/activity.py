@@ -119,10 +119,9 @@ def _serialize_recommended_lead(inquiry) -> dict:
             inquiry.create_date.isoformat() if inquiry.create_date else None
         ),
         "current_status": inquiry.current_status or None,
-        # first_contacted_on lives on the parent primary lead
         "first_contacted_on": (
-            parent_lead.first_contact_datetime.isoformat()
-            if parent_lead and parent_lead.first_contact_datetime
+            inquiry.first_contact_datetime.isoformat()
+            if inquiry.first_contact_datetime
             else None
         ),
         "site_visit_datetime": (
