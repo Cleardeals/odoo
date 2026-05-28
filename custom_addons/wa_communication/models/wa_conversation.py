@@ -741,6 +741,11 @@ class WaConversation(models.Model):
         conv = self._owa_get_conversation(phone)
         lead = self._owa_resolve_lead(actor_id, actor_type, phone)
 
+        # Prefer event-supplied rm_odoo_id; fall back to the RM already assigned
+        # on the lead so that existing assignments are honoured without re-assigning.
+        if not rm_odoo_id and lead and lead.user_id:
+            rm_odoo_id = lead.user_id.id
+
         self.env['wa.message'].sudo().create({
             'conversation_id':   conv.id,
             'wa_message_id':     wa_message_id or False,
