@@ -771,14 +771,16 @@ class WaConversation(models.Model):
                 act_type = self.env.ref(
                     'mail.mail_activity_data_todo', raise_if_not_found=False
                 )
-                self.env['mail.activity'].sudo().create({
-                    'res_model': 'leads.new',
-                    'res_id':    lead.id,
-                    'activity_type_id': act_type.id if act_type else False,
-                    'user_id':   rm_odoo_id,
-                    'summary':   'WA reply from buyer',
-                    'note':      message_text[:500] if message_text else '',
-                })
+                leads_model = self.env['ir.model']._get('leads.new')
+                with self.env.cr.savepoint():
+                    self.env['mail.activity'].sudo().create({
+                        'res_model_id': leads_model.id,
+                        'res_id':       lead.id,
+                        'activity_type_id': act_type.id if act_type else False,
+                        'user_id':   rm_odoo_id,
+                        'summary':   'WA reply from buyer',
+                        'note':      message_text[:500] if message_text else '',
+                    })
             except Exception:
                 _logger.exception("wa_push: failed to create activity for lead_replied")
 
@@ -836,14 +838,16 @@ class WaConversation(models.Model):
                 act_type = self.env.ref(
                     'mail.mail_activity_data_todo', raise_if_not_found=False
                 )
-                self.env['mail.activity'].sudo().create({
-                    'res_model': 'leads.new',
-                    'res_id':    lead.id,
-                    'activity_type_id': act_type.id if act_type else False,
-                    'user_id':   rm_odoo_id,
-                    'summary':   'WA review required: ambiguous reply',
-                    'note':      message_text[:500] if message_text else '',
-                })
+                leads_model = self.env['ir.model']._get('leads.new')
+                with self.env.cr.savepoint():
+                    self.env['mail.activity'].sudo().create({
+                        'res_model_id': leads_model.id,
+                        'res_id':       lead.id,
+                        'activity_type_id': act_type.id if act_type else False,
+                        'user_id':   rm_odoo_id,
+                        'summary':   'WA review required: ambiguous reply',
+                        'note':      message_text[:500] if message_text else '',
+                    })
             except Exception:
                 _logger.exception("wa_push: failed to create activity for ambiguous_reply")
 
@@ -892,14 +896,16 @@ class WaConversation(models.Model):
                 act_type = self.env.ref(
                     'mail.mail_activity_data_todo', raise_if_not_found=False
                 )
-                self.env['mail.activity'].sudo().create({
-                    'res_model': 'leads.new',
-                    'res_id':    lead.id,
-                    'activity_type_id': act_type.id if act_type else False,
-                    'user_id':   rm_odoo_id,
-                    'summary':   summary,
-                    'note':      f'Code: {failure_code}' if failure_code else '',
-                })
+                leads_model = self.env['ir.model']._get('leads.new')
+                with self.env.cr.savepoint():
+                    self.env['mail.activity'].sudo().create({
+                        'res_model_id': leads_model.id,
+                        'res_id':       lead.id,
+                        'activity_type_id': act_type.id if act_type else False,
+                        'user_id':   rm_odoo_id,
+                        'summary':   summary,
+                        'note':      f'Code: {failure_code}' if failure_code else '',
+                    })
             except Exception:
                 _logger.exception("wa_push: failed to create activity for permanent_failure")
 
