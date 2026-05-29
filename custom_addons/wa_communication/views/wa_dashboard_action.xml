@@ -1,7 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
+    <!-- WA Dashboard client action -->
     <record id="action_wa_dashboard" model="ir.actions.client">
         <field name="name">WhatsApp Dashboard</field>
         <field name="tag">wa_dashboard</field>
+    </record>
+
+    <!-- Delete the legacy ir.actions.act_window before creating the client action
+         with the same XML id (Odoo refuses to change a record's model in-place) -->
+    <delete model="ir.actions.act_window" id="action_wa_message_log"/>
+
+    <!-- Message Log client action (replaces the standard list view) -->
+    <record id="action_wa_message_log" model="ir.actions.client">
+        <field name="name">Message Log</field>
+        <field name="tag">wa_message_log</field>
     </record>
 </odoo>

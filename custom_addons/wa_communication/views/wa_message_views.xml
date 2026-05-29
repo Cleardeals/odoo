@@ -163,24 +163,6 @@
         </field>
     </record>
 
-    <!-- ================================================================
-         Action — wa.message
-         ================================================================ -->
-    <record id="action_wa_message_log" model="ir.actions.act_window">
-        <field name="name">Message Log</field>
-        <field name="res_model">wa.message</field>
-        <field name="view_mode">list,form</field>
-        <field name="search_view_id" ref="view_wa_message_search"/>
-        <field name="context">{'search_default_filter_outbound': 0}</field>
-        <field name="help" type="html">
-            <p class="o_view_nocontent_smiling_face">
-                No WhatsApp messages yet.
-            </p>
-            <p>
-                Messages are logged here automatically whenever a WhatsApp
-                message is sent or received via the Pub/Sub pipeline.
-            </p>
-        </field>
-    </record>
+    <!-- action_wa_message_log is defined as ir.actions.client in wa_dashboard_action.xml -->
 
 </odoo>

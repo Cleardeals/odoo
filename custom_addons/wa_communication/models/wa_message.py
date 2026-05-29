@@ -38,7 +38,7 @@ alongside it — exactly one of the two should be set per row.
 It is an integer, not a FK.
 """
 
-from odoo import fields, models
+from odoo import api, fields, models
 from odoo.exceptions import UserError, ValidationError
 
 # Structural fields that must never change after a record is created.
@@ -286,7 +286,35 @@ class WaMessage(models.Model):
                 "The following fields cannot be changed after creation: %s"
                 % sorted(immutable_attempted)
             )
-        return super().write(vals)
+        result = super().write(vals)
+        # Broadcast status changes to the message-log live channel so the
+        # OWL Message Log client action can update in real time.
+        if 'status' in vals:
+            self._broadcast_message_log_update()
+        return result
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        records = super().create(vals_list)
+        # Broadcast new messages to the message-log live channel.
+        records._broadcast_message_log_update()
+        return records
+
+    def _broadcast_message_log_update(self):
+        """Send a lightweight bus.bus notification to the wa_message_log channel.
+
+        The OWL Message Log component subscribes to this channel and triggers
+        a data refresh when it receives this notification.  We send only a
+        minimal signal — the component fetches fresh data itself.
+        """
+        try:
+            self.env['bus.bus']._sendone(
+                'wa_message_log',
+                'wa_message_update',
+                {'ts': fields.Datetime.now().isoformat()},
+            )
+        except Exception:
+            pass  # never let broadcast failures break the write/create path
 
     def unlink(self):
         """Block direct ORM deletion to protect the audit trail.

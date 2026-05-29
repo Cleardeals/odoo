@@ -392,6 +392,8 @@ class WaConversation(models.Model):
                 'wa_message_id': wa_msg_id,
                 'from': from_phone,
                 'type': msg_type,
+                'sender_name': sender_name,
+                'raw': msg,
             },
             status='processed',
         )
@@ -424,7 +426,7 @@ class WaConversation(models.Model):
             event_type='wa_status_update',
             direction='inbound',
             pubsub_message_id=pubsub_message_id,
-            payload={'wa_message_id': wa_msg_id, 'status': new_status},
+            payload={'wa_message_id': wa_msg_id, 'new_status': new_status, 'raw': status},
             status='processed',
         )
 
@@ -466,7 +468,7 @@ class WaConversation(models.Model):
             event_type='wa_message_ack',
             direction='inbound',
             pubsub_message_id=pubsub_message_id,
-            payload={'odoo_message_id': odoo_msg_id, 'wa_message_id': wa_msg_id},
+            payload={'odoo_message_id': odoo_msg_id, 'wa_message_id': wa_msg_id, 'raw': payload},
             status='processed',
         )
 

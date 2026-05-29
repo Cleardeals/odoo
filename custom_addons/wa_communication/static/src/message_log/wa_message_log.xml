@@ -1,0 +1,236 @@
+<?xml version="1.0" encoding="utf-8"?>
+<templates xml:space="preserve">
+
+  <!-- ══════════════════════════════════════════════════════════════════════════
+       WaMessageLog — main Message Log client action
+       ══════════════════════════════════════════════════════════════════════════ -->
+  <t t-name="wa_communication.WaMessageLog">
+    <div class="cd-msg-log">
+
+      <!-- Webhook Log overlay — rendered on top when open -->
+      <t t-if="state.showWebhookLog">
+        <WaWebhookLog onClose="() => this.closeWebhookLog()"/>
+      </t>
+
+      <!-- ── Header ──────────────────────────────────────────────────────── -->
+      <div class="cd-msg-log__header">
+        <div class="cd-msg-log__header-left">
+          <h1 class="cd-msg-log__title">Message Logs</h1>
+          <span class="cd-msg-log__subtitle">
+            <t t-esc="state.dateLabel"/>
+          </span>
+        </div>
+        <div class="cd-msg-log__header-right">
+          <t t-if="state.lastFetchedLabel">
+            <span class="cd-msg-log__last-fetched">
+              Last Fetched · <t t-esc="state.lastFetchedLabel"/>
+            </span>
+          </t>
+          <button class="btn btn-sm btn-outline-secondary cd-msg-log__btn"
+                  t-on-click="() => this.onRefresh()">
+            <i class="fa fa-refresh"/> Refresh
+          </button>
+          <button class="btn btn-sm btn-dark cd-msg-log__btn cd-msg-log__btn--webhook"
+                  t-on-click="() => this.openWebhookLog()">
+            <i class="fa fa-code"/> Raw Webhook Log
+          </button>
+        </div>
+      </div>
+
+      <!-- ── Period filter ─────────────────────────────────────────────────── -->
+      <div class="cd-msg-log__period-bar">
+        <button t-att-class="'cd-msg-log__period-btn' + (state.dateLabel === 'Today' ? ' cd-msg-log__period-btn--active' : '')"
+                t-on-click="() => this.onPresetToday()">Today</button>
+        <button t-att-class="'cd-msg-log__period-btn' + (state.dateLabel === 'Yesterday' ? ' cd-msg-log__period-btn--active' : '')"
+                t-on-click="() => this.onPresetYesterday()">Yesterday</button>
+        <button t-att-class="'cd-msg-log__period-btn' + (state.dateLabel === 'Last 7d' ? ' cd-msg-log__period-btn--active' : '')"
+                t-on-click="() => this.onPresetLast7d()">Last 7d</button>
+        <button t-att-class="'cd-msg-log__period-btn' + (state.dateLabel === 'Last 30d' ? ' cd-msg-log__period-btn--active' : '')"
+                t-on-click="() => this.onPresetLast30d()">Last 30d</button>
+        <button t-att-class="'cd-msg-log__period-btn' + (state.dateLabel === 'This Month' ? ' cd-msg-log__period-btn--active' : '')"
+                t-on-click="() => this.onPresetThisMonth()">This Month</button>
+        <button t-att-class="'cd-msg-log__period-btn cd-msg-log__period-btn--custom' + (state.showCustomDate ? ' cd-msg-log__period-btn--active' : '')"
+                t-on-click="() => this.openCustomDate()">
+          <i class="fa fa-calendar"/> Custom
+        </button>
+
+        <!-- Inline custom date range inputs — shown when Custom is clicked -->
+        <t t-if="state.showCustomDate">
+          <div class="cd-msg-log__custom-date">
+            <input type="date"
+                   class="cd-msg-log__date-input"
+                   t-att-value="state.dateFrom.slice(0,10)"
+                   t-on-change="(ev) => this.onCustomDateFrom(ev)"/>
+            <span class="cd-msg-log__date-sep">→</span>
+            <input type="date"
+                   class="cd-msg-log__date-input"
+                   t-att-value="state.dateTo.slice(0,10)"
+                   t-on-change="(ev) => this.onCustomDateTo(ev)"/>
+            <button class="btn btn-sm btn-primary cd-msg-log__date-apply"
+                    t-on-click="() => this.applyCustomDate()">Apply</button>
+          </div>
+        </t>
+
+        <!-- Summary stats (right side of period bar) -->
+        <div class="cd-msg-log__stats">
+          <span class="cd-msg-log__stat"><b t-esc="state.totals.total || 0"/> records</span>
+          <span class="cd-msg-log__stat cd-msg-log__stat--inbound">
+            <b t-esc="state.totals.inbound || 0"/> inbound
+          </span>
+          <span class="cd-msg-log__stat cd-msg-log__stat--cta">
+            <b t-esc="state.totals.cta || 0"/> CTA replies
+          </span>
+          <span class="cd-msg-log__stat cd-msg-log__stat--failed">
+            <b t-esc="state.totals.failed || 0"/> failed
+          </span>
+          <span class="cd-msg-log__stat cd-msg-log__stat--cost">
+            <b t-esc="costDisplay"/> total cost
+          </span>
+        </div>
+      </div>
+
+      <!-- ── Tab + secondary filters ──────────────────────────────────────── -->
+      <div class="cd-msg-log__filter-bar">
+
+        <!-- Direction/type tabs -->
+        <div class="cd-msg-log__tabs">
+          <button t-att-class="'cd-msg-log__tab' + (state.kindFilter === '' ? ' cd-msg-log__tab--active' : '')"
+                  t-on-click="() => this.setKindFilter('')">All</button>
+          <button t-att-class="'cd-msg-log__tab' + (state.kindFilter === 'inbound' ? ' cd-msg-log__tab--active' : '')"
+                  t-on-click="() => this.setKindFilter('inbound')">Inbound</button>
+          <button t-att-class="'cd-msg-log__tab' + (state.kindFilter === 'outbound' ? ' cd-msg-log__tab--active' : '')"
+                  t-on-click="() => this.setKindFilter('outbound')">Outbound</button>
+          <button t-att-class="'cd-msg-log__tab' + (state.kindFilter === 'button_reply' ? ' cd-msg-log__tab--active' : '')"
+                  t-on-click="() => this.setKindFilter('button_reply')">CTA Reply</button>
+          <button t-att-class="'cd-msg-log__tab' + (state.kindFilter === 'failed' ? ' cd-msg-log__tab--active' : '')"
+                  t-on-click="() => this.setKindFilter('failed')">Failed</button>
+        </div>
+
+        <!-- Secondary filters (right side) -->
+        <div class="cd-msg-log__filter-right">
+
+          <!-- Template dropdown -->
+          <div class="cd-msg-log__dropdown-wrap">
+            <button class="cd-msg-log__filter-btn"
+                    t-on-click="() => { state.showTemplateMenu = !state.showTemplateMenu; state.showWorkflowMenu = false; }">
+              <t t-esc="templateLabel"/> <i class="fa fa-chevron-down"/>
+            </button>
+            <t t-if="state.showTemplateMenu">
+              <div class="cd-msg-log__dropdown">
+                <button class="cd-msg-log__dropdown-item"
+                        t-on-click="() => this.setTemplate('')">All Templates</button>
+                <t t-foreach="state.templates" t-as="tmpl" t-key="tmpl">
+                  <button class="cd-msg-log__dropdown-item"
+                          t-on-click="() => this.setTemplate(tmpl)">
+                    <t t-esc="tmpl"/>
+                  </button>
+                </t>
+              </div>
+            </t>
+          </div>
+
+          <!-- Workflow dropdown -->
+          <div class="cd-msg-log__dropdown-wrap">
+            <button class="cd-msg-log__filter-btn"
+                    t-on-click="() => { state.showWorkflowMenu = !state.showWorkflowMenu; state.showTemplateMenu = false; }">
+              <t t-esc="workflowLabel"/> <i class="fa fa-chevron-down"/>
+            </button>
+            <t t-if="state.showWorkflowMenu">
+              <div class="cd-msg-log__dropdown">
+                <button class="cd-msg-log__dropdown-item"
+                        t-on-click="() => this.setWorkflow('')">All Workflows</button>
+                <t t-foreach="state.workflows" t-as="wf" t-key="wf">
+                  <button class="cd-msg-log__dropdown-item"
+                          t-on-click="() => this.setWorkflow(wf)">
+                    <t t-esc="wf"/>
+                  </button>
+                </t>
+              </div>
+            </t>
+          </div>
+
+          <!-- Search -->
+          <input class="cd-msg-log__search"
+                 type="text"
+                 placeholder="Search phone / lead..."
+                 t-att-value="state.searchText"
+                 t-on-input="(ev) => this.onSearchInput(ev)"/>
+
+        </div>
+      </div>
+
+      <!-- ── Table ─────────────────────────────────────────────────────────── -->
+      <div class="cd-msg-log__table-wrap">
+
+        <!-- Loading state -->
+        <t t-if="state.loading">
+          <div class="cd-msg-log__loading">
+            <i class="fa fa-spinner fa-spin"/> Loading…
+          </div>
+        </t>
+
+        <!-- Error state -->
+        <t t-elif="state.error">
+          <div class="cd-msg-log__error">
+            <i class="fa fa-exclamation-triangle"/> <t t-esc="state.error"/>
+          </div>
+        </t>
+
+        <!-- Empty state -->
+        <t t-elif="state.rows.length === 0">
+          <div class="cd-msg-log__empty">No messages found for the selected filters.</div>
+        </t>
+
+        <!-- Table -->
+        <t t-else="">
+          <table class="cd-msg-log__table">
+            <thead>
+              <tr>
+                <th>Dir</th>
+                <th>Type</th>
+                <th>Lead</th>
+                <th>Message / Button Clicked</th>
+                <th>Status</th>
+                <th>Failure</th>
+                <th>Time</th>
+                <th>Cost ₹</th>
+                <th>Workflow</th>
+              </tr>
+            </thead>
+            <tbody>
+              <t t-foreach="state.rows" t-as="row" t-key="row.id">
+                <WaMessageRow
+                  row="row"
+                  isExpanded="state.expandedRowId === row.id"
+                  onToggle="(id) => this.toggleRow(id)"
+                />
+              </t>
+            </tbody>
+          </table>
+        </t>
+      </div>
+
+      <!-- ── Pagination ─────────────────────────────────────────────────────── -->
+      <t t-if="state.total > state.limit">
+        <div class="cd-msg-log__pagination">
+          <button class="btn btn-sm btn-outline-secondary"
+                  t-att-disabled="!hasPrev"
+                  t-on-click="() => this.onPrev()">
+            <i class="fa fa-chevron-left"/> Prev
+          </button>
+          <span class="cd-msg-log__page-info">
+            <t t-esc="state.offset + 1"/>–<t t-esc="Math.min(state.offset + state.limit, state.total)"/>
+            of <t t-esc="state.total"/>
+          </span>
+          <button class="btn btn-sm btn-outline-secondary"
+                  t-att-disabled="!hasNext"
+                  t-on-click="() => this.onNext()">
+            Next <i class="fa fa-chevron-right"/>
+          </button>
+        </div>
+      </t>
+
+    </div>
+  </t>
+
+</templates>

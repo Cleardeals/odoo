@@ -1,0 +1,332 @@
+// ─── Webhook Log developer panel styles ──────────────────────────────────────
+// BEM: .cd-webhook-log__* — full-screen overlay
+
+.cd-webhook-log {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background: #f8f9fa;
+  display: flex;
+  flex-direction: column;
+  font-family: inherit;
+
+  // ── Header ───────────────────────────────────────────────────────────────────
+  &__header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 24px;
+    background: #fff;
+    border-bottom: 1px solid #e9ecef;
+    flex-wrap: wrap;
+  }
+
+  &__back {
+    background: none;
+    border: none;
+    color: #5c3d8f;
+    font-size: 13px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0;
+    &:hover { text-decoration: underline; }
+  }
+
+  &__breadcrumb-sep {
+    color: #adb5bd;
+  }
+
+  &__breadcrumb-current {
+    font-weight: 600;
+    font-size: 14px;
+    color: #1a1a2e;
+  }
+
+  &__dev-pill {
+    padding: 2px 10px;
+    background: #fff3cd;
+    color: #856404;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    margin-left: 4px;
+  }
+
+  &__header-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+  }
+
+  &__search {
+    padding: 5px 12px;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    font-size: 13px;
+    width: 220px;
+    outline: none;
+    &:focus { border-color: #5c3d8f; box-shadow: 0 0 0 2px rgba(92,61,143,.15); }
+  }
+
+  &__date-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: #fff;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 4px 8px;
+    font-size: 12px;
+  }
+
+  &__date-input {
+    padding: 3px 6px;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    font-size: 12px;
+    outline: none;
+    &:focus { border-color: #5c3d8f; }
+  }
+
+  // ── Tabs ─────────────────────────────────────────────────────────────────────
+  &__tabs {
+    display: flex;
+    gap: 4px;
+    padding: 10px 24px;
+    background: #fff;
+    border-bottom: 1px solid #e9ecef;
+  }
+
+  &__tab {
+    padding: 6px 14px;
+    border: none;
+    background: transparent;
+    font-size: 13px;
+    color: #6c757d;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    &:hover { background: #f0f0f5; color: #1a1a2e; }
+    &--active { background: #1a1a2e; color: #fff; }
+  }
+
+  &__tab-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 18px;
+    padding: 0 5px;
+    background: rgba(255,255,255,.2);
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 700;
+
+    .cd-webhook-log__tab:not(.cd-webhook-log__tab--active) & {
+      background: #e9ecef;
+      color: #495057;
+    }
+  }
+
+  // ── Two-panel body ────────────────────────────────────────────────────────────
+  &__body {
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    flex: 1;
+    overflow: hidden;
+
+    @media (max-width: 768px) {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  // ── Left list ────────────────────────────────────────────────────────────────
+  &__list {
+    overflow-y: auto;
+    border-right: 1px solid #e9ecef;
+    background: #fff;
+  }
+
+  &__list-loading,
+  &__list-empty,
+  &__list-error {
+    padding: 32px;
+    text-align: center;
+    color: #6c757d;
+    font-size: 13px;
+  }
+
+  &__event {
+    padding: 14px 18px;
+    border-bottom: 1px solid #f0f0f5;
+    cursor: pointer;
+    transition: background 0.1s;
+
+    &:hover { background: #f8f9fa; }
+
+    &--selected {
+      background: #f5f0ff;
+      border-left: 3px solid #5c3d8f;
+    }
+  }
+
+  &__event-top {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+  }
+
+  &__event-status {
+    font-size: 11px;
+    font-weight: 700;
+    &--ok  { color: #198754; }
+    &--err { color: #dc3545; }
+  }
+
+  &__event-type {
+    font-size: 13px;
+    font-weight: 600;
+    color: #1a1a2e;
+  }
+
+  &__event-phone {
+    font-size: 12px;
+    color: #5c3d8f;
+    font-weight: 500;
+    margin-bottom: 3px;
+  }
+
+  &__event-cta-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    background: #d1e7dd;
+    color: #0a5c36;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+
+  &__event-time {
+    font-size: 11px;
+    color: #9399a6;
+  }
+
+  // ── Right detail ─────────────────────────────────────────────────────────────
+  &__detail {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: #fff;
+    padding: 20px 24px;
+    overflow-y: auto;
+  }
+
+  &__detail-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: #6c757d;
+    font-size: 14px;
+  }
+
+  &__detail-meta {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+
+  &__detail-lead {
+    font-size: 15px;
+    font-weight: 600;
+    color: #1a1a2e;
+  }
+
+  &__detail-phone {
+    color: #5c3d8f;
+  }
+
+  &__detail-wa-id {
+    font-size: 12px;
+  }
+
+  &__detail-created {
+    font-size: 12px;
+  }
+
+  &__detail-stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    padding: 14px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    margin-bottom: 16px;
+
+    @media (max-width: 900px) { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  &__detail-stat {
+    label {
+      display: block;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .06em;
+      color: #9399a6;
+      text-transform: uppercase;
+      margin-bottom: 3px;
+    }
+    span {
+      font-size: 13px;
+      color: #1a1a2e;
+    }
+  }
+
+  &__detail-error-msg {
+    padding: 10px 14px;
+    background: #f8d7da;
+    color: #842029;
+    border-radius: 6px;
+    font-size: 12px;
+    margin-bottom: 14px;
+  }
+
+  &__json-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 13px;
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 8px;
+  }
+
+  &__json {
+    flex: 1;
+    background: #1a1a2e;
+    color: #a8d8a8;
+    font-family: "SFMono-Regular", Consolas, "Courier New", monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    padding: 16px;
+    border-radius: 8px;
+    overflow: auto;
+    white-space: pre;
+    min-height: 300px;
+  }
+
+  &__mono {
+    font-family: "SFMono-Regular", Consolas, monospace;
+    font-size: 11px;
+  }
+}

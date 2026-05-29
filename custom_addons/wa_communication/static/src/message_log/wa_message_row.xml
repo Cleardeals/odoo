@@ -1,0 +1,223 @@
+<?xml version="1.0" encoding="utf-8"?>
+<templates xml:space="preserve">
+
+  <!-- ══════════════════════════════════════════════════════════════════════════
+       WaMessageRow — single row + expandable detail panel
+       ══════════════════════════════════════════════════════════════════════════ -->
+  <t t-name="wa_communication.WaMessageRow">
+
+    <!-- ── Main row ─────────────────────────────────────────────────────── -->
+    <tr t-att-class="'cd-msg-log__row' + (props.isExpanded ? ' cd-msg-log__row--expanded' : '')"
+        t-on-click="() => this.onClick()">
+
+      <!-- Dir -->
+      <td>
+        <span t-att-class="dirBadgeClass">
+          <t t-esc="props.row.direction === 'inbound' ? 'Inbound' : 'Outbound'"/>
+        </span>
+      </td>
+
+      <!-- Type -->
+      <td>
+        <span t-att-class="kindBadgeClass">
+          <t t-if="props.row.kind === 'button_reply'">
+            <i class="fa fa-reply"/> 
+          </t>
+          <t t-elif="props.row.kind === 'template'">
+            <i class="fa fa-table"/>
+          </t>
+          <t t-elif="props.row.kind === 'text_reply'">
+            <i class="fa fa-comment-o"/>
+          </t>
+          <t t-esc="props.row.kind_label"/>
+        </span>
+      </td>
+
+      <!-- Lead -->
+      <td class="cd-msg-log__lead-cell">
+        <div class="cd-msg-log__lead-name">
+          <t t-if="props.row.lead_name">
+            <t t-esc="props.row.lead_name"/>
+          </t>
+          <t t-else="">
+            <span class="text-muted">—</span>
+          </t>
+        </div>
+        <div class="cd-msg-log__lead-phone text-muted">
+          <t t-esc="props.row.phone"/>
+        </div>
+      </td>
+
+      <!-- Message / Button Clicked -->
+      <td class="cd-msg-log__body-cell">
+        <t t-if="props.row.kind === 'button_reply'">
+          <span class="cd-msg-log__cta-pill">
+            <i class="fa fa-reply cd-msg-log__cta-icon"/>
+            <t t-esc="props.row.body"/>
+          </span>
+        </t>
+        <t t-elif="props.row.template_name">
+          <span class="text-muted" t-esc="props.row.template_name"/>
+        </t>
+        <t t-else="">
+          <span class="cd-msg-log__body-text">
+            <t t-esc="props.row.body ? '&quot;' + props.row.body + '&quot;' : '—'"/>
+          </span>
+        </t>
+      </td>
+
+      <!-- Status -->
+      <td>
+        <span t-att-class="statusBadgeClass">
+          <t t-esc="props.row.status.charAt(0).toUpperCase() + props.row.status.slice(1).replace('_', ' ')"/>
+        </span>
+      </td>
+
+      <!-- Failure -->
+      <td class="cd-msg-log__failure-cell">
+        <t t-if="hasFailure">
+          <t t-foreach="failureLines" t-as="line" t-key="line_index">
+            <div t-att-class="line_index === 0 ? 'cd-msg-log__failure-label' : 'text-muted small'">
+              <t t-esc="line"/>
+            </div>
+          </t>
+        </t>
+        <t t-else="">
+          <span class="text-muted">—</span>
+        </t>
+      </td>
+
+      <!-- Time -->
+      <td class="cd-msg-log__time-cell">
+        <t t-esc="props.row.occurred_at"/>
+      </td>
+
+      <!-- Cost -->
+      <td class="cd-msg-log__cost-cell">
+        <t t-if="props.row.cost_inr">
+          <span class="cd-msg-log__cost">₹<t t-esc="props.row.cost_inr.toFixed(2)"/></span>
+        </t>
+        <t t-else="">
+          <span class="text-muted">—</span>
+        </t>
+      </td>
+
+      <!-- Workflow -->
+      <td class="cd-msg-log__workflow-cell">
+        <t t-if="props.row.workflow_slug">
+          <div class="cd-msg-log__workflow-name" t-esc="props.row.workflow_slug"/>
+          <t t-if="props.row.step_id">
+            <div class="cd-msg-log__workflow-step text-muted small" t-esc="props.row.step_id"/>
+          </t>
+        </t>
+        <t t-else="">
+          <span class="text-muted">—</span>
+        </t>
+      </td>
+
+    </tr>
+
+    <!-- ── Expanded detail panel ────────────────────────────────────────── -->
+    <t t-if="props.isExpanded">
+      <tr class="cd-msg-log__detail-row">
+        <td colspan="9">
+          <div class="cd-msg-log__detail-panel">
+
+            <!-- Header -->
+            <div class="cd-msg-log__detail-header">
+              <span class="cd-msg-log__detail-title">
+                Full Message Details
+                <t t-if="state.detail"> — WA-<t t-esc="state.detail.id"/></t>
+              </span>
+              <button class="cd-msg-log__detail-close"
+                      t-on-click.stop="() => this.onClick()">
+                ×
+              </button>
+            </div>
+
+            <!-- Loading -->
+            <t t-if="state.detailLoading">
+              <div class="cd-msg-log__detail-loading">
+                <i class="fa fa-spinner fa-spin"/> Loading detail…
+              </div>
+            </t>
+
+            <!-- Error -->
+            <t t-elif="state.detailError">
+              <div class="cd-msg-log__detail-error">
+                <i class="fa fa-exclamation-triangle"/> <t t-esc="state.detailError"/>
+              </div>
+            </t>
+
+            <!-- Detail fields grid -->
+            <t t-elif="state.detail">
+              <div class="cd-msg-log__detail-grid">
+
+                <div class="cd-msg-log__detail-field">
+                  <label>RECEIVED AT (UTC)</label>
+                  <span t-esc="state.detail.received_at || '—'"/>
+                </div>
+                <div class="cd-msg-log__detail-field">
+                  <label>DELIVERED AT (UTC)</label>
+                  <span t-esc="state.detail.delivered_at || '—'"/>
+                </div>
+                <div class="cd-msg-log__detail-field">
+                  <label>SEEN AT (UTC)</label>
+                  <span t-esc="state.detail.seen_at || '—'"/>
+                </div>
+                <div class="cd-msg-log__detail-field">
+                  <label>BUTTON TEXT</label>
+                  <t t-if="state.detail.button_text">
+                    <span class="cd-msg-log__cta-pill">
+                      <i class="fa fa-reply cd-msg-log__cta-icon"/>
+                      <t t-esc="state.detail.button_text"/>
+                    </span>
+                  </t>
+                  <t t-else=""><span>—</span></t>
+                </div>
+
+                <div class="cd-msg-log__detail-field">
+                  <label>BUTTON TYPE</label>
+                  <span t-esc="state.detail.button_type || '—'"/>
+                </div>
+                <div class="cd-msg-log__detail-field">
+                  <label>TEMPLATE (REPLIED TO)</label>
+                  <span t-esc="state.detail.template_replied_to || '—'"/>
+                </div>
+                <div class="cd-msg-log__detail-field">
+                  <label>WHATSAPP COST</label>
+                  <span t-esc="state.detail.whatsapp_cost || '—'"/>
+                </div>
+                <div class="cd-msg-log__detail-field">
+                  <label>INTERAKT MARKUP</label>
+                  <span t-esc="state.detail.interakt_markup || '—'"/>
+                </div>
+
+                <div class="cd-msg-log__detail-field">
+                  <label>ACTUAL MESSAGE COST</label>
+                  <span t-esc="state.detail.actual_cost || '—'"/>
+                </div>
+                <div class="cd-msg-log__detail-field">
+                  <label>WORKFLOW</label>
+                  <span t-esc="state.detail.workflow || '—'"/>
+                </div>
+                <div class="cd-msg-log__detail-field">
+                  <label>ENROLLMENT ID</label>
+                  <span class="cd-msg-log__detail-mono" t-esc="state.detail.enrollment_id || '—'"/>
+                </div>
+                <div class="cd-msg-log__detail-field">
+                  <label>WA MESSAGE ID</label>
+                  <span class="cd-msg-log__detail-mono" t-esc="state.detail.wa_message_id || '—'"/>
+                </div>
+
+              </div>
+            </t>
+
+          </div>
+        </td>
+      </tr>
+    </t>
+
+  </t>
+
+</templates>

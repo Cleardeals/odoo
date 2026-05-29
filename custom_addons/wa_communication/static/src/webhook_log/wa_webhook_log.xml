@@ -1,0 +1,191 @@
+<?xml version="1.0" encoding="utf-8"?>
+<templates xml:space="preserve">
+
+  <!-- ══════════════════════════════════════════════════════════════════════════
+       WaWebhookLog — raw webhook event log developer panel
+       Full-screen overlay with left event list + right detail panel
+       ══════════════════════════════════════════════════════════════════════════ -->
+  <t t-name="wa_communication.WaWebhookLog">
+    <div class="cd-webhook-log">
+
+      <!-- ── Breadcrumb header ──────────────────────────────────────────── -->
+      <div class="cd-webhook-log__header">
+        <button class="cd-webhook-log__back"
+                t-on-click="() => this.props.onClose()">
+          <i class="fa fa-arrow-left"/> Back to Message Log
+        </button>
+        <span class="cd-webhook-log__breadcrumb-sep">/</span>
+        <span class="cd-webhook-log__breadcrumb-current">Webhook Log</span>
+        <span class="cd-webhook-log__dev-pill">Developer Tool</span>
+        <div class="cd-webhook-log__header-right">
+          <input class="cd-webhook-log__search"
+                 type="text"
+                 placeholder="Search lead, phone, ID..."
+                 t-att-value="state.searchText"
+                 t-on-input="(ev) => this.onSearchInput(ev)"/>
+          <!-- Date range picker -->
+          <button t-att-class="'btn btn-sm btn-outline-secondary' + (state.showCustomDate ? ' active' : '')"
+                  t-on-click="() => this.openCustomDate()">
+            <i class="fa fa-calendar"/>
+            <t t-esc="state.dateFrom.slice(0,10)"/> → <t t-esc="state.dateTo.slice(0,10)"/>
+          </button>
+          <t t-if="state.showCustomDate">
+            <div class="cd-webhook-log__date-row">
+              <input type="date" class="cd-webhook-log__date-input"
+                     t-att-value="state.dateFrom.slice(0,10)"
+                     t-on-change="(ev) => this.onDateFrom(ev)"/>
+              <span>→</span>
+              <input type="date" class="cd-webhook-log__date-input"
+                     t-att-value="state.dateTo.slice(0,10)"
+                     t-on-change="(ev) => this.onDateTo(ev)"/>
+              <button class="btn btn-sm btn-primary"
+                      t-on-click="() => this.applyDateRange()">Apply</button>
+            </div>
+          </t>
+          <button class="btn btn-sm btn-outline-secondary"
+                  t-on-click="() => this._loadData()">
+            <i class="fa fa-refresh"/> Refresh
+          </button>
+        </div>
+      </div>
+
+      <!-- ── Category filter tabs ──────────────────────────────────────── -->
+      <div class="cd-webhook-log__tabs">
+        <button t-att-class="'cd-webhook-log__tab' + (state.categoryFilter === '' ? ' cd-webhook-log__tab--active' : '')"
+                t-on-click="() => this.setCategoryFilter('')">
+          All Events <span class="cd-webhook-log__tab-count" t-esc="categoryCounts['']"/>
+        </button>
+        <button t-att-class="'cd-webhook-log__tab' + (state.categoryFilter === 'cta' ? ' cd-webhook-log__tab--active' : '')"
+                t-on-click="() => this.setCategoryFilter('cta')">
+          CTA Reply <span class="cd-webhook-log__tab-count" t-esc="categoryCounts['cta']"/>
+        </button>
+        <button t-att-class="'cd-webhook-log__tab' + (state.categoryFilter === 'inbound' ? ' cd-webhook-log__tab--active' : '')"
+                t-on-click="() => this.setCategoryFilter('inbound')">
+          Inbound Text <span class="cd-webhook-log__tab-count" t-esc="categoryCounts['inbound']"/>
+        </button>
+        <button t-att-class="'cd-webhook-log__tab' + (state.categoryFilter === 'outbound' ? ' cd-webhook-log__tab--active' : '')"
+                t-on-click="() => this.setCategoryFilter('outbound')">
+          Outbound <span class="cd-webhook-log__tab-count" t-esc="categoryCounts['outbound']"/>
+        </button>
+        <button t-att-class="'cd-webhook-log__tab' + (state.categoryFilter === 'failed' ? ' cd-webhook-log__tab--active' : '')"
+                t-on-click="() => this.setCategoryFilter('failed')">
+          Failed <span class="cd-webhook-log__tab-count" t-esc="categoryCounts['failed']"/>
+        </button>
+      </div>
+
+      <!-- ── Two-panel body ────────────────────────────────────────────── -->
+      <div class="cd-webhook-log__body">
+
+        <!-- Left: event list -->
+        <div class="cd-webhook-log__list">
+          <t t-if="state.loading">
+            <div class="cd-webhook-log__list-loading">
+              <i class="fa fa-spinner fa-spin"/> Loading…
+            </div>
+          </t>
+          <t t-elif="state.error">
+            <div class="cd-webhook-log__list-error">
+              <i class="fa fa-exclamation-triangle"/> <t t-esc="state.error"/>
+            </div>
+          </t>
+          <t t-else="">
+            <t t-foreach="filteredRows" t-as="row" t-key="row.id">
+              <div t-att-class="'cd-webhook-log__event' + (state.selectedRow and state.selectedRow.id === row.id ? ' cd-webhook-log__event--selected' : '')"
+                   t-on-click="() => this.selectRow(row)">
+                <div class="cd-webhook-log__event-top">
+                  <span t-att-class="statusClass(row)">
+                    <t t-esc="statusIcon(row)"/>
+                  </span>
+                  <span class="cd-webhook-log__event-type">
+                    <t t-esc="eventLabel(row.event_type)"/>
+                  </span>
+                </div>
+                <t t-set="excerpt" t-value="payloadExcerpt(row)"/>
+                <t t-if="excerpt.phone or excerpt.msg">
+                  <div class="cd-webhook-log__event-phone" t-esc="excerpt.phone"/>
+                  <t t-if="excerpt.msg">
+                    <div class="cd-webhook-log__event-cta-pill">
+                      <t t-esc="excerpt.msg"/>
+                    </div>
+                  </t>
+                </t>
+                <div class="cd-webhook-log__event-time" t-esc="row.create_date"/>
+              </div>
+            </t>
+            <t t-if="filteredRows.length === 0">
+              <div class="cd-webhook-log__list-empty">No events found.</div>
+            </t>
+          </t>
+        </div>
+
+        <!-- Right: selected event detail -->
+        <div class="cd-webhook-log__detail">
+          <t t-if="!state.selectedRow">
+            <div class="cd-webhook-log__detail-empty">
+              Select an event on the left to view details.
+            </div>
+          </t>
+          <t t-else="">
+            <t t-set="sel" t-value="state.selectedRow"/>
+            <t t-set="excerpt" t-value="payloadExcerpt(sel)"/>
+
+            <!-- Lead / event meta -->
+            <div class="cd-webhook-log__detail-meta">
+              <div class="cd-webhook-log__detail-lead">
+                <span class="cd-webhook-log__detail-phone" t-esc="excerpt.phone || sel.pubsub_message_id"/>
+                <span class="cd-webhook-log__detail-wa-id text-muted ms-2">
+                  WF-<t t-esc="sel.id"/>
+                </span>
+              </div>
+              <div class="cd-webhook-log__detail-created text-muted">
+                <t t-esc="sel.create_date"/>
+              </div>
+            </div>
+
+            <!-- Quick stats row -->
+            <div class="cd-webhook-log__detail-stats">
+              <div class="cd-webhook-log__detail-stat">
+                <label>TYPE</label>
+                <span t-esc="eventLabel(sel.event_type)"/>
+              </div>
+              <div class="cd-webhook-log__detail-stat">
+                <label>DIRECTION</label>
+                <span t-esc="sel.direction || '—'"/>
+              </div>
+              <div class="cd-webhook-log__detail-stat">
+                <label>STATUS</label>
+                <span t-att-class="statusClass(sel)" t-esc="statusIcon(sel)"/>
+              </div>
+              <div class="cd-webhook-log__detail-stat">
+                <label>PUBSUB ID</label>
+                <span class="cd-webhook-log__mono" t-esc="sel.pubsub_message_id || '—'"/>
+              </div>
+            </div>
+
+            <t t-if="sel.error_message">
+              <div class="cd-webhook-log__detail-error-msg">
+                <i class="fa fa-exclamation-triangle"/> <t t-esc="sel.error_message"/>
+              </div>
+            </t>
+
+            <!-- Copy JSON button -->
+            <div class="cd-webhook-log__json-header">
+              <span>Raw Payload</span>
+              <button class="btn btn-sm btn-outline-secondary"
+                      t-on-click="() => this.copyJson()">
+                <i class="fa fa-copy"/>
+                <t t-esc="state.copySuccess ? ' Copied!' : ' Copy JSON'"/>
+              </button>
+            </div>
+
+            <!-- JSON payload -->
+            <pre class="cd-webhook-log__json"><t t-esc="prettyPayload"/></pre>
+
+          </t>
+        </div>
+      </div>
+
+    </div>
+  </t>
+
+</templates>
