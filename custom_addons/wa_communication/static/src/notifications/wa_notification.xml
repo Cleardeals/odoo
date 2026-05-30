@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+  <!--
+    WaNotification: stacked toast notification cards for WA events.
+    Fixed to bottom-right corner, z-index 3000.
+    BEM prefix: cd-wa-notif (card modifier: replied / review / failure)
+  -->
+  <t t-name="wa_communication.WaNotification">
+    <div class="cd-wa-notif" t-if="state.notifications.length > 0">
+      <t t-foreach="state.notifications" t-as="n" t-key="n.id">
+        <div t-attf-class="cd-wa-notif__card cd-wa-notif__card--#{n.mod}">
+
+          <!-- Header row: icon + title + dismiss -->
+          <div class="cd-wa-notif__header">
+            <i t-attf-class="fa #{n.icon} cd-wa-notif__icon" />
+            <span class="cd-wa-notif__title" t-esc="n.title" />
+            <button class="cd-wa-notif__dismiss" t-on-click="() => dismiss(n.id)" title="Dismiss">
+              <i class="fa fa-times" />
+            </button>
+          </div>
+
+          <!-- Lead name / phone -->
+          <div t-if="n.leadName" class="cd-wa-notif__lead" t-esc="n.leadName" />
+
+          <!-- Message preview -->
+          <div t-if="n.message" class="cd-wa-notif__msg" t-esc="n.message" />
+
+          <!-- Action row -->
+          <div class="cd-wa-notif__actions" t-if="n.leadUrl">
+            <button class="cd-wa-notif__btn" t-on-click="() => openLead(n)">
+              View Lead →
+            </button>
+          </div>
+
+        </div>
+      </t>
+    </div>
+  </t>
+
+</templates>

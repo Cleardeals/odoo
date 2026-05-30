@@ -23,11 +23,14 @@ Usage from OWL::
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
+
+import pytz
 
 from odoo import api, fields, models
 
 _logger = logging.getLogger(__name__)
+_IST = pytz.timezone('Asia/Kolkata')
 
 _FAILED_STATUSES = [
     'failed', 'meta_blocked', 'invalid_number',
@@ -238,7 +241,7 @@ class WaMessageLog(models.Model):
             domain += [
                 '|',
                 ('conversation_id.phone_number', 'ilike', search),
-                ('lead_id.partner_id.name', 'ilike', search),
+                ('lead_id.name', 'ilike', search),
             ]
 
         return domain
@@ -269,12 +272,17 @@ class WaMessageLog(models.Model):
         cta     = WaMsg.search_count(domain + [('kind', '=', 'button_reply')])
         failed  = WaMsg.search_count(domain + [('status', 'in', _FAILED_STATUSES)])
 
-        cost_data = WaMsg.read_group(
-            domain,
-            fields=['cost_inr:sum'],
+        groups = WaMsg._read_group(
+            domain=domain,
             groupby=[],
+            aggregates=['cost_inr:sum'],
         )
-        total_cost = cost_data[0]['cost_inr'] if cost_data else 0.0
+        total_cost = 0.0
+        if groups:
+            try:
+                total_cost = float(groups[0]['cost_inr:sum'] or 0.0)
+            except (TypeError, KeyError, IndexError):
+                total_cost = 0.0
 
         return {
             'total':      total,
@@ -313,8 +321,7 @@ class WaMessageLog(models.Model):
             'lead_id':          lead.id if lead else None,
             'lead_name':        lead.name if lead else '',
             'phone':            phone,
-            'body':             (msg.body or '')[:120],
-            'template_name':    msg.template_name or '',
+            'body':             (msg.body or '')[:120],            'media_url':        msg.media_url or '',            'template_name':    msg.template_name or '',
             'workflow_slug':    msg.workflow_slug or '',
             'workflow_display': workflow_display,
             'status':           msg.status,
@@ -327,16 +334,6 @@ class WaMessageLog(models.Model):
 
     def _format_detail(self, msg) -> dict:
         """Format the full detail dict for the expanded row panel."""
-        raw = msg.raw_payload or {}
-        whatsapp_cost   = raw.get('whatsapp_cost', '')
-        interakt_markup = raw.get('interakt_markup', '')
-        button_type     = raw.get('button_type', '')
-        template_replied_to = raw.get('template_name', '') or msg.template_name or ''
-
-        # Parse delivered_at / seen_at from raw payload if available
-        delivered_at = raw.get('delivered_at_utc', '')
-        seen_at      = raw.get('seen_at_utc', '')
-
         return {
             'id':                  msg.id,
             'wa_id':               f'WA-{msg.id}',
@@ -344,14 +341,15 @@ class WaMessageLog(models.Model):
             'kind':                msg.kind,
             'kind_label':          _KIND_LABEL.get(msg.kind, msg.kind),
             'received_at':         self._fmt_dt(msg.occurred_at),
-            'delivered_at':        delivered_at or '',
-            'seen_at':             seen_at or '',
+            'delivered_at':        self._fmt_dt(msg.delivered_at),
+            'seen_at':             self._fmt_dt(msg.seen_at),
             'button_text':         msg.body or '',
-            'button_type':         button_type,
-            'template_replied_to': template_replied_to,
-            'whatsapp_cost':       f'₹{whatsapp_cost}' if whatsapp_cost else '',
-            'interakt_markup':     f'₹{interakt_markup}' if interakt_markup else '',
-            'actual_cost':         f'₹{msg.cost_inr:.4f}' if msg.cost_inr else '',
+            'button_type':         msg.kind if msg.kind == 'button_reply' else '',
+            'template_replied_to': msg.template_replied_to or msg.template_name or '',
+            'media_url':           msg.media_url or '',
+            'whatsapp_cost':       f'\u20b9{msg.cost_inr:.4f}' if msg.cost_inr else '',
+            'interakt_markup':     '',
+            'actual_cost':         f'\u20b9{msg.cost_inr:.4f}' if msg.cost_inr else '',
             'workflow':            msg.workflow_slug or '',
             'step_id':             msg.step_id or '',
             'enrollment_id':       msg.enrollment_id or '',
@@ -385,7 +383,10 @@ class WaMessageLog(models.Model):
         if not dt:
             return ''
         if isinstance(dt, datetime):
-            return dt.strftime('%d %b %H:%M')
+            # Convert naive UTC to IST (+5:30) for display
+            utc_dt = dt.replace(tzinfo=timezone.utc)
+            ist_dt = utc_dt.astimezone(_IST)
+            return ist_dt.strftime('%d %b %H:%M')
         return str(dt)
 
     @staticmethod

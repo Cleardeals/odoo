@@ -346,8 +346,20 @@ class WaConversation(models.Model):
             contacts[0].get('profile', {}).get('name', '') if contacts else ''
         )
 
-        # Resolve message body from the appropriate sub-object
+        # Resolve message body and media URL from the appropriate sub-object
         body = _extract_body(msg, msg_type)
+        media_url = _extract_media_url(msg, msg_type)
+
+        # For button_reply: look up the template that triggered this CTA
+        template_replied_to = ''
+        if msg_type == 'button_reply':
+            context_msg_id = (msg.get('context') or {}).get('id', '')
+            if context_msg_id:
+                orig = self.env['wa.message'].sudo().search(
+                    [('wa_message_id', '=', context_msg_id)], limit=1
+                )
+                if orig:
+                    template_replied_to = orig.template_name or ''
 
         created_at = _wa_ts_to_dt(ts_str)
 
@@ -371,12 +383,21 @@ class WaConversation(models.Model):
             'initiator': 'buyer',
             'kind': _WA_TYPE_TO_KIND.get(msg_type, 'unknown'),
             'body': body,
+            'media_url': media_url or False,
+            'template_replied_to': template_replied_to or False,
             'status': 'delivered',
             'sender_name': sender_name,
             'lead_id': conv.lead_id.id if conv.lead_id else False,
             'occurred_at': created_at,
             'raw_payload': msg,
         })
+
+        self.env.cr.execute(
+            'SELECT id FROM wa_conversation WHERE id = %s FOR UPDATE',
+            (conv.id,)
+        )
+
+        conv.invalidate_recordset()
 
         conv.sudo().write({
             'last_message_at': created_at,
@@ -502,6 +523,18 @@ class WaConversation(models.Model):
             'workflow.synced':          self._handle_workflow_synced,
         }
         handler = _ODOO_WA_HANDLERS.get(event_type)
+        # Log every OdooWaEvent to the webhook log BEFORE dispatching so that
+        # even failed or unknown events leave an audit trail.
+        try:
+            self.env['wa.event.log'].sudo()._log(
+                event_type=f'odoo_wa_{event_type}' if event_type else 'odoo_wa_unknown',
+                direction='inbound',
+                pubsub_message_id=pubsub_message_id,
+                payload=event,
+                status='processed',
+            )
+        except Exception:
+            pass  # never let audit logging break event processing
         try:
             if handler:
                 handler(event, pubsub_message_id)
@@ -510,26 +543,22 @@ class WaConversation(models.Model):
                     "wa_push: unhandled OdooWaEvent type=%r message=%s",
                     event_type, pubsub_message_id,
                 )
-                self.env['wa.event.log'].sudo()._log(
-                    event_type=f'odoo_wa_{event_type}' if event_type else 'odoo_wa_unknown',
-                    direction='inbound',
-                    pubsub_message_id=pubsub_message_id,
-                    payload=event,
-                    status='processed',
-                )
         except Exception as exc:
             _logger.exception(
                 "wa_push: OdooWaEvent handler failed for type=%r message=%s",
                 event_type, pubsub_message_id,
             )
-            self.env['wa.event.log'].sudo()._log(
-                event_type=f'odoo_wa_{event_type}_error',
-                direction='inbound',
-                pubsub_message_id=pubsub_message_id,
-                payload={'error': str(exc), 'event': event},
-                status='failed',
-                error_message=str(exc),
-            )
+            try:
+                self.env['wa.event.log'].sudo()._log(
+                    event_type=f'odoo_wa_{event_type}_error',
+                    direction='inbound',
+                    pubsub_message_id=pubsub_message_id,
+                    payload={'error': str(exc), 'event': event},
+                    status='failed',
+                    error_message=str(exc),
+                )
+            except Exception:
+                pass
 
     # ------------------------------------------------------------------
     # OdooWaEvent helpers
@@ -665,12 +694,14 @@ class WaConversation(models.Model):
         wa_message_id = event.get('wa_message_id') or ''
         request_id    = event.get('request_id') or ''
         cost_inr      = event.get('cost_inr') or 0.0
+        occurred_at   = _parse_iso_dt(event.get('occurred_at', ''))
 
         msg = self._owa_find_message(wa_message_id=wa_message_id, request_id=request_id)
         if msg:
             msg.write({
                 'status':          'delivered',
                 'cost_inr':        cost_inr,
+                'delivered_at':    occurred_at,
                 'status_updated_at': fields.Datetime.now(),
             })
         else:
@@ -684,11 +715,13 @@ class WaConversation(models.Model):
         """Handle message_read — update status to read."""
         wa_message_id = event.get('wa_message_id') or ''
         request_id    = event.get('request_id') or ''
+        occurred_at   = _parse_iso_dt(event.get('occurred_at', ''))
 
         msg = self._owa_find_message(wa_message_id=wa_message_id, request_id=request_id)
         if msg:
             msg.write({
                 'status':          'read',
+                'seen_at':         occurred_at,
                 'status_updated_at': fields.Datetime.now(),
             })
         else:
@@ -724,7 +757,7 @@ class WaConversation(models.Model):
             )
 
     def _handle_odoo_lead_replied(self, event: dict, pubsub_message_id: str) -> None:
-        """Handle lead_replied — buyer sent a message; create wa.message + activity."""
+        """Handle lead_replied — buyer sent a message; create wa.message + notify RM."""
         phone          = event.get('phone', '')
         wa_message_id  = event.get('wa_message_id') or ''
         actor_id       = event.get('actor_id')
@@ -732,6 +765,7 @@ class WaConversation(models.Model):
         rm_odoo_id     = event.get('rm_odoo_id')
         message_text   = event.get('message_text') or ''
         button_reply_id = event.get('button_reply_id')
+        template_replied_to = event.get('template_name', '') or event.get('original_template_name', '')
         occurred_at    = _parse_iso_dt(event.get('occurred_at', ''))
         kind           = 'button_reply' if button_reply_id else 'text_reply'
 
@@ -755,11 +789,19 @@ class WaConversation(models.Model):
             'initiator':         'buyer',
             'kind':              kind,
             'body':              message_text,
+            'template_replied_to': template_replied_to or False,
             'lead_id':           lead.id if lead else False,
             'platform_actor_id': actor_id or 0,
             'status':            'delivered',
             'occurred_at':       occurred_at,
         })
+
+        self.env.cr.execute(
+            'SELECT id FROM wa_conversation WHERE id = %s FOR UPDATE',
+            (conv.id,)
+        )
+
+        conv.invalidate_recordset()
 
         conv.sudo().write({
             'last_message_at':      occurred_at,
@@ -767,36 +809,20 @@ class WaConversation(models.Model):
             'unread_count':         conv.unread_count + 1,
         })
 
-        # Create activity on lead for the RM
-        if lead and rm_odoo_id:
-            try:
-                act_type = self.env.ref(
-                    'mail.mail_activity_data_todo', raise_if_not_found=False
-                )
-                leads_model = self.env['ir.model']._get('leads.new')
-                with self.env.cr.savepoint():
-                    self.env['mail.activity'].sudo().create({
-                        'res_model_id': leads_model.id,
-                        'res_id':       lead.id,
-                        'activity_type_id': act_type.id if act_type else False,
-                        'user_id':   rm_odoo_id,
-                        'summary':   'WA reply from buyer',
-                        'note':      message_text[:500] if message_text else '',
-                    })
-            except Exception:
-                _logger.exception("wa_push: failed to create activity for lead_replied")
-
-        # bus.bus notification to RM
+        # bus.bus notification to RM — replaces mail.activity
         if rm_odoo_id:
+            lead_name = (lead.name if lead else '')
             try:
                 self.env['bus.bus']._sendone(
                     f'wa_notification_{rm_odoo_id}',
                     'wa_event',
                     {
-                        'type':     'lead_replied',
-                        'actor_id': actor_id,
-                        'message':  message_text[:60] if message_text else '',
-                        'lead_url': f'/web#model=leads.new&id={actor_id}' if actor_id else '',
+                        'type':      'lead_replied',
+                        'actor_id':  actor_id,
+                        'lead_name': lead_name,
+                        'phone':     phone,
+                        'message':   message_text[:80] if message_text else '',
+                        'lead_url':  f'/web#model=leads.new&id={lead.id}' if lead else '',
                     },
                 )
             except Exception:
@@ -805,7 +831,7 @@ class WaConversation(models.Model):
     def _handle_odoo_ambiguous_reply(
         self, event: dict, pubsub_message_id: str
     ) -> None:
-        """Handle ambiguous_reply — reply unroutable; create review activity."""
+        """Handle ambiguous_reply — reply unroutable; create wa.message + notify RM."""
         phone          = event.get('phone', '')
         wa_message_id  = event.get('wa_message_id') or ''
         actor_id       = event.get('actor_id')
@@ -833,36 +859,29 @@ class WaConversation(models.Model):
             'occurred_at':       occurred_at,
         })
 
+        self.env.cr.execute(
+            'SELECT id FROM wa_conversation WHERE id = %s FOR UPDATE',
+            (conv.id,)
+        )
+
+        conv.invalidate_recordset()
+
         conv.sudo().write({'last_message_at': occurred_at, 'unread_count': conv.unread_count + 1})
 
-        if lead and rm_odoo_id:
-            try:
-                act_type = self.env.ref(
-                    'mail.mail_activity_data_todo', raise_if_not_found=False
-                )
-                leads_model = self.env['ir.model']._get('leads.new')
-                with self.env.cr.savepoint():
-                    self.env['mail.activity'].sudo().create({
-                        'res_model_id': leads_model.id,
-                        'res_id':       lead.id,
-                        'activity_type_id': act_type.id if act_type else False,
-                        'user_id':   rm_odoo_id,
-                        'summary':   'WA review required: ambiguous reply',
-                        'note':      message_text[:500] if message_text else '',
-                    })
-            except Exception:
-                _logger.exception("wa_push: failed to create activity for ambiguous_reply")
-
+        # bus.bus notification to RM — replaces mail.activity
         if rm_odoo_id:
+            lead_name = (lead.name if lead else '')
             try:
                 self.env['bus.bus']._sendone(
                     f'wa_notification_{rm_odoo_id}',
                     'wa_event',
                     {
-                        'type':     'ambiguous_reply',
-                        'actor_id': actor_id,
-                        'message':  message_text[:60] if message_text else '',
-                        'lead_url': f'/web#model=leads.new&id={actor_id}' if actor_id else '',
+                        'type':      'ambiguous_reply',
+                        'actor_id':  actor_id,
+                        'lead_name': lead_name,
+                        'phone':     phone,
+                        'message':   message_text[:80] if message_text else '',
+                        'lead_url':  f'/web#model=leads.new&id={lead.id}' if lead else '',
                     },
                 )
             except Exception:
@@ -871,7 +890,7 @@ class WaConversation(models.Model):
     def _handle_odoo_permanent_failure(
         self, event: dict, pubsub_message_id: str
     ) -> None:
-        """Handle permanent_failure and retry_exhausted — update status + activity."""
+        """Handle permanent_failure and retry_exhausted — update status + notify RM."""
         wa_message_id  = event.get('wa_message_id') or ''
         request_id     = event.get('request_id') or ''
         actor_id       = event.get('actor_id')
@@ -888,28 +907,30 @@ class WaConversation(models.Model):
             msg.write({'status': new_status, 'status_updated_at': fields.Datetime.now()})
 
         lead = self._owa_resolve_lead(actor_id, actor_type, phone)
-        if lead and rm_odoo_id:
+
+        # bus.bus notification to RM — replaces mail.activity
+        if rm_odoo_id:
+            lead_name = (lead.name if lead else '')
             summary = (
-                f'WA delivery failed: {failure_reason}'
+                f'Delivery failed: {failure_reason}'
                 if event_type == 'permanent_failure'
-                else f'WA retries exhausted: {failure_reason}'
+                else f'Retries exhausted: {failure_reason}'
             )
             try:
-                act_type = self.env.ref(
-                    'mail.mail_activity_data_todo', raise_if_not_found=False
+                self.env['bus.bus']._sendone(
+                    f'wa_notification_{rm_odoo_id}',
+                    'wa_event',
+                    {
+                        'type':      'permanent_failure',
+                        'actor_id':  actor_id,
+                        'lead_name': lead_name,
+                        'phone':     phone,
+                        'message':   summary[:80],
+                        'lead_url':  f'/web#model=leads.new&id={lead.id}' if lead else '',
+                    },
                 )
-                leads_model = self.env['ir.model']._get('leads.new')
-                with self.env.cr.savepoint():
-                    self.env['mail.activity'].sudo().create({
-                        'res_model_id': leads_model.id,
-                        'res_id':       lead.id,
-                        'activity_type_id': act_type.id if act_type else False,
-                        'user_id':   rm_odoo_id,
-                        'summary':   summary,
-                        'note':      f'Code: {failure_code}' if failure_code else '',
-                    })
             except Exception:
-                _logger.exception("wa_push: failed to create activity for permanent_failure")
+                _logger.exception("wa_push: failed to send bus.bus for permanent_failure")
 
     def _handle_odoo_enrollment_created(
         self, event: dict, pubsub_message_id: str
@@ -936,6 +957,11 @@ class WaConversation(models.Model):
             return
 
         conv = self._owa_get_conversation(phone)
+        self.env.cr.execute(
+            'SELECT id FROM wa_conversation WHERE id = %s FOR UPDATE',
+            (conv.id,)
+        )
+
         lead = self._owa_resolve_lead(actor_id, actor_type, phone)
 
         self.env['wa.message'].sudo().create({
@@ -948,7 +974,7 @@ class WaConversation(models.Model):
             'enrollment_id':   enrollment_id or False,
             'lead_id':         lead.id if lead else False,
             'platform_actor_id': actor_id or 0,
-            'status':          'sent',
+            'status':          'enrolled',
             'occurred_at':     occurred_at,
         })
 
@@ -1002,7 +1028,7 @@ class WaConversation(models.Model):
             'enrollment_id':   enrollment_id or False,
             'lead_id':         lead.id if lead else False,
             'platform_actor_id': actor_id or 0,
-            'status':          'sent',
+            'status':          'enrollment_completed',
             'occurred_at':     occurred_at,
         })
 
@@ -1187,3 +1213,20 @@ def _extract_body(msg: dict, msg_type: str) -> str:
         name = (msg.get('template') or {}).get('name', '')
         return f'[Template: {name}]' if name else '[Template]'
     return f'[{msg_type}]'
+
+
+def _extract_media_url(msg: dict, msg_type: str) -> str:
+    """Extract the media URL from an inbound WA message object.
+
+    The WA Cloud API includes a ``url`` or ``link`` key inside the media
+    sub-object for image, video, document and audio messages.  Returns an
+    empty string for text, button_reply and other non-media types.
+
+    :param msg:      WA message dict.
+    :param msg_type: The ``type`` field from ``msg``.
+    :return:         Media URL string, or ``''`` if not a media message.
+    """
+    if msg_type not in ('image', 'video', 'document', 'audio'):
+        return ''
+    media_obj = msg.get(msg_type) or {}
+    return media_obj.get('url') or media_obj.get('link') or ''

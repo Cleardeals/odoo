@@ -223,12 +223,47 @@ class WaMessage(models.Model):
             ('template_error', 'Template Error'),   # error codes 132000 / 132001
             ('skipped',        'Skipped'),          # pre-send check blocked
             ('expired',        'Expired'),          # 24-hour window passed
+            ('enrolled',       'Enrolled'),         # system: enrollment started
+            ('enrollment_completed', 'Enrollment Completed'),  # system: enrollment done
         ],
         required=True,
         default='queued',
         index=True,
     )
     status_updated_at = fields.Datetime('Status Updated At', readonly=True)
+
+    # ------------------------------------------------------------------
+    # Media
+    # ------------------------------------------------------------------
+
+    media_url = fields.Char(
+        'Media URL',
+        help="Public URL of the media file for image/document/video/audio messages.",
+    )
+
+    # ------------------------------------------------------------------
+    # Delivery timestamps
+    # ------------------------------------------------------------------
+
+    delivered_at = fields.Datetime(
+        'Delivered At',
+        readonly=True,
+        help="When the recipient's device confirmed delivery (from OdooWaEvent).",
+    )
+    seen_at = fields.Datetime(
+        'Seen At',
+        readonly=True,
+        help="When the recipient read the message (from OdooWaEvent).",
+    )
+
+    # ------------------------------------------------------------------
+    # CTA context
+    # ------------------------------------------------------------------
+
+    template_replied_to = fields.Char(
+        'Template Replied To',
+        help="Template name the button-reply was triggered from (CTA replies only).",
+    )
 
     # ------------------------------------------------------------------
     # Cost
