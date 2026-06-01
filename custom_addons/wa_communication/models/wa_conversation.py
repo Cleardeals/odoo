@@ -537,7 +537,12 @@ class WaConversation(models.Model):
             pass  # never let audit logging break event processing
         try:
             if handler:
-                handler(event, pubsub_message_id)
+                # Savepoint isolates the handler's DB work.  If the handler
+                # raises any exception (including DeadlockDetected), the
+                # savepoint rolls back cleanly — leaving the outer transaction
+                # in a usable state so the error-log INSERT below can succeed.
+                with self.env.cr.savepoint():
+                    handler(event, pubsub_message_id)
             else:
                 _logger.debug(
                     "wa_push: unhandled OdooWaEvent type=%r message=%s",
@@ -782,6 +787,17 @@ class WaConversation(models.Model):
         if not rm_odoo_id and lead and lead.user_id:
             rm_odoo_id = lead.user_id.id
 
+        # Lock the conversation row BEFORE creating wa.message.  The FK
+        # insert acquires FOR KEY SHARE on wa_conversation; if we also need
+        # FOR UPDATE afterwards (to write last_message_at), both workers end
+        # up holding KEY SHARE while waiting for the other's upgrade →
+        # deadlock.  Locking first avoids that upgrade path entirely.
+        self.env.cr.execute(
+            'SELECT id FROM wa_conversation WHERE id = %s FOR UPDATE',
+            (conv.id,)
+        )
+        conv.invalidate_recordset()
+
         self.env['wa.message'].sudo().create({
             'conversation_id':   conv.id,
             'wa_message_id':     wa_message_id or False,
@@ -795,13 +811,6 @@ class WaConversation(models.Model):
             'status':            'delivered',
             'occurred_at':       occurred_at,
         })
-
-        self.env.cr.execute(
-            'SELECT id FROM wa_conversation WHERE id = %s FOR UPDATE',
-            (conv.id,)
-        )
-
-        conv.invalidate_recordset()
 
         conv.sudo().write({
             'last_message_at':      occurred_at,
@@ -846,6 +855,13 @@ class WaConversation(models.Model):
         conv = self._owa_get_conversation(phone)
         lead = self._owa_resolve_lead(actor_id, actor_type, phone)
 
+        # Lock BEFORE create — same deadlock prevention as _handle_odoo_lead_replied.
+        self.env.cr.execute(
+            'SELECT id FROM wa_conversation WHERE id = %s FOR UPDATE',
+            (conv.id,)
+        )
+        conv.invalidate_recordset()
+
         self.env['wa.message'].sudo().create({
             'conversation_id':   conv.id,
             'wa_message_id':     wa_message_id or False,
@@ -858,13 +874,6 @@ class WaConversation(models.Model):
             'status':            'delivered',
             'occurred_at':       occurred_at,
         })
-
-        self.env.cr.execute(
-            'SELECT id FROM wa_conversation WHERE id = %s FOR UPDATE',
-            (conv.id,)
-        )
-
-        conv.invalidate_recordset()
 
         conv.sudo().write({'last_message_at': occurred_at, 'unread_count': conv.unread_count + 1})
 
