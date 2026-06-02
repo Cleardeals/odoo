@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="wa_communication.WaLeadTab">
+        <div class="wa-lead-tab">
+            <t t-if="state.loading">
+                <div class="wa-lead-tab__loading">
+                    <i class="fa fa-spinner fa-spin fa-2x" aria-hidden="true"/>
+                </div>
+            </t>
+            <t t-elif="state.error">
+                <div class="alert alert-danger m-2" t-esc="state.error"/>
+            </t>
+            <t t-elif="!state.convId">
+                <div class="wa-lead-tab__no-conv">
+                    <i class="fa fa-whatsapp wa-lead-tab__no-conv-icon" aria-hidden="true"/>
+                    <p>No WhatsApp conversation found for this lead's phone number.</p>
+                    <p class="text-muted small">Messages will appear here once the customer contacts us on WhatsApp.</p>
+                </div>
+            </t>
+            <t t-else="">
+                <!-- 3-column layout -->
+
+                <!-- Left: Enrollments panel -->
+                <div class="wa-lead-tab__enrollments">
+                    <div class="wa-lead-tab__panel-title">ENROLLMENTS</div>
+                    <t t-if="enrollments.length">
+                        <t t-foreach="enrollments" t-as="enr" t-key="enr.slug">
+                            <div t-attf-class="wa-lead-tab__enr-card {{ enr.active ? 'wa-lead-tab__enr-card--active' : '' }}">
+                                <div class="wa-lead-tab__enr-name" t-esc="enr.name"/>
+                                <div class="wa-lead-tab__enr-step" t-esc="enr.step"/>
+                                <span t-attf-class="wa-lead-tab__enr-badge wa-lead-tab__enr-badge--{{ enr.status_key }}">
+                                    <t t-esc="enr.status_label"/>
+                                </span>
+                            </div>
+                        </t>
+                    </t>
+                    <t t-else="">
+                        <div class="wa-lead-tab__enr-empty text-muted small">No active workflows</div>
+                    </t>
+                </div>
+
+                <!-- Centre: Chat thread + composer -->
+                <div class="wa-lead-tab__chat">
+                    <t t-if="state.sendError">
+                        <div class="alert alert-danger wa-lead-tab__send-error" t-esc="state.sendError"/>
+                    </t>
+                    <CdChatThread messages="messages"/>
+                    <CdChatComposer
+                        windowState="windowState"
+                        onSend="(body, kind, opts) => this.onSend(body, kind, opts)"/>
+                </div>
+
+                <!-- Right: Stats + Actions -->
+                <div class="wa-lead-tab__sidebar">
+                    <!-- Window badge -->
+                    <div class="wa-lead-tab__window-row">
+                        <CdWindowBadge state="windowState" windowExpiresAt="windowExpiresAt"/>
+                    </div>
+
+                    <!-- Stats -->
+                    <div class="wa-lead-tab__panel-title">STATS</div>
+                    <div class="wa-lead-tab__stats-grid">
+                        <div class="wa-lead-tab__stat-card">
+                            <div class="wa-lead-tab__stat-val" t-esc="stats.sent || 0"/>
+                            <div class="wa-lead-tab__stat-lbl">Sent</div>
+                        </div>
+                        <div class="wa-lead-tab__stat-card">
+                            <div class="wa-lead-tab__stat-val">
+                                <t t-esc="stats.delivered_pct || 0"/>%
+                            </div>
+                            <div class="wa-lead-tab__stat-lbl">Delivered</div>
+                        </div>
+                        <div class="wa-lead-tab__stat-card">
+                            <div class="wa-lead-tab__stat-val">
+                                <t t-esc="stats.read_pct || 0"/>%
+                            </div>
+                            <div class="wa-lead-tab__stat-lbl">Read</div>
+                        </div>
+                        <div class="wa-lead-tab__stat-card">
+                            <div class="wa-lead-tab__stat-val" t-esc="stats.replies || 0"/>
+                            <div class="wa-lead-tab__stat-lbl">Replies</div>
+                        </div>
+                    </div>
+
+                    <!-- Actions -->
+                    <div class="wa-lead-tab__panel-title" style="margin-top:16px">ACTIONS</div>
+                    <div class="wa-lead-tab__actions">
+                        <button class="wa-lead-tab__action-btn">
+                            <i class="fa fa-envelope-o" aria-hidden="true"/>
+                            Send Template
+                        </button>
+
+                        <button class="wa-lead-tab__action-btn"
+                                t-att-class="state.showAssignPicker ? 'wa-lead-tab__action-btn wa-lead-tab__action-btn--active' : 'wa-lead-tab__action-btn'"
+                                t-on-click="() => this.openAssignPicker()">
+                            <i class="fa fa-user-plus" aria-hidden="true"/>
+                            Assign Conversation
+                        </button>
+                        <!-- Assign picker dropdown -->
+                        <t t-if="state.showAssignPicker">
+                            <div class="wa-lead-tab__picker">
+                                <div class="wa-lead-tab__picker-header">
+                                    Assign to RM
+                                    <button class="wa-lead-tab__picker-close"
+                                            t-on-click="() => this.closePickers()">×</button>
+                                </div>
+                                <div class="wa-lead-tab__picker-list">
+                                    <t t-foreach="state.assignUsers" t-as="u" t-key="u.id">
+                                        <button class="wa-lead-tab__picker-row"
+                                                t-on-click="() => this.pickAssignUser(u.id)">
+                                            <i class="fa fa-user-circle-o" aria-hidden="true"/>
+                                            <span t-esc="u.name"/>
+                                        </button>
+                                    </t>
+                                </div>
+                            </div>
+                        </t>
+
+                        <button class="wa-lead-tab__action-btn"
+                                t-on-click="() => this.openEnrolPicker()">
+                            <i class="fa fa-plus-circle" aria-hidden="true"/>
+                            Enrol in Workflow
+                        </button>
+                        <!-- Enrol picker dropdown -->
+                        <t t-if="state.showEnrolPicker">
+                            <div class="wa-lead-tab__picker">
+                                <div class="wa-lead-tab__picker-header">
+                                    Enrol in Workflow
+                                    <button class="wa-lead-tab__picker-close"
+                                            t-on-click="() => this.closePickers()">×</button>
+                                </div>
+                                <div class="wa-lead-tab__picker-list">
+                                    <t t-if="!state.enrolWorkflows.length">
+                                        <div class="wa-lead-tab__picker-empty">No active workflows</div>
+                                    </t>
+                                    <t t-foreach="state.enrolWorkflows" t-as="wf" t-key="wf.id">
+                                        <button class="wa-lead-tab__picker-row"
+                                                t-on-click="() => this.pickWorkflow(wf.slug)">
+                                            <i class="fa fa-sitemap" aria-hidden="true"/>
+                                            <span t-esc="wf.name"/>
+                                        </button>
+                                    </t>
+                                </div>
+                            </div>
+                        </t>
+
+                        <button class="wa-lead-tab__action-btn"
+                                t-on-click="() => this.openInInterakt()">
+                            <i class="fa fa-external-link" aria-hidden="true"/>
+                            Open in Interakt
+                        </button>
+                    </div>
+                </div>
+            </t>
+        </div>
+    </t>
+</templates>

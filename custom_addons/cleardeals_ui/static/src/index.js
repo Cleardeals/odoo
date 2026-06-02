@@ -25,8 +25,15 @@
 export { CdStatusBadge, cdStatusBadgeField } from "./fields/status_badge/status_badge";
 
 // ── components ──────────────────────────────────────────────────────────────
-export { CdMetricCard }            from "./components/metric_card/metric_card";
-export { CdWorkflowHealthTable }   from "./components/workflow_health_table/workflow_health_table";
-export { CdBarChart }              from "./components/bar_chart/bar_chart";
-export { CdLineChart }             from "./components/line_chart/line_chart";
-export { CdRecentFailuresTable }   from "./components/recent_failures_table/recent_failures_table";
+export { CdMetricCard }              from "./components/metric_card/metric_card";
+export { CdWorkflowHealthTable }     from "./components/workflow_health_table/workflow_health_table";
+export { CdBarChart }                from "./components/bar_chart/bar_chart";
+export { CdLineChart }               from "./components/line_chart/line_chart";
+export { CdRecentFailuresTable }     from "./components/recent_failures_table/recent_failures_table";
+
+// ── chat components ──────────────────────────────────────────────────────────
+export { CdWindowBadge }             from "./components/window_badge/window_badge";
+export { CdChatBubble }              from "./components/chat_bubble/chat_bubble";
+export { CdChatThread }              from "./components/chat_thread/chat_thread";
+export { CdChatComposer }            from "./components/chat_composer/chat_composer";
+export { CdConversationListItem }    from "./components/conversation_list_item/conversation_list_item";

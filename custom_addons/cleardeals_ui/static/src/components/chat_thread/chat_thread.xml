@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="cleardeals_ui.ChatThread">
+        <div class="cd-chat-thread" t-ref="scrollContainer">
+            <t t-if="props.messages.length === 0">
+                <div class="cd-chat-thread__empty">
+                    <i class="fa fa-comments-o" aria-hidden="true"/>
+                    <p>No messages yet</p>
+                </div>
+            </t>
+            <t t-foreach="props.messages" t-as="msg" t-key="msg.id">
+                <CdChatBubble message="msg"/>
+            </t>
+        </div>
+    </t>
+</templates>

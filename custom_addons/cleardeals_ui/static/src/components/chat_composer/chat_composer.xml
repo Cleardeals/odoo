@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="cleardeals_ui.ChatComposer">
+        <div class="cd-chat-composer">
+
+            <!-- Hidden file input (triggered programmatically) -->
+            <input type="file" t-ref="fileInput" class="cd-chat-composer__file-hidden"
+                   t-on-change="(ev) => this.onFileSelected(ev)"/>
+
+            <!-- Closed-window notice -->
+            <t t-if="isClosed">
+                <div class="cd-chat-composer__closed-notice">
+                    <i class="fa fa-lock" aria-hidden="true"/>
+                    24h window closed — only templates can be sent
+                </div>
+            </t>
+
+            <!-- Upload error -->
+            <t t-if="state.uploadError">
+                <div class="cd-chat-composer__upload-error" t-esc="state.uploadError"/>
+            </t>
+
+            <!-- Attachment preview panel (shown after file selected) -->
+            <t t-if="state.attachKind and state.attachName and !state.uploading and canSendFreeText">
+                <div class="cd-chat-composer__attach-panel">
+                    <div class="cd-chat-composer__attach-preview">
+                        <i t-attf-class="fa {{ state.attachKind === 'image' ? 'fa-image' : state.attachKind === 'video' ? 'fa-video-camera' : 'fa-file' }} cd-chat-composer__attach-icon"
+                           aria-hidden="true"/>
+                        <span class="cd-chat-composer__attach-name" t-esc="state.attachName"/>
+                    </div>
+                    <input type="text" class="cd-chat-composer__attach-caption"
+                           placeholder="Add a caption (optional)…"
+                           t-att-value="state.attachCaption"
+                           t-on-input="(ev) => { this.state.attachCaption = ev.target.value; }"/>
+                    <div class="cd-chat-composer__attach-actions">
+                        <button class="btn btn-sm btn-primary"
+                                t-on-click="() => this.sendMedia()">
+                            <i class="fa fa-send" aria-hidden="true"/> Send
+                        </button>
+                        <button class="btn btn-sm btn-secondary"
+                                t-on-click="() => this.cancelAttach()">
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            </t>
+
+            <!-- Uploading spinner -->
+            <t t-if="state.uploading">
+                <div class="cd-chat-composer__uploading">
+                    <i class="fa fa-spinner fa-spin" aria-hidden="true"/> Uploading…
+                </div>
+            </t>
+
+            <!-- Compose row -->
+            <div class="cd-chat-composer__row">
+                <t t-if="canSendFreeText">
+                    <button class="btn cd-chat-composer__attach-btn"
+                            title="Attach image"
+                            t-on-click="() => this.selectAttach('image')">
+                        <i class="fa fa-image" aria-hidden="true"/>
+                    </button>
+                    <button class="btn cd-chat-composer__attach-btn"
+                            title="Attach video"
+                            t-on-click="() => this.selectAttach('video')">
+                        <i class="fa fa-video-camera" aria-hidden="true"/>
+                    </button>
+                    <button class="btn cd-chat-composer__attach-btn"
+                            title="Attach document"
+                            t-on-click="() => this.selectAttach('document')">
+                        <i class="fa fa-paperclip" aria-hidden="true"/>
+                    </button>
+                </t>
+
+                <textarea class="cd-chat-composer__input"
+                          t-att-disabled="!canSendFreeText"
+                          t-att-placeholder="placeholderText"
+                          t-att-value="state.body"
+                          t-on-input="(ev) => this.onInput(ev)"
+                          t-on-keydown="(ev) => this.onKeydown(ev)"
+                          rows="1"/>
+
+                <button class="btn btn-primary cd-chat-composer__send-btn"
+                        t-att-disabled="!state.body.trim() or !canSendFreeText"
+                        t-on-click="() => this.sendText()">
+                    <i class="fa fa-send" aria-hidden="true"/>
+                </button>
+            </div>
+        </div>
+    </t>
+</templates>

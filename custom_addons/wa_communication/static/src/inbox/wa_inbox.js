@@ -1,0 +1,259 @@
+/** @odoo-module */
+
+import { Component, useState, onMounted, onWillUnmount } from "@odoo/owl";
+import { registry }      from "@web/core/registry";
+import { useService }    from "@web/core/utils/hooks";
+import { session }       from "@web/session";
+import { CdChatThread }  from "@cleardeals_ui/index";
+import { CdChatComposer } from "@cleardeals_ui/index";
+import { CdWindowBadge } from "@cleardeals_ui/index";
+import { relativeTime } from "@cleardeals_ui/utils/datetime";
+
+const DATE_RANGES = [
+    { key: "today",      label: "Today" },
+    { key: "yesterday",  label: "Yesterday" },
+    { key: "last_7d",    label: "Last 7d" },
+    { key: "last_30d",   label: "Last 30d" },
+    { key: "this_month", label: "This Month" },
+];
+
+const STATUS_OPTIONS = [
+    { key: "needs_reply", label: "Needs Reply" },
+    { key: "active",      label: "Active" },
+    { key: "completed",   label: "Completed" },
+];
+
+const STATUS_COLORS = {
+    needs_reply: "cd-status-badge--red",
+    active:      "cd-status-badge--green",
+    completed:   "cd-status-badge--grey",
+    blocked:     "cd-status-badge--orange",
+};
+
+export class WaInbox extends Component {
+    static template   = "wa_communication.WaInbox";
+    static props      = { "*": true };
+    static components = { CdChatThread, CdChatComposer, CdWindowBadge };
+
+    setup() {
+        this.orm        = useService("orm");
+        this.action     = useService("action");
+        this.busService = useService("bus_service");
+
+        this.state = useState({
+            // Filters (sidebar)
+            statusFilters:  [],    // array of active status keys
+            assignedRms:    [],    // array of active RM ids
+            dateRange:      "today",
+            searchText:     "",
+
+            // List
+            conversations:  [],
+            totalCount:     0,
+            listLoading:    true,
+            listError:      null,
+
+            // Sidebar counts (loaded once)
+            counts:         { status: {}, assigned_rms: [] },
+
+            // Thread panel (right side)
+            activeConvId:   null,
+            thread:         null,
+            threadLoading:  false,
+            sendError:      null,
+        });
+
+        this._searchDebounce = null;
+
+        onMounted(() => {
+            this._loadCounts();
+            this._loadConversations();
+            this._subscribeBus();
+        });
+
+        onWillUnmount(() => {});
+    }
+
+    // ── Bus ──────────────────────────────────────────────────────────────────
+
+    _subscribeBus() {
+        this.busService.addChannel("wa_message_log");
+        this.busService.subscribe("wa_message_update", () => {
+            this._loadConversations();
+            if (this.state.activeConvId) this._loadThread(this.state.activeConvId);
+        });
+        const uid = session.uid || null;
+        if (uid) {
+            this.busService.addChannel(`wa_notification_${uid}`);
+            this.busService.subscribe("wa_event", () => {
+                this._loadConversations();
+                if (this.state.activeConvId) this._loadThread(this.state.activeConvId);
+            });
+        }
+    }
+
+    // ── Data loading ─────────────────────────────────────────────────────────
+
+    async _loadCounts() {
+        try {
+            const counts = await this.orm.call("wa.conversation", "get_inbox_counts", [], {});
+            this.state.counts = counts;
+        } catch (_) {}
+    }
+
+    async _loadConversations() {
+        this.state.listLoading = true;
+        try {
+            const rows = await this.orm.call("wa.conversation", "get_inbox", [], {
+                filters: {
+                    status:       this.state.statusFilters[0] || undefined,
+                    date_range:   this.state.dateRange || undefined,
+                    assigned_rm:  this.state.assignedRms[0] || undefined,
+                    search:       this.state.searchText || undefined,
+                    limit:        100,
+                },
+            });
+            this.state.conversations = rows;
+            this.state.totalCount = rows.length;
+            this.state.listError = null;
+        } catch (e) {
+            this.state.listError = String(e);
+        } finally {
+            this.state.listLoading = false;
+        }
+    }
+
+    async _loadThread(convId) {
+        this.state.threadLoading = true;
+        try {
+            const data = await this.orm.call("wa.conversation", "get_thread", [[convId]], {});
+            this.state.thread = data;
+            this.state.activeConvId = convId;
+        } catch (e) {
+            console.error("WaInbox._loadThread", e);
+        } finally {
+            this.state.threadLoading = false;
+        }
+        try {
+            await this.orm.call("wa.conversation", "mark_as_read", [[convId]], {});
+            const conv = this.state.conversations.find(c => c.id === convId);
+            if (conv) conv.unread_count = 0;
+        } catch (_) {}
+    }
+
+    // ── Filter actions ────────────────────────────────────────────────────────
+
+    toggleStatusFilter(key) {
+        const idx = this.state.statusFilters.indexOf(key);
+        if (idx >= 0) this.state.statusFilters.splice(idx, 1);
+        else this.state.statusFilters.push(key);
+        this._loadConversations();
+    }
+
+    toggleRmFilter(id) {
+        const idx = this.state.assignedRms.indexOf(id);
+        if (idx >= 0) this.state.assignedRms.splice(idx, 1);
+        else this.state.assignedRms.push(id);
+        this._loadConversations();
+    }
+
+    setDateRange(key) {
+        this.state.dateRange = key;
+        this._loadConversations();
+    }
+
+    onSearchInput(ev) {
+        this.state.searchText = ev.target.value;
+        clearTimeout(this._searchDebounce);
+        this._searchDebounce = setTimeout(() => this._loadConversations(), 350);
+    }
+
+    removeStatusChip(key) {
+        const idx = this.state.statusFilters.indexOf(key);
+        if (idx >= 0) this.state.statusFilters.splice(idx, 1);
+        this._loadConversations();
+    }
+
+    // ── Row actions ───────────────────────────────────────────────────────────
+
+    openThread(convId) {
+        if (this.state.activeConvId !== convId) {
+            this.state.thread = null;
+            this._loadThread(convId);
+        }
+    }
+
+    closeThread() {
+        this.state.activeConvId = null;
+        this.state.thread = null;
+    }
+
+    openLead(leadId) {
+        this.action.doAction({
+            type:      "ir.actions.act_window",
+            res_model: "leads.new",
+            res_id:    leadId,
+            views:     [[false, "form"]],
+            target:    "current",
+        });
+    }
+
+    openInInterakt(url) {
+        if (url) window.open(url, "_blank", "noopener");
+    }
+
+    async onSend(body, kind, opts = {}) {
+        const convId = this.state.activeConvId;
+        if (!convId) return;
+        this.state.sendError = null;
+        try {
+            await this.orm.call("wa.conversation", "send_message", [[convId]], {
+                body, kind,
+                media_url:      opts.media_url      || "",
+                media_filename: opts.media_filename || "",
+            });
+            await this._loadThread(convId);
+        } catch (e) {
+            this.state.sendError = e.data?.message || String(e);
+        }
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    statusLabel(key) {
+        return STATUS_OPTIONS.find(s => s.key === key)?.label || key;
+    }
+
+    statusBadgeClass(key) {
+        return `cd-inbox-status-badge ${STATUS_COLORS[key] || ""}`;
+    }
+
+    relativeTime(isoStr) {
+        return relativeTime(isoStr);
+    }
+
+    get statusOptions()  { return STATUS_OPTIONS; }
+    get dateRanges()     { return DATE_RANGES; }
+
+    get activeConversation() {
+        return this.state.thread?.conversation || null;
+    }
+
+    get activeMessages() {
+        return this.state.thread?.messages || [];
+    }
+
+    get activeStats() {
+        return this.state.thread?.stats || {};
+    }
+
+    get windowState() {
+        return this.activeConversation?.window_state || "closed";
+    }
+
+    get windowExpiresAt() {
+        return this.activeConversation?.window_expires_at || null;
+    }
+}
+
+registry.category("actions").add("wa_inbox", WaInbox);

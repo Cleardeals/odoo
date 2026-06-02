@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Add WhatsApp Activity tab to the leads.new form view -->
+    <record id="view_leads_new_form_wa_inherit" model="ir.ui.view">
+        <field name="name">leads.new.form.wa_communication</field>
+        <field name="model">leads.new</field>
+        <field name="inherit_id" ref="leads.view_new_portal_lead_form"/>
+        <field name="arch" type="xml">
+            <notebook position="inside">
+                <page string="WhatsApp Activity" name="wa_activity">
+                    <widget name="wa_whatsapp_tab"/>
+                </page>
+            </notebook>
+        </field>
+    </record>
+</odoo>

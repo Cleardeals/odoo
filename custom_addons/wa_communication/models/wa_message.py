@@ -269,6 +269,15 @@ class WaMessage(models.Model):
         help="Template name the button-reply was triggered from (CTA replies only).",
     )
 
+    quoted_body = fields.Text(
+        'Quoted Body',
+        help="Body of the message this inbound is a swipe-reply to.",
+    )
+    quoted_sender = fields.Char(
+        'Quoted Sender',
+        help="Display name of the sender of the quoted message.",
+    )
+
     # ------------------------------------------------------------------
     # Cost
     # ------------------------------------------------------------------

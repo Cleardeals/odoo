@@ -1,0 +1,175 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="cleardeals_ui.ChatBubble">
+
+        <!-- System event chip (centred) -->
+        <t t-if="isSystemEvent">
+            <div class="cd-chat-event-chip">
+                <span t-esc="props.message.body"/>
+            </div>
+        </t>
+
+        <t t-else="">
+            <div t-att-class="bubbleClass">
+
+                <!-- Sender name (inbound or RM name for outbound) -->
+                <div class="cd-chat-bubble__sender" t-esc="senderLabel"/>
+
+                <!-- Quoted / swipe-reply context -->
+                <t t-if="props.message.quoted_body or props.message.quoted_sender">
+                    <div class="cd-chat-bubble__quoted">
+                        <div class="cd-chat-bubble__quoted-sender"
+                             t-esc="props.message.quoted_sender || 'Previous message'"/>
+                        <div class="cd-chat-bubble__quoted-body"
+                             t-esc="props.message.quoted_body || ''"/>
+                    </div>
+                </t>
+
+                <!-- Media -->
+                <t t-if="isMedia">
+                    <div class="cd-chat-bubble__media">
+                        <t t-if="props.message.media_url">
+
+                            <!-- Image -->
+                            <t t-if="props.message.kind === 'image'">
+                                <a t-att-href="props.message.media_url" target="_blank" rel="noopener">
+                                    <img t-att-src="props.message.media_url"
+                                         class="cd-chat-bubble__img" alt="Image"/>
+                                </a>
+                            </t>
+
+                            <!-- Video -->
+                            <t t-elif="props.message.kind === 'video'">
+                                <div class="cd-chat-bubble__video-wrap">
+                                    <video class="cd-chat-bubble__video"
+                                           t-att-src="props.message.media_url"
+                                           controls="true" preload="metadata"/>
+                                </div>
+                            </t>
+
+                            <!-- Audio -->
+                            <t t-elif="props.message.kind === 'audio'">
+                                <audio class="cd-chat-bubble__audio"
+                                       t-att-src="props.message.media_url"
+                                       controls="true" preload="metadata"/>
+                            </t>
+
+                            <!-- Document / other -->
+                            <t t-else="">
+                                <a t-att-href="props.message.media_url" target="_blank" rel="noopener"
+                                   class="cd-chat-bubble__file-link">
+                                    <div class="cd-chat-bubble__file-icon">
+                                        <i t-attf-class="fa {{ mediaIcon }}" aria-hidden="true"/>
+                                    </div>
+                                    <div class="cd-chat-bubble__file-info">
+                                        <span class="cd-chat-bubble__file-name"
+                                              t-esc="props.message.media_filename || props.message.kind"/>
+                                        <span class="cd-chat-bubble__file-label">Document</span>
+                                    </div>
+                                    <i class="fa fa-download cd-chat-bubble__file-dl" aria-hidden="true"/>
+                                </a>
+                            </t>
+
+                        </t>
+                        <t t-else="">
+                            <span class="cd-chat-bubble__media-placeholder">
+                                <i t-attf-class="fa {{ mediaIcon }}" aria-hidden="true"/>
+                                <span t-esc="props.message.kind"/>
+                            </span>
+                        </t>
+                    </div>
+                </t>
+
+                <!-- Body text -->
+                <t t-if="props.message.body">
+                    <div class="cd-chat-bubble__body" t-esc="props.message.body"/>
+                </t>
+
+                <!-- Template buttons (for outbound template messages) -->
+                <t t-if="props.message.template_buttons and props.message.template_buttons.length">
+                    <div class="cd-chat-bubble__btn-row">
+                        <t t-foreach="props.message.template_buttons" t-as="btn" t-key="btn">
+                            <span class="cd-chat-bubble__template-btn" t-esc="btn"/>
+                        </t>
+                    </div>
+                </t>
+
+                <!-- Template name chip (for outbound template without button list) -->
+                <t t-elif="props.message.template_name and !isInbound">
+                    <span class="cd-chat-bubble__template-chip">
+                        <i class="fa fa-envelope-o" aria-hidden="true"/>
+                        <span t-esc="props.message.template_name"/>
+                    </span>
+                </t>
+
+                <!-- Footer: time + status ticks -->
+                <div class="cd-chat-bubble__footer">
+                    <span class="cd-chat-bubble__time" t-esc="timeLabel"/>
+                    <t t-if="!isInbound">
+
+                        <!--
+                            WhatsApp-style ticks:
+                            Single check  (sent)      : one stroke from bottom-left up-right
+                            Double check  (delivered)  : two overlapping strokes, second offset +4px right
+                            Double check  (read)       : same geometry, blue fill
+                            All drawn on a 18×11 canvas so both strokes fit; single uses 11×11.
+                        -->
+
+                        <!-- read — blue double tick -->
+                        <t t-if="props.message.status === 'read'">
+                            <svg class="cd-ticks cd-ticks--dbl cd-ticks--read"
+                                 viewBox="0 0 18 11" xmlns="http://www.w3.org/2000/svg">
+                                <!-- back tick (left, slightly thinner) -->
+                                <polyline points="1,6 4,9.5 10,1.5"
+                                          fill="none" stroke="currentColor" stroke-width="1.8"
+                                          stroke-linecap="round" stroke-linejoin="round"/>
+                                <!-- front tick (overlaps right half of back tick) -->
+                                <polyline points="5,6 8,9.5 17,1.5"
+                                          fill="none" stroke="currentColor" stroke-width="1.8"
+                                          stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </t>
+
+                        <!-- delivered — grey double tick -->
+                        <t t-elif="props.message.status === 'delivered'">
+                            <svg class="cd-ticks cd-ticks--dbl"
+                                 viewBox="0 0 18 11" xmlns="http://www.w3.org/2000/svg">
+                                <polyline points="1,6 4,9.5 10,1.5"
+                                          fill="none" stroke-width="1.8"
+                                          stroke-linecap="round" stroke-linejoin="round"/>
+                                <polyline points="5,6 8,9.5 17,1.5"
+                                          fill="none" stroke-width="1.8"
+                                          stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </t>
+
+                        <!-- sent — single grey tick -->
+                        <t t-elif="props.message.status === 'sent'">
+                            <svg class="cd-ticks cd-ticks--sgl"
+                                 viewBox="0 0 11 11" xmlns="http://www.w3.org/2000/svg">
+                                <polyline points="1,6 4,9.5 10,1.5"
+                                          fill="none" stroke="currentColor" stroke-width="1.8"
+                                          stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </t>
+
+                        <!-- failed -->
+                        <t t-elif="props.message.status === 'failed' or
+                                   props.message.status === 'meta_blocked' or
+                                   props.message.status === 'invalid_number'">
+                            <i class="fa fa-times-circle cd-ticks cd-ticks--failed" aria-hidden="true"/>
+                        </t>
+
+                        <!-- pending / queued -->
+                        <t t-else="">
+                            <i class="fa fa-clock-o cd-ticks cd-ticks--pending" aria-hidden="true"/>
+                        </t>
+
+                    </t>
+                </div>
+
+            </div>
+        </t>
+
+    </t>
+</templates>

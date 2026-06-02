@@ -1,0 +1,119 @@
+.cd-chat-composer {
+    border-top: 1px solid #dee2e6;
+    background: #f8f9fa;
+    padding: 8px 12px;
+
+    &__closed-notice {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        color: #856404;
+        background: #fff3cd;
+        border: 1px solid #ffc107;
+        border-radius: 6px;
+        padding: 6px 10px;
+        margin-bottom: 6px;
+    }
+
+    &__file-hidden { display: none; }
+
+    &__upload-error {
+        font-size: 12px;
+        color: #dc2626;
+        padding: 4px 0;
+    }
+
+    &__uploading {
+        font-size: 12px;
+        color: #6c757d;
+        padding: 4px 0;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    &__attach-panel {
+        background: #f0f0f0;
+        border-radius: 8px;
+        padding: 10px 12px;
+        margin-bottom: 6px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    &__attach-preview {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    &__attach-icon { font-size: 20px; color: #7c3aed; }
+
+    &__attach-name {
+        font-size: 13px;
+        font-weight: 500;
+        color: #1a1a1a;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        max-width: 300px;
+    }
+
+    &__attach-caption {
+        border: 1px solid #ced4da;
+        border-radius: 6px;
+        padding: 5px 10px;
+        font-size: 13px;
+        width: 100%;
+        outline: none;
+        &:focus { border-color: #7c3aed; }
+    }
+
+    &__attach-actions {
+        display: flex;
+        gap: 8px;
+    }
+
+    &__row {
+        display: flex;
+        align-items: flex-end;
+        gap: 6px;
+    }
+
+    &__attach-btn {
+        padding: 6px 8px;
+        color: #6c757d;
+        background: none;
+        border: none;
+        font-size: 18px;
+        &:hover { color: #495057; }
+    }
+
+    &__input {
+        flex: 1;
+        resize: none;
+        border: 1px solid #ced4da;
+        border-radius: 20px;
+        padding: 8px 14px;
+        font-size: 14px;
+        outline: none;
+        max-height: 120px;
+        overflow-y: auto;
+
+        &:focus { border-color: #7c3aed; box-shadow: 0 0 0 2px rgba(124,58,237,.15); }
+        &:disabled { background: #e9ecef; cursor: not-allowed; }
+    }
+
+    &__send-btn {
+        border-radius: 50%;
+        width: 38px;
+        height: 38px;
+        padding: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+}

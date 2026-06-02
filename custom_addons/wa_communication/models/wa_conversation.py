@@ -38,7 +38,7 @@ WA message and delivers status receipts back via the inbound OdooWaEvent path.
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from odoo import api, fields, models
 from odoo.exceptions import UserError
@@ -185,6 +185,33 @@ class WaConversation(models.Model):
         required=True,
         index=True,
     )
+    assigned_user_id = fields.Many2one(
+        'res.users',
+        string='Assigned RM',
+        index=True,
+        ondelete='set null',
+        copy=False,
+        help="RM currently owning this conversation. Synced to Interakt via reassignment.",
+    )
+    window_expires_at = fields.Datetime(
+        string='Window Expires',
+        readonly=True,
+        copy=False,
+        help="UTC time when the 24h free-text window closes. "
+             "Computed from last inbound message; overwritten by platform when provided.",
+    )
+    window_state = fields.Selection(
+        [('open', 'Open'), ('closed', 'Closed')],
+        string='Chat Window',
+        compute='_compute_window_state',
+        store=False,
+        help="Whether the WhatsApp 24h free-text window is currently open.",
+    )
+    interakt_inbox_url = fields.Char(
+        string='Interakt Inbox URL',
+        compute='_compute_interakt_inbox_url',
+        store=False,
+    )
 
     _sql_constraints = [
         (
@@ -208,6 +235,23 @@ class WaConversation(models.Model):
         for rec in self:
             rec.message_count = len(rec.message_ids)
 
+    def _compute_window_state(self):
+        now = datetime.utcnow()
+        for rec in self:
+            if rec.window_expires_at and rec.window_expires_at > now:
+                rec.window_state = 'open'
+            else:
+                rec.window_state = 'closed'
+
+    def _compute_interakt_inbox_url(self):
+        for rec in self:
+            if rec.phone_number:
+                rec.interakt_inbox_url = (
+                    f'https://app.interakt.ai/inbox?channelPhoneNumber={rec.phone_number}'
+                )
+            else:
+                rec.interakt_inbox_url = False
+
     # ------------------------------------------------------------------
     # Inbound — conversation lookup / creation
     # ------------------------------------------------------------------
@@ -230,8 +274,12 @@ class WaConversation(models.Model):
         if conv:
             return conv
 
+        # leads.new stores a standardized 10-digit number (strips leading 91).
+        # wa.conversation stores the full E.164-without-plus (12 digits, e.g. 919876543210).
+        # Strip the 91 country prefix for the lead lookup.
+        lead_phone = phone_number[2:] if phone_number.startswith('91') and len(phone_number) == 12 else phone_number
         lead = self.env['leads.new'].search(
-            [('phone', '=', phone_number)],
+            [('phone', '=', lead_phone)],
             order='create_date desc',
             limit=1,
         )
@@ -360,16 +408,21 @@ class WaConversation(models.Model):
         body = _extract_body(msg, msg_type)
         media_url = _extract_media_url(msg, msg_type)
 
-        # For button_reply: look up the template that triggered this CTA
+        # Resolve context (swipe-reply or button-tap) — find the quoted message
         template_replied_to = ''
-        if msg_type == 'button_reply':
-            context_msg_id = (msg.get('context') or {}).get('id', '')
-            if context_msg_id:
-                orig = self.env['wa.message'].sudo().search(
-                    [('wa_message_id', '=', context_msg_id)], limit=1
-                )
-                if orig:
-                    template_replied_to = orig.template_name or ''
+        quoted_body = False
+        quoted_sender = False
+        context_msg_id = (msg.get('context') or {}).get('id', '')
+        if context_msg_id:
+            orig = self.env['wa.message'].sudo().search(
+                [('wa_message_id', '=', context_msg_id)], limit=1
+            )
+            if orig:
+                template_replied_to = orig.template_name or ''
+                # For genuine text swipe-replies: populate the quoted block
+                if msg_type != 'button_reply':
+                    quoted_body = orig.body or orig.template_name or ''
+                    quoted_sender = orig.sender_name or ('Workflow' if orig.initiator == 'workflow' else 'RM')
 
         created_at = _wa_ts_to_dt(ts_str)
 
@@ -386,6 +439,9 @@ class WaConversation(models.Model):
 
         conv = self.sudo()._get_or_create_for_phone(from_phone, sender_name)
 
+        # For inbound: prefer WA profile name, fall back to linked lead name
+        display_sender = sender_name or (conv.lead_id.name if conv.lead_id else 'Customer')
+
         self.env['wa.message'].sudo().create({
             'conversation_id': conv.id,
             'wa_message_id': wa_msg_id or False,
@@ -395,8 +451,10 @@ class WaConversation(models.Model):
             'body': body,
             'media_url': media_url or False,
             'template_replied_to': template_replied_to or False,
+            'quoted_body': quoted_body or False,
+            'quoted_sender': quoted_sender or False,
             'status': 'delivered',
-            'sender_name': sender_name,
+            'sender_name': display_sender,
             'lead_id': conv.lead_id.id if conv.lead_id else False,
             'occurred_at': created_at,
             'raw_payload': msg,
@@ -852,11 +910,27 @@ class WaConversation(models.Model):
             'occurred_at':       occurred_at,
         })
 
-        conv.sudo().write({
+        # Update window_expires_at from platform if provided, else derive from occurred_at.
+        window_expires_at_raw = event.get('window_expires_at')
+        if window_expires_at_raw:
+            try:
+                window_expires_at = _parse_iso_dt(window_expires_at_raw)
+            except Exception:
+                window_expires_at = None
+        else:
+            from datetime import timedelta
+            window_expires_at = occurred_at + timedelta(hours=24) if occurred_at else None
+
+        conv_vals = {
             'last_message_at':      occurred_at,
-            'last_message_preview': message_text[:100],
+            'last_message_preview': (message_text or '')[:100],
             'unread_count':         conv.unread_count + 1,
-        })
+        }
+        if window_expires_at:
+            conv_vals['window_expires_at'] = window_expires_at
+        if lead and not conv.lead_id:
+            conv_vals['lead_id'] = lead.id
+        conv.sudo().write(conv_vals)
 
         # bus.bus notification to RM — replaces mail.activity
         if rm_odoo_id:
@@ -1130,9 +1204,12 @@ class WaConversation(models.Model):
     # Outbound messaging
     # ------------------------------------------------------------------
 
+    # Non-template kinds that require an open 24h window.
+    _WINDOWED_KINDS = frozenset({'freetext', 'image', 'video', 'document', 'audio'})
+
     def send_message(
         self,
-        body: str,
+        body: str = '',
         kind: str = 'freetext',
         template_name: str = '',
         initiator: str = 'rm',
@@ -1140,6 +1217,10 @@ class WaConversation(models.Model):
         workflow_slug: str = '',
         step_id: str = '',
         enrollment_id: str = '',
+        media_url: str = '',
+        media_filename: str = '',
+        body_values: list | None = None,
+        header_values: list | None = None,
     ) -> 'models.Model':
         """Send a WA message from this conversation.
 
@@ -1151,24 +1232,36 @@ class WaConversation(models.Model):
         The publish is deferred until after the current SQL transaction
         commits so that a rollback does not trigger a spurious WA send.
 
-        :param body:          Message text (required when ``kind='freetext'``).
-        :param kind:          Message kind — one of the ``wa.message.kind``
-                              Selection values.  Default ``'freetext'``.
-        :param template_name: Template name (required when ``kind='template'``).
-        :param initiator:     Who is sending — ``'rm'`` (default) or
-                              ``'workflow'`` for automated sends.
-        :param request_id:    OdooWaRequest UUID for tracking.
-        :param workflow_slug: Workflow context for automated sends.
-        :param step_id:       Workflow step for automated sends.
-        :param enrollment_id: Enrollment UUID for automated sends.
-        :return:              The newly created ``wa.message`` record.
-        :raises UserError:    If the conversation has no phone number.
+        :param body:           Message text (required for freetext kind).
+        :param kind:           Message kind — one of the ``wa.message.kind`` values.
+        :param template_name:  Template name (required when kind='template').
+        :param initiator:      Who is sending — 'rm' (default) or 'workflow'.
+        :param request_id:     OdooWaRequest UUID for tracking.
+        :param workflow_slug:  Workflow context for automated sends.
+        :param step_id:        Workflow step for automated sends.
+        :param enrollment_id:  Enrollment UUID for automated sends.
+        :param media_url:      Public media URL (image/video/document/audio).
+        :param media_filename: Filename hint for documents.
+        :param body_values:    Template body variable substitutions.
+        :param header_values:  Template header variable substitutions.
+        :return:               The newly created ``wa.message`` record.
+        :raises UserError:     If the conversation has no phone number, or if the
+                               24h free-text window is closed for a non-template kind.
         """
         self.ensure_one()
         if not self.phone_number:
             raise UserError(
                 "Cannot send — this conversation has no phone number."
             )
+
+        # Hard-block non-template sends when the 24h window is closed.
+        if kind in self._WINDOWED_KINDS and initiator == 'rm':
+            self._compute_window_state()
+            if self.window_state == 'closed':
+                raise UserError(
+                    "The 24-hour WhatsApp window is closed for this contact. "
+                    "You can only send template messages until the customer replies."
+                )
 
         import uuid as _uuid
         # Always produce a valid UUID request_id: the bridge stores it in
@@ -1183,11 +1276,14 @@ class WaConversation(models.Model):
             'kind': kind,
             'body': body,
             'template_name': template_name or False,
+            'media_url': media_url or False,
+            'media_filename': media_filename or False,
             'request_id': effective_request_id,
             'workflow_slug': workflow_slug or False,
             'step_id': step_id or False,
             'enrollment_id': enrollment_id or False,
             'lead_id': self.lead_id.id if self.lead_id else False,
+            'sender_name': self.env.user.name if initiator == 'rm' else None,
             'status': 'queued',
             'occurred_at': fields.Datetime.now(),
         })
@@ -1196,8 +1292,6 @@ class WaConversation(models.Model):
             _TOPIC_WA_REQUESTS, 'cd-prod-odoo-wa-requests'
         )
         # Payload matches OdooWaRequest (shared/models.py in the WA platform).
-        # Mandatory fields: request_type, request_id (UUID str), phone.
-        # message_text carries the body for freetext; template_name for templates.
         request_data = {
             'request_type': 'send',
             'request_id': effective_request_id,
@@ -1205,6 +1299,12 @@ class WaConversation(models.Model):
             'kind': kind,
             'message_text': body or None,
             'template_name': template_name or None,
+            'media_url': media_url or None,
+            'media_filename': media_filename or None,
+            'body_values': body_values or [],
+            'header_values': header_values or [],
+            'rm_odoo_id': self.env.uid,
+            'rm_name': self.env.user.name if self.env.user else None,
         }
 
         # Defer publish until after the transaction commits.
@@ -1232,6 +1332,279 @@ class WaConversation(models.Model):
         """Reset the unread counter for this conversation."""
         self.ensure_one()
         self.write({'unread_count': 0})
+
+    def action_reassign(self, lead_id: int | None = None, user_id: int | None = None) -> None:
+        """Reassign this conversation to a different inquiry or RM.
+
+        Updates the local ``lead_id`` / ``assigned_user_id`` and publishes an
+        assign request to the platform so Interakt's ``rm_assignments`` follow.
+
+        :param lead_id:  ``leads.new`` record ID to re-link this thread to.
+        :param user_id:  ``res.users`` record ID of the new RM.
+        """
+        self.ensure_one()
+        vals: dict = {}
+        if lead_id:
+            vals['lead_id'] = lead_id
+        if user_id:
+            vals['assigned_user_id'] = user_id
+        if vals:
+            self.sudo().write(vals)
+
+        # Publish assign request so platform rm_assignments follows and Interakt
+        # routes future inbounds to the new RM's inbox.
+        rm_email = None
+        if user_id:
+            user = self.env['res.users'].sudo().browse(user_id)
+            rm_email = user.email
+        elif self.assigned_user_id:
+            rm_email = self.assigned_user_id.email
+
+        if rm_email and self.phone_number:
+            topic = self.env['ir.config_parameter'].sudo().get_param(
+                _TOPIC_WA_REQUESTS, 'cd-prod-odoo-wa-requests'
+            )
+            import uuid as _uuid
+            request_data = {
+                'request_type': 'assign',
+                'request_id': str(_uuid.uuid4()),
+                'phone': self.phone_number,
+                'rm_email': rm_email,
+            }
+
+            def _publish():
+                self.env['cleardeals.pubsub'].publish_async(topic, request_data)
+
+            self.env.cr.postcommit.add(_publish)
+
+    def action_enrol_workflow(self, lead_id: int | None = None, workflow_slug: str | None = None) -> None:
+        """Publish a workflow enrolment request for this conversation's phone."""
+        self.ensure_one()
+        if not workflow_slug:
+            raise UserError("workflow_slug is required")
+        phone = self.phone_number
+        actor_id = self.lead_id.id if self.lead_id else (lead_id or None)
+        topic = self.env['ir.config_parameter'].sudo().get_param(
+            _TOPIC_WA_REQUESTS, 'cd-prod-odoo-wa-requests'
+        )
+        import uuid as _uuid
+        request_data = {
+            'request_type': 'enrol',
+            'request_id': str(_uuid.uuid4()),
+            'phone': phone,
+            'actor_id': actor_id,
+            'workflow_slug': workflow_slug,
+        }
+
+        def _publish():
+            self.env['cleardeals.pubsub'].publish_async(topic, request_data)
+
+        self.env.cr.postcommit.add(_publish)
+
+    def _inbox_conv_status(self, conv, window_open):
+        """Derive a display status for the inbox table."""
+        if conv.unread_count > 0:
+            return 'needs_reply'
+        if window_open:
+            return 'active'
+        return 'completed'
+
+    @api.model
+    def get_inbox(self, filters: dict | None = None) -> list[dict]:
+        """Return conversation list for the WhatsApp Inbox client action."""
+        filters = filters or {}
+        limit = min(int(filters.get('limit', 100)), 200)
+        offset = int(filters.get('offset', 0))
+        now = datetime.utcnow()
+
+        domain = []
+        if filters.get('assigned_rm'):
+            domain.append(('assigned_user_id', '=', int(filters['assigned_rm'])))
+        if filters.get('search'):
+            s = filters['search']
+            domain += ['|', ('lead_id.name', 'ilike', s), ('phone_number', 'ilike', s)]
+
+        # Status filter
+        status_f = filters.get('status')
+        if status_f == 'needs_reply':
+            domain.append(('unread_count', '>', 0))
+        elif status_f == 'active':
+            domain += [('unread_count', '=', 0), ('window_expires_at', '>', now)]
+        elif status_f == 'completed':
+            domain += [('unread_count', '=', 0), '|', ('window_expires_at', '=', False), ('window_expires_at', '<=', now)]
+
+        # Date range filter on last_message_at
+        date_range = filters.get('date_range')
+        if date_range == 'today':
+            today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            domain.append(('last_message_at', '>=', today))
+        elif date_range == 'yesterday':
+            today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            yesterday = today - timedelta(days=1)
+            domain += [('last_message_at', '>=', yesterday), ('last_message_at', '<', today)]
+        elif date_range == 'last_7d':
+            domain.append(('last_message_at', '>=', now - timedelta(days=7)))
+        elif date_range == 'last_30d':
+            domain.append(('last_message_at', '>=', now - timedelta(days=30)))
+        elif date_range == 'this_month':
+            month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            domain.append(('last_message_at', '>=', month_start))
+
+        convs = self.env['wa.conversation'].sudo().search(
+            domain, order='last_message_at desc', limit=limit, offset=offset
+        )
+
+        rows = []
+        for conv in convs:
+            window_open = bool(conv.window_expires_at and conv.window_expires_at > now)
+            lead = conv.lead_id
+            # Try to get portal source from lead (field may not exist on all installations)
+            portal_source = ''
+            if lead:
+                portal_source = getattr(lead, 'portal_source', '') or getattr(lead, 'source_id', '') or ''
+                if hasattr(portal_source, 'name'):
+                    portal_source = portal_source.name
+            # Last active workflow slug from messages
+            last_wf_msg = conv.message_ids.filtered(lambda m: m.workflow_slug).sorted('occurred_at', reverse=True)[:1]
+            workflow_name = last_wf_msg.workflow_slug if last_wf_msg else ''
+            rows.append({
+                'id': conv.id,
+                'lead_id': lead.id if lead else None,
+                'lead_name': lead.name if lead else None,
+                'lead_source': portal_source,
+                'phone': conv.phone_number,
+                'last_message': conv.last_message_preview or '',
+                'last_message_at': conv.last_message_at.isoformat() if conv.last_message_at else None,
+                'unread_count': conv.unread_count,
+                'conv_status': self._inbox_conv_status(conv, window_open),
+                'window_state': 'open' if window_open else 'closed',
+                'window_expires_at': conv.window_expires_at.isoformat() if conv.window_expires_at else None,
+                'assigned_user_id': conv.assigned_user_id.id if conv.assigned_user_id else None,
+                'assigned_user_name': conv.assigned_user_id.name if conv.assigned_user_id else None,
+                'workflow_name': workflow_name,
+                'interakt_url': conv.interakt_inbox_url,
+            })
+        return rows
+
+    @api.model
+    def get_inbox_counts(self) -> dict:
+        """Return facet counts for the inbox sidebar filters."""
+        now = datetime.utcnow()
+        all_convs = self.env['wa.conversation'].sudo().search([])
+        status_counts = {'needs_reply': 0, 'active': 0, 'completed': 0}
+        for conv in all_convs:
+            window_open = bool(conv.window_expires_at and conv.window_expires_at > now)
+            status_counts[self._inbox_conv_status(conv, window_open)] += 1
+
+        # Assigned RM counts
+        rm_counts = {}
+        for conv in all_convs:
+            if conv.assigned_user_id:
+                uid = conv.assigned_user_id.id
+                rm_counts.setdefault(uid, {'id': uid, 'name': conv.assigned_user_id.name, 'count': 0})
+                rm_counts[uid]['count'] += 1
+
+        return {
+            'status': status_counts,
+            'assigned_rms': list(rm_counts.values()),
+        }
+
+    @api.model
+    def get_thread(self, conversation_id: int) -> dict:
+        """Return full thread data for a conversation.
+
+        :param conversation_id: ``wa.conversation`` record ID.
+        :return: Dict with ``conversation`` metadata, ``messages`` list,
+                 and ``stats`` (sent/delivered/read counts for current inquiry).
+        """
+        conv = self.env['wa.conversation'].sudo().browse(conversation_id)
+        if not conv.exists():
+            return {'error': 'Conversation not found'}
+        now = datetime.utcnow()
+        window_open = bool(conv.window_expires_at and conv.window_expires_at > now)
+
+        messages = []
+        for msg in conv.message_ids.sorted('occurred_at'):
+            messages.append({
+                'id': msg.id,
+                'direction': msg.direction,
+                'initiator': msg.initiator,
+                'kind': msg.kind,
+                'body': msg.body or '',
+                'media_url': msg.media_url or None,
+                'media_filename': msg.media_filename or None,
+                'status': msg.status,
+                'occurred_at': msg.occurred_at.isoformat() if msg.occurred_at else None,
+                'sender_name': msg.sender_name or (
+                    conv.lead_id.name if msg.direction == 'inbound' and conv.lead_id
+                    else None
+                ),
+                'template_name': msg.template_name or None,
+                'template_buttons': self._extract_template_buttons(msg),
+                'quoted_body': msg.quoted_body or None,
+                'quoted_sender': msg.quoted_sender or None,
+                'lead_id': msg.lead_id.id if msg.lead_id else None,
+                'workflow_slug': msg.workflow_slug or None,
+            })
+
+        # Per-inquiry stats (for the current linked lead)
+        stats = {'sent': 0, 'delivered': 0, 'read': 0, 'replies': 0}
+        if conv.lead_id:
+            lid = conv.lead_id.id
+            inquiry_msgs = conv.message_ids.filtered(
+                lambda m: m.lead_id.id == lid and m.direction == 'outbound'
+            )
+            inbound_msgs = conv.message_ids.filtered(
+                lambda m: m.lead_id.id == lid and m.direction == 'inbound'
+            )
+            total = len(inquiry_msgs)
+            delivered = len(inquiry_msgs.filtered(lambda m: m.status in ('delivered', 'read')))
+            read_count = len(inquiry_msgs.filtered(lambda m: m.status == 'read'))
+            stats = {
+                'sent': total,
+                'delivered': delivered,
+                'read': read_count,
+                'replies': len(inbound_msgs),
+                'delivered_pct': round(100 * delivered / total) if total else 0,
+                'read_pct': round(100 * read_count / total) if total else 0,
+            }
+
+        return {
+            'conversation': {
+                'id': conv.id,
+                'phone': conv.phone_number,
+                'lead_id': conv.lead_id.id if conv.lead_id else None,
+                'lead_name': conv.lead_id.name if conv.lead_id else None,
+                'assigned_user_id': conv.assigned_user_id.id if conv.assigned_user_id else None,
+                'assigned_user_name': conv.assigned_user_id.name if conv.assigned_user_id else None,
+                'window_state': 'open' if window_open else 'closed',
+                'window_expires_at': conv.window_expires_at.isoformat() if conv.window_expires_at else None,
+                'interakt_url': conv.interakt_inbox_url,
+                'unread_count': conv.unread_count,
+            },
+            'messages': messages,
+            'stats': stats,
+        }
+
+    def _extract_template_buttons(self, msg) -> list:
+        """Return list of button label strings from template raw_payload, or []."""
+        try:
+            raw = msg.raw_payload
+            if not raw:
+                return []
+            data = json.loads(raw) if isinstance(raw, str) else raw
+            # Interakt template payload structure
+            components = (
+                data.get('template', {}).get('components', [])
+                or data.get('payload', {}).get('template', {}).get('components', [])
+            )
+            for comp in components:
+                if comp.get('type', '').lower() == 'button':
+                    btns = comp.get('buttons', [])
+                    return [b.get('text', '') for b in btns if b.get('text')]
+        except Exception:
+            pass
+        return []
 
 
 # ------------------------------------------------------------------

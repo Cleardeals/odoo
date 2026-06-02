@@ -51,6 +51,8 @@ Client action at WhatsApp → Dashboard providing:
         'data/wa_communication_config_data.xml',
         'views/wa_message_views.xml',
         'views/wa_dashboard_action.xml',
+        'views/wa_inbox_action.xml',
+        'views/wa_lead_form_inherit.xml',
         'views/wa_communication_menus.xml',
     ],
     'assets': {

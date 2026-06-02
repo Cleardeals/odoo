@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="cleardeals_ui.ConversationListItem">
+        <div t-att-class="rowClass" t-on-click="onClickRow">
+            <div class="cd-conv-item__header">
+                <span class="cd-conv-item__name"
+                      t-esc="props.conversation.lead_name || props.conversation.phone"/>
+                <span class="cd-conv-item__time" t-esc="timeLabel"/>
+            </div>
+
+            <div class="cd-conv-item__preview" t-esc="props.conversation.last_message"/>
+
+            <div class="cd-conv-item__footer">
+                <CdWindowBadge
+                    state="props.conversation.window_state"
+                    windowExpiresAt="props.conversation.window_expires_at"/>
+
+                <t t-if="props.conversation.unread_count > 0">
+                    <span class="cd-conv-item__badge" t-esc="props.conversation.unread_count"/>
+                </t>
+
+                <div class="cd-conv-item__actions">
+                    <t t-if="props.conversation.lead_id">
+                        <button class="btn btn-xs cd-conv-item__action-btn"
+                                title="View Lead"
+                                t-on-click="onClickLead">
+                            <i class="fa fa-user" aria-hidden="true"/>
+                        </button>
+                    </t>
+                    <button class="btn btn-xs cd-conv-item__action-btn"
+                            title="Reassign"
+                            t-on-click="onClickAssign">
+                        <i class="fa fa-exchange" aria-hidden="true"/>
+                    </button>
+                </div>
+            </div>
+
+            <t t-if="props.conversation.assigned_user_name">
+                <div class="cd-conv-item__rm">
+                    <i class="fa fa-user-circle-o" aria-hidden="true"/>
+                    <span t-esc="props.conversation.assigned_user_name"/>
+                </div>
+            </t>
+        </div>
+    </t>
+</templates>

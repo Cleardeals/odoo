@@ -1,0 +1,245 @@
+$enr-w: 160px;
+$sidebar-w: 200px;
+
+.wa-lead-tab {
+    display: flex;
+    height: 620px;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #fff;
+
+    // Loading / empty states
+    &__loading, &__no-conv {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        color: #aaa;
+        gap: 8px;
+        padding: 32px;
+    }
+
+    &__no-conv-icon { font-size: 48px; color: #25d366; }
+
+    // ── Left panel: Enrollments ───────────────────────────────────────────────
+    &__enrollments {
+        width: $enr-w;
+        min-width: $enr-w;
+        border-right: 1px solid #dee2e6;
+        background: #fafafa;
+        overflow-y: auto;
+        padding: 12px 10px;
+    }
+
+    &__panel-title {
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        color: #aaa;
+        margin-bottom: 10px;
+    }
+
+    &__enr-card {
+        border: 1px solid #dee2e6;
+        border-radius: 6px;
+        padding: 8px 10px;
+        margin-bottom: 8px;
+        background: #fff;
+        cursor: default;
+
+        &--active {
+            border-color: #7c3aed;
+            background: #faf5ff;
+        }
+    }
+
+    &__enr-name {
+        font-size: 12px;
+        font-weight: 600;
+        color: #1a1a1a;
+        line-height: 1.3;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    &__enr-step {
+        font-size: 10px;
+        color: #888;
+        margin-top: 2px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    &__enr-badge {
+        display: inline-block;
+        margin-top: 4px;
+        border-radius: 8px;
+        padding: 1px 6px;
+        font-size: 10px;
+        font-weight: 600;
+
+        &--active  { background: #dcfce7; color: #15803d; }
+        &--pending { background: #fef3c7; color: #92400e; }
+        &--paused  { background: #f3f4f6; color: #6b7280; }
+        &--done    { background: #e0e7ff; color: #3730a3; }
+    }
+
+    &__enr-empty { padding: 8px 0; }
+
+    // ── Centre: chat ──────────────────────────────────────────────────────────
+    &__chat {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        min-width: 0;
+    }
+
+    &__send-error {
+        margin: 0;
+        border-radius: 0;
+        font-size: 13px;
+    }
+
+    // ── Right panel: stats + actions ──────────────────────────────────────────
+    &__sidebar {
+        width: $sidebar-w;
+        min-width: $sidebar-w;
+        border-left: 1px solid #dee2e6;
+        background: #fafafa;
+        padding: 12px;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    &__window-row {
+        margin-bottom: 8px;
+    }
+
+    &__stats-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+    }
+
+    &__stat-card {
+        background: #fff;
+        border: 1px solid #dee2e6;
+        border-radius: 6px;
+        padding: 8px 6px;
+        text-align: center;
+    }
+
+    &__stat-val {
+        font-size: 20px;
+        font-weight: 700;
+        color: #1a1a1a;
+        line-height: 1;
+    }
+
+    &__stat-lbl {
+        font-size: 10px;
+        color: #888;
+        margin-top: 3px;
+    }
+
+    &__actions {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    &__picker {
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        background: #fff;
+        overflow: hidden;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+    }
+
+    &__picker-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 8px 10px;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        color: #888;
+        background: #f8f8f8;
+        border-bottom: 1px solid #dee2e6;
+    }
+
+    &__picker-close {
+        border: none;
+        background: none;
+        cursor: pointer;
+        font-size: 16px;
+        color: #aaa;
+        line-height: 1;
+        padding: 0;
+        &:hover { color: #dc2626; }
+    }
+
+    &__picker-list { max-height: 180px; overflow-y: auto; }
+
+    &__picker-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        padding: 8px 10px;
+        border: none;
+        background: none;
+        cursor: pointer;
+        font-size: 12px;
+        color: #343a40;
+        text-align: left;
+        border-bottom: 1px solid #f0f0f0;
+        .fa { color: #7c3aed; width: 14px; }
+        &:last-child { border-bottom: none; }
+        &:hover { background: #f5f3ff; color: #7c3aed; }
+    }
+
+    &__picker-empty {
+        padding: 12px;
+        font-size: 12px;
+        color: #aaa;
+        text-align: center;
+    }
+
+    &__action-btn--active {
+        background: #f5f3ff;
+        border-color: #7c3aed;
+        color: #7c3aed;
+    }
+
+    &__action-btn {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        border: 1px solid #dee2e6;
+        background: #fff;
+        border-radius: 6px;
+        padding: 7px 10px;
+        font-size: 12px;
+        color: #343a40;
+        cursor: pointer;
+        text-align: left;
+
+        .fa { color: #7c3aed; width: 14px; }
+
+        &:hover {
+            background: #f5f3ff;
+            border-color: #7c3aed;
+            color: #7c3aed;
+        }
+    }
+}
