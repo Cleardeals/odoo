@@ -9,14 +9,19 @@ import { formatISTTime } from "../../utils/datetime";
  * Props:
  *   message {Object} wa.message row from get_thread:
  *     id, direction, initiator, kind, body, media_url, media_filename,
- *     status, occurred_at, sender_name, template_name, template_buttons,
- *     quoted_body, quoted_sender, workflow_slug
+ *     status, occurred_at, sender_name, template_name, template_header,
+ *     template_footer, template_buttons, quoted_body, quoted_sender,
+ *     quoted_msg_id, workflow_slug
+ *   onOpenMedia   {Function} optional (url, kind, filename) => void — open in-tab preview
+ *   onQuotedClick {Function} optional (msgId) => void — scroll to quoted original
  */
 export class CdChatBubble extends Component {
     static template = "cleardeals_ui.ChatBubble";
 
     static props = {
-        message: { type: Object },
+        message:       { type: Object },
+        onOpenMedia:   { type: Function, optional: true },
+        onQuotedClick: { type: Function, optional: true },
     };
 
     get isInbound() {
@@ -52,5 +57,28 @@ export class CdChatBubble extends Component {
 
     get isSystemEvent() {
         return this.props.message.kind === "system";
+    }
+
+    get templateButtons() {
+        const b = this.props.message.template_buttons;
+        return Array.isArray(b) ? b : [];
+    }
+
+    // ── Interaction ───────────────────────────────────────────────────────────
+
+    onMediaClick(ev) {
+        // Preview inside the chat (lightbox) rather than navigating to a new tab.
+        const m = this.props.message;
+        if (this.props.onOpenMedia && m.media_url) {
+            ev.preventDefault();
+            this.props.onOpenMedia(m.media_url, m.kind, m.media_filename || m.kind);
+        }
+    }
+
+    onQuotedClick() {
+        const target = this.props.message.quoted_msg_id;
+        if (target && this.props.onQuotedClick) {
+            this.props.onQuotedClick(target);
+        }
     }
 }

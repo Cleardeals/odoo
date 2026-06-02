@@ -4,7 +4,11 @@ $topbar-h: 52px;
 .wa-inbox {
     display: flex;
     flex-direction: column;
-    height: 100vh;
+    // Fill the client-action container (NOT 100vh, which overflows past the
+    // top navbar and pushes the composer below the fold — issue: reply screen
+    // had no visible send bar).
+    height: 100%;
+    min-height: 0;
     background: #fff;
     font-family: inherit;
 

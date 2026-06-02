@@ -1,9 +1,29 @@
 $enr-w: 160px;
 $sidebar-w: 200px;
 
+// ── Issue: the side chatter ate ~40% of the lead form and left an uneven gap.
+// The chatter has flex-grow:1, so just capping its width leaves whitespace.
+// On wide screens, pin it narrow AND let the form sheet fill the row so the
+// layout is even and the WhatsApp tab gets real width. Below 1200px Odoo drops
+// the chatter full-width under the form, which is the responsive behaviour we want.
+@media (min-width: 1200px) {
+    .o_form_renderer:has(.wa-lead-tab) {
+        .o_form_sheet_bg, .o_form_sheet {
+            max-width: none !important;
+        }
+        .o-mail-Form-chatter.o-aside {
+            flex: 0 0 300px !important;
+            width: 300px !important;
+            min-width: 300px !important;
+        }
+    }
+}
+
 .wa-lead-tab {
     display: flex;
-    height: 620px;
+    // Fit the remaining viewport so ONLY the chat thread scrolls — no second
+    // (outer form) scrollbar. dvh accounts for mobile browser chrome.
+    height: clamp(420px, calc(100dvh - 340px), 820px);
     border: 1px solid #dee2e6;
     border-radius: 8px;
     overflow: hidden;
@@ -241,5 +261,25 @@ $sidebar-w: 200px;
             border-color: #7c3aed;
             color: #7c3aed;
         }
+    }
+
+    // ── Responsive ─────────────────────────────────────────────────────────
+    // Tablet: reclaim horizontal space — drop the enrollments rail, slim the
+    // stats/actions sidebar. Chat + composer stay front and centre.
+    @media (max-width: 1024px) {
+        &__enrollments { display: none; }
+        &__sidebar {
+            width: 170px;
+            min-width: 170px;
+        }
+        &__stats-grid { grid-template-columns: 1fr; }
+    }
+
+    // Phone: chat-first. Hide both side panels so the conversation is full-width
+    // and the composer is reachable without horizontal squish or extra scroll.
+    // (Send Template / Assign / stats live in the dedicated WhatsApp Inbox.)
+    @media (max-width: 640px) {
+        height: clamp(340px, calc(100dvh - 210px), 720px);
+        &__sidebar { display: none; }
     }
 }

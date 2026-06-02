@@ -711,6 +711,69 @@ class WaConversation(models.Model):
         """Map an Interakt error code to a ``wa.message.status`` value."""
         return _FAILURE_CODE_TO_STATUS.get(failure_code, 'failed')
 
+    def _owa_resolve_quoted_context(self, conv, template_replied_to, event):
+        """Resolve the message a buyer reply refers to (swipe / button reply).
+
+        Returns ``(quoted_body, quoted_sender)`` so the inbound bubble can show
+        the quoted snippet WhatsApp-style.  Matches the referenced template name
+        to the most recent earlier outbound message in this conversation.  Falls
+        back to any platform-supplied ``quoted_body`` / ``source_message_text``.
+        """
+        # 1. Platform-supplied quoted text wins, if present.
+        q_body = event.get('quoted_body') or event.get('source_message_text')
+        q_sender = event.get('quoted_sender')
+        if q_body:
+            return q_body, (q_sender or 'You')
+
+        if not template_replied_to:
+            return None, None
+
+        orig = conv.message_ids.filtered(
+            lambda m: m.direction == 'outbound'
+            and m.template_name == template_replied_to
+        ).sorted('occurred_at')
+        if not orig:
+            return None, None
+        src = orig[-1]
+        snippet = (
+            (src.template_body or '').strip()
+            or (src.body or '').strip()
+            or (src.template_header or '').strip()
+            or src.template_name
+            or ''
+        )
+        sender = src.sender_name or 'You'
+        return (snippet[:140] or None), sender
+
+    @staticmethod
+    def _owa_template_content_vals(event: dict, msg) -> dict:
+        """Extract rendered template content from a status event into write vals.
+
+        wa-sender enriches ``message_delivered``/``message_read`` events with the
+        template body/header/footer/buttons rendered from Interakt's
+        ``raw_template`` (placeholders substituted).  Persist them so the chat
+        bubble shows the real message text instead of just the template name.
+        Only fills ``body`` when the message doesn't already carry text.
+        """
+        rendered_body = event.get('rendered_body')
+        if rendered_body is None and not event.get('template_buttons'):
+            return {}
+        vals = {}
+        # 'body' is immutable (append-only); render into the dedicated
+        # template_body field instead and only when not already populated.
+        if rendered_body and not (msg.template_body or '').strip():
+            vals['template_body'] = rendered_body
+        header = event.get('rendered_header')
+        if header:
+            vals['template_header'] = header
+        footer = event.get('template_footer')
+        if footer:
+            vals['template_footer'] = footer
+        buttons = event.get('template_buttons')
+        if buttons:
+            vals['template_buttons'] = buttons
+        return vals
+
     # ------------------------------------------------------------------
     # OdooWaEvent handlers
     # ------------------------------------------------------------------
@@ -744,16 +807,18 @@ class WaConversation(models.Model):
         )
         if msg:
             # RM-initiated send: update the queued record created by send_message()
-            msg.write({
+            vals = {
                 'wa_message_id':   wa_message_id or msg.wa_message_id,
                 'status':          'sent',
                 'status_updated_at': fields.Datetime.now(),
-            })
+            }
+            vals.update(self._owa_template_content_vals(event, msg))
+            msg.write(vals)
         else:
             # Workflow-initiated send: Odoo never created a wa.message for this
             conv  = self._owa_get_conversation(phone)
             lead  = self._owa_resolve_lead(actor_id, actor_type, phone)
-            self.env['wa.message'].sudo().create({
+            create_vals = {
                 'conversation_id':  conv.id,
                 'wa_message_id':    wa_message_id or False,
                 'request_id':       request_id or False,
@@ -769,7 +834,17 @@ class WaConversation(models.Model):
                 'status':           'sent',
                 'status_updated_at': fields.Datetime.now(),
                 'occurred_at':      occurred_at,
-            })
+            }
+            # Rendered template content (header/body/footer/buttons), if present.
+            if event.get('rendered_body'):
+                create_vals['template_body'] = event['rendered_body']
+            if event.get('rendered_header'):
+                create_vals['template_header'] = event['rendered_header']
+            if event.get('template_footer'):
+                create_vals['template_footer'] = event['template_footer']
+            if event.get('template_buttons'):
+                create_vals['template_buttons'] = event['template_buttons']
+            self.env['wa.message'].sudo().create(create_vals)
             conv.sudo().write({'last_message_at': occurred_at})
 
     def _handle_odoo_message_delivered(
@@ -790,12 +865,14 @@ class WaConversation(models.Model):
             step_id=step_id,
         )
         if msg:
-            msg.write({
+            vals = {
                 'status':          'delivered',
                 'cost_inr':        cost_inr,
                 'delivered_at':    occurred_at,
                 'status_updated_at': fields.Datetime.now(),
-            })
+            }
+            vals.update(self._owa_template_content_vals(event, msg))
+            msg.write(vals)
         else:
             _logger.debug(
                 "wa_push: message_delivered — no wa.message found for "
@@ -818,11 +895,13 @@ class WaConversation(models.Model):
             step_id=step_id,
         )
         if msg:
-            msg.write({
+            vals = {
                 'status':          'read',
                 'seen_at':         occurred_at,
                 'status_updated_at': fields.Datetime.now(),
-            })
+            }
+            vals.update(self._owa_template_content_vals(event, msg))
+            msg.write(vals)
         else:
             _logger.debug(
                 "wa_push: message_read — no wa.message found for "
@@ -906,6 +985,11 @@ class WaConversation(models.Model):
 
         # For media messages, caption may arrive as literal "None" from Interakt.
         body = message_text if message_text != 'None' else ''
+        # Resolve the quoted/swipe context so the bubble can show what the buyer
+        # replied to (WhatsApp-style), matched to the referenced template.
+        quoted_body, quoted_sender = self._owa_resolve_quoted_context(
+            conv, template_replied_to, event,
+        )
         self.env['wa.message'].sudo().create({
             'conversation_id':   conv.id,
             'wa_message_id':     wa_message_id or False,
@@ -916,6 +1000,8 @@ class WaConversation(models.Model):
             'media_url':         media_url,
             'media_filename':    media_filename,
             'template_replied_to': template_replied_to or False,
+            'quoted_body':       quoted_body or False,
+            'quoted_sender':     quoted_sender or False,
             'lead_id':           lead.id if lead else False,
             'platform_actor_id': actor_id or 0,
             'status':            'delivered',
@@ -1542,7 +1628,7 @@ class WaConversation(models.Model):
                 'direction': msg.direction,
                 'initiator': msg.initiator,
                 'kind': msg.kind,
-                'body': msg.body or '',
+                'body': msg.body or msg.template_body or '',
                 'media_url': msg.media_url or None,
                 'media_filename': msg.media_filename or None,
                 'status': msg.status,
@@ -1552,12 +1638,18 @@ class WaConversation(models.Model):
                     else None
                 ),
                 'template_name': msg.template_name or None,
-                'template_buttons': self._extract_template_buttons(msg),
+                'template_header': msg.template_header or None,
+                'template_footer': msg.template_footer or None,
+                'template_buttons': msg.template_buttons or self._extract_template_buttons(msg),
                 'quoted_body': msg.quoted_body or None,
                 'quoted_sender': msg.quoted_sender or None,
+                'quoted_msg_id': None,  # resolved below
+                'template_replied_to': msg.template_replied_to or None,
                 'lead_id': msg.lead_id.id if msg.lead_id else None,
                 'workflow_slug': msg.workflow_slug or None,
             })
+
+        self._owa_resolve_quoted_links(messages)
 
         # Per-inquiry stats (for the current linked lead)
         stats = {'sent': 0, 'delivered': 0, 'read': 0, 'replies': 0}
@@ -1597,6 +1689,38 @@ class WaConversation(models.Model):
             'messages': messages,
             'stats': stats,
         }
+
+    @staticmethod
+    def _owa_resolve_quoted_links(messages: list) -> None:
+        """Set ``quoted_msg_id`` on reply messages so the UI can scroll to the original.
+
+        A swipe/button reply carries ``quoted_body`` and/or ``template_replied_to``.
+        Match each reply to the most recent *earlier* message it refers to:
+          1. ``template_replied_to`` → an earlier message with that ``template_name``;
+          2. otherwise ``quoted_body`` → an earlier message whose body / template
+             header matches the quoted snippet.
+        ``messages`` is the ordered (oldest-first) list of serialized dicts; this
+        mutates it in place.
+        """
+        for i, m in enumerate(messages):
+            tpl = m.get('template_replied_to')
+            quoted = (m.get('quoted_body') or '').strip()
+            if not tpl and not quoted:
+                continue
+            for j in range(i - 1, -1, -1):
+                prev = messages[j]
+                if tpl and prev.get('template_name') == tpl:
+                    m['quoted_msg_id'] = prev['id']
+                    break
+                if quoted:
+                    cand = (prev.get('body') or '').strip()
+                    head = (prev.get('template_header') or '').strip()
+                    if cand and (cand == quoted or quoted in cand or cand in quoted):
+                        m['quoted_msg_id'] = prev['id']
+                        break
+                    if head and head == quoted:
+                        m['quoted_msg_id'] = prev['id']
+                        break
 
     def _extract_template_buttons(self, msg) -> list:
         """Return list of button label strings from template raw_payload, or []."""

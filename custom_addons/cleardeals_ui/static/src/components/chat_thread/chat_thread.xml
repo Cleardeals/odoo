@@ -9,7 +9,41 @@
                 </div>
             </t>
             <t t-foreach="props.messages" t-as="msg" t-key="msg.id">
-                <CdChatBubble message="msg"/>
+                <CdChatBubble message="msg"
+                              onOpenMedia="(url, kind, filename) => this.openMedia(url, kind, filename)"
+                              onQuotedClick="(id) => this.scrollToMessage(id)"/>
+            </t>
+
+            <!-- In-tab media lightbox -->
+            <t t-if="lightbox.open">
+                <div class="cd-lightbox" t-on-click="() => this.closeMedia()">
+                    <button class="cd-lightbox__close" t-on-click="() => this.closeMedia()">
+                        <i class="fa fa-times" aria-hidden="true"/>
+                    </button>
+                    <div class="cd-lightbox__stage" t-on-click.stop="() => {}">
+                        <t t-if="lightbox.kind === 'image'">
+                            <img class="cd-lightbox__img" t-att-src="lightbox.url" alt="Preview"/>
+                        </t>
+                        <t t-elif="isPdf">
+                            <iframe class="cd-lightbox__frame" t-att-src="lightbox.url"
+                                    title="Document preview"/>
+                        </t>
+                        <t t-else="">
+                            <div class="cd-lightbox__fallback">
+                                <i class="fa fa-file-o" aria-hidden="true"/>
+                                <p t-esc="lightbox.filename || 'Attachment'"/>
+                                <a class="btn btn-sm btn-primary"
+                                   t-att-href="lightbox.url" target="_blank" rel="noopener">
+                                    <i class="fa fa-download" aria-hidden="true"/> Download
+                                </a>
+                            </div>
+                        </t>
+                    </div>
+                    <a class="cd-lightbox__open-new" t-att-href="lightbox.url"
+                       target="_blank" rel="noopener" t-on-click.stop="() => {}">
+                        Open in new tab <i class="fa fa-external-link" aria-hidden="true"/>
+                    </a>
+                </div>
             </t>
         </div>
     </t>

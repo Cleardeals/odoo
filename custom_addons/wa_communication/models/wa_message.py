@@ -169,6 +169,27 @@ class WaMessage(models.Model):
         help="WA template identifier (e.g. 'site_visit_reminder_v2').  "
              "Populated for kind='template'.",
     )
+    template_body = fields.Text(
+        'Template Body',
+        help="Rendered template body text (placeholders substituted), extracted "
+             "from the Interakt status webhook's raw_template.  Kept separate from "
+             "the immutable 'body' field so it can be backfilled when the receipt "
+             "(sent/delivered) arrives.",
+    )
+    template_header = fields.Char(
+        'Template Header',
+        help="Rendered template header text (placeholders substituted), "
+             "extracted from the Interakt status webhook's raw_template.",
+    )
+    template_footer = fields.Char(
+        'Template Footer',
+        help="Static template footer text, from the Interakt raw_template.",
+    )
+    template_buttons = fields.Json(
+        'Template Buttons',
+        help="List of quick-reply / CTA button labels for a template message, "
+             "from the Interakt raw_template.",
+    )
     workflow_slug = fields.Char(
         'Workflow',
         help="Slug of the WA workflow that triggered this message "
