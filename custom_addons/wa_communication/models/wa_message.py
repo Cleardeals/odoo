@@ -290,6 +290,14 @@ class WaMessage(models.Model):
         help="Template name the button-reply was triggered from (CTA replies only).",
     )
 
+    quoted_message_id = fields.Many2one(
+        'wa.message',
+        string='Quoted Message',
+        ondelete='set null',
+        index=True,
+        help="The exact earlier message this reply quotes (swipe / button reply), "
+             "resolved from the Interakt message_context id.  Drives click-to-scroll.",
+    )
     quoted_body = fields.Text(
         'Quoted Body',
         help="Body of the message this inbound is a swipe-reply to.",

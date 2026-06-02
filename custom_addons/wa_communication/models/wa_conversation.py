@@ -714,36 +714,55 @@ class WaConversation(models.Model):
     def _owa_resolve_quoted_context(self, conv, template_replied_to, event):
         """Resolve the message a buyer reply refers to (swipe / button reply).
 
-        Returns ``(quoted_body, quoted_sender)`` so the inbound bubble can show
-        the quoted snippet WhatsApp-style.  Matches the referenced template name
-        to the most recent earlier outbound message in this conversation.  Falls
-        back to any platform-supplied ``quoted_body`` / ``source_message_text``.
+        Returns ``(quoted_body, quoted_sender, src_record_or_None)`` so the inbound
+        bubble can show the quoted snippet WhatsApp-style and link to it.  Order:
+          1. ``source_message_id`` (Interakt id of the quoted message) → match the
+             exact ``wa.message`` by ``wa_message_id`` — works for ANY kind
+             (template, RM free-text, media, buyer message), not just templates.
+          2. ``template_replied_to`` → most recent earlier outbound message with
+             that template name.
+          3. Platform-supplied ``quoted_body`` / ``source_message_text``.
         """
-        # 1. Platform-supplied quoted text wins, if present.
+        def _snippet(src):
+            text = (
+                (src.template_body or '').strip()
+                or (src.body or '').strip()
+                or (src.template_header or '').strip()
+                or (src.media_filename or '').strip()
+                or (src.template_name or '')
+                or (f'[{src.kind}]' if src.kind else '')
+            )
+            sender = src.sender_name or (
+                conv.lead_id.name if src.direction == 'inbound' and conv.lead_id else 'You'
+            )
+            return (text[:140] or None), sender
+
+        # 1. Exact reference by Interakt message id (any message kind).
+        source_message_id = event.get('source_message_id')
+        if source_message_id:
+            src = conv.message_ids.filtered(
+                lambda m: m.wa_message_id == source_message_id
+            )[:1]
+            if src:
+                body, sender = _snippet(src)
+                return body, sender, src
+
+        # 2. Template-name match (button replies, or when no id is supplied).
+        if template_replied_to:
+            orig = conv.message_ids.filtered(
+                lambda m: m.direction == 'outbound'
+                and m.template_name == template_replied_to
+            ).sorted('occurred_at')
+            if orig:
+                body, sender = _snippet(orig[-1])
+                return body, sender, orig[-1]
+
+        # 3. Platform-supplied quoted text fallback (no linkable record).
         q_body = event.get('quoted_body') or event.get('source_message_text')
-        q_sender = event.get('quoted_sender')
         if q_body:
-            return q_body, (q_sender or 'You')
+            return q_body, (event.get('quoted_sender') or 'You'), None
 
-        if not template_replied_to:
-            return None, None
-
-        orig = conv.message_ids.filtered(
-            lambda m: m.direction == 'outbound'
-            and m.template_name == template_replied_to
-        ).sorted('occurred_at')
-        if not orig:
-            return None, None
-        src = orig[-1]
-        snippet = (
-            (src.template_body or '').strip()
-            or (src.body or '').strip()
-            or (src.template_header or '').strip()
-            or src.template_name
-            or ''
-        )
-        sender = src.sender_name or 'You'
-        return (snippet[:140] or None), sender
+        return None, None, None
 
     @staticmethod
     def _owa_template_content_vals(event: dict, msg) -> dict:
@@ -987,7 +1006,7 @@ class WaConversation(models.Model):
         body = message_text if message_text != 'None' else ''
         # Resolve the quoted/swipe context so the bubble can show what the buyer
         # replied to (WhatsApp-style), matched to the referenced template.
-        quoted_body, quoted_sender = self._owa_resolve_quoted_context(
+        quoted_body, quoted_sender, quoted_src = self._owa_resolve_quoted_context(
             conv, template_replied_to, event,
         )
         self.env['wa.message'].sudo().create({
@@ -1002,6 +1021,7 @@ class WaConversation(models.Model):
             'template_replied_to': template_replied_to or False,
             'quoted_body':       quoted_body or False,
             'quoted_sender':     quoted_sender or False,
+            'quoted_message_id': quoted_src.id if quoted_src else False,
             'lead_id':           lead.id if lead else False,
             'platform_actor_id': actor_id or 0,
             'status':            'delivered',
@@ -1643,7 +1663,7 @@ class WaConversation(models.Model):
                 'template_buttons': msg.template_buttons or self._extract_template_buttons(msg),
                 'quoted_body': msg.quoted_body or None,
                 'quoted_sender': msg.quoted_sender or None,
-                'quoted_msg_id': None,  # resolved below
+                'quoted_msg_id': msg.quoted_message_id.id if msg.quoted_message_id else None,
                 'template_replied_to': msg.template_replied_to or None,
                 'lead_id': msg.lead_id.id if msg.lead_id else None,
                 'workflow_slug': msg.workflow_slug or None,
@@ -1703,6 +1723,8 @@ class WaConversation(models.Model):
         mutates it in place.
         """
         for i, m in enumerate(messages):
+            if m.get('quoted_msg_id'):
+                continue  # already linked exactly (quoted_message_id)
             tpl = m.get('template_replied_to')
             quoted = (m.get('quoted_body') or '').strip()
             if not tpl and not quoted:
