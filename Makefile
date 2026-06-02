@@ -47,7 +47,7 @@ help:
 	@echo "  make migrate-db                     .\make.ps1 migrate-db"
 	@echo "  make wipe                           .\make.ps1 wipe"
 	@echo "────────────────────────────────────────────────────────────────────"
-	@echo "  make wa-tunnel                      (public ngrok tunnel for WA media)"
+	@echo "  make wa-tunnel                      (public cloudflared tunnel for WA media)"
 	@echo "  make wa-media-url URL=https://…     (set/clear WA media base URL)"
 	@echo "════════════════════════════════════════════════════════════════════"
 	@echo "  Windows one-time setup:"
@@ -116,32 +116,38 @@ migrate-db:
 
 # ── WhatsApp media local testing ───────────────────────────────────────────────
 # Interakt fetches image/video/document media over a PUBLIC URL, so localhost is
-# unreachable. `make wa-tunnel` opens an ngrok tunnel to the local Odoo (port
-# 8069) and points the WA media controller at it via the
+# unreachable. `make wa-tunnel` opens a tunnel to the local Odoo (port 8069) and
+# points the WA media controller at it via the
 # `wa_communication.media_public_base_url` system parameter — WITHOUT touching
 # the global `web.base.url` (which would break login redirects in dev).
+#
+# Uses **cloudflared** (not ngrok): ngrok free allows only ONE static domain /
+# online tunnel per account, which you already use for the webhook-gateway
+# tunnel — sharing it makes media requests land on the wrong service (FastAPI
+# 404). cloudflared quick-tunnels are free, need no account, and mint a fresh
+# unique https://*.trycloudflare.com URL per run, so they never collide.
 #
 # Leave the tunnel running while you test sends. Ctrl-C stops it (the param is
 # left set; clear it with `make wa-media-url URL=` when done).
 wa-tunnel:
-	@command -v ngrok >/dev/null 2>&1 || { echo "✗ ngrok not found. Install: brew install ngrok"; exit 1; }
-	@echo "→ Starting ngrok tunnel to http://localhost:8069 …"
-	@pkill -f "ngrok http 8069" 2>/dev/null || true
-	@ngrok http 8069 --log=stdout --pooling-enabled > /tmp/wa-ngrok.log 2>&1 &
-	@for i in $$(seq 1 15); do \
-		URL=$$(curl -s http://localhost:4040/api/tunnels 2>/dev/null \
-			| python3 -c "import sys,json; t=json.load(sys.stdin).get('tunnels',[]); print(next((x['public_url'] for x in t if x['public_url'].startswith('https')), ''))" 2>/dev/null); \
+	@command -v cloudflared >/dev/null 2>&1 || { \
+		echo "✗ cloudflared not found. Install it (does NOT collide with your ngrok"; \
+		echo "  webhook tunnel): brew install cloudflared"; exit 1; }
+	@echo "→ Starting cloudflared quick tunnel to http://localhost:8069 …"
+	@pkill -f "cloudflared tunnel --url http://localhost:8069" 2>/dev/null || true
+	@cloudflared tunnel --url http://localhost:8069 > /tmp/wa-cloudflared.log 2>&1 &
+	@for i in $$(seq 1 20); do \
+		URL=$$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' /tmp/wa-cloudflared.log 2>/dev/null | head -1); \
 		[ -n "$$URL" ] && break; sleep 1; \
 	done; \
-	if [ -z "$$URL" ]; then echo "✗ Could not read ngrok URL (see /tmp/wa-ngrok.log)"; exit 1; fi; \
+	if [ -z "$$URL" ]; then echo "✗ Could not read cloudflared URL (see /tmp/wa-cloudflared.log)"; exit 1; fi; \
 	echo "→ Public URL: $$URL"; \
 	$(MAKE) --no-print-directory wa-media-url URL=$$URL; \
 	echo ""; \
 	echo "✓ Tunnel live. Keep this terminal open while testing media sends."; \
-	echo "  Inspect requests at http://localhost:4040"; \
 	echo "  Press Ctrl-C to stop the tunnel."; \
-	trap 'pkill -f "ngrok http 8069" 2>/dev/null || true; echo; echo "✓ Tunnel stopped."' INT TERM; \
-	tail -f /tmp/wa-ngrok.log
+	trap 'pkill -f "cloudflared tunnel --url http://localhost:8069" 2>/dev/null || true; echo; echo "✓ Tunnel stopped."' INT TERM; \
+	tail -f /tmp/wa-cloudflared.log
 
 # Set (or clear) the media public base URL system parameter.
 # Usage: make wa-media-url URL=https://abcd-12-34.ngrok-free.app

@@ -40,6 +40,8 @@ import json
 import logging
 from datetime import datetime, timedelta, timezone
 
+import psycopg2.errors
+
 from odoo import api, fields, models
 from odoo.exceptions import UserError
 
@@ -616,6 +618,16 @@ class WaConversation(models.Model):
                     "wa_push: unhandled OdooWaEvent type=%r message=%s",
                     event_type, pubsub_message_id,
                 )
+        except psycopg2.errors.SerializationFailure:
+            # Two concurrent Pub/Sub deliveries of the same event raced to update
+            # the same wa.message row.  The other transaction won; this one is a
+            # no-op.  Log at DEBUG to avoid noisy error alerts.
+            _logger.debug(
+                "wa_push: SerializationFailure on type=%r message=%s — concurrent "
+                "delivery, row already updated by the other worker (harmless)",
+                event_type, pubsub_message_id,
+            )
+            return
         except Exception as exc:
             _logger.exception(
                 "wa_push: OdooWaEvent handler failed for type=%r message=%s",

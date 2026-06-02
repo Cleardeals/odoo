@@ -13,6 +13,8 @@ URL base resolution (first non-empty wins):
 
 import base64
 import logging
+import re
+from urllib.parse import quote
 
 from odoo import http
 from odoo.http import request
@@ -34,12 +36,16 @@ class WaMediaUploadController(http.Controller):
         if not file:
             return request.make_json_response({"error": "no file"}, status=400)
 
-        filename = file.filename or "attachment"
+        original_filename = file.filename or "attachment"
+        # Strip path components and sanitise for use in a URL segment.
+        # Keep only alphanumerics, dots, dashes and underscores; replace
+        # everything else (including spaces) with underscores.
+        safe_filename = re.sub(r"[^\w.\-]", "_", original_filename.lstrip("/\\"))
         mimetype = file.content_type or "application/octet-stream"
         data = base64.b64encode(file.read()).decode()
 
         attachment = request.env["ir.attachment"].sudo().create({
-            "name":     filename,
+            "name":     original_filename,   # human-readable name in Odoo
             "datas":    data,
             "mimetype": mimetype,
             "public":   True,
@@ -59,7 +65,15 @@ class WaMediaUploadController(http.Controller):
                 base_url,
             )
 
-        public_url = f"{base_url}/web/content/{attachment.id}/{filename}"
+        # URL uses the sanitised filename (no spaces, safe for HTTP headers).
+        public_url = f"{base_url}/web/content/{attachment.id}/{quote(safe_filename)}"
 
-        _logger.info("wa_media_upload: id=%s url=%s", attachment.id, public_url)
-        return request.make_json_response({"url": public_url, "id": attachment.id})
+        _logger.info(
+            "wa_media_upload: id=%s original=%r safe=%r url=%s",
+            attachment.id, original_filename, safe_filename, public_url,
+        )
+        return request.make_json_response({
+            "url":  public_url,
+            "id":   attachment.id,
+            "name": original_filename,
+        })
