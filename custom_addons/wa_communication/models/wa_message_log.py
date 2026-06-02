@@ -347,6 +347,7 @@ class WaMessageLog(models.Model):
             'button_type':         msg.kind if msg.kind == 'button_reply' else '',
             'template_replied_to': msg.template_replied_to or msg.template_name or '',
             'media_url':           msg.media_url or '',
+            'media_filename':      msg.media_filename or '',
             'whatsapp_cost':       f'\u20b9{msg.cost_inr:.4f}' if msg.cost_inr else '',
             'interakt_markup':     '',
             'actual_cost':         f'\u20b9{msg.cost_inr:.4f}' if msg.cost_inr else '',

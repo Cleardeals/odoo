@@ -240,6 +240,10 @@ class WaMessage(models.Model):
         'Media URL',
         help="Public URL of the media file for image/document/video/audio messages.",
     )
+    media_filename = fields.Char(
+        'Media Filename',
+        help="Filename derived from the media URL path (e.g. 'photo.jpeg', 'doc.pdf').",
+    )
 
     # ------------------------------------------------------------------
     # Delivery timestamps

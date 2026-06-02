@@ -64,6 +64,16 @@ _WA_TYPE_TO_KIND = {
     # reaction has no Odoo kind — logged as unknown
 }
 
+# Interakt message_content_type → wa.message kind (used by OdooWaEvent lead_replied path)
+_INTERAKT_KIND_TO_ODOO = {
+    'Image':    'image',
+    'Document': 'document',
+    'Video':    'video',
+    'Audio':    'audio',
+    'Text':     'text_reply',
+    'Button':   'button_reply',
+}
+
 # Mapping from WA status webhook strings to wa.message.status Selection values.
 _WA_STATUS_MAP = {
     'sent':      'sent',
@@ -698,10 +708,17 @@ class WaConversation(models.Model):
         """Handle message_delivered — update status and record delivery cost."""
         wa_message_id = event.get('wa_message_id') or ''
         request_id    = event.get('request_id') or ''
+        enrollment_id = event.get('enrollment_id') or ''
+        step_id       = event.get('step_id') or ''
         cost_inr      = event.get('cost_inr') or 0.0
         occurred_at   = _parse_iso_dt(event.get('occurred_at', ''))
 
-        msg = self._owa_find_message(wa_message_id=wa_message_id, request_id=request_id)
+        msg = self._owa_find_message(
+            wa_message_id=wa_message_id,
+            request_id=request_id,
+            enrollment_id=enrollment_id,
+            step_id=step_id,
+        )
         if msg:
             msg.write({
                 'status':          'delivered',
@@ -712,17 +729,24 @@ class WaConversation(models.Model):
         else:
             _logger.debug(
                 "wa_push: message_delivered — no wa.message found for "
-                "wa_message_id=%r request_id=%r",
-                wa_message_id, request_id,
+                "wa_message_id=%r request_id=%r enrollment_id=%r step_id=%r",
+                wa_message_id, request_id, enrollment_id, step_id,
             )
 
     def _handle_odoo_message_read(self, event: dict, pubsub_message_id: str) -> None:
         """Handle message_read — update status to read."""
         wa_message_id = event.get('wa_message_id') or ''
         request_id    = event.get('request_id') or ''
+        enrollment_id = event.get('enrollment_id') or ''
+        step_id       = event.get('step_id') or ''
         occurred_at   = _parse_iso_dt(event.get('occurred_at', ''))
 
-        msg = self._owa_find_message(wa_message_id=wa_message_id, request_id=request_id)
+        msg = self._owa_find_message(
+            wa_message_id=wa_message_id,
+            request_id=request_id,
+            enrollment_id=enrollment_id,
+            step_id=step_id,
+        )
         if msg:
             msg.write({
                 'status':          'read',
@@ -732,8 +756,8 @@ class WaConversation(models.Model):
         else:
             _logger.debug(
                 "wa_push: message_read — no wa.message found for "
-                "wa_message_id=%r request_id=%r",
-                wa_message_id, request_id,
+                "wa_message_id=%r request_id=%r enrollment_id=%r step_id=%r",
+                wa_message_id, request_id, enrollment_id, step_id,
             )
 
     def _handle_odoo_message_failed(self, event: dict, pubsub_message_id: str) -> None:
@@ -763,16 +787,28 @@ class WaConversation(models.Model):
 
     def _handle_odoo_lead_replied(self, event: dict, pubsub_message_id: str) -> None:
         """Handle lead_replied — buyer sent a message; create wa.message + notify RM."""
-        phone          = event.get('phone', '')
-        wa_message_id  = event.get('wa_message_id') or ''
-        actor_id       = event.get('actor_id')
-        actor_type     = event.get('actor_type', '')
-        rm_odoo_id     = event.get('rm_odoo_id')
-        message_text   = event.get('message_text') or ''
+        phone           = event.get('phone', '')
+        wa_message_id   = event.get('wa_message_id') or ''
+        actor_id        = event.get('actor_id')
+        actor_type      = event.get('actor_type', '')
+        rm_odoo_id      = event.get('rm_odoo_id')
+        message_text    = event.get('message_text') or ''
         button_reply_id = event.get('button_reply_id')
-        template_replied_to = event.get('template_name', '') or event.get('original_template_name', '')
-        occurred_at    = _parse_iso_dt(event.get('occurred_at', ''))
-        kind           = 'button_reply' if button_reply_id else 'text_reply'
+        template_replied_to = (
+            event.get('source_template_name', '')
+            or event.get('template_name', '')
+            or event.get('original_template_name', '')
+        )
+        occurred_at     = _parse_iso_dt(event.get('occurred_at', ''))
+        # Media fields forwarded from the WA platform
+        media_url       = event.get('media_url') or False
+        media_filename  = event.get('media_filename') or False
+        # Map Interakt message_content_type → Odoo kind; fall back to button/text logic
+        interakt_kind   = event.get('message_kind') or ''
+        kind = (
+            _INTERAKT_KIND_TO_ODOO.get(interakt_kind)
+            or ('button_reply' if button_reply_id else 'text_reply')
+        )
 
         # Deduplicate by wa_message_id
         if wa_message_id and self._owa_find_message(wa_message_id=wa_message_id):
@@ -798,13 +834,17 @@ class WaConversation(models.Model):
         )
         conv.invalidate_recordset()
 
+        # For media messages, caption may arrive as literal "None" from Interakt.
+        body = message_text if message_text != 'None' else ''
         self.env['wa.message'].sudo().create({
             'conversation_id':   conv.id,
             'wa_message_id':     wa_message_id or False,
             'direction':         'inbound',
             'initiator':         'buyer',
             'kind':              kind,
-            'body':              message_text,
+            'body':              body,
+            'media_url':         media_url,
+            'media_filename':    media_filename,
             'template_replied_to': template_replied_to or False,
             'lead_id':           lead.id if lead else False,
             'platform_actor_id': actor_id or 0,
