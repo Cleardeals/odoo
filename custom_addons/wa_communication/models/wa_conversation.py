@@ -978,10 +978,34 @@ class WaConversation(models.Model):
             or ('button_reply' if button_reply_id else 'text_reply')
         )
 
-        # Deduplicate by wa_message_id
-        if wa_message_id and self._owa_find_message(wa_message_id=wa_message_id):
-            _logger.debug("wa_push: lead_replied duplicate wa_message_id=%s", wa_message_id)
-            return
+        # Deduplicate by wa_message_id — with a twist for button / CTA replies.
+        #
+        # A quick-reply tap reuses the TEMPLATE's outbound Interakt id as the
+        # reply's message id (the gateway sets it for click→template correlation).
+        # Naively deduping on that id finds the OUTBOUND template row and silently
+        # drops EVERY button reply (and makes a second, different-button tap look
+        # like a duplicate of the first).  Detect that case: when the id only
+        # matches an OUTBOUND message, that message IS the one being replied to —
+        # store the reply under a distinct id derived from the button so each tap
+        # is recorded, and link it as the quoted original.
+        store_wa_message_id = wa_message_id
+        quoted_src_from_collision = None
+        if wa_message_id:
+            existing = self._owa_find_message(wa_message_id=wa_message_id)
+            if existing and existing.direction == 'inbound':
+                _logger.debug("wa_push: lead_replied duplicate wa_message_id=%s", wa_message_id)
+                return
+            if existing and existing.direction == 'outbound':
+                quoted_src_from_collision = existing
+                suffix = (button_reply_id or message_text or 'reply').strip().replace(' ', '_')[:40]
+                store_wa_message_id = f"{wa_message_id}:r:{suffix}"
+                # Re-dedup on the synthetic id so Pub/Sub redelivery of the same
+                # tap doesn't create a second row.
+                if self._owa_find_message(wa_message_id=store_wa_message_id):
+                    _logger.debug(
+                        "wa_push: lead_replied duplicate synthetic id=%s", store_wa_message_id
+                    )
+                    return
 
         conv = self._owa_get_conversation(phone)
         lead = self._owa_resolve_lead(actor_id, actor_type, phone)
@@ -1009,9 +1033,22 @@ class WaConversation(models.Model):
         quoted_body, quoted_sender, quoted_src = self._owa_resolve_quoted_context(
             conv, template_replied_to, event,
         )
+        # Fall back to the collision-detected template (button/CTA reply) when no
+        # explicit message_context reference was supplied.
+        if not quoted_src and quoted_src_from_collision:
+            quoted_src = quoted_src_from_collision
+            if not quoted_body:
+                quoted_body = (
+                    (quoted_src.template_body or '').strip()
+                    or (quoted_src.body or '').strip()
+                    or (quoted_src.template_header or '').strip()
+                    or quoted_src.template_name
+                    or ''
+                )[:140] or False
+                quoted_sender = quoted_sender or quoted_src.sender_name or 'You'
         self.env['wa.message'].sudo().create({
             'conversation_id':   conv.id,
-            'wa_message_id':     wa_message_id or False,
+            'wa_message_id':     store_wa_message_id or False,
             'direction':         'inbound',
             'initiator':         'buyer',
             'kind':              kind,
