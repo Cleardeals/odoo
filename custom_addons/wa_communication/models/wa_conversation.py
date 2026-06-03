@@ -1701,6 +1701,8 @@ class WaConversation(models.Model):
                 'quoted_body': msg.quoted_body or None,
                 'quoted_sender': msg.quoted_sender or None,
                 'quoted_msg_id': msg.quoted_message_id.id if msg.quoted_message_id else None,
+                'quoted_kind': msg.quoted_message_id.kind if msg.quoted_message_id else None,
+                'quoted_media_url': msg.quoted_message_id.media_url if msg.quoted_message_id else None,
                 'template_replied_to': msg.template_replied_to or None,
                 'lead_id': msg.lead_id.id if msg.lead_id else None,
                 'workflow_slug': msg.workflow_slug or None,

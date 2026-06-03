@@ -3,7 +3,7 @@
     <t t-name="cleardeals_ui.ChatComposer">
         <div class="cd-chat-composer">
 
-            <!-- Hidden file input (triggered programmatically) -->
+            <!-- Hidden file input (multi-select, triggered programmatically) -->
             <input type="file" t-ref="fileInput" class="cd-chat-composer__file-hidden"
                    t-on-change="(ev) => this.onFileSelected(ev)"/>
 
@@ -15,40 +15,77 @@
                 </div>
             </t>
 
-            <!-- Upload error -->
+            <!-- Upload error (global) -->
             <t t-if="state.uploadError">
                 <div class="cd-chat-composer__upload-error" t-esc="state.uploadError"/>
             </t>
 
-            <!-- Attachment preview panel (shown after file selected) -->
-            <t t-if="state.attachKind and state.attachName and !state.uploading and canSendFreeText">
-                <div class="cd-chat-composer__attach-panel">
-                    <div class="cd-chat-composer__attach-preview">
-                        <i t-attf-class="fa {{ state.attachKind === 'image' ? 'fa-image' : state.attachKind === 'video' ? 'fa-video-camera' : 'fa-file' }} cd-chat-composer__attach-icon"
-                           aria-hidden="true"/>
-                        <span class="cd-chat-composer__attach-name" t-esc="state.attachName"/>
+            <!-- Multi-file preview panel -->
+            <t t-if="hasPending and canSendFreeText">
+                <div class="cd-chat-composer__files-panel">
+                    <div class="cd-chat-composer__files-grid">
+                        <t t-foreach="state.pendingFiles" t-as="pf" t-key="pf.id">
+                            <div t-attf-class="cd-chat-composer__file-thumb
+                                    {{ pf.uploading ? 'cd-chat-composer__file-thumb--uploading' : '' }}
+                                    {{ pf.error ? 'cd-chat-composer__file-thumb--error' : '' }}">
+
+                                <!-- Image thumbnail preview -->
+                                <t t-if="pf.kind === 'image' and pf.localPreviewUrl">
+                                    <img t-att-src="pf.localPreviewUrl"
+                                         class="cd-chat-composer__thumb-img" alt=""/>
+                                </t>
+                                <!-- Non-image: icon + filename -->
+                                <t t-else="">
+                                    <i t-attf-class="fa {{ pf.kind === 'video' ? 'fa-video-camera' : 'fa-file' }} cd-chat-composer__thumb-doc-icon"
+                                       aria-hidden="true"/>
+                                    <span class="cd-chat-composer__thumb-name" t-esc="pf.name"/>
+                                </t>
+
+                                <!-- Upload spinner overlay -->
+                                <t t-if="pf.uploading">
+                                    <div class="cd-chat-composer__thumb-overlay">
+                                        <i class="fa fa-spinner fa-spin" aria-hidden="true"/>
+                                    </div>
+                                </t>
+                                <!-- Error overlay -->
+                                <t t-elif="pf.error">
+                                    <div class="cd-chat-composer__thumb-overlay cd-chat-composer__thumb-overlay--error"
+                                         t-att-title="pf.error">
+                                        <i class="fa fa-exclamation-triangle" aria-hidden="true"/>
+                                    </div>
+                                </t>
+
+                                <!-- Remove button -->
+                                <button class="cd-chat-composer__thumb-remove"
+                                        t-on-click="() => this.removePendingFile(pf.id)"
+                                        title="Remove">
+                                    <i class="fa fa-times" aria-hidden="true"/>
+                                </button>
+                            </div>
+                        </t>
                     </div>
+
+                    <!-- Shared caption for all files -->
                     <input type="text" class="cd-chat-composer__attach-caption"
                            placeholder="Add a caption (optional)…"
-                           t-att-value="state.attachCaption"
-                           t-on-input="(ev) => { this.state.attachCaption = ev.target.value; }"/>
+                           t-att-value="state.sharedCaption"
+                           t-on-input="(ev) => { this.state.sharedCaption = ev.target.value; }"/>
+
                     <div class="cd-chat-composer__attach-actions">
                         <button class="btn btn-sm btn-primary"
-                                t-on-click="() => this.sendMedia()">
-                            <i class="fa fa-send" aria-hidden="true"/> Send
+                                t-att-disabled="!allUploaded"
+                                t-on-click="() => this.sendAllMedia()">
+                            <i class="fa fa-send" aria-hidden="true"/>
+                            Send
+                            <t t-if="state.pendingFiles.length > 1">
+                                (<t t-esc="readyCount"/>/<t t-esc="state.pendingFiles.length"/>)
+                            </t>
                         </button>
                         <button class="btn btn-sm btn-secondary"
-                                t-on-click="() => this.cancelAttach()">
+                                t-on-click="() => this.cancelAllAttach()">
                             Cancel
                         </button>
                     </div>
-                </div>
-            </t>
-
-            <!-- Uploading spinner -->
-            <t t-if="state.uploading">
-                <div class="cd-chat-composer__uploading">
-                    <i class="fa fa-spinner fa-spin" aria-hidden="true"/> Uploading…
                 </div>
             </t>
 
@@ -56,17 +93,17 @@
             <div class="cd-chat-composer__row">
                 <t t-if="canSendFreeText">
                     <button class="btn cd-chat-composer__attach-btn"
-                            title="Attach image"
+                            title="Attach image(s)"
                             t-on-click="() => this.selectAttach('image')">
                         <i class="fa fa-image" aria-hidden="true"/>
                     </button>
                     <button class="btn cd-chat-composer__attach-btn"
-                            title="Attach video"
+                            title="Attach video(s)"
                             t-on-click="() => this.selectAttach('video')">
                         <i class="fa fa-video-camera" aria-hidden="true"/>
                     </button>
                     <button class="btn cd-chat-composer__attach-btn"
-                            title="Attach document"
+                            title="Attach document(s)"
                             t-on-click="() => this.selectAttach('document')">
                         <i class="fa fa-paperclip" aria-hidden="true"/>
                     </button>

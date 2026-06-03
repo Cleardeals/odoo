@@ -24,6 +24,10 @@
                         <t t-if="lightbox.kind === 'image'">
                             <img class="cd-lightbox__img" t-att-src="lightbox.url" alt="Preview"/>
                         </t>
+                        <t t-elif="lightbox.kind === 'video'">
+                            <video class="cd-lightbox__video" t-att-src="lightbox.url"
+                                   controls="true" autoplay="true"/>
+                        </t>
                         <t t-elif="isPdf">
                             <iframe class="cd-lightbox__frame" t-att-src="lightbox.url"
                                     title="Document preview"/>

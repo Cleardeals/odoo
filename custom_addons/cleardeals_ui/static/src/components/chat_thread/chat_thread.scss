@@ -23,10 +23,13 @@
 }
 
 // ── In-tab media lightbox ──────────────────────────────────────────────────
+// position:fixed so the overlay covers the viewport regardless of scroll
+// position — position:absolute inside an overflow:auto container is clipped
+// to the scroll origin and invisible when the thread is scrolled down.
 .cd-lightbox {
-    position: absolute;
+    position: fixed;
     inset: 0;
-    z-index: 50;
+    z-index: 9999;
     background: rgba(0, 0, 0, 0.85);
     display: flex;
     align-items: center;
@@ -62,6 +65,13 @@
         max-height: 100%;
         object-fit: contain;
         border-radius: 4px;
+    }
+
+    &__video {
+        max-width: 90vw;
+        max-height: 80vh;
+        border-radius: 4px;
+        outline: none;
     }
 
     &__frame {

@@ -3,7 +3,7 @@
 import { Component, useState, useRef } from "@odoo/owl";
 
 /**
- * CdChatComposer — message compose box with file attach and send.
+ * CdChatComposer — message compose box with multi-file attach and send.
  *
  * Props:
  *   windowState  {String}   "open" | "closed"
@@ -23,19 +23,27 @@ export class CdChatComposer extends Component {
 
     setup() {
         this.state = useState({
-            body:           "",
-            attachKind:     null,   // null | "image" | "video" | "document"
-            attachName:     "",
-            attachCaption:  "",
-            uploading:      false,
-            uploadError:    null,
+            body:          "",
+            pendingFiles:  [],  // [{id, kind, name, localPreviewUrl, uploadUrl, uploading, error}]
+            sharedCaption: "",
+            uploadError:   null,
         });
+        this._nextFileId = 0;
+        this._selectingKind = null;
         this.fileRef = useRef("fileInput");
     }
 
-    get isClosed()       { return this.props.windowState === "closed"; }
-    get canSendFreeText(){ return !this.isClosed && !this.props.disabled; }
-    get placeholderText(){
+    get isClosed()        { return this.props.windowState === "closed"; }
+    get canSendFreeText() { return !this.isClosed && !this.props.disabled; }
+    get hasPending()      { return this.state.pendingFiles.length > 0; }
+    get allUploaded() {
+        return this.hasPending &&
+               this.state.pendingFiles.every(f => f.uploadUrl && !f.uploading && !f.error);
+    }
+    get readyCount() {
+        return this.state.pendingFiles.filter(f => f.uploadUrl && !f.uploading).length;
+    }
+    get placeholderText() {
         return this.isClosed
             ? "Window closed — use Send Template to reach this contact"
             : "Type a message…";
@@ -57,68 +65,95 @@ export class CdChatComposer extends Component {
     }
 
     selectAttach(kind) {
-        if (this.state.attachKind === kind) {
-            this.state.attachKind = null;
-            return;
-        }
-        this.state.attachKind = kind;
-        this.state.attachName = "";
-        this.state.attachCaption = "";
-        this.state.uploadError = null;
-        // Trigger the hidden file input
+        this._selectingKind = kind;
         const accept = kind === "image"    ? "image/*"
                      : kind === "video"    ? "video/*"
-                     : "application/pdf,application/msword,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.zip";
-        this.fileRef.el.accept = accept;
-        this.fileRef.el.value  = "";
+                     : "application/pdf,application/msword,application/vnd.ms-excel,"
+                       + "application/vnd.openxmlformats-officedocument.*,"
+                       + ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.zip";
+        this.fileRef.el.accept   = accept;
+        this.fileRef.el.multiple = true;  // always allow multi-select
+        this.fileRef.el.value    = "";
         this.fileRef.el.click();
     }
 
     async onFileSelected(ev) {
-        const file = ev.target.files[0];
-        if (!file) { this.state.attachKind = null; return; }
-        this.state.attachName   = file.name;
-        this.state.uploadError  = null;
-        this.state.uploading    = true;
+        const files = Array.from(ev.target.files);
+        if (!files.length) return;
+        const kind = this._selectingKind || "document";
 
-        try {
-            // POST multipart to /wa/media/upload — server returns web.base.url-based public URL
-            const formData = new FormData();
-            formData.append("file", file);
-            const resp = await fetch("/wa/media/upload", {
-                method: "POST",
-                body:   formData,
-                headers: { "X-Requested-With": "XMLHttpRequest" },
-            });
-            const json = await resp.json();
-            if (!resp.ok || json.error) {
-                throw new Error(json.error || resp.statusText);
-            }
-            this.state.attachUrl = json.url;
-        } catch (e) {
-            this.state.uploadError = "Upload failed: " + String(e);
-            this.state.attachKind  = null;
-        } finally {
-            this.state.uploading = false;
+        // Add all files to the pending list immediately so thumbnails appear
+        const newEntries = files.map(file => ({
+            id:              ++this._nextFileId,
+            kind,
+            name:            file.name,
+            localPreviewUrl: kind === "image" ? URL.createObjectURL(file) : null,
+            uploadUrl:       null,
+            uploading:       true,
+            error:           null,
+        }));
+        for (const entry of newEntries) {
+            this.state.pendingFiles.push(entry);
         }
+        this.state.uploadError = null;
+
+        // Upload each file concurrently; identify by id after resolution
+        await Promise.all(files.map(async (file, i) => {
+            const id = newEntries[i].id;
+            try {
+                const formData = new FormData();
+                formData.append("file", file);
+                const resp = await fetch("/wa/media/upload", {
+                    method:  "POST",
+                    body:    formData,
+                    headers: { "X-Requested-With": "XMLHttpRequest" },
+                });
+                const json = await resp.json();
+                if (!resp.ok || json.error) throw new Error(json.error || resp.statusText);
+                const entry = this.state.pendingFiles.find(f => f.id === id);
+                if (entry) { entry.uploadUrl = json.url; entry.uploading = false; }
+            } catch (e) {
+                const entry = this.state.pendingFiles.find(f => f.id === id);
+                if (entry) { entry.error = String(e); entry.uploading = false; }
+            }
+        }));
     }
 
-    async sendMedia() {
-        if (!this.state.attachUrl || !this.state.attachKind || !this.canSendFreeText) return;
-        this.props.onSend(this.state.attachCaption.trim(), this.state.attachKind, {
-            media_url:      this.state.attachUrl,
-            media_filename: this.state.attachName,
-        });
-        this.state.attachKind    = null;
-        this.state.attachUrl     = "";
-        this.state.attachName    = "";
-        this.state.attachCaption = "";
+    async sendAllMedia() {
+        if (!this.canSendFreeText) return;
+        const ready = this.state.pendingFiles.filter(f => f.uploadUrl && !f.uploading);
+        if (!ready.length) return;
+        const caption = this.state.sharedCaption.trim();
+        for (let i = 0; i < ready.length; i++) {
+            const f = ready[i];
+            // Caption goes only on the last file so it appears once at the end
+            const body = (i === ready.length - 1) ? caption : "";
+            this.props.onSend(body, f.kind, {
+                media_url:      f.uploadUrl,
+                media_filename: f.name,
+            });
+        }
+        this._clearPending();
     }
 
-    cancelAttach() {
-        this.state.attachKind = null;
-        this.state.attachUrl  = "";
-        this.state.attachName = "";
+    removePendingFile(id) {
+        const idx = this.state.pendingFiles.findIndex(f => f.id === id);
+        if (idx === -1) return;
+        const f = this.state.pendingFiles[idx];
+        if (f.localPreviewUrl) URL.revokeObjectURL(f.localPreviewUrl);
+        this.state.pendingFiles.splice(idx, 1);
+        if (!this.state.pendingFiles.length) this.state.sharedCaption = "";
     }
 
+    cancelAllAttach() {
+        this._clearPending();
+    }
+
+    _clearPending() {
+        for (const f of this.state.pendingFiles) {
+            if (f.localPreviewUrl) URL.revokeObjectURL(f.localPreviewUrl);
+        }
+        this.state.pendingFiles  = [];
+        this.state.sharedCaption = "";
+    }
 }

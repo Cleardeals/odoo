@@ -21,8 +21,44 @@
                          t-on-click="() => this.onQuotedClick()">
                         <div class="cd-chat-bubble__quoted-sender"
                              t-esc="props.message.quoted_sender || 'Previous message'"/>
-                        <div class="cd-chat-bubble__quoted-body"
-                             t-esc="props.message.quoted_body || ''"/>
+                        <!-- Image quoted: show thumbnail + label -->
+                        <t t-if="props.message.quoted_kind === 'image'">
+                            <div class="cd-chat-bubble__quoted-media">
+                                <t t-if="props.message.quoted_media_url">
+                                    <img class="cd-chat-bubble__quoted-thumb"
+                                         t-att-src="props.message.quoted_media_url" alt=""/>
+                                </t>
+                                <t t-else="">
+                                    <i class="fa fa-camera cd-chat-bubble__quoted-media-icon" aria-hidden="true"/>
+                                </t>
+                                <span class="cd-chat-bubble__quoted-media-label">
+                                    <i class="fa fa-camera" aria-hidden="true"/> Photo
+                                </span>
+                            </div>
+                        </t>
+                        <!-- Video quoted -->
+                        <t t-elif="props.message.quoted_kind === 'video'">
+                            <div class="cd-chat-bubble__quoted-media">
+                                <i class="fa fa-video-camera cd-chat-bubble__quoted-media-icon" aria-hidden="true"/>
+                                <span class="cd-chat-bubble__quoted-media-label">
+                                    <i class="fa fa-video-camera" aria-hidden="true"/> Video
+                                </span>
+                            </div>
+                        </t>
+                        <!-- Audio quoted -->
+                        <t t-elif="props.message.quoted_kind === 'audio'">
+                            <div class="cd-chat-bubble__quoted-media">
+                                <i class="fa fa-music cd-chat-bubble__quoted-media-icon" aria-hidden="true"/>
+                                <span class="cd-chat-bubble__quoted-media-label">
+                                    <i class="fa fa-music" aria-hidden="true"/> Audio
+                                </span>
+                            </div>
+                        </t>
+                        <!-- Document / text quoted -->
+                        <t t-else="">
+                            <div class="cd-chat-bubble__quoted-body"
+                                 t-esc="props.message.quoted_body || ''"/>
+                        </t>
                     </div>
                 </t>
 
@@ -38,12 +74,16 @@
                                      t-on-click="(ev) => this.onMediaClick(ev)"/>
                             </t>
 
-                            <!-- Video -->
+                            <!-- Video — click the play overlay to open in lightbox -->
                             <t t-elif="props.message.kind === 'video'">
-                                <div class="cd-chat-bubble__video-wrap">
+                                <div class="cd-chat-bubble__video-wrap"
+                                     t-on-click="(ev) => this.onMediaClick(ev)">
                                     <video class="cd-chat-bubble__video"
                                            t-att-src="props.message.media_url"
-                                           controls="true" preload="metadata"/>
+                                           preload="metadata"/>
+                                    <div class="cd-chat-bubble__video-play">
+                                        <i class="fa fa-play-circle" aria-hidden="true"/>
+                                    </div>
                                 </div>
                             </t>
 

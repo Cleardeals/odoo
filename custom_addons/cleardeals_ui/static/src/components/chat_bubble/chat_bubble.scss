@@ -62,6 +62,38 @@ $max-bubble-width:   72%;
         text-overflow: ellipsis;
     }
 
+    // Media quoted block (image / video / audio)
+    &__quoted-media {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 36px;
+    }
+
+    &__quoted-thumb {
+        width: 48px;
+        height: 48px;
+        object-fit: cover;
+        border-radius: 4px;
+        flex-shrink: 0;
+    }
+
+    &__quoted-media-icon {
+        font-size: 20px;
+        color: #7c3aed;
+        width: 24px;
+        text-align: center;
+        flex-shrink: 0;
+    }
+
+    &__quoted-media-label {
+        font-size: 12px;
+        color: #555;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+
     // Rendered template header (bold first line)
     &__tmpl-header {
         font-size: 14px;
@@ -100,9 +132,11 @@ $max-bubble-width:   72%;
     }
 
     &__video-wrap {
+        position: relative;
         max-width: 280px;
         border-radius: 8px;
         overflow: hidden;
+        cursor: pointer;
     }
 
     &__video {
@@ -110,6 +144,18 @@ $max-bubble-width:   72%;
         max-height: 200px;
         display: block;
         border-radius: 8px;
+        pointer-events: none; // overlay captures the click
+    }
+
+    &__video-play {
+        position: absolute;
+        inset: 0;
+        background: rgba(0,0,0,0.28);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        .fa { font-size: 44px; color: rgba(255,255,255,0.92); }
+        &:hover { background: rgba(0,0,0,0.38); }
     }
 
     &__audio {
