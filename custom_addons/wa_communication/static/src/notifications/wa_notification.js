@@ -41,6 +41,31 @@ const TYPE_CONFIG = {
         icon:  "fa-times-circle",
         mod:   "failure",
     },
+    reassignment_request: {
+        title: "Chat handover requested",
+        icon:  "fa-user-plus",
+        mod:   "review",
+    },
+    assignment_changed: {
+        title: "Chat assigned to you",
+        icon:  "fa-check-circle",
+        mod:   "replied",
+    },
+    reassignment_approved: {
+        title: "Request approved",
+        icon:  "fa-check-circle",
+        mod:   "replied",
+    },
+    reassignment_declined: {
+        title: "Request declined",
+        icon:  "fa-times-circle",
+        mod:   "failure",
+    },
+    reassignment_failed: {
+        title: "Reassignment failed",
+        icon:  "fa-times-circle",
+        mod:   "failure",
+    },
 };
 
 function _cfg(type) {
@@ -53,6 +78,8 @@ export class WaNotification extends Component {
 
     setup() {
         this.busService = useService("bus_service");
+        this.orm = useService("orm");
+        this.notification = useService("notification");
         this.state = useState({ notifications: [] });
         this._nextId = 1;
         this._timers = {};
@@ -79,6 +106,7 @@ export class WaNotification extends Component {
     _onEvent(payload) {
         const id  = this._nextId++;
         const cfg = _cfg(payload.type);
+        const actionable = payload.type === "reassignment_request";
         const notif = {
             id,
             type:      payload.type || "wa_event",
@@ -87,15 +115,22 @@ export class WaNotification extends Component {
             mod:       cfg.mod,
             leadName:  payload.lead_name || payload.phone || "",
             phone:     payload.phone || "",
-            message:   payload.message || "",
+            message:   actionable
+                ? `${payload.requester_name || "An RM"} wants to take over this chat.`
+                : (payload.message || ""),
             leadUrl:   payload.lead_url || "",
+            actionable,
+            requestId: payload.request_id || null,
+            busy:      false,
         };
 
         // Prepend and cap at MAX_VISIBLE
         this.state.notifications = [notif, ...this.state.notifications].slice(0, MAX_VISIBLE);
 
-        // Auto-dismiss after timeout
-        this._timers[id] = setTimeout(() => this.dismiss(id), DISMISS_AFTER_MS);
+        // Actionable cards persist until the user acts; others auto-dismiss.
+        if (!actionable) {
+            this._timers[id] = setTimeout(() => this.dismiss(id), DISMISS_AFTER_MS);
+        }
     }
 
     // ── Actions ──────────────────────────────────────────────────────────────
@@ -104,6 +139,27 @@ export class WaNotification extends Component {
         clearTimeout(this._timers[id]);
         delete this._timers[id];
         this.state.notifications = this.state.notifications.filter((n) => n.id !== id);
+    }
+
+    async approve(notif) {
+        await this._resolve(notif, "approve", "Chat handed over.");
+    }
+
+    async decline(notif) {
+        await this._resolve(notif, "decline", "Request declined.");
+    }
+
+    async _resolve(notif, method, okMsg) {
+        if (!notif.requestId || notif.busy) return;
+        notif.busy = true;
+        try {
+            await this.orm.call("wa.reassignment.request", method, [[notif.requestId]]);
+            this.notification.add(okMsg, { type: "success" });
+            this.dismiss(notif.id);
+        } catch (e) {
+            this.notification.add(e.data?.message || "Action failed", { type: "danger" });
+            notif.busy = false;
+        }
     }
 
     openLead(notif) {

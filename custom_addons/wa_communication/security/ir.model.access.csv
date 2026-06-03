@@ -11,3 +11,7 @@ access_wa_enrollment_manager,wa.enrollment manager,model_wa_enrollment,base.grou
 access_wa_enrollment_user,wa.enrollment user,model_wa_enrollment,base.group_user,1,0,0,0
 access_wa_dashboard_user,wa.dashboard user,model_wa_dashboard,base.group_user,1,0,0,0
 access_wa_message_log_user,wa.message.log user,model_wa_message_log,base.group_user,1,0,0,0
+access_wa_quick_reply_user,wa.quick.reply user,model_wa_quick_reply,base.group_user,1,1,1,1
+access_wa_quick_reply_manager,wa.quick.reply manager,model_wa_quick_reply,base.group_system,1,1,1,1
+access_wa_reassignment_request_user,wa.reassignment.request user,model_wa_reassignment_request,base.group_user,1,1,1,0
+access_wa_reassignment_request_manager,wa.reassignment.request manager,model_wa_reassignment_request,base.group_system,1,1,1,1

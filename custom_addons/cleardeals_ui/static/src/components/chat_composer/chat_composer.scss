@@ -16,6 +16,24 @@
         margin-bottom: 6px;
     }
 
+    &__gate-notice {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        color: #7c3a00;
+        background: #ffe8d6;
+        border: 1px solid #ff922b;
+        border-radius: 6px;
+        padding: 6px 10px;
+        margin-bottom: 6px;
+    }
+
+    &__qr-wrap {
+        position: relative;
+        display: flex;
+    }
+
     &__file-hidden { display: none; }
 
     &__upload-error {
@@ -149,6 +167,7 @@
         border: none;
         font-size: 18px;
         &:hover { color: #495057; }
+        &--active { color: #7c3aed; }
     }
 
     &__input {

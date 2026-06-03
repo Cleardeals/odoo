@@ -26,12 +26,30 @@
           <!-- Message preview -->
           <div t-if="n.message" class="cd-wa-notif__msg" t-esc="n.message" />
 
+          <!-- Actionable: reassignment approve / decline -->
+          <t t-if="n.actionable">
+            <div class="cd-wa-notif__actions">
+              <button class="cd-wa-notif__btn cd-wa-notif__btn--primary"
+                      t-att-disabled="n.busy"
+                      t-on-click="() => this.approve(n)">
+                <i class="fa fa-check" aria-hidden="true"/> Approve
+              </button>
+              <button class="cd-wa-notif__btn"
+                      t-att-disabled="n.busy"
+                      t-on-click="() => this.decline(n)">
+                Decline
+              </button>
+            </div>
+          </t>
+
           <!-- Action row -->
-          <div class="cd-wa-notif__actions" t-if="n.leadUrl">
-            <button class="cd-wa-notif__btn" t-on-click="() => openLead(n)">
-              View Lead →
-            </button>
-          </div>
+          <t t-elif="n.leadUrl">
+            <div class="cd-wa-notif__actions">
+              <button class="cd-wa-notif__btn" t-on-click="() => openLead(n)">
+                View Lead →
+              </button>
+            </div>
+          </t>
 
         </div>
       </t>

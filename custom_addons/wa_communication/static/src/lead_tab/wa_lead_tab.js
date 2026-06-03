@@ -7,6 +7,7 @@ import { standardWidgetProps } from "@web/views/widgets/standard_widget_props";
 import { CdChatThread }   from "@cleardeals_ui/index";
 import { CdChatComposer } from "@cleardeals_ui/index";
 import { CdWindowBadge }  from "@cleardeals_ui/index";
+import { CdTemplatePickerModal } from "@cleardeals_ui/index";
 
 const WF_STATUS_MAP = {
     active:   { label: "Active",   key: "active" },
@@ -20,7 +21,7 @@ const WF_STATUS_MAP = {
 export class WaLeadTab extends Component {
     static template   = "wa_communication.WaLeadTab";
     static props      = { ...standardWidgetProps };
-    static components = { CdChatThread, CdChatComposer, CdWindowBadge };
+    static components = { CdChatThread, CdChatComposer, CdWindowBadge, CdTemplatePickerModal };
 
     setup() {
         this.orm        = useService("orm");
@@ -33,15 +34,20 @@ export class WaLeadTab extends Component {
             loading:   true,
             error:     null,
             sendError: null,
+            quickReplies: [],
             // Inline pickers
             showAssignPicker: false,
             assignUsers:      [],
-            showEnrolPicker:  false,
-            enrolWorkflows:   [],
+            // Template picker
+            showTemplatePicker: false,
+            templates:          [],
+            tplLoading:         false,
+            tplError:           "",
         });
 
         onMounted(() => {
             this._load();
+            this._loadQuickReplies();
             this._subscribeBus();
         });
 
@@ -97,6 +103,13 @@ export class WaLeadTab extends Component {
         }
     }
 
+    async _loadQuickReplies() {
+        try {
+            this.state.quickReplies = await this.orm.call(
+                "wa.quick.reply", "get_for_composer", [], {});
+        } catch (_) {}
+    }
+
     async onSend(body, kind, opts = {}) {
         const convId = this.state.convId;
         if (!convId) return;
@@ -118,12 +131,54 @@ export class WaLeadTab extends Component {
         if (url) window.open(url, "_blank", "noopener");
     }
 
+    // ── Send Template ──────────────────────────────────────────────────────────
+
+    async openTemplatePicker() {
+        this.state.showTemplatePicker = true;
+        await this._loadTemplates();
+    }
+
+    async _loadTemplates() {
+        this.state.tplLoading = true;
+        this.state.tplError = "";
+        try {
+            this.state.templates = await this.orm.call(
+                "wa.conversation", "fetch_templates", [], {});
+        } catch (e) {
+            this.state.tplError = e.data?.message || String(e);
+            this.state.templates = [];
+        } finally {
+            this.state.tplLoading = false;
+        }
+    }
+
+    closeTemplatePicker() { this.state.showTemplatePicker = false; }
+
+    get leadName() {
+        return this.props.record?.data?.name || "";
+    }
+
+    async sendTemplate({ template_name, body_values, header_values }) {
+        const convId = this.state.convId;
+        if (!convId) return;
+        this.state.sendError = null;
+        try {
+            await this.orm.call("wa.conversation", "send_message", [[convId]], {
+                body: "", kind: "template",
+                template_name, body_values, header_values,
+            });
+            await this._loadThread(convId);
+        } catch (e) {
+            this.state.sendError = e.data?.message || String(e);
+            throw e;
+        }
+    }
+
     async openAssignPicker() {
         this.state.assignUsers = await this.orm.searchRead(
             "res.users", [["share", "=", false]], ["id", "name"], { limit: 50 }
         );
         this.state.showAssignPicker = true;
-        this.state.showEnrolPicker  = false;
     }
 
     async pickAssignUser(userId) {
@@ -139,31 +194,43 @@ export class WaLeadTab extends Component {
         }
     }
 
-    async openEnrolPicker() {
-        const wfs = await this.orm.searchRead(
-            "wa.workflow", [["is_active", "=", true]], ["id", "name", "slug"], { limit: 30 }
-        );
-        this.state.enrolWorkflows  = wfs;
-        this.state.showEnrolPicker = true;
+    closePickers() {
         this.state.showAssignPicker = false;
     }
 
-    async pickWorkflow(slug) {
-        this.state.showEnrolPicker = false;
+    // Assignment gating (populated by get_thread in Feature 3; default open).
+    get canSend() {
+        const c = this.conversation;
+        return !c || c.can_send !== false;
+    }
+    get sendGateReason() {
+        return this.conversation?.send_gate_reason || "";
+    }
+    get assignmentPending() {
+        return !!this.conversation?.assignment_pending;
+    }
+    get isUnassigned() {
+        return !this.conversation?.assigned_user_id;
+    }
+
+    async claimChat() {
+        if (!this.state.convId) return;
         try {
-            await this.orm.call("wa.conversation", "action_enrol_workflow", [[this.state.convId]], {
-                lead_id: this.leadId,
-                workflow_slug: slug,
-            });
+            await this.orm.call("wa.conversation", "action_claim", [[this.state.convId]], {});
             await this._loadThread(this.state.convId);
         } catch (e) {
             this.state.sendError = e.data?.message || String(e);
         }
     }
 
-    closePickers() {
-        this.state.showAssignPicker = false;
-        this.state.showEnrolPicker  = false;
+    async requestAssignment() {
+        if (!this.state.convId) return;
+        try {
+            await this.orm.call("wa.conversation", "request_assignment", [[this.state.convId]], {});
+            await this._loadThread(this.state.convId);
+        } catch (e) {
+            this.state.sendError = e.data?.message || String(e);
+        }
     }
 
     // ── Derived from thread ───────────────────────────────────────────────────

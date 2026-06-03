@@ -45,6 +45,8 @@ import psycopg2.errors
 from odoo import api, fields, models
 from odoo.exceptions import UserError
 
+from . import interakt_client
+
 _logger = logging.getLogger(__name__)
 
 # ir.config_parameter keys -------------------------------------------------
@@ -194,6 +196,14 @@ class WaConversation(models.Model):
         ondelete='set null',
         copy=False,
         help="RM currently owning this conversation. Synced to Interakt via reassignment.",
+    )
+    assignment_pending = fields.Boolean(
+        'Assignment Pending',
+        default=False,
+        copy=False,
+        help="True while a reassignment request is in flight to the platform and "
+             "Interakt confirmation has not yet returned. The composer shows a "
+             "spinner during this window.",
     )
     window_expires_at = fields.Datetime(
         string='Window Expires',
@@ -587,6 +597,8 @@ class WaConversation(models.Model):
             'enrollment_created':      self._handle_odoo_enrollment_created,
             'enrollment_completed':    self._handle_odoo_enrollment_completed,
             'enrollment_step_changed': self._handle_odoo_enrollment_step_changed,
+            # Chat assignment confirmation from the platform (Interakt result:true)
+            'assignment_confirmed':     self._handle_odoo_assignment_confirmed,
             # Workflow registry sync — routes to wa.workflow model
             'workflow.registry.synced': self._handle_workflow_registry_synced,
             # Workflow toggle ACK — WA platform confirms toggle was applied
@@ -1409,6 +1421,11 @@ class WaConversation(models.Model):
                 "Cannot send — this conversation has no phone number."
             )
 
+        # Ownership gate: an RM may only send on a chat assigned to them.
+        # Managers can send on any chat; system/workflow sends bypass the gate.
+        if initiator == 'rm':
+            self._assert_can_send()
+
         # Hard-block non-template sends when the 24h window is closed.
         if kind in self._WINDOWED_KINDS and initiator == 'rm':
             self._compute_window_state()
@@ -1488,73 +1505,211 @@ class WaConversation(models.Model):
         self.ensure_one()
         self.write({'unread_count': 0})
 
-    def action_reassign(self, lead_id: int | None = None, user_id: int | None = None) -> None:
-        """Reassign this conversation to a different inquiry or RM.
+    # ------------------------------------------------------------------
+    # Ownership / assignment
+    # ------------------------------------------------------------------
 
-        Updates the local ``lead_id`` / ``assigned_user_id`` and publishes an
-        assign request to the platform so Interakt's ``rm_assignments`` follow.
+    def _is_wa_manager(self) -> bool:
+        return self.env.user.has_group('wa_communication.group_wa_manager')
 
-        :param lead_id:  ``leads.new`` record ID to re-link this thread to.
-        :param user_id:  ``res.users`` record ID of the new RM.
+    def _can_send(self) -> bool:
+        """Whether the current user may send on this conversation."""
+        self.ensure_one()
+        if self._is_wa_manager():
+            return True
+        return bool(self.assigned_user_id) and self.assigned_user_id.id == self.env.uid
+
+    def _send_gate_reason(self) -> str:
+        """Human message for why the composer is locked (empty if unlocked)."""
+        self.ensure_one()
+        if self._can_send():
+            return ''
+        if not self.assigned_user_id:
+            return "This chat is unassigned. Claim it to reply."
+        return ("This chat is assigned to %s. Request assignment to reply."
+                % self.assigned_user_id.name)
+
+    def _assert_can_send(self) -> None:
+        self.ensure_one()
+        if not self._can_send():
+            raise UserError(self._send_gate_reason())
+
+    def _request_assign(self, target_user, request_id: str | None = None) -> str:
+        """Publish a platform-routed assign request for ``target_user``.
+
+        Ownership is NOT flipped here — it flips when the platform sends back an
+        ``assignment_confirmed`` event (Interakt ``result:true`` + ``rm_assignments``
+        updated). Sets ``assignment_pending`` so the UI shows a spinner.
+
+        :returns: the correlation ``request_id`` used.
         """
         self.ensure_one()
-        vals: dict = {}
-        if lead_id:
-            vals['lead_id'] = lead_id
-        if user_id:
-            vals['assigned_user_id'] = user_id
-        if vals:
-            self.sudo().write(vals)
+        if not self.phone_number:
+            raise UserError("Cannot assign — this conversation has no phone number.")
+        if not target_user.email:
+            raise UserError(
+                "Cannot assign to %s — that user has no email (required as the "
+                "Interakt agent identifier)." % target_user.name)
 
-        # Publish assign request so platform rm_assignments follows and Interakt
-        # routes future inbounds to the new RM's inbox.
-        rm_email = None
-        if user_id:
-            user = self.env['res.users'].sudo().browse(user_id)
-            rm_email = user.email
-        elif self.assigned_user_id:
-            rm_email = self.assigned_user_id.email
-
-        if rm_email and self.phone_number:
-            topic = self.env['ir.config_parameter'].sudo().get_param(
-                _TOPIC_WA_REQUESTS, 'cd-prod-odoo-wa-requests'
-            )
-            import uuid as _uuid
-            request_data = {
-                'request_type': 'assign',
-                'request_id': str(_uuid.uuid4()),
-                'phone': self.phone_number,
-                'rm_email': rm_email,
-            }
-
-            def _publish():
-                self.env['cleardeals.pubsub'].publish_async(topic, request_data)
-
-            self.env.cr.postcommit.add(_publish)
-
-    def action_enrol_workflow(self, lead_id: int | None = None, workflow_slug: str | None = None) -> None:
-        """Publish a workflow enrolment request for this conversation's phone."""
-        self.ensure_one()
-        if not workflow_slug:
-            raise UserError("workflow_slug is required")
-        phone = self.phone_number
-        actor_id = self.lead_id.id if self.lead_id else (lead_id or None)
+        import uuid as _uuid
+        req_id = request_id or str(_uuid.uuid4())
         topic = self.env['ir.config_parameter'].sudo().get_param(
             _TOPIC_WA_REQUESTS, 'cd-prod-odoo-wa-requests'
         )
-        import uuid as _uuid
         request_data = {
-            'request_type': 'enrol',
-            'request_id': str(_uuid.uuid4()),
-            'phone': phone,
-            'actor_id': actor_id,
-            'workflow_slug': workflow_slug,
+            'request_type': 'assign',
+            'request_id': req_id,
+            'phone': self.phone_number,
+            'rm_email': target_user.email,
+            'rm_name': target_user.name,
+            'rm_odoo_id': target_user.id,
+            'actor_id': self.lead_id.id if self.lead_id else None,
         }
+        self.sudo().write({'assignment_pending': True})
 
         def _publish():
             self.env['cleardeals.pubsub'].publish_async(topic, request_data)
 
         self.env.cr.postcommit.add(_publish)
+        return req_id
+
+    def action_claim(self) -> None:
+        """Self-claim an unassigned conversation (instant, no approval)."""
+        self.ensure_one()
+        if self.assigned_user_id and not self._is_wa_manager():
+            raise UserError(
+                "This chat is already assigned to %s." % self.assigned_user_id.name)
+        self._request_assign(self.env.user)
+
+    def request_assignment(self, note: str | None = None) -> int:
+        """Raise a reassignment request to the current assignee.
+
+        Returns the ``wa.reassignment.request`` id.
+        """
+        self.ensure_one()
+        if self._can_send():
+            raise UserError("You can already reply on this chat.")
+        if not self.assigned_user_id:
+            # Nobody owns it — claim directly instead of a handshake.
+            self.action_claim()
+            return 0
+        existing = self.env['wa.reassignment.request'].search([
+            ('conversation_id', '=', self.id),
+            ('requester_id', '=', self.env.uid),
+            ('state', 'in', ('pending', 'confirming')),
+        ], limit=1)
+        if existing:
+            return existing.id
+        req = self.env['wa.reassignment.request'].create({
+            'conversation_id': self.id,
+            'requester_id': self.env.uid,
+            'current_assignee_id': self.assigned_user_id.id,
+            'note': note or '',
+            'state': 'pending',
+        })
+        # Notify the current assignee with an actionable card.
+        try:
+            self.env['bus.bus']._sendone(
+                'wa_notification_%d' % self.assigned_user_id.id,
+                'wa_event',
+                {
+                    'type': 'reassignment_request',
+                    'request_id': req.id,
+                    'requester_name': self.env.user.name,
+                    'phone': self.phone_number,
+                    'lead_name': self.lead_id.name if self.lead_id else '',
+                    'note': note or '',
+                    'conversation_id': self.id,
+                },
+            )
+        except Exception:  # noqa: BLE001
+            _logger.debug("request_assignment notify failed", exc_info=True)
+        return req.id
+
+    def action_reassign(self, lead_id: int | None = None, user_id: int | None = None) -> None:
+        """Manager force-reassign (or re-link inquiry) — platform-routed.
+
+        Managers may reassign instantly without the approval handshake; the
+        ownership flip still waits for the platform's ``assignment_confirmed``.
+        """
+        self.ensure_one()
+        if not self._is_wa_manager():
+            raise UserError("Only a WhatsApp manager can force-reassign a chat.")
+        if lead_id:
+            self.sudo().write({'lead_id': lead_id})
+        if user_id:
+            target = self.env['res.users'].sudo().browse(user_id)
+            self._request_assign(target)
+
+    def _handle_odoo_assignment_confirmed(self, event: dict, pubsub_message_id: str) -> None:
+        """Platform confirmed (or failed) an Interakt chat assignment.
+
+        On success: flip ``assigned_user_id``, clear the pending marker, resolve
+        any matching reassignment request, log a system message, and notify the
+        new assignee so their composer unlocks. On failure: notify the requester.
+        """
+        phone = event.get('phone')
+        rm_odoo_id = event.get('rm_odoo_id')
+        request_id = event.get('request_id')
+        success = event.get('success', True)
+
+        conv = self.search([('phone_number', '=', phone)], limit=1) if phone else self
+        if not conv:
+            return
+        conv = conv[:1]
+
+        req = None
+        if request_id:
+            req = self.env['wa.reassignment.request'].sudo().search(
+                [('request_id', '=', request_id)], limit=1)
+
+        if not success:
+            conv.sudo().write({'assignment_pending': False})
+            if req:
+                req._mark_failed(event.get('failure_reason') or '')
+            return
+
+        new_user = self.env['res.users'].sudo().browse(rm_odoo_id) if rm_odoo_id else None
+        vals = {'assignment_pending': False}
+        if new_user and new_user.exists():
+            vals['assigned_user_id'] = new_user.id
+        conv.sudo().write(vals)
+
+        if new_user:
+            conv._owa_log_system_event("Chat assigned to %s" % new_user.name)
+            try:
+                self.env['bus.bus']._sendone(
+                    'wa_notification_%d' % new_user.id,
+                    'wa_event',
+                    {
+                        'type': 'assignment_changed',
+                        'phone': conv.phone_number,
+                        'lead_name': conv.lead_id.name if conv.lead_id else '',
+                        'conversation_id': conv.id,
+                        'message': "You are now assigned to this chat.",
+                    },
+                )
+            except Exception:  # noqa: BLE001
+                _logger.debug("assignment_changed notify failed", exc_info=True)
+        if req:
+            req._mark_approved()
+
+    def _owa_log_system_event(self, body: str) -> None:
+        """Append a system-event ``wa.message`` to this conversation's timeline."""
+        self.ensure_one()
+        try:
+            self.env['wa.message'].sudo().create({
+                'conversation_id': self.id,
+                'direction': 'outbound',
+                'initiator': 'system',
+                'kind': 'system',
+                'body': body,
+                'status': 'sent',
+                'occurred_at': fields.Datetime.now(),
+                'lead_id': self.lead_id.id if self.lead_id else False,
+            })
+        except Exception:  # noqa: BLE001
+            _logger.debug("system event log failed", exc_info=True)
 
     def _inbox_conv_status(self, conv, window_open):
         """Derive a display status for the inbox table."""
@@ -1636,6 +1791,8 @@ class WaConversation(models.Model):
                 'window_expires_at': conv.window_expires_at.isoformat() if conv.window_expires_at else None,
                 'assigned_user_id': conv.assigned_user_id.id if conv.assigned_user_id else None,
                 'assigned_user_name': conv.assigned_user_id.name if conv.assigned_user_id else None,
+                'can_send': conv._can_send(),
+                'assignment_pending': conv.assignment_pending,
                 'workflow_name': workflow_name,
                 'interakt_url': conv.interakt_inbox_url,
             })
@@ -1663,6 +1820,20 @@ class WaConversation(models.Model):
             'status': status_counts,
             'assigned_rms': list(rm_counts.values()),
         }
+
+    @api.model
+    def fetch_templates(self, template_name: str | None = None) -> list[dict]:
+        """Fetch APPROVED WhatsApp templates live from Interakt for the picker.
+
+        Odoo holds the Interakt API key (system params) and queries the
+        Get-All-Templates endpoint on demand — there is no local cache. Each
+        returned template carries its rendered skeleton (header/body/footer),
+        button labels, and an ordered list of ``{{N}}`` variable slots so the
+        RM can fill them before sending.
+
+        :raises UserError: if the key is unset or Interakt is unreachable.
+        """
+        return interakt_client.fetch_templates(self.env, template_name=template_name)
 
     @api.model
     def get_thread(self, conversation_id: int) -> dict:
@@ -1744,6 +1915,11 @@ class WaConversation(models.Model):
                 'window_expires_at': conv.window_expires_at.isoformat() if conv.window_expires_at else None,
                 'interakt_url': conv.interakt_inbox_url,
                 'unread_count': conv.unread_count,
+                # Ownership gating for the composer.
+                'can_send': conv._can_send(),
+                'send_gate_reason': conv._send_gate_reason(),
+                'is_manager': conv._is_wa_manager(),
+                'assignment_pending': conv.assignment_pending,
             },
             'messages': messages,
             'stats': stats,

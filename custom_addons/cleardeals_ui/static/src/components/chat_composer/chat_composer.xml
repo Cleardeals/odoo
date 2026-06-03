@@ -7,8 +7,16 @@
             <input type="file" t-ref="fileInput" class="cd-chat-composer__file-hidden"
                    t-on-change="(ev) => this.onFileSelected(ev)"/>
 
+            <!-- Assignee-gate notice (takes precedence over the window notice) -->
+            <t t-if="props.disabled and props.disabledReason">
+                <div class="cd-chat-composer__gate-notice">
+                    <i class="fa fa-lock" aria-hidden="true"/>
+                    <span t-esc="props.disabledReason"/>
+                </div>
+            </t>
+
             <!-- Closed-window notice -->
-            <t t-if="isClosed">
+            <t t-elif="isClosed">
                 <div class="cd-chat-composer__closed-notice">
                     <i class="fa fa-lock" aria-hidden="true"/>
                     24h window closed — only templates can be sent
@@ -92,6 +100,23 @@
             <!-- Compose row -->
             <div class="cd-chat-composer__row">
                 <t t-if="canSendFreeText">
+                    <!-- Quick replies -->
+                    <div class="cd-chat-composer__qr-wrap">
+                        <button class="btn cd-chat-composer__attach-btn"
+                                t-att-class="{ 'cd-chat-composer__attach-btn--active': state.showQuickReplies }"
+                                title="Quick replies"
+                                t-on-click="() => this.toggleQuickReplies()">
+                            <i class="fa fa-bolt" aria-hidden="true"/>
+                        </button>
+                        <t t-if="state.showQuickReplies">
+                            <CdQuickReplyPicker
+                                replies="props.quickReplies"
+                                initialQuery="state.body"
+                                onSelect="(body) => this.insertQuickReply(body)"
+                                onClose="() => this.closeQuickReplies()"/>
+                        </t>
+                    </div>
+
                     <button class="btn cd-chat-composer__attach-btn"
                             title="Attach image(s)"
                             t-on-click="() => this.selectAttach('image')">

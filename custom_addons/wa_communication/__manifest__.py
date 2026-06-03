@@ -47,13 +47,16 @@ Client action at WhatsApp → Dashboard providing:
     'license': 'LGPL-3',
     'depends': ['cleardeals_pubsub', 'leads', 'cleardeals_ui'],
     'data': [
+        'security/wa_security.xml',
         'security/ir.model.access.csv',
+        'security/wa_quick_reply_rules.xml',
         'data/wa_communication_config_data.xml',
         'views/wa_message_views.xml',
         'views/wa_dashboard_action.xml',
         'views/wa_inbox_action.xml',
         'views/wa_lead_form_inherit.xml',
         'views/wa_communication_menus.xml',
+        'views/wa_quick_reply_action.xml',
     ],
     'assets': {
         'web.assets_backend': [

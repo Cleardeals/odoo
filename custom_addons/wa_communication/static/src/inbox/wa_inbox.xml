@@ -109,6 +109,10 @@
                                     </t>
                                 </div>
                                 <div class="wa-inbox__thread-actions">
+                                    <button class="btn btn-sm btn-outline-primary"
+                                            t-on-click="() => this.openTemplatePicker()">
+                                        <i class="fa fa-envelope-o" aria-hidden="true"/> Template
+                                    </button>
                                     <t t-if="activeConversation and activeConversation.lead_id">
                                         <button class="btn btn-sm btn-outline-secondary"
                                                 t-on-click="() => this.openLead(activeConversation.lead_id)">
@@ -135,8 +139,36 @@
                                 <CdChatThread messages="activeMessages"/>
                             </t>
 
+                            <t t-if="!canSend">
+                                <div class="wa-inbox__claim-bar">
+                                    <t t-if="assignmentPending">
+                                        <span class="wa-inbox__claim-msg">
+                                            <i class="fa fa-spinner fa-spin" aria-hidden="true"/>
+                                            Assigning…
+                                        </span>
+                                    </t>
+                                    <t t-else="">
+                                        <span class="wa-inbox__claim-msg" t-esc="sendGateReason"/>
+                                        <t t-if="isUnassigned">
+                                            <button class="btn btn-sm btn-primary"
+                                                    t-on-click="() => this.claimChat()">
+                                                <i class="fa fa-hand-paper-o" aria-hidden="true"/> Claim chat
+                                            </button>
+                                        </t>
+                                        <t t-else="">
+                                            <button class="btn btn-sm btn-outline-primary"
+                                                    t-on-click="() => this.requestAssignment()">
+                                                <i class="fa fa-user-plus" aria-hidden="true"/> Request assignment
+                                            </button>
+                                        </t>
+                                    </t>
+                                </div>
+                            </t>
                             <CdChatComposer
                                 windowState="windowState"
+                                quickReplies="state.quickReplies"
+                                disabled="!canSend"
+                                disabledReason="sendGateReason"
                                 onSend="(body, kind, opts) => this.onSend(body, kind, opts)"/>
                         </div>
                     </t>
@@ -213,6 +245,18 @@
                     </t>
                 </div>
             </div>
+
+            <!-- Send-template modal -->
+            <t t-if="state.showTemplatePicker">
+                <CdTemplatePickerModal
+                    templates="state.templates"
+                    loading="state.tplLoading"
+                    error="state.tplError"
+                    defaultBodyValue1="activeConversation and activeConversation.lead_name ? activeConversation.lead_name : ''"
+                    onSend="(payload) => this.sendTemplate(payload)"
+                    onClose="() => this.closeTemplatePicker()"
+                    onRefresh="() => this._loadTemplates()"/>
+            </t>
         </div>
     </t>
 </templates>

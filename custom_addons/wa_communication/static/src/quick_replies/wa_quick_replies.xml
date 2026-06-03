@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="wa_communication.WaQuickReplies">
+        <div class="wa-qr">
+            <div class="wa-qr__header">
+                <div>
+                    <h2 class="wa-qr__title">
+                        <i class="fa fa-bolt" aria-hidden="true"/> Quick Replies
+                    </h2>
+                    <p class="wa-qr__subtitle">
+                        Save canned messages to insert into any WhatsApp chat.
+                    </p>
+                </div>
+                <button class="btn btn-primary wa-qr__new-btn" t-on-click="() => this.newReply()">
+                    <i class="fa fa-plus" aria-hidden="true"/> New quick reply
+                </button>
+            </div>
+
+            <t t-if="state.loading">
+                <div class="wa-qr__loading"><i class="fa fa-spinner fa-spin"/></div>
+            </t>
+
+            <t t-else="">
+                <!-- Personal -->
+                <div class="wa-qr__section-title">
+                    <i class="fa fa-user" aria-hidden="true"/> My quick replies
+                </div>
+                <div class="wa-qr__grid">
+                    <t t-if="personalReplies.length === 0">
+                        <div class="wa-qr__empty">No personal quick replies yet.</div>
+                    </t>
+                    <t t-foreach="personalReplies" t-as="r" t-key="r.id">
+                        <t t-call="wa_communication.WaQuickReplyCard"/>
+                    </t>
+                </div>
+
+                <!-- Shared -->
+                <div class="wa-qr__section-title">
+                    <i class="fa fa-users" aria-hidden="true"/> Shared with the team
+                    <t t-if="!state.isManager">
+                        <span class="wa-qr__readonly-tag">read-only</span>
+                    </t>
+                </div>
+                <div class="wa-qr__grid">
+                    <t t-if="sharedReplies.length === 0">
+                        <div class="wa-qr__empty">No shared quick replies.</div>
+                    </t>
+                    <t t-foreach="sharedReplies" t-as="r" t-key="r.id">
+                        <t t-call="wa_communication.WaQuickReplyCard"/>
+                    </t>
+                </div>
+            </t>
+
+            <!-- Editor modal -->
+            <t t-if="state.editing">
+                <div class="wa-qr__overlay" t-on-click="() => this.cancelEdit()">
+                    <div class="wa-qr__modal" t-on-click.stop="() => {}">
+                        <div class="wa-qr__modal-header">
+                            <span t-esc="state.editing.id ? 'Edit quick reply' : 'New quick reply'"/>
+                            <button class="wa-qr__modal-close" t-on-click="() => this.cancelEdit()">×</button>
+                        </div>
+                        <div class="wa-qr__modal-body">
+                            <label class="wa-qr__label">Title</label>
+                            <input type="text" class="wa-qr__input" placeholder="e.g. Site visit confirm"
+                                   t-att-value="state.editing.title"
+                                   t-on-input="(ev) => { this.state.editing.title = ev.target.value; }"/>
+
+                            <label class="wa-qr__label">Shortcut (optional)</label>
+                            <input type="text" class="wa-qr__input" placeholder="/visit"
+                                   t-att-value="state.editing.shortcut"
+                                   t-on-input="(ev) => { this.state.editing.shortcut = ev.target.value; }"/>
+
+                            <label class="wa-qr__label">Message</label>
+                            <textarea class="wa-qr__textarea" rows="5"
+                                      placeholder="Type the canned message…"
+                                      t-att-value="state.editing.body"
+                                      t-on-input="(ev) => { this.state.editing.body = ev.target.value; }"/>
+
+                            <t t-if="state.isManager">
+                                <label class="wa-qr__check">
+                                    <input type="checkbox"
+                                           t-att-checked="state.editing.is_shared"
+                                           t-on-change="(ev) => { this.state.editing.is_shared = ev.target.checked; }"/>
+                                    Share with the whole team
+                                </label>
+                            </t>
+                        </div>
+                        <div class="wa-qr__modal-footer">
+                            <button class="btn btn-secondary" t-on-click="() => this.cancelEdit()">Cancel</button>
+                            <button class="btn btn-primary" t-att-disabled="state.saving"
+                                    t-on-click="() => this.save()">
+                                <t t-if="state.saving"><i class="fa fa-spinner fa-spin"/></t>
+                                <t t-else="">Save</t>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </t>
+        </div>
+    </t>
+
+    <!-- Reusable card -->
+    <t t-name="wa_communication.WaQuickReplyCard">
+        <div class="wa-qr__card">
+            <div class="wa-qr__card-head">
+                <span class="wa-qr__card-title" t-esc="r.title"/>
+                <t t-if="r.shortcut">
+                    <span class="wa-qr__card-shortcut" t-esc="r.shortcut"/>
+                </t>
+            </div>
+            <div class="wa-qr__card-body" t-esc="r.body"/>
+            <div class="wa-qr__card-actions">
+                <t t-if="canEdit(r)">
+                    <button class="wa-qr__icon-btn" title="Edit" t-on-click="() => this.editReply(r)">
+                        <i class="fa fa-pencil" aria-hidden="true"/>
+                    </button>
+                    <button class="wa-qr__icon-btn wa-qr__icon-btn--danger" title="Delete"
+                            t-on-click="() => this.remove(r)">
+                        <i class="fa fa-trash" aria-hidden="true"/>
+                    </button>
+                </t>
+                <t t-else="">
+                    <span class="wa-qr__card-lock"><i class="fa fa-lock" aria-hidden="true"/></span>
+                </t>
+            </div>
+        </div>
+    </t>
+</templates>

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="cleardeals_ui.QuickReplyPicker">
+        <div class="cd-qr-picker" t-ref="root">
+            <div class="cd-qr-picker__header">
+                <i class="fa fa-bolt" aria-hidden="true"/>
+                <input type="text" class="cd-qr-picker__search"
+                       placeholder="Search quick replies…"
+                       t-att-value="state.query"
+                       t-on-input="(ev) => this.onSearchInput(ev)"
+                       autofocus="autofocus"/>
+            </div>
+            <div class="cd-qr-picker__list">
+                <t t-if="filtered.length === 0">
+                    <div class="cd-qr-picker__empty">
+                        <i class="fa fa-comment-o" aria-hidden="true"/>
+                        <span>No quick replies</span>
+                    </div>
+                </t>
+                <t t-foreach="filtered" t-as="reply" t-key="reply.id">
+                    <div class="cd-qr-picker__item" t-on-click="() => this.onPick(reply)">
+                        <div class="cd-qr-picker__item-head">
+                            <span class="cd-qr-picker__item-title" t-esc="reply.title"/>
+                            <t t-if="reply.shortcut">
+                                <span class="cd-qr-picker__item-shortcut" t-esc="reply.shortcut"/>
+                            </t>
+                            <t t-if="reply.is_shared">
+                                <span class="cd-qr-picker__item-shared" title="Shared with the team">
+                                    <i class="fa fa-users" aria-hidden="true"/>
+                                </span>
+                            </t>
+                        </div>
+                        <div class="cd-qr-picker__item-body" t-esc="reply.body"/>
+                    </div>
+                </t>
+            </div>
+        </div>
+    </t>
+</templates>

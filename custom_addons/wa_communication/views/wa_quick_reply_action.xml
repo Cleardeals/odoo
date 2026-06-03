@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Quick Replies management client action (custom OWL UI) -->
+    <record id="action_wa_quick_replies" model="ir.actions.client">
+        <field name="name">WhatsApp Quick Replies</field>
+        <field name="tag">wa_quick_replies</field>
+    </record>
+
+    <menuitem id="menu_wa_quick_replies"
+              name="Quick Replies"
+              parent="menu_wa_communication_messaging"
+              action="action_wa_quick_replies"
+              sequence="20"/>
+</odoo>

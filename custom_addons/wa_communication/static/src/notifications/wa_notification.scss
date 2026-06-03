@@ -90,6 +90,9 @@
 
 .cd-wa-notif__actions {
     margin-top: 0.5rem;
+    display: flex;
+    gap: 8px;
+    align-items: center;
 }
 
 .cd-wa-notif__btn {
@@ -102,6 +105,15 @@
     padding: 0;
 
     &:hover { text-decoration: underline; }
+    &:disabled { opacity: 0.5; cursor: default; text-decoration: none; }
+
+    &--primary {
+        color: #fff;
+        background: #7c3aed;
+        border-radius: 6px;
+        padding: 4px 12px;
+        &:hover { text-decoration: none; background: #6d28d9; }
+    }
 }
 
 @keyframes cd-wa-notif-slidein {

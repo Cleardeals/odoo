@@ -71,6 +71,18 @@
         <field name="value">cd-prod-customer-events</field>
     </record>
 
+    <!-- Interakt direct API (template catalogue fetch).
+         Set the API key (Interakt > Developer Settings) per environment. -->
+    <record id="param_interakt_api_key" model="ir.config_parameter">
+        <field name="key">wa_communication.interakt_api_key</field>
+        <field name="value"></field>
+    </record>
+
+    <record id="param_interakt_base_url" model="ir.config_parameter">
+        <field name="key">wa_communication.interakt_base_url</field>
+        <field name="value">https://api.interakt.ai</field>
+    </record>
+
     </data>
 
     <!-- noupdate="0": code constants that must always be applied on upgrade. -->

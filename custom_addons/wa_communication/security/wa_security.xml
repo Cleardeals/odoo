@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="0">
+
+    <!--
+        WhatsApp manager group.
+
+        The module already grants every internal user (base.group_user)
+        read/write on the wa.* models, so base.group_user IS the "WA user"
+        baseline. We only need to distinguish a MANAGER who can:
+          * send on ANY conversation (bypass the assignee gate),
+          * force-reassign chats without the approval handshake,
+          * create / edit SHARED quick replies.
+    -->
+
+    <record id="group_wa_manager" model="res.groups">
+        <field name="name">WhatsApp Manager</field>
+        <field name="implied_ids" eval="[(4, ref('base.group_user'))]"/>
+        <field name="user_ids" eval="[(4, ref('base.user_admin'))]"/>
+    </record>
+
+</odoo>

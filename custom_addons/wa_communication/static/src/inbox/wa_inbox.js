@@ -7,6 +7,7 @@ import { session }       from "@web/session";
 import { CdChatThread }  from "@cleardeals_ui/index";
 import { CdChatComposer } from "@cleardeals_ui/index";
 import { CdWindowBadge } from "@cleardeals_ui/index";
+import { CdTemplatePickerModal } from "@cleardeals_ui/index";
 import { relativeTime } from "@cleardeals_ui/utils/datetime";
 
 const DATE_RANGES = [
@@ -33,7 +34,7 @@ const STATUS_COLORS = {
 export class WaInbox extends Component {
     static template   = "wa_communication.WaInbox";
     static props      = { "*": true };
-    static components = { CdChatThread, CdChatComposer, CdWindowBadge };
+    static components = { CdChatThread, CdChatComposer, CdWindowBadge, CdTemplatePickerModal };
 
     setup() {
         this.orm        = useService("orm");
@@ -61,6 +62,15 @@ export class WaInbox extends Component {
             thread:         null,
             threadLoading:  false,
             sendError:      null,
+
+            // Composer aids
+            quickReplies:   [],
+
+            // Template picker
+            showTemplatePicker: false,
+            templates:          [],
+            tplLoading:         false,
+            tplError:           "",
         });
 
         this._searchDebounce = null;
@@ -68,6 +78,7 @@ export class WaInbox extends Component {
         onMounted(() => {
             this._loadCounts();
             this._loadConversations();
+            this._loadQuickReplies();
             this._subscribeBus();
         });
 
@@ -98,6 +109,13 @@ export class WaInbox extends Component {
         try {
             const counts = await this.orm.call("wa.conversation", "get_inbox_counts", [], {});
             this.state.counts = counts;
+        } catch (_) {}
+    }
+
+    async _loadQuickReplies() {
+        try {
+            this.state.quickReplies = await this.orm.call(
+                "wa.quick.reply", "get_for_composer", [], {});
         } catch (_) {}
     }
 
@@ -218,6 +236,46 @@ export class WaInbox extends Component {
         }
     }
 
+    // ── Send Template ──────────────────────────────────────────────────────────
+
+    async openTemplatePicker() {
+        if (!this.state.activeConvId) return;
+        this.state.showTemplatePicker = true;
+        await this._loadTemplates();
+    }
+
+    async _loadTemplates() {
+        this.state.tplLoading = true;
+        this.state.tplError = "";
+        try {
+            this.state.templates = await this.orm.call(
+                "wa.conversation", "fetch_templates", [], {});
+        } catch (e) {
+            this.state.tplError = e.data?.message || String(e);
+            this.state.templates = [];
+        } finally {
+            this.state.tplLoading = false;
+        }
+    }
+
+    closeTemplatePicker() { this.state.showTemplatePicker = false; }
+
+    async sendTemplate({ template_name, body_values, header_values }) {
+        const convId = this.state.activeConvId;
+        if (!convId) return;
+        this.state.sendError = null;
+        try {
+            await this.orm.call("wa.conversation", "send_message", [[convId]], {
+                body: "", kind: "template",
+                template_name, body_values, header_values,
+            });
+            await this._loadThread(convId);
+        } catch (e) {
+            this.state.sendError = e.data?.message || String(e);
+            throw e;
+        }
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     statusLabel(key) {
@@ -253,6 +311,46 @@ export class WaInbox extends Component {
 
     get windowExpiresAt() {
         return this.activeConversation?.window_expires_at || null;
+    }
+
+    // Assignment gating (populated by get_thread in Feature 3; default open).
+    get canSend() {
+        const c = this.activeConversation;
+        return !c || c.can_send !== false;
+    }
+
+    get sendGateReason() {
+        return this.activeConversation?.send_gate_reason || "";
+    }
+
+    get assignmentPending() {
+        return !!this.activeConversation?.assignment_pending;
+    }
+
+    get isUnassigned() {
+        return !this.activeConversation?.assigned_user_id;
+    }
+
+    async claimChat() {
+        const convId = this.state.activeConvId;
+        if (!convId) return;
+        try {
+            await this.orm.call("wa.conversation", "action_claim", [[convId]], {});
+            await this._loadThread(convId);
+        } catch (e) {
+            this.state.sendError = e.data?.message || String(e);
+        }
+    }
+
+    async requestAssignment() {
+        const convId = this.state.activeConvId;
+        if (!convId) return;
+        try {
+            await this.orm.call("wa.conversation", "request_assignment", [[convId]], {});
+            await this._loadThread(convId);
+        } catch (e) {
+            this.state.sendError = e.data?.message || String(e);
+        }
     }
 }
 

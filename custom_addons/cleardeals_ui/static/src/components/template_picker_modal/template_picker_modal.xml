@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="cleardeals_ui.TemplatePickerModal">
+        <div class="cd-tpl-overlay" t-on-click="() => this.props.onClose()">
+            <div class="cd-tpl-modal" t-on-click.stop="() => {}">
+
+                <div class="cd-tpl-modal__header">
+                    <t t-if="state.selected">
+                        <button class="cd-tpl-modal__back" t-on-click="() => this.backToList()">
+                            <i class="fa fa-arrow-left" aria-hidden="true"/>
+                        </button>
+                    </t>
+                    <span class="cd-tpl-modal__title">
+                        <t t-if="state.selected" t-esc="state.selected.display_name || state.selected.name"/>
+                        <t t-else="">Send a template</t>
+                    </span>
+                    <button class="cd-tpl-modal__close" t-on-click="() => this.props.onClose()">×</button>
+                </div>
+
+                <!-- STEP 1 — list -->
+                <t t-if="!state.selected">
+                    <div class="cd-tpl-modal__toolbar">
+                        <input type="text" class="cd-tpl-modal__search"
+                               placeholder="Search templates…"
+                               t-att-value="state.query"
+                               t-on-input="(ev) => { this.state.query = ev.target.value; }"/>
+                        <t t-if="props.onRefresh">
+                            <button class="cd-tpl-modal__refresh" title="Refresh from Interakt"
+                                    t-on-click="() => this.props.onRefresh()">
+                                <i class="fa fa-refresh" aria-hidden="true"/>
+                            </button>
+                        </t>
+                    </div>
+
+                    <div class="cd-tpl-modal__body">
+                        <t t-if="props.loading">
+                            <div class="cd-tpl-modal__loading"><i class="fa fa-spinner fa-spin"/> Loading templates…</div>
+                        </t>
+                        <t t-elif="props.error">
+                            <div class="cd-tpl-modal__error">
+                                <i class="fa fa-exclamation-triangle" aria-hidden="true"/>
+                                <span t-esc="props.error"/>
+                            </div>
+                        </t>
+                        <t t-elif="filtered.length === 0">
+                            <div class="cd-tpl-modal__empty">No approved templates found.</div>
+                        </t>
+                        <t t-else="">
+                            <t t-foreach="filtered" t-as="t" t-key="t.name">
+                                <div class="cd-tpl-modal__item" t-on-click="() => this.selectTemplate(t)">
+                                    <div class="cd-tpl-modal__item-head">
+                                        <span class="cd-tpl-modal__item-name"
+                                              t-esc="t.display_name || t.name"/>
+                                        <t t-if="t.category">
+                                            <span class="cd-tpl-modal__item-cat" t-esc="t.category"/>
+                                        </t>
+                                        <span class="cd-tpl-modal__item-lang" t-esc="t.language"/>
+                                    </div>
+                                    <div class="cd-tpl-modal__item-body" t-esc="t.body"/>
+                                    <t t-if="t.variables.length">
+                                        <div class="cd-tpl-modal__item-vars">
+                                            <i class="fa fa-pencil-square-o" aria-hidden="true"/>
+                                            <t t-esc="t.variables.length"/> variable(s)
+                                        </div>
+                                    </t>
+                                </div>
+                            </t>
+                        </t>
+                    </div>
+                </t>
+
+                <!-- STEP 2 — fill + preview -->
+                <t t-else="">
+                    <div class="cd-tpl-modal__body cd-tpl-modal__fill">
+                        <div class="cd-tpl-modal__fill-form">
+                            <t t-if="state.selected.variables.length === 0">
+                                <div class="cd-tpl-modal__novar">This template has no variables.</div>
+                            </t>
+                            <t t-foreach="state.selected.variables" t-as="v" t-key="v.scope + '_' + v.position">
+                                <label class="cd-tpl-modal__label" t-esc="v.label"/>
+                                <input type="text" class="cd-tpl-modal__input"
+                                       t-att-value="state.values[v.scope + ':' + v.position]"
+                                       t-on-input="(ev) => this.setValue(v, ev)"/>
+                            </t>
+                        </div>
+
+                        <div class="cd-tpl-modal__preview">
+                            <div class="cd-tpl-modal__preview-label">Preview</div>
+                            <div class="cd-tpl-modal__bubble">
+                                <t t-if="headerPreview">
+                                    <div class="cd-tpl-modal__bubble-header" t-esc="headerPreview"/>
+                                </t>
+                                <div class="cd-tpl-modal__bubble-body" t-esc="bodyPreview"/>
+                                <t t-if="state.selected.footer">
+                                    <div class="cd-tpl-modal__bubble-footer" t-esc="state.selected.footer"/>
+                                </t>
+                                <t t-if="state.selected.buttons.length">
+                                    <div class="cd-tpl-modal__bubble-buttons">
+                                        <t t-foreach="state.selected.buttons" t-as="b" t-key="b_index">
+                                            <div class="cd-tpl-modal__bubble-btn">
+                                                <i class="fa fa-reply" aria-hidden="true"/>
+                                                <span t-esc="b"/>
+                                            </div>
+                                        </t>
+                                    </div>
+                                </t>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="cd-tpl-modal__footer">
+                        <button class="btn btn-secondary" t-on-click="() => this.backToList()">Back</button>
+                        <button class="btn btn-primary"
+                                t-att-disabled="!canSend or state.sending"
+                                t-on-click="() => this.send()">
+                            <t t-if="state.sending"><i class="fa fa-spinner fa-spin"/></t>
+                            <t t-else=""><i class="fa fa-send" aria-hidden="true"/> Send template</t>
+                        </button>
+                    </div>
+                </t>
+
+            </div>
+        </div>
+    </t>
+</templates>

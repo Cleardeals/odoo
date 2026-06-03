@@ -1,6 +1,7 @@
 /** @odoo-module */
 
 import { Component, useState, useRef } from "@odoo/owl";
+import { CdQuickReplyPicker } from "../quick_reply_picker/quick_reply_picker";
 
 /**
  * CdChatComposer — message compose box with multi-file attach and send.
@@ -9,17 +10,22 @@ import { Component, useState, useRef } from "@odoo/owl";
  *   windowState  {String}   "open" | "closed"
  *   onSend       {Function} (body, kind, opts) => void
  *   disabled     {Boolean}  optional hard-disable
+ *   disabledReason {String} optional — shown when disabled (e.g. assignee gate)
+ *   quickReplies {Array}    optional — [{id,title,shortcut,body,is_shared}]
  */
 export class CdChatComposer extends Component {
     static template = "cleardeals_ui.ChatComposer";
+    static components = { CdQuickReplyPicker };
 
     static props = {
-        windowState: { type: String },
-        onSend:      { type: Function },
-        disabled:    { type: Boolean, optional: true },
+        windowState:    { type: String },
+        onSend:         { type: Function },
+        disabled:       { type: Boolean, optional: true },
+        disabledReason: { type: String, optional: true },
+        quickReplies:   { type: Array, optional: true },
     };
 
-    static defaultProps = { disabled: false };
+    static defaultProps = { disabled: false, disabledReason: "", quickReplies: [] };
 
     setup() {
         this.state = useState({
@@ -27,6 +33,7 @@ export class CdChatComposer extends Component {
             pendingFiles:  [],  // [{id, kind, name, localPreviewUrl, uploadUrl, uploading, error}]
             sharedCaption: "",
             uploadError:   null,
+            showQuickReplies: false,
         });
         this._nextFileId = 0;
         this._selectingKind = null;
@@ -55,6 +62,26 @@ export class CdChatComposer extends Component {
             ev.preventDefault();
             this.sendText();
         }
+    }
+
+    // ── Quick replies ──────────────────────────────────────────────────────────
+
+    get hasQuickReplies() { return (this.props.quickReplies || []).length > 0; }
+
+    toggleQuickReplies() {
+        if (!this.canSendFreeText) return;
+        this.state.showQuickReplies = !this.state.showQuickReplies;
+    }
+
+    closeQuickReplies() { this.state.showQuickReplies = false; }
+
+    insertQuickReply(body) {
+        // Insert verbatim; if the box only holds a "/shortcut" query, replace it.
+        const cur = this.state.body || "";
+        this.state.body = (cur.trim().startsWith("/") || !cur.trim())
+            ? body
+            : (cur + (cur.endsWith(" ") ? "" : " ") + body);
+        this.state.showQuickReplies = false;
     }
 
     sendText() {
