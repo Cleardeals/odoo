@@ -27,6 +27,7 @@ export class WaLeadTab extends Component {
         this.orm        = useService("orm");
         this.action     = useService("action");
         this.busService = useService("bus_service");
+        this.notification = useService("notification");
 
         this.state = useState({
             convId:    null,
@@ -225,17 +226,25 @@ export class WaLeadTab extends Component {
 
     async requestAssignment() {
         if (!this.state.convId) return;
+        const assignee = this.conversation?.assigned_user_name || "the current owner";
         try {
             await this.orm.call("wa.conversation", "request_assignment", [[this.state.convId]], {});
+            this.notification.add(
+                `Assignment requested from ${assignee}. You'll be notified when they approve.`,
+                { type: "success" }
+            );
             await this._loadThread(this.state.convId);
         } catch (e) {
-            this.state.sendError = e.data?.message || String(e);
+            const msg = e.data?.message || String(e);
+            this.state.sendError = msg;
+            this.notification.add(msg, { type: "danger" });
         }
     }
 
     // ── Derived from thread ───────────────────────────────────────────────────
 
     get conversation()   { return this.state.thread?.conversation || null; }
+    get myOpenRequest()  { return !!this.conversation?.my_open_request; }
     get messages()       { return this.state.thread?.messages     || []; }
     get stats()          { return this.state.thread?.stats        || {}; }
     get windowState()    { return this.conversation?.window_state || "closed"; }

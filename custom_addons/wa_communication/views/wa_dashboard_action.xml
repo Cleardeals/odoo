@@ -6,9 +6,13 @@
         <field name="tag">wa_dashboard</field>
     </record>
 
-    <!-- Delete the legacy ir.actions.act_window before creating the client action
-         with the same XML id (Odoo refuses to change a record's model in-place) -->
-    <delete model="ir.actions.act_window" id="action_wa_message_log"/>
+    <!-- NOTE: action_wa_message_log was historically an ir.actions.act_window.
+         Odoo refuses to change a record's model in-place, so on databases that
+         still hold the legacy act_window it must be dropped first. That cleanup
+         now lives in migrations/1.1.1/pre-migrate.py (tolerant — it only acts if
+         the legacy record exists). A hard <delete> here is fatal on a FRESH
+         install (the xml id doesn't exist yet) and aborts the whole module, so
+         it must not be done in the data file. -->
 
     <!-- Message Log client action (replaces the standard list view) -->
     <record id="action_wa_message_log" model="ir.actions.client">

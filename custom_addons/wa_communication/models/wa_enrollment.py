@@ -78,13 +78,11 @@ class WaEnrollment(models.Model):
 
     # --- Constraints ------------------------------------------------------
 
-    _sql_constraints = [
-        (
-            'enrollment_id_unique',
-            'UNIQUE(enrollment_id)',
-            'Enrollment ID must be unique.',
-        ),
-    ]
+    # Odoo 19: declare DB constraints via models.Constraint (not _sql_constraints).
+    _enrollment_id_unique = models.Constraint(
+        'UNIQUE(enrollment_id)',
+        'Enrollment ID must be unique.',
+    )
 
     # --- Computed fields --------------------------------------------------
 

@@ -79,7 +79,12 @@ class WaReassignmentRequest(models.Model):
         if self.state not in ('pending',):
             return
         # Trigger the platform-routed assign; ownership flips on confirmation.
-        self.conversation_id._request_assign(self.requester_id, self.request_id)
+        # Persist the correlation id returned by _request_assign so the
+        # platform's assignment_confirmed event can be matched back to THIS
+        # request (otherwise it stays stuck in 'confirming' forever).
+        req_id = self.conversation_id._request_assign(
+            self.requester_id, self.request_id or None)
+        self.request_id = req_id
         self.state = 'confirming'
 
     def decline(self):

@@ -40,6 +40,7 @@ export class WaInbox extends Component {
         this.orm        = useService("orm");
         this.action     = useService("action");
         this.busService = useService("bus_service");
+        this.notification = useService("notification");
 
         this.state = useState({
             // Filters (sidebar)
@@ -331,6 +332,10 @@ export class WaInbox extends Component {
         return !this.activeConversation?.assigned_user_id;
     }
 
+    get myOpenRequest() {
+        return !!this.activeConversation?.my_open_request;
+    }
+
     async claimChat() {
         const convId = this.state.activeConvId;
         if (!convId) return;
@@ -345,11 +350,18 @@ export class WaInbox extends Component {
     async requestAssignment() {
         const convId = this.state.activeConvId;
         if (!convId) return;
+        const assignee = this.activeConversation?.assigned_user_name || "the current owner";
         try {
             await this.orm.call("wa.conversation", "request_assignment", [[convId]], {});
+            this.notification.add(
+                `Assignment requested from ${assignee}. You'll be notified when they approve.`,
+                { type: "success" }
+            );
             await this._loadThread(convId);
         } catch (e) {
-            this.state.sendError = e.data?.message || String(e);
+            const msg = e.data?.message || String(e);
+            this.state.sendError = msg;
+            this.notification.add(msg, { type: "danger" });
         }
     }
 }

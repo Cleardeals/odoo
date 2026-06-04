@@ -29,8 +29,8 @@ LOG_LEVEL="${LOG_LEVEL:-test}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Modules/tags to test — can be overridden by positional arguments
-DEFAULT_MODULES="leads,lead_suggestor,cleardeals_dashboards,properties,cleardeals_pubsub"
-DEFAULT_TAGS="/leads,/lead_suggestor,/cleardeals_dashboards,/properties,/cleardeals_pubsub"
+DEFAULT_MODULES="leads,lead_suggestor,cleardeals_dashboards,properties,cleardeals_pubsub,wa_communication"
+DEFAULT_TAGS="/leads,/lead_suggestor,/cleardeals_dashboards,/properties,/cleardeals_pubsub,/wa_communication"
 
 if [[ $# -gt 0 ]]; then
     # Build comma-separated lists from positional args

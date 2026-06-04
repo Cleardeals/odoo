@@ -128,6 +128,50 @@ class TestAssignment(TransactionCase):
         req.with_user(self.rm_a).decline()
         self.assertEqual(req.state, 'declined')
 
+    def test_request_assignment_notifies_assignee(self):
+        """The handover request must push a bus card to the current assignee."""
+        captured = []
+        bus_cls = type(self.env['bus.bus'])
+
+        def _cap(self2, target, ntype, message):
+            captured.append((target, ntype, message))
+
+        with patch.object(bus_cls, '_sendone', _cap), \
+             patch.object(type(self.env['cleardeals.pubsub']), 'publish_async'):
+            self.conv.with_user(self.rm_b).request_assignment(note='please')
+
+        target = 'wa_notification_%d' % self.rm_a.id
+        matches = [m for (t, _n, m) in captured if t == target]
+        self.assertTrue(matches, "assignee must receive a bus notification")
+        payload = matches[0]
+        self.assertEqual(payload['type'], 'reassignment_request')
+        self.assertEqual(payload['requester_name'], self.rm_b.name)
+
+    def test_request_assignment_resurfaces_for_duplicate(self):
+        """A repeat request must re-notify the assignee, not silently no-op."""
+        bus_cls = type(self.env['bus.bus'])
+        with patch.object(type(self.env['cleardeals.pubsub']), 'publish_async'):
+            with patch.object(bus_cls, '_sendone'):
+                first = self.conv.with_user(self.rm_b).request_assignment()
+            captured = []
+            with patch.object(bus_cls, '_sendone',
+                              lambda s, t, n, m: captured.append(t)):
+                second = self.conv.with_user(self.rm_b).request_assignment()
+        self.assertEqual(first, second, "duplicate returns the same request id")
+        self.assertIn('wa_notification_%d' % self.rm_a.id, captured,
+                      "duplicate request must still re-notify the assignee")
+
+    def test_get_thread_surfaces_my_open_request(self):
+        """Requester's thread flags the pending request (drives the UI wait state)."""
+        with patch.object(type(self.env['cleardeals.pubsub']), 'publish_async'), \
+             patch.object(type(self.env['bus.bus']), '_sendone'):
+            self.conv.with_user(self.rm_b).request_assignment()
+        b_thread = self.Conv.with_user(self.rm_b).get_thread(self.conv.id)
+        self.assertTrue(b_thread['conversation']['my_open_request'])
+        # The assignee has no open request of their own.
+        a_thread = self.Conv.with_user(self.rm_a).get_thread(self.conv.id)
+        self.assertFalse(a_thread['conversation']['my_open_request'])
+
     def test_unassigned_self_claim(self):
         conv = self.Conv.create({'phone_number': '919800000002'})
         captured = []

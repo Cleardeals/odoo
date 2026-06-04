@@ -225,13 +225,12 @@ class WaConversation(models.Model):
         store=False,
     )
 
-    _sql_constraints = [
-        (
-            'phone_unique',
-            'UNIQUE(phone_number)',
-            'A conversation already exists for this phone number.',
-        ),
-    ]
+    # Odoo 19 removed ``_sql_constraints``; constraints are declared as
+    # ``models.Constraint`` class attributes instead.
+    _phone_unique = models.Constraint(
+        'UNIQUE(phone_number)',
+        'A conversation already exists for this phone number.',
+    )
 
     # ------------------------------------------------------------------
     # Computed fields
@@ -1598,39 +1597,74 @@ class WaConversation(models.Model):
             # Nobody owns it — claim directly instead of a handshake.
             self.action_claim()
             return 0
+        assignee = self.assigned_user_id
         existing = self.env['wa.reassignment.request'].search([
             ('conversation_id', '=', self.id),
             ('requester_id', '=', self.env.uid),
             ('state', 'in', ('pending', 'confirming')),
         ], limit=1)
         if existing:
+            _logger.info(
+                "request_assignment: %s already has an open request (#%s, %s) "
+                "for conv %s — re-notifying assignee %s",
+                self.env.user.name, existing.id, existing.state, self.id, assignee.name,
+            )
+            # Re-emit so the assignee gets another chance to see the card even
+            # if they missed the first one (e.g. were offline).
+            self._notify_assignee_of_request(existing)
             return existing.id
         req = self.env['wa.reassignment.request'].create({
             'conversation_id': self.id,
             'requester_id': self.env.uid,
-            'current_assignee_id': self.assigned_user_id.id,
+            'current_assignee_id': assignee.id,
             'note': note or '',
             'state': 'pending',
         })
-        # Notify the current assignee with an actionable card.
+        _logger.info(
+            "request_assignment: %s (uid=%s) requested chat %s (lead=%s) from "
+            "assignee %s (uid=%s) — created request #%s, notifying channel "
+            "wa_notification_%s",
+            self.env.user.name, self.env.uid, self.phone_number,
+            self.lead_id.name if self.lead_id else '-', assignee.name, assignee.id,
+            req.id, assignee.id,
+        )
+        self._notify_assignee_of_request(req)
+        return req.id
+
+    def _notify_assignee_of_request(self, req) -> None:
+        """Push the actionable handover card to the current assignee.
+
+        Failures here must be loud (warning, not debug) — a swallowed bus error
+        is exactly why "nothing happens" with no trace.
+        """
+        self.ensure_one()
+        assignee = self.assigned_user_id
+        if not assignee:
+            return
         try:
             self.env['bus.bus']._sendone(
-                'wa_notification_%d' % self.assigned_user_id.id,
+                'wa_notification_%d' % assignee.id,
                 'wa_event',
                 {
                     'type': 'reassignment_request',
                     'request_id': req.id,
-                    'requester_name': self.env.user.name,
+                    'requester_name': req.requester_id.name,
                     'phone': self.phone_number,
                     'lead_id': self.lead_id.id if self.lead_id else None,
                     'lead_name': self.lead_id.name if self.lead_id else '',
-                    'note': note or '',
+                    'note': req.note or '',
                     'conversation_id': self.id,
                 },
             )
+            _logger.info(
+                "request_assignment: queued bus notification to wa_notification_%s "
+                "for request #%s", assignee.id, req.id,
+            )
         except Exception:  # noqa: BLE001
-            _logger.debug("request_assignment notify failed", exc_info=True)
-        return req.id
+            _logger.warning(
+                "request_assignment: failed to notify assignee %s for request #%s",
+                assignee.id, req.id, exc_info=True,
+            )
 
     def action_reassign(self, lead_id: int | None = None, user_id: int | None = None) -> None:
         """Manager force-reassign (or re-link inquiry) — platform-routed.
@@ -1929,6 +1963,13 @@ class WaConversation(models.Model):
                 'send_gate_reason': conv._send_gate_reason(),
                 'is_manager': conv._is_wa_manager(),
                 'assignment_pending': conv.assignment_pending,
+                # True when the current user already has an open handover request
+                # on this chat — lets the composer show "waiting for approval".
+                'my_open_request': bool(self.env['wa.reassignment.request'].sudo().search_count([
+                    ('conversation_id', '=', conv.id),
+                    ('requester_id', '=', self.env.uid),
+                    ('state', 'in', ('pending', 'confirming')),
+                ])),
             },
             'messages': messages,
             'stats': stats,

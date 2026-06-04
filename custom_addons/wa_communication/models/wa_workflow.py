@@ -89,9 +89,9 @@ class WaWorkflow(models.Model):
 
     # --- Constraints ------------------------------------------------------
 
-    _sql_constraints = [
-        ('slug_unique', 'UNIQUE(slug)', 'Workflow slug must be unique.'),
-    ]
+    # Odoo 19: declare DB constraints via models.Constraint (not _sql_constraints).
+    _slug_unique = models.Constraint(
+        'UNIQUE(slug)', 'Workflow slug must be unique.')
 
     # --- Business logic ---------------------------------------------------
 

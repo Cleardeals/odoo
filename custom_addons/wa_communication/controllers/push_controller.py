@@ -51,6 +51,13 @@ class WaPubSubPushController(http.Controller):
         methods=['POST'],
         csrf=False,
         save_session=False,
+        # In Odoo 19 routes default to readonly when ``auth='none'``.  This
+        # endpoint *writes* (creates conversations, messages, event-log rows),
+        # so it must be explicitly read/write — otherwise the handler runs in a
+        # read-only transaction and relies on the implicit readonly→readwrite
+        # retry, which wastes a request in production and fails outright under
+        # HttpCase.  Declaring it here keeps the write intent unambiguous.
+        readonly=False,
     )
     def wa_push(self, **_kwargs):
         """Receive and process one GCP Pub/Sub push delivery.

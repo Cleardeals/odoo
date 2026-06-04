@@ -85,9 +85,15 @@ def _wa_status_payload(
     }
 
 
-# Patch target: suppress OIDC verification in all test cases
+# Patch target: suppress OIDC verification in all test cases.
+#
+# IMPORTANT: patch the name *where it is looked up*, not where it is defined.
+# push_controller does ``from ...push_utils import verify_push_token``, which
+# binds the function into the controller module's own namespace.  Patching
+# ``push_utils.verify_push_token`` would leave that binding untouched and the
+# real (network-calling) verifier would run, 500-ing every request.
 _VERIFY_PATCH = (
-    'odoo.addons.cleardeals_pubsub.controllers.push_utils.verify_push_token'
+    'odoo.addons.wa_communication.controllers.push_controller.verify_push_token'
 )
 
 
