@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- A user may only see (and mark read) their own notifications. Emission is
+         done with sudo via notify(), so users need no create/unlink rights. -->
+    <record id="rule_cleardeals_notification_own" model="ir.rule">
+        <field name="name">Notifications: own only</field>
+        <field name="model_id" ref="model_cleardeals_notification"/>
+        <field name="groups" eval="[(4, ref('base.group_user'))]"/>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="True"/>
+        <field name="perm_create" eval="False"/>
+        <field name="perm_unlink" eval="False"/>
+        <field name="domain_force">[('user_id', '=', user.id)]</field>
+    </record>
+</odoo>
