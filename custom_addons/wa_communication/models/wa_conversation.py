@@ -1884,6 +1884,8 @@ class WaConversation(models.Model):
                 'template_replied_to': msg.template_replied_to or None,
                 'lead_id': msg.lead_id.id if msg.lead_id else None,
                 'workflow_slug': msg.workflow_slug or None,
+                'delivered_at': msg.delivered_at.isoformat() if msg.delivered_at else None,
+                'seen_at': msg.seen_at.isoformat() if msg.seen_at else None,
             })
 
         self._owa_resolve_quoted_links(messages)

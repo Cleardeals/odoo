@@ -262,6 +262,85 @@ $max-bubble-width:   72%;
         margin-top: 4px;
     }
 
+    // ── ⓘ info button + popover (outbound only) ──────────────────────────────
+    &__info-btn {
+        position: absolute;
+        top: 3px;
+        right: 3px;
+        border: none;
+        background: transparent;
+        padding: 2px;
+        cursor: pointer;
+        color: rgba(0, 0, 0, 0.25);
+        font-size: 11px;
+        line-height: 1;
+        border-radius: 50%;
+        display: none; // shown on bubble hover
+        transition: color 0.15s;
+
+        &:hover { color: rgba(0, 0, 0, 0.6); }
+    }
+
+    &:hover &__info-btn { display: block; }
+
+    &__info-popover {
+        position: absolute;
+        bottom: calc(100% + 6px);
+        right: 0;
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.14);
+        padding: 8px 12px;
+        min-width: 210px;
+        z-index: 200;
+        white-space: nowrap;
+
+        // Small arrow pointing downward-right
+        &::after {
+            content: "";
+            position: absolute;
+            bottom: -6px;
+            right: 12px;
+            border-left: 6px solid transparent;
+            border-right: 6px solid transparent;
+            border-top: 6px solid #fff;
+            filter: drop-shadow(0 1px 1px rgba(0,0,0,0.08));
+        }
+    }
+
+    &__info-row {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        padding: 3px 0;
+        font-size: 12px;
+        color: #374151;
+
+        & + & { border-top: 1px solid #f3f4f6; }
+        &--read .cd-chat-bubble__info-icon { color: #53bdeb; }
+    }
+
+    &__info-icon {
+        flex-shrink: 0;
+        color: #8696a0;
+        fill: none;
+        stroke: currentColor;
+        width: 14px;
+        height: 11px;
+    }
+
+    &__info-label {
+        font-weight: 600;
+        color: #6b7280;
+        width: 58px;
+        flex-shrink: 0;
+    }
+
+    &__info-time {
+        color: #374151;
+    }
+
     // Footer
     &__footer {
         display: flex;
@@ -332,6 +411,18 @@ $max-bubble-width:   72%;
 }
 .cd-chat-bubble--search-current {
     box-shadow: 0 0 0 3px rgba(255, 152, 0, 0.95);
+}
+
+// Phrase-level search highlight injected inside message body text
+mark.cd-search-highlight {
+    background: rgba(255, 230, 0, 0.65);
+    color: inherit;
+    border-radius: 2px;
+    padding: 0 1px;
+    font-weight: inherit;
+}
+.cd-chat-bubble--search-current mark.cd-search-highlight {
+    background: rgba(255, 152, 0, 0.75);
 }
 
 // System event chip

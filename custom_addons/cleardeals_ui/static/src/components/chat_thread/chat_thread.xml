@@ -53,6 +53,7 @@
                     </t>
                     <t t-else="">
                         <CdChatBubble message="item.msg"
+                                      searchQuery="search.open ? search.query : ''"
                                       onOpenMedia="(url, kind, filename) => this.openMedia(url, kind, filename)"
                                       onQuotedClick="(id) => this.scrollToMessage(id)"/>
                     </t>

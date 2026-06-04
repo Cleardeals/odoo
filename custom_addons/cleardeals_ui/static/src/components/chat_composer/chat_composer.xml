@@ -119,23 +119,6 @@
                         </t>
                     </div>
 
-                    <!-- Inline text formatting (WhatsApp markers) -->
-                    <button class="btn cd-chat-composer__attach-btn cd-chat-composer__fmt-btn"
-                            title="Bold (*text*)"
-                            t-on-click="() => this.applyFormat('*')">
-                        <b>B</b>
-                    </button>
-                    <button class="btn cd-chat-composer__attach-btn cd-chat-composer__fmt-btn"
-                            title="Italic (_text_)"
-                            t-on-click="() => this.applyFormat('_')">
-                        <i>I</i>
-                    </button>
-                    <button class="btn cd-chat-composer__attach-btn cd-chat-composer__fmt-btn"
-                            title="Strikethrough (~text~)"
-                            t-on-click="() => this.applyFormat('~')">
-                        <s>S</s>
-                    </button>
-
                     <button class="btn cd-chat-composer__attach-btn"
                             title="Attach image(s)"
                             t-on-click="() => this.selectAttach('image')">
@@ -153,13 +136,42 @@
                     </button>
                 </t>
 
-                <textarea class="cd-chat-composer__input" t-ref="input"
-                          t-att-disabled="!canSendFreeText"
-                          t-att-placeholder="placeholderText"
-                          t-att-value="state.body"
-                          t-on-input="(ev) => this.onInput(ev)"
-                          t-on-keydown="(ev) => this.onKeydown(ev)"
-                          rows="1"/>
+                <!-- Textarea wrapper (position:relative so the popup anchors to it) -->
+                <div class="cd-chat-composer__input-wrap">
+                    <!-- Floating format popup — fixed to viewport coords above selection -->
+                    <div t-if="fmtPopup.visible and canSendFreeText"
+                         class="cd-chat-composer__fmt-popup"
+                         t-att-style="`left:${fmtPopup.x}px; top:${fmtPopup.y}px;`">
+                        <button type="button" class="cd-chat-composer__fmt-popup-btn"
+                                title="Bold (Ctrl+B / ⌘B)"
+                                t-on-mousedown.prevent="() => this.applyFormat('*')">
+                            <b>B</b>
+                        </button>
+                        <button type="button" class="cd-chat-composer__fmt-popup-btn"
+                                title="Italic (Ctrl+I / ⌘I)"
+                                t-on-mousedown.prevent="() => this.applyFormat('_')">
+                            <i>I</i>
+                        </button>
+                        <button type="button" class="cd-chat-composer__fmt-popup-btn"
+                                title="Strikethrough (Ctrl+⇧S / ⌘⇧S)"
+                                t-on-mousedown.prevent="() => this.applyFormat('~')">
+                            <s>S</s>
+                        </button>
+                        <button type="button" class="cd-chat-composer__fmt-popup-btn"
+                                title="Monospace"
+                                t-on-mousedown.prevent="() => this.applyFormat('```')">
+                            <code>&lt;/&gt;</code>
+                        </button>
+                    </div>
+
+                    <textarea class="cd-chat-composer__input" t-ref="input"
+                              t-att-disabled="!canSendFreeText"
+                              t-att-placeholder="placeholderText"
+                              t-att-value="state.body"
+                              t-on-input="(ev) => this.onInput(ev)"
+                              t-on-keydown="(ev) => this.onKeydown(ev)"
+                              rows="1"/>
+                </div>
 
                 <button class="btn btn-primary cd-chat-composer__send-btn"
                         t-att-disabled="!state.body.trim() or !canSendFreeText"

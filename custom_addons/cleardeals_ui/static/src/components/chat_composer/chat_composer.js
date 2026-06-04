@@ -1,6 +1,6 @@
 /** @odoo-module */
 
-import { Component, useState, useRef } from "@odoo/owl";
+import { Component, useState, useRef, onMounted, onWillUnmount } from "@odoo/owl";
 import { CdQuickReplyPicker } from "../quick_reply_picker/quick_reply_picker";
 import { wrapSelection } from "../../utils/whatsapp_format";
 
@@ -36,10 +36,16 @@ export class CdChatComposer extends Component {
             uploadError:   null,
             showQuickReplies: false,
         });
+        this.fmtPopup = useState({ visible: false, x: 0, y: 0 });
         this._nextFileId = 0;
         this._selectingKind = null;
         this.fileRef = useRef("fileInput");
         this.inputRef = useRef("input");
+
+        // Show/hide the floating format popup whenever the document selection changes.
+        this._onSelChange = () => this._updateFmtPopup();
+        onMounted(() => document.addEventListener("selectionchange", this._onSelChange));
+        onWillUnmount(() => document.removeEventListener("selectionchange", this._onSelChange));
     }
 
     get isClosed()        { return this.props.windowState === "closed"; }
@@ -74,10 +80,87 @@ export class CdChatComposer extends Component {
             this.state.showQuickReplies = false;
             return;
         }
+        // Ctrl/Cmd + B → bold,  Ctrl/Cmd + I → italic,  Ctrl/Cmd + Shift + S → strike
+        if ((ev.ctrlKey || ev.metaKey) && !ev.altKey && this.canSendFreeText) {
+            const k = ev.key.toLowerCase();
+            if (k === "b") { ev.preventDefault(); this.applyFormat("*"); return; }
+            if (k === "i") { ev.preventDefault(); this.applyFormat("_"); return; }
+            if (ev.shiftKey && k === "s") { ev.preventDefault(); this.applyFormat("~"); return; }
+        }
         if (ev.key === "Enter" && !ev.shiftKey) {
             ev.preventDefault();
             this.sendText();
         }
+    }
+
+    // ── Format popup (appears above the text selection) ─────────────────────────
+
+    _updateFmtPopup() {
+        const el = this.inputRef.el;
+        if (!el || document.activeElement !== el) {
+            if (this.fmtPopup.visible) this.fmtPopup.visible = false;
+            return;
+        }
+        if (el.selectionStart === el.selectionEnd) {
+            if (this.fmtPopup.visible) this.fmtPopup.visible = false;
+            return;
+        }
+        const pos = this._getCursorPixelPos();
+        if (pos) {
+            this.fmtPopup.x = pos.x;
+            this.fmtPopup.y = pos.y;
+            this.fmtPopup.visible = true;
+        }
+    }
+
+    /**
+     * Use a mirror-div to compute the viewport coordinates of the current
+     * textarea selection so the format popup can be positioned precisely
+     * above the selected text.
+     */
+    _getCursorPixelPos() {
+        const el = this.inputRef.el;
+        if (!el) return null;
+        const s = window.getComputedStyle(el);
+        const elRect = el.getBoundingClientRect();
+
+        const mirror = document.createElement("div");
+        Object.assign(mirror.style, {
+            position:   "fixed",
+            top:        elRect.top  + "px",
+            left:       elRect.left + "px",
+            width:      elRect.width + "px",
+            overflow:   "hidden",
+            visibility: "hidden",
+            pointerEvents: "none",
+            whiteSpace: "pre-wrap",
+            wordBreak:  "break-word",
+        });
+        const copyProps = [
+            "fontFamily", "fontSize", "fontWeight", "fontStyle", "letterSpacing",
+            "lineHeight", "textTransform", "paddingTop", "paddingRight",
+            "paddingBottom", "paddingLeft", "borderTopWidth", "borderRightWidth",
+            "borderBottomWidth", "borderLeftWidth", "boxSizing",
+        ];
+        for (const p of copyProps) mirror.style[p] = s[p];
+
+        // Text up to the start of selection
+        mirror.appendChild(document.createTextNode(el.value.slice(0, el.selectionStart)));
+
+        // Span that covers the selected text
+        const span = document.createElement("span");
+        span.textContent = el.value.slice(el.selectionStart, el.selectionEnd) || "​";
+        mirror.appendChild(span);
+
+        document.body.appendChild(mirror);
+        mirror.scrollTop = el.scrollTop;
+        const spanRect = span.getBoundingClientRect();
+        document.body.removeChild(mirror);
+
+        return {
+            x: Math.round(spanRect.left + spanRect.width / 2),
+            y: Math.round(spanRect.top),
+        };
     }
 
     // ── Inline formatting (WhatsApp markers) ────────────────────────────────────

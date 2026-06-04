@@ -143,6 +143,10 @@ export class CdChatThread extends Component {
     _applyHighlights() {
         const el = this.scrollRef.el;
         if (!el) return;
+        // The phrase highlight is handled by the searchQuery prop passed to each
+        // CdChatBubble — OWL re-renders the body HTML with <mark> tags via the
+        // formatWhatsAppHtml + highlightHtml path.  Here we only apply the glow
+        // class on the bubble wrapper so it remains OWL-safe (no innerHTML mutation).
         this.search.matches.forEach((id) => {
             const node = el.querySelector(`#cd-msg-${id}`);
             if (node) node.classList.add("cd-chat-bubble--search-hit");
@@ -168,6 +172,8 @@ export class CdChatThread extends Component {
         if (!el) return;
         el.querySelectorAll(".cd-chat-bubble--search-hit, .cd-chat-bubble--search-current")
             .forEach((n) => n.classList.remove("cd-chat-bubble--search-hit", "cd-chat-bubble--search-current"));
+        // Phrase de-highlighting is automatic: when search.query becomes "" the
+        // searchQuery prop is "" and OWL re-renders without any <mark> tags.
     }
 
     nextMatch() {

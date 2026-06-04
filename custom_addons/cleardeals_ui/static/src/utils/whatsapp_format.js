@@ -1,5 +1,7 @@
 /** @odoo-module */
 
+import { markup } from "@odoo/owl";
+
 /**
  * WhatsApp-style inline text formatting.
  *
@@ -14,6 +16,9 @@
  * The input is HTML-escaped FIRST, so the result is safe to inject with t-out.
  * Markers only fire when they wrap at least one non-space character, mirroring
  * WhatsApp's own behaviour (so a lone "*" or "5 * 3" is left untouched).
+ *
+ * Returns an OWL markup() object so that t-out renders the HTML instead of
+ * escaping it. (Plain strings passed to t-out are still escaped in OWL 2.)
  */
 
 /**
@@ -65,18 +70,56 @@ function applyMarker(text, marker, tag) {
 }
 
 /**
- * Format a plain-text WhatsApp message into safe HTML.
+ * Format a plain-text WhatsApp message into a safe HTML *string* (no markup wrapper).
+ * Useful when callers need to further process the HTML (e.g. add search highlights)
+ * before wrapping with markup().
+ *
  * @param {String} value
- * @returns {String} HTML string (already escaped + formatted)
+ * @returns {String} Plain HTML string — NOT safe to inject as-is without markup().
  */
-export function formatWhatsApp(value) {
+export function formatWhatsAppHtml(value) {
     if (value === undefined || value === null) return "";
-    let s = escapeHtml(value);
-    // Monospace first (triple backticks), so inner * _ ~ are not reprocessed.
+    let s = String(value);
+    // Normalise literal <br/> / <br> tags (platform may store them this way).
+    s = s.replace(/<br\s*\/?>/gi, "\n");
+    s = escapeHtml(s);
     s = s.replace(/```(?=\S)([\s\S]*?\S|\S)```/g, "<code>$1</code>");
     s = applyMarker(s, "*", "b");
     s = applyMarker(s, "_", "i");
     s = applyMarker(s, "~", "s");
     s = s.replace(/\r?\n/g, "<br/>");
     return s;
+}
+
+/**
+ * Format a plain-text WhatsApp message into safe HTML wrapped in OWL markup().
+ * Use with t-out.  (Plain strings passed to t-out are still escaped in OWL 2.)
+ *
+ * @param {String} value
+ * @returns {markup}
+ */
+export function formatWhatsApp(value) {
+    return markup(formatWhatsAppHtml(value));
+}
+
+/**
+ * Wrap all occurrences of `query` inside an HTML string with
+ * <mark class="cd-search-highlight">…</mark>, touching only text nodes
+ * (content between > and <) so HTML tag attributes are never corrupted.
+ *
+ * Used by the in-chat search to highlight the exact phrase within a bubble.
+ *
+ * @param {String} html   The innerHTML produced by formatWhatsApp.
+ * @param {String} query  Plain-text search term.
+ * @returns {String}      HTML string with marks inserted.
+ */
+export function highlightHtml(html, query) {
+    if (!query || !html) return html;
+    const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const re = new RegExp(`(${escaped})`, "gi");
+    // Walk segments: HTML tags are passed through; text nodes get the marks.
+    return html.replace(/(<[^>]*>)|([^<]+)/g, (match, tag, text) => {
+        if (tag) return tag;
+        return text.replace(re, `<mark class="cd-search-highlight">$1</mark>`);
+    });
 }
