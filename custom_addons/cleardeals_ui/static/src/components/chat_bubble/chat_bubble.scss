@@ -326,6 +326,14 @@ $max-bubble-width:   72%;
     100% { box-shadow: 0 0 0 3px rgba(124,58,237,0); }
 }
 
+// In-chat search highlighting
+.cd-chat-bubble--search-hit {
+    box-shadow: 0 0 0 2px rgba(255, 196, 0, 0.65);
+}
+.cd-chat-bubble--search-current {
+    box-shadow: 0 0 0 3px rgba(255, 152, 0, 0.95);
+}
+
 // System event chip
 .cd-chat-event-chip {
     align-self: center;

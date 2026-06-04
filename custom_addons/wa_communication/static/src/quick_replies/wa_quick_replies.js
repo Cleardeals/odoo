@@ -1,9 +1,10 @@
 /** @odoo-module */
 
-import { Component, useState, onMounted } from "@odoo/owl";
+import { Component, useState, useRef, onMounted } from "@odoo/owl";
 import { registry }   from "@web/core/registry";
 import { useService } from "@web/core/utils/hooks";
 import { session }    from "@web/session";
+import { wrapSelection, formatWhatsApp } from "@cleardeals_ui/utils/whatsapp_format";
 
 /**
  * WaQuickReplies — custom management surface for WhatsApp quick replies.
@@ -18,6 +19,7 @@ export class WaQuickReplies extends Component {
     setup() {
         this.orm          = useService("orm");
         this.notification = useService("notification");
+        this.bodyRef      = useRef("editorBody");
 
         this.state = useState({
             loading:   true,
@@ -64,6 +66,16 @@ export class WaQuickReplies extends Component {
     cancelEdit() { this.state.editing = null; }
 
     canEdit(r) { return r.owned || (r.is_shared && this.state.isManager); }
+
+    // ── Inline formatting (WhatsApp markers) ────────────────────────────────────
+
+    applyFormat(marker) {
+        if (!this.state.editing) return;
+        this.state.editing.body = wrapSelection(this.bodyRef.el, marker);
+    }
+
+    /** Card body preview rendered with WhatsApp inline formatting. */
+    bodyHtml(body) { return formatWhatsApp(body); }
 
     async save() {
         const e = this.state.editing;

@@ -2,13 +2,19 @@
 <templates xml:space="preserve">
     <t t-name="cleardeals_ui.QuickReplyPicker">
         <div class="cd-qr-picker" t-ref="root">
-            <div class="cd-qr-picker__header">
+            <!-- In typeahead (slash) mode the host's input drives the filter,
+                 so the picker hides its own search box. -->
+            <div class="cd-qr-picker__header" t-if="!isTypeahead">
                 <i class="fa fa-bolt" aria-hidden="true"/>
                 <input type="text" class="cd-qr-picker__search"
                        placeholder="Search quick replies…"
                        t-att-value="state.query"
                        t-on-input="(ev) => this.onSearchInput(ev)"
                        autofocus="autofocus"/>
+            </div>
+            <div class="cd-qr-picker__hint" t-if="isTypeahead">
+                <i class="fa fa-bolt" aria-hidden="true"/>
+                <span>Quick replies — keep typing to filter, or pick one</span>
             </div>
             <div class="cd-qr-picker__list">
                 <t t-if="filtered.length === 0">

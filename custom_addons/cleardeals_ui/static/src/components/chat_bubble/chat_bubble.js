@@ -2,6 +2,7 @@
 
 import { Component } from "@odoo/owl";
 import { formatISTTime } from "../../utils/datetime";
+import { formatWhatsApp } from "../../utils/whatsapp_format";
 
 /**
  * CdChatBubble — a single WhatsApp message bubble.
@@ -46,6 +47,19 @@ export class CdChatBubble extends Component {
 
     get timeLabel() {
         return formatISTTime(this.props.message.occurred_at);
+    }
+
+    /** Body rendered with WhatsApp inline formatting (bold/italic/strike/mono). */
+    get bodyHtml() {
+        return formatWhatsApp(this.props.message.body);
+    }
+
+    get headerHtml() {
+        return formatWhatsApp(this.props.message.template_header);
+    }
+
+    get footerHtml() {
+        return formatWhatsApp(this.props.message.template_footer);
     }
 
     get senderLabel() {

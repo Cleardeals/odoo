@@ -79,6 +79,7 @@ export class WaNotification extends Component {
     setup() {
         this.busService = useService("bus_service");
         this.orm = useService("orm");
+        this.action = useService("action");
         this.notification = useService("notification");
         this.state = useState({ notifications: [] });
         this._nextId = 1;
@@ -119,6 +120,7 @@ export class WaNotification extends Component {
                 ? `${payload.requester_name || "An RM"} wants to take over this chat.`
                 : (payload.message || ""),
             leadUrl:   payload.lead_url || "",
+            leadId:    payload.lead_id || null,
             actionable,
             requestId: payload.request_id || null,
             busy:      false,
@@ -162,8 +164,22 @@ export class WaNotification extends Component {
         }
     }
 
+    /** Whether clicking the card should jump to the lead's WhatsApp inbox. */
+    isClickable(notif) {
+        return !notif.actionable && !!(notif.leadId || notif.leadUrl);
+    }
+
     openLead(notif) {
-        if (notif.leadUrl) {
+        // Open the lead form (which hosts the WhatsApp Activity inbox tab).
+        if (notif.leadId) {
+            this.action.doAction({
+                type:      "ir.actions.act_window",
+                res_model: "leads.new",
+                res_id:    notif.leadId,
+                views:     [[false, "form"]],
+                target:    "current",
+            });
+        } else if (notif.leadUrl) {
             window.location.hash = notif.leadUrl.replace(/^.*#/, "#");
         }
         this.dismiss(notif.id);

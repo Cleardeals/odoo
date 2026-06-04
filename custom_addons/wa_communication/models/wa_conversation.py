@@ -1109,6 +1109,7 @@ class WaConversation(models.Model):
                     {
                         'type':      'lead_replied',
                         'actor_id':  actor_id,
+                        'lead_id':   lead.id if lead else None,
                         'lead_name': lead_name,
                         'phone':     phone,
                         'message':   message_text[:80] if message_text else '',
@@ -1168,6 +1169,7 @@ class WaConversation(models.Model):
                     {
                         'type':      'ambiguous_reply',
                         'actor_id':  actor_id,
+                        'lead_id':   lead.id if lead else None,
                         'lead_name': lead_name,
                         'phone':     phone,
                         'message':   message_text[:80] if message_text else '',
@@ -1213,6 +1215,7 @@ class WaConversation(models.Model):
                     {
                         'type':      'permanent_failure',
                         'actor_id':  actor_id,
+                        'lead_id':   lead.id if lead else None,
                         'lead_name': lead_name,
                         'phone':     phone,
                         'message':   summary[:80],
@@ -1379,6 +1382,7 @@ class WaConversation(models.Model):
         body: str = '',
         kind: str = 'freetext',
         template_name: str = '',
+        template_language: str = '',
         initiator: str = 'rm',
         request_id: str = '',
         workflow_slug: str = '',
@@ -1471,6 +1475,7 @@ class WaConversation(models.Model):
             'kind': kind,
             'message_text': body or None,
             'template_name': template_name or None,
+            'template_language': template_language or None,
             'media_url': media_url or None,
             'media_filename': media_filename or None,
             'body_values': body_values or [],
@@ -1617,6 +1622,7 @@ class WaConversation(models.Model):
                     'request_id': req.id,
                     'requester_name': self.env.user.name,
                     'phone': self.phone_number,
+                    'lead_id': self.lead_id.id if self.lead_id else None,
                     'lead_name': self.lead_id.name if self.lead_id else '',
                     'note': note or '',
                     'conversation_id': self.id,
@@ -1684,6 +1690,7 @@ class WaConversation(models.Model):
                     {
                         'type': 'assignment_changed',
                         'phone': conv.phone_number,
+                        'lead_id': conv.lead_id.id if conv.lead_id else None,
                         'lead_name': conv.lead_id.name if conv.lead_id else '',
                         'conversation_id': conv.id,
                         'message': "You are now assigned to this chat.",

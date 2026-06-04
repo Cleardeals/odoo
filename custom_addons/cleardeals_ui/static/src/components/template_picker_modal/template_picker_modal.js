@@ -120,9 +120,10 @@ export class CdTemplatePickerModal extends Component {
         this.state.sending = true;
         try {
             await this.props.onSend({
-                template_name: this.state.selected.name,
-                body_values:   this.bodyValues,
-                header_values: this.headerValues,
+                template_name:     this.state.selected.name,
+                template_language: this.state.selected.language || "en",
+                body_values:       this.bodyValues,
+                header_values:     this.headerValues,
             });
             this.props.onClose();
         } finally {

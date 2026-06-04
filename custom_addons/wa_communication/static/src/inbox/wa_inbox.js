@@ -260,14 +260,14 @@ export class WaInbox extends Component {
 
     closeTemplatePicker() { this.state.showTemplatePicker = false; }
 
-    async sendTemplate({ template_name, body_values, header_values }) {
+    async sendTemplate({ template_name, template_language, body_values, header_values }) {
         const convId = this.state.activeConvId;
         if (!convId) return;
         this.state.sendError = null;
         try {
             await this.orm.call("wa.conversation", "send_message", [[convId]], {
                 body: "", kind: "template",
-                template_name, body_values, header_values,
+                template_name, template_language, body_values, header_values,
             });
             await this._loadThread(convId);
         } catch (e) {

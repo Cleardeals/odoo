@@ -57,6 +57,33 @@ export function formatISTDateTime(value) {
     });
 }
 
+/** Stable per-day key in IST, e.g. "2026-06-04", for grouping messages by date. */
+export function istDayKey(value) {
+    const d = parseServerDateTime(value);
+    if (!d || isNaN(d)) return "";
+    // en-CA yields ISO-style YYYY-MM-DD.
+    return d.toLocaleDateString("en-CA", { timeZone: IST });
+}
+
+/**
+ * WhatsApp-style day separator label in IST:
+ *   "Today" / "Yesterday" / "4 June 2026".
+ */
+export function formatDayLabel(value) {
+    const d = parseServerDateTime(value);
+    if (!d || isNaN(d)) return "";
+    const key = istDayKey(value);
+    const now = new Date();
+    const todayKey = now.toLocaleDateString("en-CA", { timeZone: IST });
+    const yest = new Date(now.getTime() - 86400000);
+    const yestKey = yest.toLocaleDateString("en-CA", { timeZone: IST });
+    if (key === todayKey) return "Today";
+    if (key === yestKey) return "Yesterday";
+    return d.toLocaleDateString("en-IN", {
+        day: "numeric", month: "long", year: "numeric", timeZone: IST,
+    });
+}
+
 /** Coarse "5m ago" / "3h ago" / "2 Jun" relative label. */
 export function relativeTime(value) {
     const d = parseServerDateTime(value);

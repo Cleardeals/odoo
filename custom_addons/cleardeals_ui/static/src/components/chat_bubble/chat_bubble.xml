@@ -122,12 +122,12 @@
 
                 <!-- Template header (rendered, bold) -->
                 <t t-if="props.message.template_header">
-                    <div class="cd-chat-bubble__tmpl-header" t-esc="props.message.template_header"/>
+                    <div class="cd-chat-bubble__tmpl-header" t-out="headerHtml"/>
                 </t>
 
-                <!-- Body text -->
+                <!-- Body text (WhatsApp inline formatting) -->
                 <t t-if="props.message.body">
-                    <div class="cd-chat-bubble__body" t-esc="props.message.body"/>
+                    <div class="cd-chat-bubble__body" t-out="bodyHtml"/>
                 </t>
                 <!-- Fallback: template name chip only when no rendered body is available yet -->
                 <t t-elif="props.message.template_name and !isInbound">
@@ -139,7 +139,7 @@
 
                 <!-- Template footer (muted) -->
                 <t t-if="props.message.template_footer">
-                    <div class="cd-chat-bubble__tmpl-footer" t-esc="props.message.template_footer"/>
+                    <div class="cd-chat-bubble__tmpl-footer" t-out="footerHtml"/>
                 </t>
 
                 <!-- Template buttons -->

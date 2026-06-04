@@ -170,6 +170,15 @@
         &--active { color: #7c3aed; }
     }
 
+    &__fmt-btn {
+        font-size: 14px;
+        font-weight: 600;
+        width: 30px;
+        line-height: 1;
+        b, i, s { font-style: inherit; }
+        i { font-style: italic; }
+    }
+
     &__input {
         flex: 1;
         resize: none;

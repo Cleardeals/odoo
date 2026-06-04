@@ -29,6 +29,15 @@
     &--review   { border-left-color: #d97706; } // amber  — ambiguous reply
     &--failure  { border-left-color: #dc2626; } // red    — permanent failure
     &--default  { border-left-color: #2563eb; } // blue   — other
+
+    &--clickable {
+        cursor: pointer;
+        transition: box-shadow 0.15s ease, transform 0.15s ease;
+        &:hover {
+            box-shadow: 0 6px 24px rgba(0, 0, 0, 0.26);
+            transform: translateY(-1px);
+        }
+    }
 }
 
 .cd-wa-notif__header {

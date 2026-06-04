@@ -9,13 +9,14 @@
   <t t-name="wa_communication.WaNotification">
     <div class="cd-wa-notif" t-if="state.notifications.length > 0">
       <t t-foreach="state.notifications" t-as="n" t-key="n.id">
-        <div t-attf-class="cd-wa-notif__card cd-wa-notif__card--#{n.mod}">
+        <div t-attf-class="cd-wa-notif__card cd-wa-notif__card--#{n.mod} #{isClickable(n) ? 'cd-wa-notif__card--clickable' : ''}"
+             t-on-click="() => isClickable(n) ? this.openLead(n) : null">
 
           <!-- Header row: icon + title + dismiss -->
           <div class="cd-wa-notif__header">
             <i t-attf-class="fa #{n.icon} cd-wa-notif__icon" />
             <span class="cd-wa-notif__title" t-esc="n.title" />
-            <button class="cd-wa-notif__dismiss" t-on-click="() => dismiss(n.id)" title="Dismiss">
+            <button class="cd-wa-notif__dismiss" t-on-click.stop="() => dismiss(n.id)" title="Dismiss">
               <i class="fa fa-times" />
             </button>
           </div>
@@ -43,10 +44,10 @@
           </t>
 
           <!-- Action row -->
-          <t t-elif="n.leadUrl">
+          <t t-elif="isClickable(n)">
             <div class="cd-wa-notif__actions">
-              <button class="cd-wa-notif__btn" t-on-click="() => openLead(n)">
-                View Lead →
+              <button class="cd-wa-notif__btn" t-on-click.stop="() => openLead(n)">
+                Open chat →
               </button>
             </div>
           </t>

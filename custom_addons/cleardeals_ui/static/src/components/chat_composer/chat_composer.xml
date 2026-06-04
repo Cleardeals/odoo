@@ -112,10 +112,29 @@
                             <CdQuickReplyPicker
                                 replies="props.quickReplies"
                                 initialQuery="state.body"
+                                query="state.body"
+                                typeahead="qrTypeahead"
                                 onSelect="(body) => this.insertQuickReply(body)"
                                 onClose="() => this.closeQuickReplies()"/>
                         </t>
                     </div>
+
+                    <!-- Inline text formatting (WhatsApp markers) -->
+                    <button class="btn cd-chat-composer__attach-btn cd-chat-composer__fmt-btn"
+                            title="Bold (*text*)"
+                            t-on-click="() => this.applyFormat('*')">
+                        <b>B</b>
+                    </button>
+                    <button class="btn cd-chat-composer__attach-btn cd-chat-composer__fmt-btn"
+                            title="Italic (_text_)"
+                            t-on-click="() => this.applyFormat('_')">
+                        <i>I</i>
+                    </button>
+                    <button class="btn cd-chat-composer__attach-btn cd-chat-composer__fmt-btn"
+                            title="Strikethrough (~text~)"
+                            t-on-click="() => this.applyFormat('~')">
+                        <s>S</s>
+                    </button>
 
                     <button class="btn cd-chat-composer__attach-btn"
                             title="Attach image(s)"
@@ -134,7 +153,7 @@
                     </button>
                 </t>
 
-                <textarea class="cd-chat-composer__input"
+                <textarea class="cd-chat-composer__input" t-ref="input"
                           t-att-disabled="!canSendFreeText"
                           t-att-placeholder="placeholderText"
                           t-att-value="state.body"

@@ -2,6 +2,7 @@
 
 import { Component, useState, useRef } from "@odoo/owl";
 import { CdQuickReplyPicker } from "../quick_reply_picker/quick_reply_picker";
+import { wrapSelection } from "../../utils/whatsapp_format";
 
 /**
  * CdChatComposer — message compose box with multi-file attach and send.
@@ -38,6 +39,7 @@ export class CdChatComposer extends Component {
         this._nextFileId = 0;
         this._selectingKind = null;
         this.fileRef = useRef("fileInput");
+        this.inputRef = useRef("input");
     }
 
     get isClosed()        { return this.props.windowState === "closed"; }
@@ -56,17 +58,41 @@ export class CdChatComposer extends Component {
             : "Type a message…";
     }
 
-    onInput(ev)   { this.state.body = ev.target.value; }
+    onInput(ev) {
+        this.state.body = ev.target.value;
+        // Slash-command typeahead: open the quick-reply picker as soon as the
+        // message begins with "/", filtering live as the RM keeps typing.
+        const trimmed = (this.state.body || "").trimStart();
+        if (this.hasQuickReplies && trimmed.startsWith("/")) {
+            this.state.showQuickReplies = true;
+        } else if (this.state.showQuickReplies && !trimmed.startsWith("/")) {
+            this.state.showQuickReplies = false;
+        }
+    }
     onKeydown(ev) {
+        if (ev.key === "Escape" && this.state.showQuickReplies) {
+            this.state.showQuickReplies = false;
+            return;
+        }
         if (ev.key === "Enter" && !ev.shiftKey) {
             ev.preventDefault();
             this.sendText();
         }
     }
 
+    // ── Inline formatting (WhatsApp markers) ────────────────────────────────────
+
+    applyFormat(marker) {
+        if (!this.canSendFreeText) return;
+        this.state.body = wrapSelection(this.inputRef.el, marker);
+    }
+
     // ── Quick replies ──────────────────────────────────────────────────────────
 
     get hasQuickReplies() { return (this.props.quickReplies || []).length > 0; }
+
+    /** True when the draft starts with "/" — drives the picker's typeahead mode. */
+    get qrTypeahead() { return (this.state.body || "").trimStart().startsWith("/"); }
 
     toggleQuickReplies() {
         if (!this.canSendFreeText) return;

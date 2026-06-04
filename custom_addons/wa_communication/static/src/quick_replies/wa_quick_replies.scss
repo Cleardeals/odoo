@@ -209,6 +209,27 @@
 
     &__textarea { resize: vertical; }
 
+    &__fmt-bar {
+        display: flex;
+        gap: 4px;
+        margin-bottom: 6px;
+    }
+
+    &__fmt-btn {
+        border: 1px solid #d5d5dd;
+        background: #fff;
+        border-radius: 6px;
+        min-width: 30px;
+        height: 28px;
+        font-size: 13px;
+        line-height: 1;
+        color: #444;
+        cursor: pointer;
+        i { font-style: italic; }
+        code { font-size: 11px; }
+        &:hover { background: #f3effb; border-color: #7c3aed; color: #7c3aed; }
+    }
+
     &__check {
         display: flex;
         align-items: center;

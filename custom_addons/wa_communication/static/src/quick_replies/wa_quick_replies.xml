@@ -71,8 +71,18 @@
                                    t-on-input="(ev) => { this.state.editing.shortcut = ev.target.value; }"/>
 
                             <label class="wa-qr__label">Message</label>
-                            <textarea class="wa-qr__textarea" rows="5"
-                                      placeholder="Type the canned message…"
+                            <div class="wa-qr__fmt-bar">
+                                <button class="wa-qr__fmt-btn" type="button" title="Bold (*text*)"
+                                        t-on-click="() => this.applyFormat('*')"><b>B</b></button>
+                                <button class="wa-qr__fmt-btn" type="button" title="Italic (_text_)"
+                                        t-on-click="() => this.applyFormat('_')"><i>I</i></button>
+                                <button class="wa-qr__fmt-btn" type="button" title="Strikethrough (~text~)"
+                                        t-on-click="() => this.applyFormat('~')"><s>S</s></button>
+                                <button class="wa-qr__fmt-btn" type="button" title="Monospace (```text```)"
+                                        t-on-click="() => this.applyFormat('```')"><code>&lt;/&gt;</code></button>
+                            </div>
+                            <textarea class="wa-qr__textarea" rows="5" t-ref="editorBody"
+                                      placeholder="Type the canned message…  *bold*  _italic_  ~strike~"
                                       t-att-value="state.editing.body"
                                       t-on-input="(ev) => { this.state.editing.body = ev.target.value; }"/>
 
@@ -108,7 +118,7 @@
                     <span class="wa-qr__card-shortcut" t-esc="r.shortcut"/>
                 </t>
             </div>
-            <div class="wa-qr__card-body" t-esc="r.body"/>
+            <div class="wa-qr__card-body" t-out="bodyHtml(r.body)"/>
             <div class="wa-qr__card-actions">
                 <t t-if="canEdit(r)">
                     <button class="wa-qr__icon-btn" title="Edit" t-on-click="() => this.editReply(r)">

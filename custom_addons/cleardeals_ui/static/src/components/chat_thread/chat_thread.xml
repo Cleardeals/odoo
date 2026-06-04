@@ -1,54 +1,99 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <templates xml:space="preserve">
     <t t-name="cleardeals_ui.ChatThread">
-        <div class="cd-chat-thread" t-ref="scrollContainer">
-            <t t-if="props.messages.length === 0">
-                <div class="cd-chat-thread__empty">
-                    <i class="fa fa-comments-o" aria-hidden="true"/>
-                    <p>No messages yet</p>
-                </div>
-            </t>
-            <t t-foreach="props.messages" t-as="msg" t-key="msg.id">
-                <CdChatBubble message="msg"
-                              onOpenMedia="(url, kind, filename) => this.openMedia(url, kind, filename)"
-                              onQuotedClick="(id) => this.scrollToMessage(id)"/>
-            </t>
+        <div class="cd-chat-thread-wrap">
 
-            <!-- In-tab media lightbox -->
-            <t t-if="lightbox.open">
-                <div class="cd-lightbox" t-on-click="() => this.closeMedia()">
-                    <button class="cd-lightbox__close" t-on-click="() => this.closeMedia()">
+            <!-- Search affordance (WhatsApp-style) -->
+            <button class="cd-chat-thread__search-toggle"
+                    t-if="!search.open"
+                    title="Search in chat"
+                    t-on-click="() => this.toggleSearch()">
+                <i class="fa fa-search" aria-hidden="true"/>
+            </button>
+
+            <t t-if="search.open">
+                <div class="cd-chat-search">
+                    <i class="fa fa-search cd-chat-search__icon" aria-hidden="true"/>
+                    <input type="text" class="cd-chat-search__input"
+                           placeholder="Search in this chat…"
+                           t-att-value="search.query"
+                           t-on-input="(ev) => this.onSearchInput(ev)"
+                           t-on-keydown="(ev) => this.onSearchKeydown(ev)"
+                           autofocus="autofocus"/>
+                    <span class="cd-chat-search__count" t-esc="matchLabel"/>
+                    <button class="cd-chat-search__nav" title="Previous"
+                            t-att-disabled="!search.matches.length"
+                            t-on-click="() => this.prevMatch()">
+                        <i class="fa fa-chevron-up" aria-hidden="true"/>
+                    </button>
+                    <button class="cd-chat-search__nav" title="Next"
+                            t-att-disabled="!search.matches.length"
+                            t-on-click="() => this.nextMatch()">
+                        <i class="fa fa-chevron-down" aria-hidden="true"/>
+                    </button>
+                    <button class="cd-chat-search__close" title="Close"
+                            t-on-click="() => this.closeSearch()">
                         <i class="fa fa-times" aria-hidden="true"/>
                     </button>
-                    <div class="cd-lightbox__stage" t-on-click.stop="() => {}">
-                        <t t-if="lightbox.kind === 'image'">
-                            <img class="cd-lightbox__img" t-att-src="lightbox.url" alt="Preview"/>
-                        </t>
-                        <t t-elif="lightbox.kind === 'video'">
-                            <video class="cd-lightbox__video" t-att-src="lightbox.url"
-                                   controls="true" autoplay="true"/>
-                        </t>
-                        <t t-elif="isPdf">
-                            <iframe class="cd-lightbox__frame" t-att-src="lightbox.url"
-                                    title="Document preview"/>
-                        </t>
-                        <t t-else="">
-                            <div class="cd-lightbox__fallback">
-                                <i class="fa fa-file-o" aria-hidden="true"/>
-                                <p t-esc="lightbox.filename || 'Attachment'"/>
-                                <a class="btn btn-sm btn-primary"
-                                   t-att-href="lightbox.url" target="_blank" rel="noopener">
-                                    <i class="fa fa-download" aria-hidden="true"/> Download
-                                </a>
-                            </div>
-                        </t>
-                    </div>
-                    <a class="cd-lightbox__open-new" t-att-href="lightbox.url"
-                       target="_blank" rel="noopener" t-on-click.stop="() => {}">
-                        Open in new tab <i class="fa fa-external-link" aria-hidden="true"/>
-                    </a>
                 </div>
             </t>
+
+            <div class="cd-chat-thread" t-ref="scrollContainer">
+                <t t-if="props.messages.length === 0">
+                    <div class="cd-chat-thread__empty">
+                        <i class="fa fa-comments-o" aria-hidden="true"/>
+                        <p>No messages yet</p>
+                    </div>
+                </t>
+                <t t-foreach="items" t-as="item" t-key="item.type === 'date' ? ('d-' + item.key) : ('m-' + item.msg.id)">
+                    <t t-if="item.type === 'date'">
+                        <div class="cd-chat-thread__date-sep">
+                            <span class="cd-chat-thread__date-chip" t-esc="item.label"/>
+                        </div>
+                    </t>
+                    <t t-else="">
+                        <CdChatBubble message="item.msg"
+                                      onOpenMedia="(url, kind, filename) => this.openMedia(url, kind, filename)"
+                                      onQuotedClick="(id) => this.scrollToMessage(id)"/>
+                    </t>
+                </t>
+
+                <!-- In-tab media lightbox -->
+                <t t-if="lightbox.open">
+                    <div class="cd-lightbox" t-on-click="() => this.closeMedia()">
+                        <button class="cd-lightbox__close" t-on-click="() => this.closeMedia()">
+                            <i class="fa fa-times" aria-hidden="true"/>
+                        </button>
+                        <div class="cd-lightbox__stage" t-on-click.stop="() => {}">
+                            <t t-if="lightbox.kind === 'image'">
+                                <img class="cd-lightbox__img" t-att-src="lightbox.url" alt="Preview"/>
+                            </t>
+                            <t t-elif="lightbox.kind === 'video'">
+                                <video class="cd-lightbox__video" t-att-src="lightbox.url"
+                                       controls="true" autoplay="true"/>
+                            </t>
+                            <t t-elif="isPdf">
+                                <iframe class="cd-lightbox__frame" t-att-src="lightbox.url"
+                                        title="Document preview"/>
+                            </t>
+                            <t t-else="">
+                                <div class="cd-lightbox__fallback">
+                                    <i class="fa fa-file-o" aria-hidden="true"/>
+                                    <p t-esc="lightbox.filename || 'Attachment'"/>
+                                    <a class="btn btn-sm btn-primary"
+                                       t-att-href="lightbox.url" target="_blank" rel="noopener">
+                                        <i class="fa fa-download" aria-hidden="true"/> Download
+                                    </a>
+                                </div>
+                            </t>
+                        </div>
+                        <a class="cd-lightbox__open-new" t-att-href="lightbox.url"
+                           target="_blank" rel="noopener" t-on-click.stop="() => {}">
+                            Open in new tab <i class="fa fa-external-link" aria-hidden="true"/>
+                        </a>
+                    </div>
+                </t>
+            </div>
         </div>
     </t>
 </templates>

@@ -24,6 +24,19 @@
         .fa { font-size: 14px; }
     }
 
+    &__hint {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 7px 12px;
+        border-bottom: 1px solid #eee;
+        color: #7c3aed;
+        font-size: 12px;
+        background: #faf5ff;
+
+        .fa { font-size: 13px; }
+    }
+
     &__search {
         flex: 1;
         border: none;
