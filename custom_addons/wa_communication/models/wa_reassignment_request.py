@@ -118,12 +118,19 @@ class WaReassignmentRequest(models.Model):
             rec._notify_requester('reassignment_approved',
                                   "Your assignment request was approved — you can reply now.")
 
-    def _mark_failed(self, reason=''):
+    def _mark_failed(self, reason='', notify=True):
+        """Mark the request failed.
+
+        ``notify=False`` lets the caller own the notification fan-out (e.g. the
+        assignment_confirmed handler, which tells BOTH the requester and the
+        approver in one place) so the requester isn't toasted twice.
+        """
         for rec in self:
             rec.state = 'failed'
             rec.resolved_at = fields.Datetime.now()
-            rec._notify_requester('reassignment_failed',
-                                  reason or "Reassignment failed in Interakt.")
+            if notify:
+                rec._notify_requester('reassignment_failed',
+                                      reason or "Reassignment failed in Interakt.")
 
     # ------------------------------------------------------------------
     # Helpers

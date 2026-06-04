@@ -1625,7 +1625,7 @@ class WaConversation(models.Model):
             "assignee %s (uid=%s) — created request #%s, notifying channel "
             "wa_notification_%s",
             self.env.user.name, self.env.uid, self.phone_number,
-            self.lead_id.name if self.lead_id else '-', assignee.name, assignee.id,
+            self.sudo().lead_id.name if self.lead_id else '-', assignee.name, assignee.id,
             req.id, assignee.id,
         )
         self._notify_assignee_of_request(req)
@@ -1641,6 +1641,9 @@ class WaConversation(models.Model):
         assignee = self.assigned_user_id
         if not assignee:
             return
+        # The requester may not have lead-read rights ("RM See Own"); read lead
+        # display data via sudo so requesting a handover never 403s.
+        lead = self.sudo().lead_id
         try:
             self.env['bus.bus']._sendone(
                 'wa_notification_%d' % assignee.id,
@@ -1650,8 +1653,8 @@ class WaConversation(models.Model):
                     'request_id': req.id,
                     'requester_name': req.requester_id.name,
                     'phone': self.phone_number,
-                    'lead_id': self.lead_id.id if self.lead_id else None,
-                    'lead_name': self.lead_id.name if self.lead_id else '',
+                    'lead_id': lead.id if lead else None,
+                    'lead_name': lead.name if lead else '',
                     'note': req.note or '',
                     'conversation_id': self.id,
                 },
@@ -1704,9 +1707,40 @@ class WaConversation(models.Model):
                 [('request_id', '=', request_id)], limit=1)
 
         if not success:
+            reason = (event.get('failure_reason') or '').strip() \
+                or "Interakt rejected the assignment."
             conv.sudo().write({'assignment_pending': False})
+
+            target_user = (self.env['res.users'].sudo().browse(rm_odoo_id)
+                           if rm_odoo_id else None)
+            target_name = (target_user.name
+                           if target_user and target_user.exists()
+                           else "the requested RM")
+
+            # Tell EVERYONE involved, with the reason:
+            #  • the target RM (the requester / claimer who would have got it),
+            #  • the approver (the request's current assignee), and
+            #  • whoever currently owns the chat.
+            notify_uids = set()
+            if rm_odoo_id:
+                notify_uids.add(rm_odoo_id)
             if req:
-                req._mark_failed(event.get('failure_reason') or '')
+                notify_uids.add(req.requester_id.id)
+                if req.current_assignee_id:
+                    notify_uids.add(req.current_assignee_id.id)
+                # Caller owns the notification fan-out below — don't double-toast.
+                req._mark_failed(reason, notify=False)
+            if conv.assigned_user_id:
+                notify_uids.add(conv.assigned_user_id.id)
+
+            # Persistent record in the thread (survives a missed real-time toast).
+            conv._owa_log_system_event(
+                "Chat could not be assigned to %s — %s" % (target_name, reason))
+            conv._notify_assignment_failed(notify_uids, reason, target_name)
+            _logger.info(
+                "assignment failed for conv %s (target=%s): %s — notified uids=%s",
+                conv.id, target_name, reason, sorted(notify_uids),
+            )
             return
 
         new_user = self.env['res.users'].sudo().browse(rm_odoo_id) if rm_odoo_id else None
@@ -1734,6 +1768,35 @@ class WaConversation(models.Model):
                 _logger.debug("assignment_changed notify failed", exc_info=True)
         if req:
             req._mark_approved()
+
+    def _notify_assignment_failed(self, user_ids, reason: str, target_name: str) -> None:
+        """Push a 'reassignment_failed' toast (with the reason) to each user.
+
+        Used when the platform reports the Interakt assignment could not be
+        completed (e.g. "Agent with email not found"). Failures must be loud and
+        reach BOTH the requester and the approver so the chat isn't left in a
+        silent limbo.
+        """
+        self.ensure_one()
+        message = "Chat could not be assigned to %s — %s" % (target_name, reason)
+        for uid in {u for u in user_ids if u}:
+            try:
+                self.env['bus.bus']._sendone(
+                    'wa_notification_%d' % uid,
+                    'wa_event',
+                    {
+                        'type': 'reassignment_failed',
+                        'message': message,
+                        'reason': reason,
+                        'phone': self.phone_number,
+                        'lead_id': self.lead_id.id if self.lead_id else None,
+                        'lead_name': self.lead_id.name if self.lead_id else '',
+                        'conversation_id': self.id,
+                    },
+                )
+            except Exception:  # noqa: BLE001
+                _logger.warning(
+                    "assignment-failed notify to uid=%s failed", uid, exc_info=True)
 
     def _owa_log_system_event(self, body: str) -> None:
         """Append a system-event ``wa.message`` to this conversation's timeline."""
@@ -1946,6 +2009,25 @@ class WaConversation(models.Model):
                 'read_pct': round(100 * read_count / total) if total else 0,
             }
 
+        # Pending handover requests the current user may act on (they are the
+        # current assignee, or a manager). Surfaced in the thread so approval is
+        # PERSISTENT and discoverable — not reliant on catching a transient
+        # real-time toast. The requester's own open request is excluded.
+        incoming_requests = []
+        is_mgr = conv._is_wa_manager()
+        if conv.assigned_user_id.id == self.env.uid or is_mgr:
+            pending = self.env['wa.reassignment.request'].sudo().search([
+                ('conversation_id', '=', conv.id),
+                ('state', '=', 'pending'),
+                ('requester_id', '!=', self.env.uid),
+            ])
+            incoming_requests = [{
+                'id': r.id,
+                'requester_id': r.requester_id.id,
+                'requester_name': r.requester_id.name,
+                'note': r.note or '',
+            } for r in pending]
+
         return {
             'conversation': {
                 'id': conv.id,
@@ -1961,7 +2043,7 @@ class WaConversation(models.Model):
                 # Ownership gating for the composer.
                 'can_send': conv._can_send(),
                 'send_gate_reason': conv._send_gate_reason(),
-                'is_manager': conv._is_wa_manager(),
+                'is_manager': is_mgr,
                 'assignment_pending': conv.assignment_pending,
                 # True when the current user already has an open handover request
                 # on this chat — lets the composer show "waiting for approval".
@@ -1970,6 +2052,8 @@ class WaConversation(models.Model):
                     ('requester_id', '=', self.env.uid),
                     ('state', 'in', ('pending', 'confirming')),
                 ])),
+                # Handover requests awaiting THIS user's approval (persistent).
+                'incoming_requests': incoming_requests,
             },
             'messages': messages,
             'stats': stats,

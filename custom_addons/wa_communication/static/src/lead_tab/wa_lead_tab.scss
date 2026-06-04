@@ -297,3 +297,24 @@ $sidebar-w: 200px;
 
     .wa-lead-tab__claim-msg { flex: 1; }
 }
+
+// Persistent handover-approval banner (shown to the current assignee / manager)
+.wa-lead-tab__handover-banner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    margin: 6px 8px;
+    background: #eef6ff;
+    border: 1px solid #b6d4fe;
+    border-radius: 6px;
+    font-size: 13px;
+    color: #084298;
+
+    .wa-lead-tab__handover-text { flex: 1; }
+    .wa-lead-tab__handover-actions {
+        display: flex;
+        gap: 6px;
+        flex-shrink: 0;
+    }
+}

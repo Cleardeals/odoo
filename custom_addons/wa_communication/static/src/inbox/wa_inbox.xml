@@ -132,6 +132,27 @@
                                 <div class="alert alert-danger wa-inbox__send-error" t-esc="state.sendError"/>
                             </t>
 
+                            <!-- Persistent handover-approval banner (assignee/manager) -->
+                            <t t-foreach="incomingRequests" t-as="req" t-key="req.id">
+                                <div class="wa-inbox__handover-banner">
+                                    <span class="wa-inbox__handover-text">
+                                        <i class="fa fa-user-plus" aria-hidden="true"/>
+                                        <b t-esc="req.requester_name"/> requested to take over this chat.
+                                        <t t-if="req.note"> — <i t-esc="req.note"/></t>
+                                    </span>
+                                    <span class="wa-inbox__handover-actions">
+                                        <button class="btn btn-sm btn-success"
+                                                t-on-click="() => this.approveRequest(req.id)">
+                                            <i class="fa fa-check" aria-hidden="true"/> Approve
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-secondary"
+                                                t-on-click="() => this.declineRequest(req.id)">
+                                            <i class="fa fa-times" aria-hidden="true"/> Decline
+                                        </button>
+                                    </span>
+                                </div>
+                            </t>
+
                             <t t-if="state.threadLoading and !state.thread">
                                 <div class="wa-inbox__loading"><i class="fa fa-spinner fa-spin"/></div>
                             </t>

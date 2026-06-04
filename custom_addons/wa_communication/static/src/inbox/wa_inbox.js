@@ -336,6 +336,30 @@ export class WaInbox extends Component {
         return !!this.activeConversation?.my_open_request;
     }
 
+    get incomingRequests() {
+        return this.activeConversation?.incoming_requests || [];
+    }
+
+    async approveRequest(reqId) {
+        try {
+            await this.orm.call("wa.reassignment.request", "approve", [[reqId]], {});
+            this.notification.add("Chat handed over.", { type: "success" });
+            await this._loadThread(this.state.activeConvId);
+        } catch (e) {
+            this.notification.add(e.data?.message || "Could not approve the request.", { type: "danger" });
+        }
+    }
+
+    async declineRequest(reqId) {
+        try {
+            await this.orm.call("wa.reassignment.request", "decline", [[reqId]], {});
+            this.notification.add("Request declined.", { type: "warning" });
+            await this._loadThread(this.state.activeConvId);
+        } catch (e) {
+            this.notification.add(e.data?.message || "Could not decline the request.", { type: "danger" });
+        }
+    }
+
     async claimChat() {
         const convId = this.state.activeConvId;
         if (!convId) return;

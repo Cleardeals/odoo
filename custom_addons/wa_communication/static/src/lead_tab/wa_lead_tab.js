@@ -241,10 +241,31 @@ export class WaLeadTab extends Component {
         }
     }
 
+    async approveRequest(reqId) {
+        try {
+            await this.orm.call("wa.reassignment.request", "approve", [[reqId]], {});
+            this.notification.add("Chat handed over.", { type: "success" });
+            await this._loadThread(this.state.convId);
+        } catch (e) {
+            this.notification.add(e.data?.message || "Could not approve the request.", { type: "danger" });
+        }
+    }
+
+    async declineRequest(reqId) {
+        try {
+            await this.orm.call("wa.reassignment.request", "decline", [[reqId]], {});
+            this.notification.add("Request declined.", { type: "warning" });
+            await this._loadThread(this.state.convId);
+        } catch (e) {
+            this.notification.add(e.data?.message || "Could not decline the request.", { type: "danger" });
+        }
+    }
+
     // ── Derived from thread ───────────────────────────────────────────────────
 
-    get conversation()   { return this.state.thread?.conversation || null; }
-    get myOpenRequest()  { return !!this.conversation?.my_open_request; }
+    get conversation()    { return this.state.thread?.conversation || null; }
+    get myOpenRequest()   { return !!this.conversation?.my_open_request; }
+    get incomingRequests(){ return this.conversation?.incoming_requests || []; }
     get messages()       { return this.state.thread?.messages     || []; }
     get stats()          { return this.state.thread?.stats        || {}; }
     get windowState()    { return this.conversation?.window_state || "closed"; }
