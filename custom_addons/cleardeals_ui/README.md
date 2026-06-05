@@ -1,11 +1,16 @@
 # custom_addons/cleardeals_ui
 
-> **Last updated:** 2026-05-21 · **Addon version:** 1.0.0 · **Odoo version:** 19.0
+> **Last updated:** 2026-06-05 · **Addon version:** 1.0.0 · **Odoo version:** 19.0 ·
+> **Depends:** `web`, `cleardeals_notification`
 
 Central OWL component library for all Cleardeals custom addons. Every
-reusable frontend primitive — field widgets, view widgets, and generic UI
-components — lives here. Other addons consume them; they never define their
-own primitives.
+reusable frontend primitive — field widgets, chat components, charts, and the
+**notification UI** (systray bell + popups) — lives here. Other addons consume
+them; they never define their own primitives.
+
+> 📚 For the full WhatsApp-suite picture (Pub/Sub transport, the three modules,
+> dev/test workflow) start at [`../README_WHATSAPP_SUITE.md`](../README_WHATSAPP_SUITE.md).
+> This file is the deep reference for the component library itself.
 
 ---
 
@@ -49,23 +54,31 @@ cleardeals_ui/
 ├── README.md             # This file
 └── static/
     └── src/
-        ├── index.js      # Barrel — re-exports every public symbol
-        ├── core/         # Generic UI primitives (no registry, no field binding)
-        ├── fields/       # Field widgets  → widget="cd_*" in XML views
+        ├── index.js          # Barrel — re-exports every public symbol
+        ├── fields/           # Field widgets  → widget="cd_*" in XML views
         │   └── status_badge/
-        │       ├── status_badge.js     ← component class + descriptor
-        │       ├── status_badge.xml    ← OWL template
-        │       └── status_badge.scss   ← scoped styles
-        └── widgets/      # Standalone view widgets → <widget name="cd_*"/>
+        ├── components/       # Reusable OWL components (pure, props-driven)
+        │   ├── metric_card/  bar_chart/  line_chart/
+        │   ├── workflow_health_table/  recent_failures_table/
+        │   ├── chat_bubble/  chat_thread/  chat_composer/
+        │   ├── conversation_list_item/  window_badge/
+        │   ├── quick_reply_picker/  template_picker_modal/
+        │   └── …             # each = <name>.{js,xml,scss}
+        ├── notification/     # the notification UI (service + popups + systray + config)
+        └── utils/            # datetime.js, whatsapp_format.js
 ```
 
-### The three categories
+### Categories
 
-| Directory | Registry key | XML usage | When to use |
+| Directory | Registry | XML / mount | When to use |
 |---|---|---|---|
-| `core/` | None — pure OWL component | `<CdComponent .../>` inside another component's template | Generic UI primitives: spinners, empty states, confirm dialogs, etc. |
-| `fields/` | `"fields"` | `<field name="x" widget="cd_*"/>` in a form/list view | Anything bound to a model field that needs custom rendering |
-| `widgets/` | `"view_widgets"` | `<widget name="cd_*"/>` in a form view | Standalone display areas that are NOT backed by a single field |
+| `fields/` | `"fields"` | `<field … widget="cd_*"/>` | Bound to a model field, custom rendering. |
+| `components/` | none (pure) | `<CdComponent .../>` inside another template | Generic reusable components: chat widgets, charts, cards. |
+| `notification/` | `services`, `main_components`, `systray` | mounted globally | The notification bell + popup system (see [§ Notification UI](#notification-ui-the-bell--popups)). |
+| `utils/` | n/a | `import` helpers | Pure functions (formatting, dates). |
+
+> The older `core/` / `widgets/` split mentioned in earlier docs was never
+> populated; the live structure is the four directories above.
 
 ### Asset registration
 
@@ -344,6 +357,108 @@ In the view:
 
 In a `write` or `_compute_color` method, set `color` to the appropriate
 palette index whenever `state` changes.
+
+---
+
+## Full component catalogue
+
+Beyond `cd_status_badge`, the library now contains the chat, dashboard, and
+notification components built for the WhatsApp suite. All are exported from
+`static/src/index.js` and imported by name (`@cleardeals_ui/index`).
+
+### Chat primitives (`components/`)
+
+| Export | Template | Purpose |
+|---|---|---|
+| `CdChatThread` | `cleardeals_ui.ChatThread` | Scrollable message timeline: day separators, auto-scroll to bottom, keeps the composer in view. |
+| `CdChatBubble` | `cleardeals_ui.ChatBubble` | One message bubble — delivery/blue ticks, inline image/PDF lightbox, quoted-reply highlight, WA-markdown via `markup()`. |
+| `CdChatComposer` | `cleardeals_ui.ChatComposer` | Input box: free text, media upload (`/wa/media/upload`), quick-reply **bolt** button, **Send-Template** button, and ownership **gating** (`disabled` prop locks the box for non-owners). |
+| `CdConversationListItem` | `cleardeals_ui.ConversationListItem` | One inbox row: avatar, last-message preview, unread badge, window state. |
+| `CdWindowBadge` | `cleardeals_ui.WindowBadge` | The 24h free-text window open/closed indicator. |
+| `CdQuickReplyPicker` | `cleardeals_ui.QuickReplyPicker` | Popover to search saved quick replies (personal + shared) and insert one into the composer; supports `/shortcut` typeahead. |
+| `CdTemplatePickerModal` | `cleardeals_ui.TemplatePickerModal` | Two-step modal: pick an approved template → fill its `{{N}}` variables with a live preview → send. Keyed by **index** (Interakt returns one `name` per language). |
+
+### Dashboard / analytics (`components/`)
+
+| Export | Purpose |
+|---|---|
+| `CdMetricCard` | KPI headline card (value + label + trend). |
+| `CdBarChart` / `CdLineChart` | Lightweight dependency-free SVG charts. |
+| `CdWorkflowHealthTable` | Workflow list with a manager-only pause/resume toggle. |
+| `CdRecentFailuresTable` | Recent send failures with click-through to the lead. |
+
+### Utilities (`utils/`)
+
+| Module | Exports | Notes |
+|---|---|---|
+| `whatsapp_format.js` | `formatWhatsApp(text)`, `wrapSelection(...)` | Renders WA markdown (`*bold*`, `_italic_`, `~strike~`). Output must be wrapped in OWL `markup()` to render as HTML. |
+| `datetime.js` | relative/short time helpers | Used by the chat thread/bubbles. |
+
+---
+
+## Notification UI (the bell + popups) {#notification-ui-the-bell--popups}
+
+`static/src/notification/` is the **front-end half** of the
+[`cleardeals_notification`](../cleardeals_notification/README.md) backend. It turns
+persisted `cleardeals.notification` rows + live bus events into a systray bell and
+toast popups.
+
+| File | What it is | Registry |
+|---|---|---|
+| `notification_service.js` | The **`cd_notification` service** — single reactive store, bus subscription, offline recovery. | `services` |
+| `notification_popups.{js,xml}` | `CdNotificationPopups` — global toast stack. | `main_components` |
+| `notification_systray.{js,xml}` | `CdNotificationBell` — systray bell + unread badge + history dropdown. | `systray` |
+| `notification_config.js` | The `cd_notification_types` registry + `getNotifConfig()`. | — |
+
+### The `cd_notification` service
+
+On start it (1) reads the current user id — **`user.userId` from `@web/core/user`**
+— (2) `subscribe("cd_notification", onEvent)` + `addChannel("cleardeals_notification_{uid}")`,
+and (3) `loadPersisted()` (`orm.call("cleardeals.notification", "get_unread")`) so
+nothing raised while offline is lost. It exposes one `reactive` `state`
+(`items`, `popups`, `unreadCount`, `activeSuppressKey`) that both the bell and the
+popup stack consume with `useState(this.center.state)`. Popups auto-dismiss after
+8s unless `actionable`/`sticky`.
+
+### Registering a notification type
+
+Type display/behaviour is **pure data** in the `cd_notification_types` registry —
+no component change needed for a new kind. Example (from `wa_communication`):
+
+```js
+import { registry } from "@web/core/registry";
+const types = registry.category("cd_notification_types");
+
+types.add("reassignment_request", {
+    title: "Chat handover requested",   // fallback if the row carries no title
+    icon: "fa-user-plus",
+    mod: "review",                       // colour variant: default|replied|review|failure
+    actions: [                            // inline buttons → orm.call(model, method, args(n))
+        { key: "approve", label: "Approve", btnClass: "btn-success",
+          model: "wa.reassignment.request", method: "approve",
+          args: (n) => [[n.request_id]], okMessage: "Chat handed over." },
+    ],
+    open: { model: "leads.new", resId: (n) => n.lead_id },   // click-through for passive cards
+});
+```
+
+`getNotifConfig(type)` **never throws** — unknown types fall back to a safe default
+(bell icon, no actions). See the backend README for the `notify()` API and the
+`suppress_key` convention.
+
+---
+
+## ⚠️ OWL gotchas that have bitten us in production
+
+Internalise these — each one caused a real outage and a debugging session.
+
+| Symptom | Root cause | Fix |
+|---|---|---|
+| Notifications dead, bell shows 0, `TypeError … 'userId'` | **`session.uid` is `undefined` in Odoo 19** — `@web/session` no longer carries the user id, so any `if (session.uid)` gate silently skips. | Import `user` from `@web/core/user`; use **`user.userId`**. |
+| `OwlError … moveBeforeVNode … Illegal invocation` | Used `t-as="t"` in a `t-foreach` — `t` is OWL's reserved template-namespace tag. | Rename the loop alias, e.g. `t-as="tpl"`. |
+| `OwlError … moveBeforeVNode … null parentEl` (esp. on re-render/search) | A `t-foreach` (VList) sat directly inside `<t>` fragment chains, so it had no real DOM parent; **or** duplicate `t-key`s. | Put the `t-foreach` under a **real `<div>`**; put `t-if/elif/else` on real elements; use a **unique** `t-key` (index keys are safest for display-only lists). |
+| Shared store changes don't re-render | Passed a plain (non-reactive) object between components. | Service exposes `reactive({...})`; components `useState(service.state)`. |
+| HTML renders escaped in a bubble | `t-out`/`t-esc` escape strings. | Wrap rendered HTML with OWL `markup()`. |
 
 ---
 
