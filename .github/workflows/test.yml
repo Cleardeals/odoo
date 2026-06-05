@@ -62,8 +62,8 @@ jobs:
             --db_user=odoo \
             --db_password=odoo \
             --addons-path=/mnt/extra-addons,/usr/lib/python3/dist-packages/odoo/addons \
-            -i leads,lead_suggestor,cleardeals_dashboards,properties,cleardeals_pubsub,wa_communication \
+            -i leads,lead_suggestor,cleardeals_dashboards,properties,cleardeals_pubsub,cleardeals_notification,wa_communication \
             --test-enable \
-            --test-tags /leads,/lead_suggestor,/cleardeals_dashboards,/properties,/cleardeals_pubsub,/wa_communication \
+            --test-tags /leads,/lead_suggestor,/cleardeals_dashboards,/properties,/cleardeals_pubsub,/cleardeals_notification,/wa_communication \
             --stop-after-init \
             --log-level=test

@@ -1098,25 +1098,20 @@ class WaConversation(models.Model):
             conv_vals['lead_id'] = lead.id
         conv.sudo().write(conv_vals)
 
-        # bus.bus notification to RM — replaces mail.activity
+        # Central notification to the RM (persistent + live popup).
         if rm_odoo_id:
-            lead_name = (lead.name if lead else '')
-            try:
-                self.env['bus.bus']._sendone(
-                    f'wa_notification_{rm_odoo_id}',
-                    'wa_event',
-                    {
-                        'type':      'lead_replied',
-                        'actor_id':  actor_id,
-                        'lead_id':   lead.id if lead else None,
-                        'lead_name': lead_name,
-                        'phone':     phone,
-                        'message':   message_text[:80] if message_text else '',
-                        'lead_url':  f'/web#model=leads.new&id={lead.id}' if lead else '',
-                    },
-                )
-            except Exception:
-                _logger.exception("wa_push: failed to send bus.bus for lead_replied")
+            self._push_user_notification(
+                rm_odoo_id, 'lead_replied',
+                title='WhatsApp reply',
+                body=(message_text[:120] if message_text else 'New WhatsApp reply'),
+                payload={
+                    'actor_id':  actor_id,
+                    'lead_id':   lead.id if lead else None,
+                    'lead_name': lead.name if lead else '',
+                    'phone':     phone,
+                    'suppress_key': phone,
+                },
+            )
 
     def _handle_odoo_ambiguous_reply(
         self, event: dict, pubsub_message_id: str
@@ -1158,25 +1153,20 @@ class WaConversation(models.Model):
 
         conv.sudo().write({'last_message_at': occurred_at, 'unread_count': conv.unread_count + 1})
 
-        # bus.bus notification to RM — replaces mail.activity
+        # Central notification to the RM (persistent + live popup).
         if rm_odoo_id:
-            lead_name = (lead.name if lead else '')
-            try:
-                self.env['bus.bus']._sendone(
-                    f'wa_notification_{rm_odoo_id}',
-                    'wa_event',
-                    {
-                        'type':      'ambiguous_reply',
-                        'actor_id':  actor_id,
-                        'lead_id':   lead.id if lead else None,
-                        'lead_name': lead_name,
-                        'phone':     phone,
-                        'message':   message_text[:80] if message_text else '',
-                        'lead_url':  f'/web#model=leads.new&id={lead.id}' if lead else '',
-                    },
-                )
-            except Exception:
-                _logger.exception("wa_push: failed to send bus.bus for ambiguous_reply")
+            self._push_user_notification(
+                rm_odoo_id, 'ambiguous_reply',
+                title='WhatsApp: review needed',
+                body=(message_text[:120] if message_text else 'Unroutable WhatsApp reply'),
+                payload={
+                    'actor_id':  actor_id,
+                    'lead_id':   lead.id if lead else None,
+                    'lead_name': lead.name if lead else '',
+                    'phone':     phone,
+                    'suppress_key': phone,
+                },
+            )
 
     def _handle_odoo_permanent_failure(
         self, event: dict, pubsub_message_id: str
@@ -1199,30 +1189,25 @@ class WaConversation(models.Model):
 
         lead = self._owa_resolve_lead(actor_id, actor_type, phone)
 
-        # bus.bus notification to RM — replaces mail.activity
+        # Central notification to the RM (persistent + live popup).
         if rm_odoo_id:
-            lead_name = (lead.name if lead else '')
             summary = (
                 f'Delivery failed: {failure_reason}'
                 if event_type == 'permanent_failure'
                 else f'Retries exhausted: {failure_reason}'
             )
-            try:
-                self.env['bus.bus']._sendone(
-                    f'wa_notification_{rm_odoo_id}',
-                    'wa_event',
-                    {
-                        'type':      'permanent_failure',
-                        'actor_id':  actor_id,
-                        'lead_id':   lead.id if lead else None,
-                        'lead_name': lead_name,
-                        'phone':     phone,
-                        'message':   summary[:80],
-                        'lead_url':  f'/web#model=leads.new&id={lead.id}' if lead else '',
-                    },
-                )
-            except Exception:
-                _logger.exception("wa_push: failed to send bus.bus for permanent_failure")
+            self._push_user_notification(
+                rm_odoo_id, 'permanent_failure',
+                title='WhatsApp delivery failed',
+                body=summary[:160],
+                payload={
+                    'actor_id':  actor_id,
+                    'lead_id':   lead.id if lead else None,
+                    'lead_name': lead.name if lead else '',
+                    'phone':     phone,
+                    'suppress_key': phone,
+                },
+            )
 
     def _handle_odoo_enrollment_created(
         self, event: dict, pubsub_message_id: str
@@ -1644,30 +1629,24 @@ class WaConversation(models.Model):
         # The requester may not have lead-read rights ("RM See Own"); read lead
         # display data via sudo so requesting a handover never 403s.
         lead = self.sudo().lead_id
-        try:
-            self.env['bus.bus']._sendone(
-                'wa_notification_%d' % assignee.id,
-                'wa_event',
-                {
-                    'type': 'reassignment_request',
-                    'request_id': req.id,
-                    'requester_name': req.requester_id.name,
-                    'phone': self.phone_number,
-                    'lead_id': lead.id if lead else None,
-                    'lead_name': lead.name if lead else '',
-                    'note': req.note or '',
-                    'conversation_id': self.id,
-                },
-            )
-            _logger.info(
-                "request_assignment: queued bus notification to wa_notification_%s "
-                "for request #%s", assignee.id, req.id,
-            )
-        except Exception:  # noqa: BLE001
-            _logger.warning(
-                "request_assignment: failed to notify assignee %s for request #%s",
-                assignee.id, req.id, exc_info=True,
-            )
+        requester_name = req.requester_id.name
+        self._push_user_notification(
+            assignee.id, 'reassignment_request',
+            title='Chat handover requested',
+            body='%s wants to take over %s.' % (
+                requester_name, (lead.name if lead else self.phone_number)),
+            payload={
+                'request_id': req.id,
+                'requester_name': requester_name,
+                'phone': self.phone_number,
+                'lead_id': lead.id if lead else None,
+                'lead_name': lead.name if lead else '',
+                'note': req.note or '',
+                'conversation_id': self.id,
+                'suppress_key': self.phone_number,
+            },
+            actionable=True,
+        )
 
     def action_reassign(self, lead_id: int | None = None, user_id: int | None = None) -> None:
         """Manager force-reassign (or re-link inquiry) — platform-routed.
@@ -1751,23 +1730,37 @@ class WaConversation(models.Model):
 
         if new_user:
             conv._owa_log_system_event("Chat assigned to %s" % new_user.name)
-            try:
-                self.env['bus.bus']._sendone(
-                    'wa_notification_%d' % new_user.id,
-                    'wa_event',
-                    {
-                        'type': 'assignment_changed',
-                        'phone': conv.phone_number,
-                        'lead_id': conv.lead_id.id if conv.lead_id else None,
-                        'lead_name': conv.lead_id.name if conv.lead_id else '',
-                        'conversation_id': conv.id,
-                        'message': "You are now assigned to this chat.",
-                    },
-                )
-            except Exception:  # noqa: BLE001
-                _logger.debug("assignment_changed notify failed", exc_info=True)
+            conv._push_user_notification(
+                new_user.id, 'assignment_changed',
+                title='Chat assigned to you',
+                body='You are now assigned to %s.' % (
+                    conv.lead_id.name if conv.lead_id else conv.phone_number),
+                payload={
+                    'phone': conv.phone_number,
+                    'lead_id': conv.lead_id.id if conv.lead_id else None,
+                    'lead_name': conv.lead_id.name if conv.lead_id else '',
+                    'conversation_id': conv.id,
+                },
+            )
         if req:
             req._mark_approved()
+
+    def _push_user_notification(self, user_id, ntype, title, body,
+                                payload=None, actionable=False) -> None:
+        """Emit a persistent + live notification via the central system.
+
+        Thin wrapper over ``cleardeals.notification.notify`` that never lets a
+        notification failure break the calling handler.
+        """
+        if not user_id:
+            return
+        try:
+            self.env['cleardeals.notification'].notify(
+                user_id, ntype, title=title, body=body,
+                payload=payload or {}, actionable=actionable)
+        except Exception:  # noqa: BLE001
+            _logger.warning("wa: notify '%s' to uid=%s failed",
+                            ntype, user_id, exc_info=True)
 
     def _notify_assignment_failed(self, user_ids, reason: str, target_name: str) -> None:
         """Push a 'reassignment_failed' toast (with the reason) to each user.
@@ -1779,24 +1772,17 @@ class WaConversation(models.Model):
         """
         self.ensure_one()
         message = "Chat could not be assigned to %s — %s" % (target_name, reason)
+        payload = {
+            'reason': reason,
+            'phone': self.phone_number,
+            'lead_id': self.lead_id.id if self.lead_id else None,
+            'lead_name': self.lead_id.name if self.lead_id else '',
+            'conversation_id': self.id,
+        }
         for uid in {u for u in user_ids if u}:
-            try:
-                self.env['bus.bus']._sendone(
-                    'wa_notification_%d' % uid,
-                    'wa_event',
-                    {
-                        'type': 'reassignment_failed',
-                        'message': message,
-                        'reason': reason,
-                        'phone': self.phone_number,
-                        'lead_id': self.lead_id.id if self.lead_id else None,
-                        'lead_name': self.lead_id.name if self.lead_id else '',
-                        'conversation_id': self.id,
-                    },
-                )
-            except Exception:  # noqa: BLE001
-                _logger.warning(
-                    "assignment-failed notify to uid=%s failed", uid, exc_info=True)
+            self._push_user_notification(
+                uid, 'reassignment_failed',
+                title='Reassignment failed', body=message, payload=payload)
 
     def _owa_log_system_event(self, body: str) -> None:
         """Append a system-event ``wa.message`` to this conversation's timeline."""

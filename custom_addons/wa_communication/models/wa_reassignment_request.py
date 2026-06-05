@@ -138,18 +138,22 @@ class WaReassignmentRequest(models.Model):
 
     def _notify_requester(self, event_type, message):
         self.ensure_one()
+        conv = self.conversation_id.sudo()
+        title = {
+            'reassignment_approved': 'Request approved',
+            'reassignment_declined': 'Request declined',
+            'reassignment_failed':   'Reassignment failed',
+        }.get(event_type, 'WhatsApp assignment')
         try:
-            conv = self.conversation_id
-            self.env['bus.bus']._sendone(
-                'wa_notification_%d' % self.requester_id.id,
-                'wa_event',
-                {
-                    'type': event_type,
-                    'message': message,
+            self.env['cleardeals.notification'].notify(
+                self.requester_id.id, event_type,
+                title=title, body=message,
+                payload={
                     'phone': conv.phone_number,
+                    'lead_id': conv.lead_id.id if conv.lead_id else None,
                     'lead_name': conv.lead_id.name if conv.lead_id else '',
                     'conversation_id': conv.id,
                 },
             )
-        except Exception:  # noqa: BLE001 — never let a bus failure break the flow
-            _logger.debug("reassignment notify failed", exc_info=True)
+        except Exception:  # noqa: BLE001 — never let a notify failure break the flow
+            _logger.warning("reassignment notify failed", exc_info=True)

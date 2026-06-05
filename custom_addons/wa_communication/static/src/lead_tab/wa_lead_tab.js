@@ -1,8 +1,9 @@
 /** @odoo-module */
 
-import { Component, useState, onMounted, onWillUpdateProps } from "@odoo/owl";
+import { Component, useState, onMounted, onWillUpdateProps, onWillUnmount } from "@odoo/owl";
 import { registry }   from "@web/core/registry";
 import { useService } from "@web/core/utils/hooks";
+import { session } from "@web/session";
 import { standardWidgetProps } from "@web/views/widgets/standard_widget_props";
 import { CdChatThread }   from "@cleardeals_ui/index";
 import { CdChatComposer } from "@cleardeals_ui/index";
@@ -28,6 +29,7 @@ export class WaLeadTab extends Component {
         this.action     = useService("action");
         this.busService = useService("bus_service");
         this.notification = useService("notification");
+        this.cdNotif    = useService("cd_notification");
 
         this.state = useState({
             convId:    null,
@@ -56,6 +58,10 @@ export class WaLeadTab extends Component {
             const newPhone = this._phone(nextProps);
             if (newPhone !== this._phone(this.props)) this._load(newPhone);
         });
+
+        // Suppress popups for THIS chat only while its Activity tab is mounted
+        // (form notebook pages mount lazily, so this ≈ "viewing this chat").
+        onWillUnmount(() => this.cdNotif.clearActiveSuppressKey());
     }
 
     _phone(props) { return props.record?.data?.phone || ""; }
@@ -67,6 +73,14 @@ export class WaLeadTab extends Component {
         this.busService.subscribe("wa_message_update", () => {
             if (this.state.convId) this._loadThread(this.state.convId);
         });
+        // Refresh the thread (gating / approval banner) on central notifications.
+        const uid = session.uid || null;
+        if (uid) {
+            this.busService.addChannel(`cleardeals_notification_${uid}`);
+            this.busService.subscribe("cd_notification", () => {
+                if (this.state.convId) this._loadThread(this.state.convId);
+            });
+        }
     }
 
     async _load(phone) {
@@ -83,9 +97,11 @@ export class WaLeadTab extends Component {
             if (convs.length) {
                 this.state.convId = convs[0].id;
                 await this._loadThread(this.state.convId);
+                this.cdNotif.setActiveSuppressKey(fullPhone);
             } else {
                 this.state.convId = null;
                 this.state.thread = null;
+                this.cdNotif.clearActiveSuppressKey();
             }
         } catch (e) {
             this.state.error = String(e);

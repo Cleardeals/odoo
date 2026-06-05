@@ -37,7 +37,7 @@ Adding a new component
     'author': 'Cleardeals Technology',
     'category': 'Technical',
     'license': 'LGPL-3',
-    'depends': ['web'],
+    'depends': ['web', 'cleardeals_notification'],
     'data': [],
     'assets': {
         'web.assets_backend': [

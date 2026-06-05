@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="cleardeals_ui.NotificationPopups">
+        <div class="cd-notif-popups">
+            <t t-foreach="state.popups" t-as="notif" t-key="notif.notification_id">
+                <div t-attf-class="cd-notif-card cd-notif-card--{{ config(notif).mod }} {{ notif.actionable ? '' : 'cd-notif-card--clickable' }}"
+                     t-on-click="() => this.onCardClick(notif)">
+                    <div class="cd-notif-card__icon">
+                        <i t-attf-class="fa {{ config(notif).icon }}" aria-hidden="true"/>
+                    </div>
+                    <div class="cd-notif-card__body">
+                        <div class="cd-notif-card__title" t-esc="title(notif)"/>
+                        <div class="cd-notif-card__msg" t-esc="notif.message"/>
+                        <t t-if="notif.actionable and config(notif).actions.length">
+                            <div class="cd-notif-card__actions">
+                                <t t-foreach="config(notif).actions" t-as="act" t-key="act.key">
+                                    <button t-attf-class="btn btn-sm {{ act.btnClass || 'btn-secondary' }}"
+                                            t-on-click.stop="() => this.runAction(notif, act)">
+                                        <i t-if="act.icon" t-attf-class="fa {{ act.icon }}" aria-hidden="true"/>
+                                        <t t-esc="act.label"/>
+                                    </button>
+                                </t>
+                            </div>
+                        </t>
+                    </div>
+                    <button class="cd-notif-card__close"
+                            t-on-click.stop="() => this.dismiss(notif)" title="Dismiss">
+                        <i class="fa fa-times" aria-hidden="true"/>
+                    </button>
+                </div>
+            </t>
+        </div>
+    </t>
+</templates>

@@ -41,6 +41,7 @@ export class WaInbox extends Component {
         this.action     = useService("action");
         this.busService = useService("bus_service");
         this.notification = useService("notification");
+        this.cdNotif    = useService("cd_notification");
 
         this.state = useState({
             // Filters (sidebar)
@@ -83,7 +84,9 @@ export class WaInbox extends Component {
             this._subscribeBus();
         });
 
-        onWillUnmount(() => {});
+        onWillUnmount(() => {
+            this.cdNotif.clearActiveSuppressKey();
+        });
     }
 
     // ── Bus ──────────────────────────────────────────────────────────────────
@@ -96,8 +99,10 @@ export class WaInbox extends Component {
         });
         const uid = session.uid || null;
         if (uid) {
-            this.busService.addChannel(`wa_notification_${uid}`);
-            this.busService.subscribe("wa_event", () => {
+            // Refresh the list/thread when a central notification arrives (the
+            // generic center handles showing it; we just react to keep data fresh).
+            this.busService.addChannel(`cleardeals_notification_${uid}`);
+            this.busService.subscribe("cd_notification", () => {
                 this._loadConversations();
                 if (this.state.activeConvId) this._loadThread(this.state.activeConvId);
             });
@@ -148,6 +153,9 @@ export class WaInbox extends Component {
             const data = await this.orm.call("wa.conversation", "get_thread", [[convId]], {});
             this.state.thread = data;
             this.state.activeConvId = convId;
+            // Suppress popups for THIS chat while it's open on screen (the user
+            // sees updates live here); everywhere else still pops.
+            this.cdNotif.setActiveSuppressKey(data?.conversation?.phone || null);
         } catch (e) {
             console.error("WaInbox._loadThread", e);
         } finally {

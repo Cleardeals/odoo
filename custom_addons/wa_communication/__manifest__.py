@@ -45,7 +45,7 @@ Client action at WhatsApp → Dashboard providing:
     'author': 'Cleardeals Technology',
     'category': 'Technical',
     'license': 'LGPL-3',
-    'depends': ['cleardeals_pubsub', 'leads', 'cleardeals_ui'],
+    'depends': ['cleardeals_pubsub', 'leads', 'cleardeals_ui', 'cleardeals_notification'],
     'data': [
         'security/wa_security.xml',
         'security/ir.model.access.csv',

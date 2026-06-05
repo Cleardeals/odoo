@@ -132,15 +132,11 @@ class TestAssignment(TransactionCase):
             self.env.cr.postcommit.run()
         self.assertEqual(req.state, 'confirming')
 
-        captured = []
-        bus_cls = type(self.env['bus.bus'])
+        Notif = self.env['cleardeals.notification'].sudo()
         sys_before = self.env['wa.message'].sudo().search_count([
             ('conversation_id', '=', self.conv.id), ('kind', '=', 'system')])
 
-        def _cap(self2, target, ntype, message):
-            captured.append((target, message))
-
-        with patch.object(bus_cls, '_sendone', _cap):
+        with patch.object(type(self.env['bus.bus']), '_sendone'):
             self.conv._handle_odoo_assignment_confirmed({
                 'phone': self.conv.phone_number,
                 'rm_odoo_id': self.rm_b.id,
@@ -153,17 +149,14 @@ class TestAssignment(TransactionCase):
         self.assertFalse(self.conv.assignment_pending)
         self.assertEqual(self.conv.assigned_user_id, self.rm_a,
                          "ownership must stay put on failure")
-        targets = [t for (t, _m) in captured]
-        self.assertIn('wa_notification_%d' % self.rm_b.id, targets,
-                      "requester must be notified of the failure")
-        self.assertIn('wa_notification_%d' % self.rm_a.id, targets,
-                      "approver must be notified of the failure")
-        # The reason is carried through to the toast payload.
-        fail_msgs = [m for (_t, m) in captured
-                     if isinstance(m, dict) and m.get('type') == 'reassignment_failed']
-        self.assertTrue(fail_msgs)
-        self.assertTrue(any('Agent with email not found' in (m.get('reason') or '')
-                            for m in fail_msgs))
+        # BOTH the requester and the approver get a persisted failure notification
+        # carrying the reason.
+        for uid in (self.rm_a.id, self.rm_b.id):
+            n = Notif.search([('user_id', '=', uid),
+                              ('notif_type', '=', 'reassignment_failed')],
+                             order='id desc', limit=1)
+            self.assertTrue(n, "uid %s must be notified of the failure" % uid)
+            self.assertIn('Agent with email not found', (n.payload or {}).get('reason', ''))
         # A persistent system event is appended to the thread.
         sys_after = self.env['wa.message'].sudo().search_count([
             ('conversation_id', '=', self.conv.id), ('kind', '=', 'system')])
@@ -207,37 +200,35 @@ class TestAssignment(TransactionCase):
         self.assertTrue(req_id)
 
     def test_request_assignment_notifies_assignee(self):
-        """The handover request must push a bus card to the current assignee."""
-        captured = []
-        bus_cls = type(self.env['bus.bus'])
-
-        def _cap(self2, target, ntype, message):
-            captured.append((target, ntype, message))
-
-        with patch.object(bus_cls, '_sendone', _cap), \
+        """The handover request persists an actionable notification for the assignee."""
+        with patch.object(type(self.env['bus.bus']), '_sendone'), \
              patch.object(type(self.env['cleardeals.pubsub']), 'publish_async'):
             self.conv.with_user(self.rm_b).request_assignment(note='please')
 
-        target = 'wa_notification_%d' % self.rm_a.id
-        matches = [m for (t, _n, m) in captured if t == target]
-        self.assertTrue(matches, "assignee must receive a bus notification")
-        payload = matches[0]
-        self.assertEqual(payload['type'], 'reassignment_request')
-        self.assertEqual(payload['requester_name'], self.rm_b.name)
+        notif = self.env['cleardeals.notification'].sudo().search([
+            ('user_id', '=', self.rm_a.id),
+            ('notif_type', '=', 'reassignment_request'),
+        ], order='id desc', limit=1)
+        self.assertTrue(notif, "assignee must receive a persisted notification")
+        self.assertTrue(notif.is_actionable)
+        self.assertEqual(notif.payload.get('requester_name'), self.rm_b.name)
+        # suppress_key = phone → popup is hidden only while viewing that exact chat.
+        self.assertEqual(notif.payload.get('suppress_key'), self.conv.phone_number)
 
     def test_request_assignment_resurfaces_for_duplicate(self):
         """A repeat request must re-notify the assignee, not silently no-op."""
-        bus_cls = type(self.env['bus.bus'])
-        with patch.object(type(self.env['cleardeals.pubsub']), 'publish_async'):
-            with patch.object(bus_cls, '_sendone'):
-                first = self.conv.with_user(self.rm_b).request_assignment()
-            captured = []
-            with patch.object(bus_cls, '_sendone',
-                              lambda s, t, n, m: captured.append(t)):
-                second = self.conv.with_user(self.rm_b).request_assignment()
+        Notif = self.env['cleardeals.notification'].sudo()
+        dom = [('user_id', '=', self.rm_a.id),
+               ('notif_type', '=', 'reassignment_request')]
+        with patch.object(type(self.env['bus.bus']), '_sendone'), \
+             patch.object(type(self.env['cleardeals.pubsub']), 'publish_async'):
+            first = self.conv.with_user(self.rm_b).request_assignment()
+            before = Notif.search_count(dom)
+            second = self.conv.with_user(self.rm_b).request_assignment()
+            after = Notif.search_count(dom)
         self.assertEqual(first, second, "duplicate returns the same request id")
-        self.assertIn('wa_notification_%d' % self.rm_a.id, captured,
-                      "duplicate request must still re-notify the assignee")
+        self.assertEqual(after, before + 1,
+                         "duplicate request must re-notify the assignee")
 
     def test_get_thread_surfaces_my_open_request(self):
         """Requester's thread flags the pending request (drives the UI wait state)."""

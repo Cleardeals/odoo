@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="cleardeals_ui.NotificationBell">
+        <div class="cd-notif-bell" t-ref="root">
+            <button class="cd-notif-bell__toggle" t-on-click="() => this.toggle()"
+                    title="Notifications">
+                <i class="fa fa-bell" aria-hidden="true"/>
+                <t t-if="state.unreadCount">
+                    <span class="cd-notif-bell__badge" t-esc="state.unreadCount &gt; 99 ? '99+' : state.unreadCount"/>
+                </t>
+            </button>
+
+            <t t-if="ui.open">
+                <div class="cd-notif-bell__panel">
+                    <div class="cd-notif-bell__header">
+                        <span>Notifications</span>
+                        <t t-if="state.unreadCount">
+                            <button class="cd-notif-bell__mark-all"
+                                    t-on-click="() => this.markAllRead()">
+                                Mark all read
+                            </button>
+                        </t>
+                    </div>
+
+                    <div class="cd-notif-bell__list">
+                        <t t-if="!state.items.length">
+                            <div class="cd-notif-bell__empty">
+                                <i class="fa fa-bell-slash-o" aria-hidden="true"/>
+                                <span>No notifications</span>
+                            </div>
+                        </t>
+                        <t t-foreach="state.items" t-as="notif" t-key="notif.notification_id">
+                            <div t-attf-class="cd-notif-item cd-notif-item--{{ config(notif).mod }} {{ notif.is_read ? 'cd-notif-item--read' : '' }} {{ notif.actionable ? '' : 'cd-notif-item--clickable' }}"
+                                 t-on-click="() => this.onItemClick(notif)">
+                                <div class="cd-notif-item__icon">
+                                    <i t-attf-class="fa {{ config(notif).icon }}" aria-hidden="true"/>
+                                </div>
+                                <div class="cd-notif-item__body">
+                                    <div class="cd-notif-item__title" t-esc="title(notif)"/>
+                                    <div class="cd-notif-item__msg" t-esc="notif.message"/>
+                                    <t t-if="notif.actionable and !notif.is_read and config(notif).actions.length">
+                                        <div class="cd-notif-item__actions">
+                                            <t t-foreach="config(notif).actions" t-as="act" t-key="act.key">
+                                                <button t-attf-class="btn btn-sm {{ act.btnClass || 'btn-secondary' }}"
+                                                        t-on-click.stop="() => this.runAction(notif, act)">
+                                                    <i t-if="act.icon" t-attf-class="fa {{ act.icon }}" aria-hidden="true"/>
+                                                    <t t-esc="act.label"/>
+                                                </button>
+                                            </t>
+                                        </div>
+                                    </t>
+                                </div>
+                                <t t-if="!notif.is_read">
+                                    <button class="cd-notif-item__read" title="Mark read"
+                                            t-on-click.stop="() => this.markRead(notif)">
+                                        <i class="fa fa-check" aria-hidden="true"/>
+                                    </button>
+                                </t>
+                            </div>
+                        </t>
+                    </div>
+                </div>
+            </t>
+        </div>
+    </t>
+</templates>
