@@ -3,7 +3,7 @@
 import { Component, useState, useRef, onMounted } from "@odoo/owl";
 import { registry }   from "@web/core/registry";
 import { useService } from "@web/core/utils/hooks";
-import { session }    from "@web/session";
+import { user }       from "@web/core/user";
 import { wrapSelection, formatWhatsApp } from "@cleardeals_ui/utils/whatsapp_format";
 
 /**
@@ -92,7 +92,7 @@ export class WaQuickReplies extends Component {
         // Managers may set scope explicitly: shared ⇒ no owner, personal ⇒ self.
         // Plain users can only make personal replies (record rules enforce it).
         if (this.state.isManager) {
-            vals.user_id = e.is_shared ? false : session.uid;
+            vals.user_id = e.is_shared ? false : user.userId;
         }
         try {
             if (e.id) {

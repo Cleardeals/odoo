@@ -3,7 +3,7 @@
 import { Component, useState, onMounted, onWillUpdateProps, onWillUnmount } from "@odoo/owl";
 import { registry }   from "@web/core/registry";
 import { useService } from "@web/core/utils/hooks";
-import { session } from "@web/session";
+import { user } from "@web/core/user";
 import { standardWidgetProps } from "@web/views/widgets/standard_widget_props";
 import { CdChatThread }   from "@cleardeals_ui/index";
 import { CdChatComposer } from "@cleardeals_ui/index";
@@ -74,7 +74,7 @@ export class WaLeadTab extends Component {
             if (this.state.convId) this._loadThread(this.state.convId);
         });
         // Refresh the thread (gating / approval banner) on central notifications.
-        const uid = session.uid || null;
+        const uid = user.userId || null;
         if (uid) {
             this.busService.addChannel(`cleardeals_notification_${uid}`);
             this.busService.subscribe("cd_notification", () => {

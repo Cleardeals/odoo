@@ -22,7 +22,7 @@
 import { registry } from "@web/core/registry";
 import { reactive } from "@odoo/owl";
 import { browser } from "@web/core/browser/browser";
-import { session } from "@web/session";
+import { user } from "@web/core/user";
 import { getNotifConfig } from "./notification_config";
 
 const MODEL = "cleardeals.notification";
@@ -101,7 +101,12 @@ export const cdNotificationService = {
             }
         }
 
-        const uid = session.uid;
+        // Odoo 19 removed `uid` from `@web/session`; the user id now lives on the
+        // `user` module (`@web/core/user`). Reading the old `session.uid` returned
+        // `undefined`, so this whole block was silently skipped — the channel was
+        // never subscribed (no live popups) and persisted unread was never loaded
+        // (empty bell). `user.userId` is populated before services start.
+        const uid = user.userId;
         if (uid) {
             bus_service.subscribe("cd_notification", onEvent);
             bus_service.addChannel(`cleardeals_notification_${uid}`);

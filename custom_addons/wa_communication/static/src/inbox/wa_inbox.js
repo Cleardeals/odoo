@@ -3,7 +3,7 @@
 import { Component, useState, onMounted, onWillUnmount } from "@odoo/owl";
 import { registry }      from "@web/core/registry";
 import { useService }    from "@web/core/utils/hooks";
-import { session }       from "@web/session";
+import { user }          from "@web/core/user";
 import { CdChatThread }  from "@cleardeals_ui/index";
 import { CdChatComposer } from "@cleardeals_ui/index";
 import { CdWindowBadge } from "@cleardeals_ui/index";
@@ -97,7 +97,7 @@ export class WaInbox extends Component {
             this._loadConversations();
             if (this.state.activeConvId) this._loadThread(this.state.activeConvId);
         });
-        const uid = session.uid || null;
+        const uid = user.userId || null;
         if (uid) {
             // Refresh the list/thread when a central notification arrives (the
             // generic center handles showing it; we just react to keep data fresh).
