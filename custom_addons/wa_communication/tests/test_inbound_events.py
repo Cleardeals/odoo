@@ -177,6 +177,45 @@ class TestInboundEvents(WaTransactionCase):
         expected = datetime(2026, 3, 1, 8, 0, 0) + timedelta(hours=24)
         self.assertEqual(conv.window_expires_at, expected)
 
+    def test_lead_replied_notifies_assigned_rm_not_routed_rm(self):
+        """A reply on an assigned chat must notify the assignee, not the lead RM."""
+        assignee = self.make_user()
+        routed = self.make_user()
+        conv = self.make_conversation(assigned_user_id=assignee.id)
+        self._process({
+            'event_type': 'lead_replied',
+            'phone': conv.phone_number,
+            'wa_message_id': 'wamid.assigned-notif',
+            'message_text': 'Hello there',
+            'occurred_at': '2026-03-01T08:00:00Z',
+            'rm_odoo_id': routed.id,
+        })
+        Notif = self.env['cleardeals.notification'].sudo()
+        recipients = Notif.search(
+            [('notif_type', '=', 'lead_replied')]).mapped('user_id').ids
+        self.assertIn(assignee.id, recipients,
+                      "the assigned RM must receive the reply notification")
+        self.assertNotIn(routed.id, recipients,
+                         "the lead's routed RM must NOT receive it when assigned")
+
+    def test_lead_replied_falls_back_to_routed_rm_when_unassigned(self):
+        """An unassigned chat still notifies the platform-routed lead RM."""
+        routed = self.make_user()
+        conv = self.make_conversation(assigned_user_id=False)
+        self._process({
+            'event_type': 'lead_replied',
+            'phone': conv.phone_number,
+            'wa_message_id': 'wamid.unassigned-notif',
+            'message_text': 'Anyone there?',
+            'occurred_at': '2026-03-01T08:00:00Z',
+            'rm_odoo_id': routed.id,
+        })
+        Notif = self.env['cleardeals.notification'].sudo()
+        recipients = Notif.search(
+            [('notif_type', '=', 'lead_replied')]).mapped('user_id').ids
+        self.assertIn(routed.id, recipients,
+                      "unassigned chats fall back to the routed lead RM")
+
     def test_lead_replied_dedup_by_wa_message_id(self):
         conv = self.make_conversation()
         event = {

@@ -1098,12 +1098,17 @@ class WaConversation(models.Model):
             conv_vals['lead_id'] = lead.id
         conv.sudo().write(conv_vals)
 
-        # Central notification to the RM (persistent + live popup).
-        if rm_odoo_id:
+        # Central notification to the chat's owner — the assigned RM if the chat
+        # is assigned, else the lead's routed RM as a fallback (persistent + live).
+        recipient_id = self._owa_chat_recipient(conv, rm_odoo_id)
+        if recipient_id:
+            lead_label = self._owa_lead_label(lead, phone)
             self._push_user_notification(
-                rm_odoo_id, 'lead_replied',
-                title='WhatsApp reply',
-                body=(message_text[:120] if message_text else 'New WhatsApp reply'),
+                recipient_id, 'lead_replied',
+                title='%s replied on WhatsApp' % lead_label,
+                # Keep the actual reply text in the body so the RM can judge
+                # urgency at a glance without opening the lead.
+                body=(message_text[:160] if message_text else 'New WhatsApp reply'),
                 payload={
                     'actor_id':  actor_id,
                     'lead_id':   lead.id if lead else None,
@@ -1153,12 +1158,16 @@ class WaConversation(models.Model):
 
         conv.sudo().write({'last_message_at': occurred_at, 'unread_count': conv.unread_count + 1})
 
-        # Central notification to the RM (persistent + live popup).
-        if rm_odoo_id:
+        # Notify the chat's owner (assigned RM, else routed RM fallback).
+        recipient_id = self._owa_chat_recipient(conv, rm_odoo_id)
+        if recipient_id:
+            lead_label = self._owa_lead_label(lead, phone)
             self._push_user_notification(
-                rm_odoo_id, 'ambiguous_reply',
-                title='WhatsApp: review needed',
-                body=(message_text[:120] if message_text else 'Unroutable WhatsApp reply'),
+                recipient_id, 'ambiguous_reply',
+                title='%s sent a message that needs review' % lead_label,
+                # Show the actual text so the RM can judge urgency at a glance.
+                body=(message_text[:160] if message_text
+                      else 'Unroutable WhatsApp reply — open the chat to review.'),
                 payload={
                     'actor_id':  actor_id,
                     'lead_id':   lead.id if lead else None,
@@ -1189,17 +1198,23 @@ class WaConversation(models.Model):
 
         lead = self._owa_resolve_lead(actor_id, actor_type, phone)
 
+        # The failed send belongs to the chat's owner. Derive the conversation
+        # from the message (or by phone) so an assigned chat notifies the
+        # assignee rather than the lead's routed RM.
+        conv = msg.conversation_id if msg else self._owa_get_conversation(phone)
+        recipient_id = self._owa_chat_recipient(conv, rm_odoo_id)
+
         # Central notification to the RM (persistent + live popup).
-        if rm_odoo_id:
-            summary = (
-                f'Delivery failed: {failure_reason}'
-                if event_type == 'permanent_failure'
-                else f'Retries exhausted: {failure_reason}'
-            )
+        if recipient_id:
+            lead_label = self._owa_lead_label(lead, phone)
+            detail = (failure_reason or 'the message could not be sent').strip()
+            body = ('Your WhatsApp message to %s couldn\'t be delivered (%s). '
+                    'Reach out another way so the conversation isn\'t dropped.'
+                    % (lead_label, detail))
             self._push_user_notification(
-                rm_odoo_id, 'permanent_failure',
-                title='WhatsApp delivery failed',
-                body=summary[:160],
+                recipient_id, 'permanent_failure',
+                title='Your message to %s didn\'t go through' % lead_label,
+                body=body[:200],
                 payload={
                     'actor_id':  actor_id,
                     'lead_id':   lead.id if lead else None,
@@ -1630,11 +1645,13 @@ class WaConversation(models.Model):
         # display data via sudo so requesting a handover never 403s.
         lead = self.sudo().lead_id
         requester_name = req.requester_id.name
+        lead_label = self._owa_lead_label(lead, self.phone_number)
         self._push_user_notification(
             assignee.id, 'reassignment_request',
-            title='Chat handover requested',
-            body='%s wants to take over %s.' % (
-                requester_name, (lead.name if lead else self.phone_number)),
+            title='%s wants to take over %s' % (requester_name, lead_label),
+            body='%s has asked to handle %s\'s WhatsApp chat. Approve it if '
+                 'you\'re no longer following up with them.' % (
+                     requester_name, lead_label),
             payload={
                 'request_id': req.id,
                 'requester_name': requester_name,
@@ -1730,11 +1747,12 @@ class WaConversation(models.Model):
 
         if new_user:
             conv._owa_log_system_event("Chat assigned to %s" % new_user.name)
+            lead_label = self._owa_lead_label(conv.lead_id, conv.phone_number)
             conv._push_user_notification(
                 new_user.id, 'assignment_changed',
-                title='Chat assigned to you',
-                body='You are now assigned to %s.' % (
-                    conv.lead_id.name if conv.lead_id else conv.phone_number),
+                title='%s\'s chat is now yours' % lead_label,
+                body='You\'re now handling %s on WhatsApp. Open the chat, say '
+                     'hello, and keep the conversation moving.' % lead_label,
                 payload={
                     'phone': conv.phone_number,
                     'lead_id': conv.lead_id.id if conv.lead_id else None,
@@ -1744,6 +1762,33 @@ class WaConversation(models.Model):
             )
         if req:
             req._mark_approved()
+
+    @staticmethod
+    def _owa_lead_label(lead, phone=None):
+        """A human-friendly name for a lead in notification copy.
+
+        Prefers the lead's name, falls back to the phone number, then a neutral
+        'A lead' so messages never read awkwardly when the lead is unresolved.
+        """
+        if lead and getattr(lead, 'name', None):
+            return lead.name
+        if phone:
+            return phone
+        return 'A lead'
+
+    @staticmethod
+    def _owa_chat_recipient(conv, rm_odoo_id):
+        """Resolve who should receive a chat notification.
+
+        Chat notifications belong to whoever *owns the conversation* — the
+        assigned RM — not the lead's salesperson. When the chat is assigned we
+        notify the assignee; only when it is unassigned do we fall back to the
+        platform-routed ``rm_odoo_id`` (the lead's RM) so replies on un-claimed
+        chats still reach someone.
+        """
+        if conv and conv.assigned_user_id:
+            return conv.assigned_user_id.id
+        return rm_odoo_id
 
     def _push_user_notification(self, user_id, ntype, title, body,
                                 payload=None, actionable=False) -> None:
@@ -1771,7 +1816,10 @@ class WaConversation(models.Model):
         silent limbo.
         """
         self.ensure_one()
-        message = "Chat could not be assigned to %s — %s" % (target_name, reason)
+        lead_label = self._owa_lead_label(self.lead_id, self.phone_number)
+        message = ("%s's chat couldn't be handed to %s (%s). It stays with its "
+                   "current owner — please follow up so the lead isn't dropped."
+                   % (lead_label, target_name, reason))
         payload = {
             'reason': reason,
             'phone': self.phone_number,
@@ -1782,7 +1830,8 @@ class WaConversation(models.Model):
         for uid in {u for u in user_ids if u}:
             self._push_user_notification(
                 uid, 'reassignment_failed',
-                title='Reassignment failed', body=message, payload=payload)
+                title='Couldn\'t reassign %s\'s chat' % lead_label,
+                body=message, payload=payload)
 
     def _owa_log_system_event(self, body: str) -> None:
         """Append a system-event ``wa.message`` to this conversation's timeline."""

@@ -94,8 +94,10 @@ class WaReassignmentRequest(models.Model):
             return
         self.state = 'declined'
         self.resolved_at = fields.Datetime.now()
-        self._notify_requester('reassignment_declined',
-                               "Your assignment request was declined.")
+        self._notify_requester(
+            'reassignment_declined',
+            "The current owner is keeping this chat for now. Focus on your other "
+            "leads and check back if anything changes.")
 
     def cancel(self):
         """Requester cancels their own pending request."""
@@ -115,8 +117,10 @@ class WaReassignmentRequest(models.Model):
         for rec in self:
             rec.state = 'approved'
             rec.resolved_at = fields.Datetime.now()
-            rec._notify_requester('reassignment_approved',
-                                  "Your assignment request was approved — you can reply now.")
+            rec._notify_requester(
+                'reassignment_approved',
+                "Your handover request was approved — jump in and start replying "
+                "to keep the conversation moving.")
 
     def _mark_failed(self, reason='', notify=True):
         """Mark the request failed.
@@ -139,11 +143,13 @@ class WaReassignmentRequest(models.Model):
     def _notify_requester(self, event_type, message):
         self.ensure_one()
         conv = self.conversation_id.sudo()
+        lead_label = (conv.lead_id.name if conv.lead_id else None) \
+            or conv.phone_number or 'the lead'
         title = {
-            'reassignment_approved': 'Request approved',
-            'reassignment_declined': 'Request declined',
-            'reassignment_failed':   'Reassignment failed',
-        }.get(event_type, 'WhatsApp assignment')
+            'reassignment_approved': '%s\'s chat is now yours' % lead_label,
+            'reassignment_declined': 'Request for %s\'s chat declined' % lead_label,
+            'reassignment_failed':   'Couldn\'t hand over %s\'s chat' % lead_label,
+        }.get(event_type, 'WhatsApp assignment update')
         try:
             self.env['cleardeals.notification'].notify(
                 self.requester_id.id, event_type,
