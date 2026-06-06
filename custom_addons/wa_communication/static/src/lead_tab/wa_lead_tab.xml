@@ -112,6 +112,14 @@
                         <CdWindowBadge state="windowState" windowExpiresAt="windowExpiresAt"/>
                     </div>
 
+                    <!-- Assigned RM -->
+                    <div class="wa-lead-tab__assignee" t-if="conversation">
+                        <i class="fa fa-user-circle-o" aria-hidden="true"/>
+                        <span class="wa-lead-tab__assignee-lbl">Assigned to</span>
+                        <span class="wa-lead-tab__assignee-name"
+                              t-esc="conversation.assigned_user_name || 'Unassigned'"/>
+                    </div>
+
                     <!-- Stats -->
                     <div class="wa-lead-tab__panel-title">STATS</div>
                     <div class="wa-lead-tab__stats-grid">

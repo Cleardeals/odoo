@@ -101,12 +101,10 @@
                                 </div>
                                 <div class="wa-inbox__thread-badges">
                                     <CdWindowBadge state="windowState" windowExpiresAt="windowExpiresAt"/>
-                                    <t t-if="activeConversation and activeConversation.assigned_user_name">
-                                        <span class="wa-inbox__rm-chip">
-                                            <i class="fa fa-user-circle-o" aria-hidden="true"/>
-                                            <t t-esc="activeConversation.assigned_user_name"/>
-                                        </span>
-                                    </t>
+                                    <span class="wa-inbox__rm-chip" title="RM this chat is assigned to">
+                                        <i class="fa fa-user-circle-o" aria-hidden="true"/>
+                                        <t t-esc="(activeConversation and activeConversation.assigned_user_name) ? activeConversation.assigned_user_name : 'Unassigned'"/>
+                                    </span>
                                 </div>
                                 <div class="wa-inbox__thread-actions">
                                     <button class="btn btn-sm btn-outline-primary"
