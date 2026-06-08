@@ -51,6 +51,7 @@ Client action at WhatsApp → Dashboard providing:
         'security/ir.model.access.csv',
         'security/wa_quick_reply_rules.xml',
         'data/wa_communication_config_data.xml',
+        'data/wa_lead_source_data.xml',
         'views/wa_message_views.xml',
         'views/wa_dashboard_action.xml',
         'views/wa_inbox_action.xml',

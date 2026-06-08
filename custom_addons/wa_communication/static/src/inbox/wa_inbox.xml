@@ -117,6 +117,13 @@
                                             <i class="fa fa-user" aria-hidden="true"/> View Lead
                                         </button>
                                     </t>
+                                    <t t-if="isOrphanChat">
+                                        <button class="btn btn-sm btn-outline-success"
+                                                t-on-click="() => this.openCreateLead()"
+                                                title="This number isn't linked to a lead yet">
+                                            <i class="fa fa-user-plus" aria-hidden="true"/> Create lead
+                                        </button>
+                                    </t>
                                     <t t-if="activeConversation and activeConversation.interakt_url">
                                         <button class="btn btn-sm btn-outline-success"
                                                 t-on-click="() => this.openInInterakt(activeConversation.interakt_url)">
@@ -281,6 +288,60 @@
                     onSend="(payload) => this.sendTemplate(payload)"
                     onClose="() => this.closeTemplatePicker()"
                     onRefresh="() => this._loadTemplates()"/>
+            </t>
+
+            <!-- Create-lead-from-chat modal (orphan / phone-only conversations) -->
+            <t t-if="state.showCreateLead">
+                <div class="wa-inbox__modal-overlay" t-on-click="() => this.closeCreateLead()">
+                    <div class="wa-inbox__create-lead" t-on-click.stop="">
+                        <div class="wa-inbox__create-lead-header">
+                            <span><i class="fa fa-user-plus" aria-hidden="true"/> Create lead from chat</span>
+                            <button class="wa-inbox__create-lead-close"
+                                    t-on-click="() => this.closeCreateLead()">×</button>
+                        </div>
+                        <div class="wa-inbox__create-lead-body">
+                            <label class="wa-inbox__cl-label">Name</label>
+                            <input type="text" class="wa-inbox__cl-input"
+                                   t-att-value="state.createLeadName"
+                                   t-on-input="(ev) => this.onCreateLeadName(ev)"
+                                   placeholder="Lead name"/>
+
+                            <label class="wa-inbox__cl-label">Phone</label>
+                            <input type="text" class="wa-inbox__cl-input" readonly="readonly"
+                                   t-att-value="activeConversation ? activeConversation.phone : ''"/>
+
+                            <label class="wa-inbox__cl-label">Property (optional)</label>
+                            <AutoComplete
+                                value="state.propertyQuery"
+                                sources="propertySources"
+                                placeholder="'Search property…'"
+                                onInput="(args) => this.onPropertyInput(args)"
+                                class="'wa-inbox__cl-autocomplete'"/>
+                            <t t-if="state.selectedProperty">
+                                <div class="wa-inbox__cl-hint">
+                                    <i class="fa fa-info-circle" aria-hidden="true"/>
+                                    Lead will route to this property's RM.
+                                </div>
+                            </t>
+
+                            <t t-if="state.createLeadError">
+                                <div class="alert alert-danger mt-2" t-esc="state.createLeadError"/>
+                            </t>
+                        </div>
+                        <div class="wa-inbox__create-lead-footer">
+                            <button class="btn btn-light"
+                                    t-on-click="() => this.closeCreateLead()">Cancel</button>
+                            <button class="btn btn-primary"
+                                    t-att-disabled="state.createLeadSaving"
+                                    t-on-click="() => this.saveLead()">
+                                <t t-if="state.createLeadSaving">
+                                    <i class="fa fa-spinner fa-spin" aria-hidden="true"/> Saving…
+                                </t>
+                                <t t-else="">Create lead</t>
+                            </button>
+                        </div>
+                    </div>
+                </div>
             </t>
         </div>
     </t>

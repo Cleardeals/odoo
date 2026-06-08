@@ -43,6 +43,20 @@ $sidebar-w: 200px;
 
     &__no-conv-icon { font-size: 48px; color: #25d366; }
 
+    &__no-conv-title {
+        font-size: 16px;
+        font-weight: 600;
+        color: #1a1a1a;
+        margin: 0 0 4px;
+    }
+
+    &__first-msg-btn {
+        margin-top: 20px;
+        padding: 10px 28px;
+        font-size: 14px;
+        .fa { margin-right: 6px; }
+    }
+
     // ── Left panel: Enrollments ───────────────────────────────────────────────
     &__enrollments {
         width: $enr-w;

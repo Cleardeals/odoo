@@ -20,6 +20,8 @@
  *       ],
  *       // optional click-through navigation for non-actionable cards:
  *       open: { model: "leads.new", resId: (n) => n.lead_id },
+ *       // …or open a named action (e.g. a client action) when there is no record:
+ *       open: { action: "wa_communication.action_wa_inbox" },
  *   });
  *
  * The component reads the config purely as data, so no module needs to touch the

@@ -4,6 +4,7 @@ import { Component, useState, onMounted, onWillUnmount } from "@odoo/owl";
 import { registry }      from "@web/core/registry";
 import { useService }    from "@web/core/utils/hooks";
 import { user }          from "@web/core/user";
+import { AutoComplete }  from "@web/core/autocomplete/autocomplete";
 import { CdChatThread }  from "@cleardeals_ui/index";
 import { CdChatComposer } from "@cleardeals_ui/index";
 import { CdWindowBadge } from "@cleardeals_ui/index";
@@ -34,7 +35,7 @@ const STATUS_COLORS = {
 export class WaInbox extends Component {
     static template   = "wa_communication.WaInbox";
     static props      = { "*": true };
-    static components = { CdChatThread, CdChatComposer, CdWindowBadge, CdTemplatePickerModal };
+    static components = { CdChatThread, CdChatComposer, CdWindowBadge, CdTemplatePickerModal, AutoComplete };
 
     setup() {
         this.orm        = useService("orm");
@@ -73,9 +74,32 @@ export class WaInbox extends Component {
             templates:          [],
             tplLoading:         false,
             tplError:           "",
+
+            // Create-lead-from-chat modal (orphan / phone-only conversations)
+            showCreateLead:     false,
+            createLeadName:     "",
+            createLeadSaving:   false,
+            createLeadError:    "",
+            propertyQuery:      "",
+            selectedProperty:   null,   // { id, name }
         });
 
         this._searchDebounce = null;
+
+        // Odoo's native AutoComplete source for the Create-lead property picker:
+        // a single async source backed by wa.conversation.search_properties. The
+        // component handles the dropdown, scrolling, keyboard nav and highlight.
+        this.propertySources = [{
+            options: async (request) => {
+                const rows = await this.orm.call(
+                    "wa.conversation", "search_properties", [],
+                    { query: request || "", limit: 20 });
+                return rows.map((p) => ({
+                    label: p.name,
+                    onSelect: () => this.pickProperty(p),
+                }));
+            },
+        }];
 
         onMounted(() => {
             this._loadCounts();
@@ -394,6 +418,83 @@ export class WaInbox extends Component {
             const msg = e.data?.message || String(e);
             this.state.sendError = msg;
             this.notification.add(msg, { type: "danger" });
+        }
+    }
+
+    // ── Create lead from chat (orphan / phone-only conversations) ──────────────
+
+    /** The active conversation has no linked lead → offer to create one. */
+    get isOrphanChat() {
+        const c = this.activeConversation;
+        return !!c && !c.lead_id;
+    }
+
+    /** Best-guess display name from the most recent inbound message. */
+    get lastInboundName() {
+        const msgs = this.activeMessages;
+        for (let i = msgs.length - 1; i >= 0; i--) {
+            if (msgs[i].direction === "inbound" && msgs[i].sender_name) {
+                return msgs[i].sender_name;
+            }
+        }
+        return "";
+    }
+
+    openCreateLead() {
+        if (!this.isOrphanChat) return;
+        this.state.createLeadName  = this.lastInboundName || "";
+        this.state.createLeadError = "";
+        this.state.propertyQuery   = "";
+        this.state.selectedProperty = null;
+        this.state.showCreateLead  = true;
+    }
+
+    closeCreateLead() {
+        this.state.showCreateLead = false;
+    }
+
+    onCreateLeadName(ev) {
+        this.state.createLeadName = ev.target.value;
+    }
+
+    /** AutoComplete typed input: track text + invalidate any prior selection. */
+    onPropertyInput({ inputValue }) {
+        this.state.propertyQuery = inputValue;
+        this.state.selectedProperty = null;
+    }
+
+    /** AutoComplete option chosen. */
+    pickProperty(p) {
+        this.state.selectedProperty = p;
+        this.state.propertyQuery = p.name;
+    }
+
+    async saveLead() {
+        const convId = this.state.activeConvId;
+        if (!convId || this.state.createLeadSaving) return;
+        const name = (this.state.createLeadName || "").trim();
+        if (!name) {
+            this.state.createLeadError = "Please enter a name for the lead.";
+            return;
+        }
+        this.state.createLeadSaving = true;
+        this.state.createLeadError = "";
+        try {
+            const leadId = await this.orm.call(
+                "wa.conversation", "create_lead_from_chat", [], {
+                    conversation_id:  convId,
+                    name,
+                    property_base_id: this.state.selectedProperty?.id || null,
+                });
+            this.state.showCreateLead = false;
+            this.notification.add("Lead created and linked to this chat.", { type: "success" });
+            await this._loadThread(convId);
+            await this._loadConversations();
+            if (leadId) this.openLead(leadId);
+        } catch (e) {
+            this.state.createLeadError = e.data?.message || String(e);
+        } finally {
+            this.state.createLeadSaving = false;
         }
     }
 }

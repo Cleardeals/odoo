@@ -157,7 +157,10 @@ export const cdNotificationService = {
         /** Click-through navigation for a non-actionable notification. */
         function open(notif) {
             const cfg = getNotifConfig(notif.type);
-            if (cfg.open && cfg.open.model) {
+            if (cfg.open && cfg.open.action) {
+                // Open a named action (e.g. a client action like the WA Inbox).
+                action.doAction(cfg.open.action);
+            } else if (cfg.open && cfg.open.model) {
                 const resId = cfg.open.resId ? cfg.open.resId(notif) : notif.res_id;
                 if (resId) {
                     action.doAction({

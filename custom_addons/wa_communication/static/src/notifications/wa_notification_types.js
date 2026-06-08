@@ -94,3 +94,13 @@ types.add("permanent_failure", {
     mod: "failure",
     open: openLead,
 });
+
+// Inbound message nobody owns (unknown number, or lead with no RM) → managers
+// triage it from the WhatsApp Inbox. No lead to open, so click-through opens the
+// Inbox client action instead.
+types.add("unrouted_inbound", {
+    title: "Unassigned WhatsApp message",
+    icon: "fa-question-circle",
+    mod: "review",
+    open: { action: "wa_communication.action_wa_inbox" },
+});

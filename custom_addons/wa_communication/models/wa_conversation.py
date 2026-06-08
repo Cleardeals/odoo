@@ -285,11 +285,11 @@ class WaConversation(models.Model):
         if conv:
             return conv
 
-        # leads.new stores a standardized 10-digit number (strips leading 91).
-        # wa.conversation stores the full E.164-without-plus (12 digits, e.g. 919876543210).
-        # Strip the 91 country prefix for the lead lookup.
-        lead_phone = phone_number[2:] if phone_number.startswith('91') and len(phone_number) == 12 else phone_number
-        lead = self.env['leads.new'].search(
+        # leads.new stores a standardized 10-digit number; wa.conversation stores
+        # the full E.164-without-plus (e.g. 919876543210). Normalize to the leads
+        # canonical format for the lookup so any inbound phone shape links reliably.
+        lead_phone = self._owa_standardize_lead_phone(phone_number)
+        lead = self.env['leads.new'].sudo().search(
             [('phone', '=', lead_phone)],
             order='create_date desc',
             limit=1,
@@ -713,8 +713,11 @@ class WaConversation(models.Model):
             lead = self.env['leads.new'].sudo().browse(actor_id)
             if lead.exists():
                 return lead
+        # Normalize the WA phone (E.164-without-plus) to the canonical 10-digit
+        # leads format so the fallback search reliably matches an existing lead.
+        lead_phone = self._owa_standardize_lead_phone(phone)
         return self.env['leads.new'].sudo().search(
-            [('phone', '=', phone)], order='create_date desc', limit=1
+            [('phone', '=', lead_phone)], order='create_date desc', limit=1
         )
 
     @staticmethod
@@ -1098,6 +1101,10 @@ class WaConversation(models.Model):
             conv_vals['lead_id'] = lead.id
         conv.sudo().write(conv_vals)
 
+        # Self-heal: if this is a migrated lead messaging first and nobody owns the
+        # chat yet, hand it to the lead's RM (establishes ownership on both sides).
+        self._owa_autoassign_to_lead_rm(conv, lead)
+
         # Central notification to the chat's owner — the assigned RM if the chat
         # is assigned, else the lead's routed RM as a fallback (persistent + live).
         recipient_id = self._owa_chat_recipient(conv, rm_odoo_id)
@@ -1117,6 +1124,10 @@ class WaConversation(models.Model):
                     'suppress_key': phone,
                 },
             )
+        else:
+            # Nobody to route to (unknown number, or lead with no RM) — fan out to
+            # WhatsApp managers so the message isn't silently stranded in the Inbox.
+            self._owa_notify_unrouted(conv, lead, phone, message_text)
 
     def _handle_odoo_ambiguous_reply(
         self, event: dict, pubsub_message_id: str
@@ -1158,6 +1169,9 @@ class WaConversation(models.Model):
 
         conv.sudo().write({'last_message_at': occurred_at, 'unread_count': conv.unread_count + 1})
 
+        # Self-heal ownership for a migrated lead messaging first (no-op if owned).
+        self._owa_autoassign_to_lead_rm(conv, lead)
+
         # Notify the chat's owner (assigned RM, else routed RM fallback).
         recipient_id = self._owa_chat_recipient(conv, rm_odoo_id)
         if recipient_id:
@@ -1176,6 +1190,9 @@ class WaConversation(models.Model):
                     'suppress_key': phone,
                 },
             )
+        else:
+            # No RM to route to — surface to managers for triage.
+            self._owa_notify_unrouted(conv, lead, phone, message_text)
 
     def _handle_odoo_permanent_failure(
         self, event: dict, pubsub_message_id: str
@@ -1763,6 +1780,23 @@ class WaConversation(models.Model):
         if req:
             req._mark_approved()
 
+    def _owa_standardize_lead_phone(self, phone_number: str) -> str:
+        """Normalize a WA phone to the canonical 10-digit leads format.
+
+        Reuses ``leads.new._standardize_phone`` (strips ``+``, leading ``0``,
+        spaces, dashes and the ``91`` country code) so lead auto-linking is robust
+        across every inbound phone shape. Falls back to a minimal 91-strip if the
+        leads model is somehow unavailable.
+        """
+        if not phone_number:
+            return ''
+        try:
+            return self.env['leads.new']._standardize_phone(phone_number)
+        except Exception:  # noqa: BLE001 — never let normalization break inbound
+            return (phone_number[2:]
+                    if phone_number.startswith('91') and len(phone_number) == 12
+                    else phone_number)
+
     @staticmethod
     def _owa_lead_label(lead, phone=None):
         """A human-friendly name for a lead in notification copy.
@@ -1789,6 +1823,111 @@ class WaConversation(models.Model):
         if conv and conv.assigned_user_id:
             return conv.assigned_user_id.id
         return rm_odoo_id
+
+    def _owa_autoassign_to_lead_rm(self, conv, lead) -> None:
+        """Self-heal: hand an unassigned conversation to the lead's owning RM.
+
+        When a migrated lead messages first, the platform doesn't yet know who
+        owns the chat (no ``rm_assignments`` row), but Odoo does — ``lead.user_id``.
+        Publish a platform-routed assign for that RM so ownership is established on
+        BOTH sides; ``assigned_user_id`` flips when ``assignment_confirmed`` returns
+        and future inbounds route correctly platform-side too.
+
+        Idempotent (guarded on unassigned + not pending) and fully defensive:
+        ``_request_assign`` raises ``UserError`` when the RM has no email, and this
+        runs inside the inbound savepoint, so an unguarded raise would roll back the
+        just-created inbound message. On any problem we skip silently — the caller's
+        manager-triage fallback still surfaces the message.
+        """
+        if not conv or not lead:
+            return
+        if conv.assigned_user_id or conv.assignment_pending:
+            return
+        rm = lead.user_id
+        if not rm or not rm.email:
+            return
+        try:
+            conv._request_assign(rm)
+        except Exception:  # noqa: BLE001 — must never break inbound processing
+            _logger.warning(
+                "wa: auto-assign of conv %s to lead RM %s failed",
+                conv.id, rm.id, exc_info=True)
+
+    def _owa_relink_orphan_for_lead(self, lead) -> None:
+        """Attach a pre-existing phone-only conversation to a newly created lead.
+
+        When an unknown number messages first we create an orphan conversation
+        (``lead_id=False``). If that contact later becomes a real lead (portal
+        inquiry, manual entry, CSV import) with the same number, link the two so
+        the earlier inbound history isn't stranded — and self-heal ownership to
+        the lead's RM. Idempotent and defensive; never raises.
+        """
+        if not lead or not lead.phone:
+            return
+        lead_phone = self._owa_standardize_lead_phone(lead.phone)
+        if not lead_phone:
+            return
+        # Match the orphan conversation by its normalized phone. Pre-filter in SQL
+        # on the 10-digit substring (handles both '91…' and bare forms), then
+        # confirm with full standardization to avoid false positives.
+        candidates = self.sudo().search([
+            ('lead_id', '=', False),
+            ('phone_number', 'like', lead_phone),
+        ])
+        conv = candidates.filtered(
+            lambda c: self._owa_standardize_lead_phone(c.phone_number) == lead_phone
+        )[:1]
+        if not conv:
+            return
+        # wa.message rows are append-only — only the conversation link is updated.
+        conv.write({'lead_id': lead.id})
+        self._owa_autoassign_to_lead_rm(conv, lead)
+        conv._owa_log_system_event("Linked to lead: %s" % lead.name)
+        _logger.info("wa: relinked orphan conv %s to new lead %s", conv.id, lead.id)
+
+    def _owa_manager_ids(self) -> list:
+        """User ids of all WhatsApp managers (``group_wa_manager``), or [].
+
+        Odoo 19 renamed ``res.groups.users`` → ``user_ids``; ``all_user_ids``
+        also includes users who hold the group via implication.
+        """
+        try:
+            return self.env.ref(
+                'wa_communication.group_wa_manager').sudo().all_user_ids.ids
+        except Exception:  # noqa: BLE001
+            return []
+
+    def _owa_notify_unrouted(self, conv, lead, phone, message_text) -> None:
+        """Notify all WhatsApp managers about an inbound nobody owns.
+
+        Triage path: a message arrived that couldn't be auto-routed to a specific
+        RM (unknown number, or a lead with no salesperson). Rather than letting it
+        sit silently in the Inbox, fan out a persistent + live ``unrouted_inbound``
+        notification to every manager so someone triages it (e.g. via the Inbox
+        "Create lead" action). Never raises.
+        """
+        manager_ids = self._owa_manager_ids()
+        if not manager_ids:
+            return
+        lead_label = self._owa_lead_label(lead, phone)
+        try:
+            self.env['cleardeals.notification'].notify(
+                manager_ids, 'unrouted_inbound',
+                title='Unassigned WhatsApp message from %s' % lead_label,
+                body=(message_text[:160] if message_text
+                      else 'A WhatsApp message arrived that isn\'t linked to an RM. '
+                           'Open the Inbox to triage it.'),
+                payload={
+                    'conversation_id': conv.id if conv else None,
+                    'lead_id': lead.id if lead else None,
+                    'lead_name': lead.name if lead else '',
+                    'phone': phone,
+                    'suppress_key': phone,
+                },
+            )
+        except Exception:  # noqa: BLE001
+            _logger.warning("wa: unrouted_inbound manager notify failed",
+                            exc_info=True)
 
     def _push_user_notification(self, user_id, ntype, title, body,
                                 payload=None, actionable=False) -> None:
@@ -1973,6 +2112,161 @@ class WaConversation(models.Model):
         :raises UserError: if the key is unset or Interakt is unreachable.
         """
         return interakt_client.fetch_templates(self.env, template_name=template_name)
+
+    @api.model
+    def send_first_message(
+        self,
+        phone: str,
+        lead_id: int | None = None,
+        template_name: str = '',
+        template_language: str = '',
+        body_values: list | None = None,
+        header_values: list | None = None,
+    ) -> int:
+        """Start a new WA conversation and send the first outbound template.
+
+        Called from the lead tab when a lead has no existing ``wa.conversation``.
+        Creates (or retrieves) the conversation record, links the lead, auto-claims
+        the chat for the sending RM, then sends the template via the normal
+        outbound path.
+
+        The ownership gate in :meth:`send_message` is satisfied because we write
+        ``assigned_user_id`` *before* calling it — whoever fires the first shot
+        owns the conversation going forward (no Interakt handshake needed here
+        because the chat does not yet exist on the platform; the first template
+        message itself creates it there).
+
+        :param phone:              Raw phone from the lead record (10 or 12 digits).
+        :param lead_id:            ``leads.new`` id to link. Optional.
+        :param template_name:      Interakt-approved template name (required).
+        :param template_language:  Template language code, e.g. ``'en'``.
+        :param body_values:        Ordered ``{{N}}`` substitution values.
+        :param header_values:      Ordered header variable substitutions.
+        :returns:                  The ``wa.conversation`` id so the caller can
+                                   load the thread immediately.
+        :raises UserError:         Missing phone/template, or send failure.
+        """
+        if not phone:
+            raise UserError(
+                "A phone number is required to start a WhatsApp conversation.")
+        if not template_name:
+            raise UserError(
+                "A template message is required for the first outreach.")
+
+        # Normalise to 12-digit E.164 (without '+').
+        full_phone = ('91' + phone) if len(phone) == 10 else phone
+
+        # Get or create the conversation record (idempotent).
+        conv = self.sudo()._get_or_create_for_phone(full_phone)
+
+        # Link the lead if provided and not already set.
+        if lead_id and not conv.lead_id:
+            conv.sudo().write({'lead_id': lead_id})
+
+        # Auto-claim: whoever sends the first message owns the chat.
+        # Write directly — no Interakt assignment handshake needed because the
+        # conversation doesn't exist on the platform yet.
+        if not conv.assigned_user_id:
+            conv.sudo().write({'assigned_user_id': self.env.uid})
+
+        # Standard outbound path.  Ownership gate passes because env.uid is now
+        # the assigned_user_id.
+        conv.send_message(
+            kind='template',
+            template_name=template_name,
+            template_language=template_language,
+            body_values=body_values or [],
+            header_values=header_values or [],
+        )
+        return conv.id
+
+    @api.model
+    def search_properties(self, query: str = '', limit: int = 20) -> list[dict]:
+        """Typeahead search over ``property.base`` for the Create-lead picker.
+
+        Returns ``[{id, name}]`` so the Inbox modal can offer a lightweight
+        searchable property dropdown without a full Odoo many2one widget.
+        """
+        domain = []
+        if query:
+            domain = ['|', ('name', 'ilike', query), ('property_tag', 'ilike', query)]
+        props = self.env['property.base'].sudo().search(
+            domain, limit=min(int(limit or 20), 50), order='id desc')
+        return [{'id': p.id, 'name': p.display_name or p.name or ''} for p in props]
+
+    @api.model
+    def create_lead_from_chat(self, conversation_id: int, name: str,
+                              property_base_id: int | None = None,
+                              source_id: int | None = None) -> int:
+        """Convert a phone-only (orphan) conversation into a real lead.
+
+        Triage action for inbound messages from unknown numbers: an RM gives the
+        contact a name and (optionally) picks the property they're interested in.
+        The lead is created via the canonical ``create_lead_if_not_duplicate``
+        (dedup + phone standardization), the conversation is linked + its message
+        history back-filled, and ownership is established:
+
+        - **Property selected** → the lead and conversation route to that
+          property's RM (``property.base.rm_user_id``).
+        - **No property** → the triaging RM (current user) takes ownership.
+
+        :returns: the linked ``leads.new`` id (new or dedup-matched).
+        """
+        conv = self.sudo().browse(conversation_id)
+        if not conv.exists():
+            raise UserError("Conversation not found.")
+        if conv.lead_id:
+            # Already linked — nothing to create.
+            return conv.lead_id.id
+        name = (name or '').strip()
+        if not name:
+            raise UserError("Please enter a name for the lead.")
+
+        Leads = self.env['leads.new']
+        phone10 = self._owa_standardize_lead_phone(conv.phone_number)
+
+        if not source_id:
+            source = self.env.ref(
+                'wa_communication.lead_source_whatsapp_inbound',
+                raise_if_not_found=False)
+            source_id = source.id if source else False
+        if not source_id:
+            raise UserError(
+                "The 'WhatsApp Inbound' lead source is not configured. "
+                "Ask an administrator to set it up.")
+
+        vals = {'name': name, 'phone': phone10, 'source_id': source_id}
+        prop = None
+        if property_base_id:
+            prop = self.env['property.base'].sudo().browse(int(property_base_id))
+            if prop.exists():
+                vals['property_base_id'] = prop.id
+
+        # Canonical creation (handles dedup + standardization). Returns None when
+        # a duplicate is detected — in that case link the existing lead instead.
+        lead = Leads.create_lead_if_not_duplicate(vals)
+        if not lead:
+            lead = Leads.sudo().search(
+                [('phone', '=', phone10)], order='create_date desc', limit=1)
+        if not lead:
+            raise UserError("Could not create a lead for this conversation.")
+
+        # Resolve the owning RM: property RM first, else the triaging user.
+        rm = prop.rm_user_id if (prop and prop.exists() and prop.rm_user_id) else self.env.user
+        write_vals = {'user_id': rm.id, 'state': 'assigned'}
+        if prop and prop.exists():
+            write_vals['property_base_id'] = prop.id
+        lead.sudo().write(write_vals)
+
+        # Link the conversation to the lead. (wa.message rows are append-only, so
+        # earlier messages keep their original lead_id — the conversation link is
+        # the source of truth the UI reads.)
+        conv.write({'lead_id': lead.id})
+
+        # Establish chat ownership for the resolved RM (platform round-trip).
+        self._owa_autoassign_to_lead_rm(conv, lead)
+        conv._owa_log_system_event("Lead created from chat: %s" % lead.name)
+        return lead.id
 
     @api.model
     def get_thread(self, conversation_id: int) -> dict:

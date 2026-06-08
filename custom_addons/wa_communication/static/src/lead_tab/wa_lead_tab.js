@@ -176,15 +176,33 @@ export class WaLeadTab extends Component {
     }
 
     async sendTemplate({ template_name, template_language, body_values, header_values }) {
-        const convId = this.state.convId;
-        if (!convId) return;
         this.state.sendError = null;
         try {
-            await this.orm.call("wa.conversation", "send_message", [[convId]], {
-                body: "", kind: "template",
-                template_name, template_language, body_values, header_values,
-            });
-            await this._loadThread(convId);
+            if (!this.state.convId) {
+                // First outreach — create the conversation + send in one call.
+                const convId = await this.orm.call(
+                    "wa.conversation", "send_first_message", [], {
+                        phone:             this.phone,
+                        lead_id:           this.leadId || null,
+                        template_name,
+                        template_language: template_language || "en",
+                        body_values:       body_values   || [],
+                        header_values:     header_values || [],
+                    }
+                );
+                this.state.convId = convId;
+                await this._loadThread(convId);
+                // Start suppressing popups for this chat now that we're viewing it.
+                const fullPhone = this.phone.length === 10 ? `91${this.phone}` : this.phone;
+                this.cdNotif.setActiveSuppressKey(fullPhone);
+            } else {
+                // Existing conversation — normal send path.
+                await this.orm.call("wa.conversation", "send_message", [[this.state.convId]], {
+                    body: "", kind: "template",
+                    template_name, template_language, body_values, header_values,
+                });
+                await this._loadThread(this.state.convId);
+            }
         } catch (e) {
             this.state.sendError = e.data?.message || String(e);
             throw e;

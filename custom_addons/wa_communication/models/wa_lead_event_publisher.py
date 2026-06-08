@@ -75,6 +75,15 @@ class WaLeadEventPublisher(models.Model):
                 _TOPIC_ACTOR,
                 rec._wa_build_event('actor.created'),
             )
+            # If a phone-only (orphan) WhatsApp conversation already exists for
+            # this lead's number, attach it now so prior inbound history isn't
+            # stranded. Defensive: a WA hiccup must never block lead creation.
+            try:
+                self.env['wa.conversation'].sudo()._owa_relink_orphan_for_lead(rec)
+            except Exception:  # noqa: BLE001
+                _logger.warning(
+                    "wa: orphan-conversation relink failed for lead %s",
+                    rec.id, exc_info=True)
         return records
 
     # ------------------------------------------------------------------

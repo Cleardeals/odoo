@@ -13,8 +13,20 @@
             <t t-elif="!state.convId">
                 <div class="wa-lead-tab__no-conv">
                     <i class="fa fa-whatsapp wa-lead-tab__no-conv-icon" aria-hidden="true"/>
-                    <p>No WhatsApp conversation found for this lead's phone number.</p>
-                    <p class="text-muted small">Messages will appear here once the customer contacts us on WhatsApp.</p>
+                    <p class="wa-lead-tab__no-conv-title">No WhatsApp conversation yet</p>
+                    <p class="text-muted small">
+                        Send a template message to start the conversation.
+                        Templates work even before the customer messages you first.
+                    </p>
+                    <button class="btn btn-primary wa-lead-tab__first-msg-btn"
+                            t-on-click="() => this.openTemplatePicker()">
+                        <i class="fa fa-paper-plane" aria-hidden="true"/>
+                        Send First Message
+                    </button>
+                    <t t-if="state.sendError">
+                        <div class="alert alert-danger wa-lead-tab__send-error mt-2"
+                             t-esc="state.sendError"/>
+                    </t>
                 </div>
             </t>
             <t t-else="">
