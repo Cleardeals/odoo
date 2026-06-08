@@ -1,4 +1,5 @@
 from . import (
+    test_bulk_reassign,
     test_cross_rm_access,
     test_buyer_activity_api,
     test_buyer_site_visits_api,

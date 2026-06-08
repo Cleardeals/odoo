@@ -10,3 +10,4 @@ from . import lead_property_interest
 from . import lead_site_visit
 from . import leads_new_inquiry
 from . import property_base_extend
+from . import lead_reassignment_log

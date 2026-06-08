@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_lead_reassignment_log_list" model="ir.ui.view">
+        <field name="name">lead.reassignment.log.list</field>
+        <field name="model">lead.reassignment.log</field>
+        <field name="arch" type="xml">
+            <list string="Reassignment Log" create="false" edit="false">
+                <field name="name"/>
+                <field name="reassign_date"/>
+                <field name="reassigned_by_id"/>
+                <field name="source_rm_summary"/>
+                <field name="new_rm_id"/>
+                <field name="lead_count"/>
+                <field name="site_visits_moved"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_lead_reassignment_log_form" model="ir.ui.view">
+        <field name="name">lead.reassignment.log.form</field>
+        <field name="model">lead.reassignment.log</field>
+        <field name="arch" type="xml">
+            <form string="Reassignment Batch" create="false" edit="false">
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="name"/>
+                            <field name="reassign_date"/>
+                            <field name="reassigned_by_id"/>
+                        </group>
+                        <group>
+                            <field name="new_rm_id"/>
+                            <field name="lead_count"/>
+                            <field name="site_visits_moved"/>
+                        </group>
+                    </group>
+                    <group string="Previous RMs">
+                        <field name="source_rm_summary" nolabel="1"/>
+                    </group>
+                    <group string="Reason">
+                        <field name="reason" nolabel="1"/>
+                    </group>
+                    <notebook>
+                        <page string="Affected Leads">
+                            <field name="lead_ids" readonly="1">
+                                <list>
+                                    <field name="create_date"/>
+                                    <field name="name"/>
+                                    <field name="phone"/>
+                                    <field name="property_base_id" string="Property"/>
+                                    <field name="user_id" string="Current RM"/>
+                                    <field name="current_status"/>
+                                </list>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_lead_reassignment_log_search" model="ir.ui.view">
+        <field name="name">lead.reassignment.log.search</field>
+        <field name="model">lead.reassignment.log</field>
+        <field name="arch" type="xml">
+            <search string="Reassignment Log">
+                <field name="name"/>
+                <field name="new_rm_id"/>
+                <field name="reassigned_by_id"/>
+                <filter name="group_new_rm" string="New RM"
+                        context="{'group_by': 'new_rm_id'}"/>
+                <filter name="group_by_date" string="Date"
+                        context="{'group_by': 'reassign_date'}"/>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_lead_reassignment_log" model="ir.actions.act_window">
+        <field name="name">Reassignment Log</field>
+        <field name="res_model">lead.reassignment.log</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="view_lead_reassignment_log_search"/>
+        <field name="context">{}</field>
+    </record>
+
+    <menuitem id="menu_lead_reassignment_log"
+              name="Reassignment Log"
+              parent="menu_daily_operations"
+              action="action_lead_reassignment_log"
+              groups="leads.group_lead_score_manager"
+              sequence="40"/>
+
+</odoo>

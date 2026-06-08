@@ -204,6 +204,15 @@ class NewPortalLead(models.Model):
         tracking=True,
     )
 
+    last_reassignment_batch_id = fields.Many2one(
+        "lead.reassignment.log",
+        string="Last Reassignment Batch",
+        readonly=True,
+        copy=False,
+        index=True,
+        help="The most recent bulk reassignment operation that moved this lead.",
+    )
+
     # ------------------------------------------------------------------
     # New related fields — sourced from property.base (property_base_id).
     # Populated as property_base_id gets backfilled / set on new leads.

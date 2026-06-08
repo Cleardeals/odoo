@@ -267,6 +267,9 @@
                             <group>
                                 <group>
                                     <field name="user_id"/>
+                                    <field name="last_reassignment_batch_id" readonly="1"
+                                           invisible="not last_reassignment_batch_id"
+                                           groups="leads.group_lead_score_manager"/>
                                     <field name="property_base_id" string="Property"
                                            context="{'properties_module_view': True}"/>
                                     <field name="base_property_tag" string="Property Tag"/>
