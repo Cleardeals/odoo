@@ -28,6 +28,25 @@ class TestInboundMigration(WaTransactionCase):
         return self.env['cleardeals.notification'].sudo().search(
             [('notif_type', '=', notif_type)]).mapped('user_id').ids
 
+    # ── Canonical phone key + dedup ───────────────────────────────────────────
+
+    def test_canonical_wa_phone_normalizes_formats(self):
+        f = self.Conv._owa_canonical_wa_phone
+        self.assertEqual(f('9876500123'), '919876500123')
+        self.assertEqual(f('919876500123'), '919876500123')
+        self.assertEqual(f('+91 98765 00123'), '919876500123')
+
+    def test_get_or_create_dedupes_10_and_12_digit_forms(self):
+        """The 10-digit and 12-digit forms of a number map to ONE conversation."""
+        a = self.Conv._get_or_create_for_phone('9876500123')
+        b = self.Conv._get_or_create_for_phone('919876500123')
+        self.assertEqual(a, b,
+                         "both phone shapes must resolve to the same conversation")
+        self.assertEqual(a.phone_number, '919876500123',
+                         "the stored key is canonical 12-digit E.164")
+        self.assertEqual(
+            self.Conv.sudo().search_count([('phone_number', '=', '919876500123')]), 1)
+
     # ── A. Phone normalization links the right lead ───────────────────────────
 
     def test_old_lead_links_via_normalized_phone(self):

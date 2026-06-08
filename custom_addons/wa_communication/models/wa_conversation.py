@@ -38,6 +38,7 @@ WA message and delivers status receipts back via the inbound OdooWaEvent path.
 
 import json
 import logging
+import re
 from datetime import datetime, timedelta, timezone
 
 import psycopg2.errors
@@ -267,27 +268,49 @@ class WaConversation(models.Model):
     # Inbound — conversation lookup / creation
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _owa_canonical_wa_phone(phone_number: str) -> str:
+        """Canonical conversation key: 12-digit E.164 without '+', i.e. ``91`` + 10.
+
+        WhatsApp / Interakt address Indian numbers as ``91XXXXXXXXXX``.  We
+        normalize the conversation KEY itself (not just the lead lookup) so the
+        same contact can never end up with separate 10-digit and 12-digit
+        conversation rows.  Non-standard shapes are returned digit-stripped so
+        equal numbers still collapse together.
+        """
+        if not phone_number:
+            return phone_number
+        digits = re.sub(r'\D', '', phone_number)
+        if len(digits) == 10:
+            return '91' + digits
+        if len(digits) == 12 and digits.startswith('91'):
+            return digits
+        return digits or phone_number
+
     @api.model
     def _get_or_create_for_phone(
         self, phone_number: str, sender_name: str = ''
     ) -> 'WaConversation':
         """Return the conversation for ``phone_number``, creating it if needed.
 
-        On creation, auto-links to the most recent ``leads.new`` record whose
-        ``phone`` field matches ``phone_number``.
+        The phone is canonicalized to 12-digit E.164 so lookups and inserts are
+        format-agnostic.  On creation, auto-links to the most recent ``leads.new``
+        record whose ``phone`` field matches.  The create is race-safe: a
+        concurrent insert that wins the ``UNIQUE(phone_number)`` index is caught
+        and the existing row returned instead of creating a duplicate.
 
-        :param phone_number: WA phone number (digits only, no ``+``).
+        :param phone_number: WA phone number (any shape; canonicalized internally).
         :param sender_name:  Display name from the WA contact object
                              (used only for logging; not stored).
         :return: Existing or newly created ``wa.conversation`` record.
         """
+        phone_number = self._owa_canonical_wa_phone(phone_number)
         conv = self.search([('phone_number', '=', phone_number)], limit=1)
         if conv:
             return conv
 
-        # leads.new stores a standardized 10-digit number; wa.conversation stores
-        # the full E.164-without-plus (e.g. 919876543210). Normalize to the leads
-        # canonical format for the lookup so any inbound phone shape links reliably.
+        # leads.new stores a standardized 10-digit number; normalize to that for
+        # the lead lookup so any inbound phone shape links reliably.
         lead_phone = self._owa_standardize_lead_phone(phone_number)
         lead = self.env['leads.new'].sudo().search(
             [('phone', '=', lead_phone)],
@@ -300,10 +323,20 @@ class WaConversation(models.Model):
             sender_name,
             lead.id or 'none',
         )
-        return self.create({
-            'phone_number': phone_number,
-            'lead_id': lead.id if lead else False,
-        })
+        # Race-safe insert: two concurrent Pub/Sub deliveries for the same number
+        # both reach here; the second hits the unique index. Catch it and return
+        # the row the winner created instead of raising / duplicating.
+        try:
+            with self.env.cr.savepoint():
+                return self.create({
+                    'phone_number': phone_number,
+                    'lead_id': lead.id if lead else False,
+                })
+        except psycopg2.errors.UniqueViolation:
+            existing = self.search([('phone_number', '=', phone_number)], limit=1)
+            if existing:
+                return existing
+            raise
 
     # ------------------------------------------------------------------
     # Inbound — push event router
