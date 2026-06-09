@@ -841,14 +841,14 @@ class TestSellerSummaryAPI(PortalLeadTestCase):
             )
 
     # ========================================================================
-    # PROPERTY DETAILS (name + rm_name) TESTS
+    # PROPERTY DETAILS (name + rm_name + phone) TESTS
     # ========================================================================
 
     def test_26_property_details_includes_name_and_rm_name(self):
         """
         ARRANGE: 3 properties, all assigned to rm_user
         ACT: Build property_details list as the controller does
-        ASSERT: Each entry has property_tag, name, and rm_name matching rm_user
+        ASSERT: Each entry has property_tag, name, rm_name, and phone matching rm_user
         """
         # ARRANGE
         phone = "9876543210"
@@ -860,6 +860,7 @@ class TestSellerSummaryAPI(PortalLeadTestCase):
                 "property_tag": prop.property_tag,
                 "name": prop.name or None,
                 "rm_name": prop.rm_user_id.name if prop.rm_user_id else None,
+                "phone": prop.rm_user_id.phone if prop.rm_user_id else None,
             }
             for prop in properties
         ]
@@ -870,15 +871,17 @@ class TestSellerSummaryAPI(PortalLeadTestCase):
             self.assertIn("property_tag", detail)
             self.assertIn("name", detail)
             self.assertIn("rm_name", detail)
+            self.assertIn("phone", detail)
             self.assertIsNotNone(detail["property_tag"])
             self.assertIsNotNone(detail["name"])
             self.assertEqual(detail["rm_name"], self.rm_user.name)
+            self.assertEqual(detail["phone"], self.rm_user.phone)
 
     def test_27_property_details_rm_name_none_when_no_rm_assigned(self):
         """
         ARRANGE: Property with no rm_user_id set
         ACT: Build property_details
-        ASSERT: rm_name is None
+        ASSERT: rm_name and phone are None
         """
         # ARRANGE
         prop_no_rm = self.env["property.base"].create(
@@ -898,10 +901,12 @@ class TestSellerSummaryAPI(PortalLeadTestCase):
             "property_tag": prop_no_rm.property_tag,
             "name": prop_no_rm.name or None,
             "rm_name": prop_no_rm.rm_user_id.name if prop_no_rm.rm_user_id else None,
+            "phone": prop_no_rm.rm_user_id.phone if prop_no_rm.rm_user_id else None,
         }
 
         # ASSERT
         self.assertIsNone(detail["rm_name"])
+        self.assertIsNone(detail["phone"])
         self.assertIsNotNone(detail["name"])
 
     def test_28_property_details_multiple_rms_per_property(self):
@@ -915,6 +920,7 @@ class TestSellerSummaryAPI(PortalLeadTestCase):
             {
                 "name": f"Other RM {self.suffix}",
                 "login": f"other_rm_{self.suffix}@test.com",
+                "phone": "9123456780",
             }
         )
         prop_other_rm = self.env["property.base"].create(
@@ -939,6 +945,7 @@ class TestSellerSummaryAPI(PortalLeadTestCase):
                 "property_tag": prop.property_tag,
                 "name": prop.name or None,
                 "rm_name": prop.rm_user_id.name if prop.rm_user_id else None,
+                "phone": prop.rm_user_id.phone if prop.rm_user_id else None,
             }
             for prop in properties
         ]
@@ -952,4 +959,15 @@ class TestSellerSummaryAPI(PortalLeadTestCase):
         self.assertEqual(
             rm_names[self.test_property.property_tag],
             self.rm_user.name,
+        )
+
+        # ASSERT — each property carries its own RM's phone
+        rm_phones = {d["property_tag"]: d["phone"] for d in property_details}
+        self.assertEqual(
+            rm_phones[prop_other_rm.property_tag],
+            other_rm.phone,
+        )
+        self.assertEqual(
+            rm_phones[self.test_property.property_tag],
+            self.rm_user.phone,
         )

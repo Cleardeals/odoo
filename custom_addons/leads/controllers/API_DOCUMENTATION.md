@@ -463,7 +463,20 @@ High-level aggregated counts for all of a seller's properties, broken down by le
 ```json
 {
   "owner_phone": "9876543210",
-  "properties":  ["TAG1", "TAG2"],
+  "properties": [
+    {
+      "property_tag": "TAG1",
+      "name": "Sunrise Residency",
+      "rm_name": "Bhoomika Prajapati",
+      "phone": "9876543210"
+    },
+    {
+      "property_tag": "TAG2",
+      "name": "Green Meadows",
+      "rm_name": "Bhoomika Prajapati",
+      "phone": "9876543210"
+    }
+  ],
   "tag_filter":  null,
   "inquiries": {
     "total":       80,
@@ -483,7 +496,11 @@ High-level aggregated counts for all of a seller's properties, broken down by le
 | Field                | Type            | Description                                               |
 |----------------------|-----------------|-----------------------------------------------------------|
 | `owner_phone`        | `string`        | Normalized 10-digit phone                                 |
-| `properties`         | `string[]`      | All active property tags for this owner                   |
+| `properties`         | `object[]`      | Per-property detail for all active properties of this owner |
+| `properties[].property_tag` | `string \| null` | Property identifier tag                            |
+| `properties[].name`  | `string \| null` | Property name                                            |
+| `properties[].rm_name` | `string \| null` | Assigned RM's name (`res.users`), `null` if no RM      |
+| `properties[].phone` | `string \| null` | Assigned RM's phone (`res.users`), `null` if no RM       |
 | `inquiries.total`    | `integer`       | Total leads (primary + recommended)                       |
 | `inquiries.primary`  | `integer`       | Direct inquiry count                                      |
 | `inquiries.recommended` | `integer`    | Recommended interest count                                |

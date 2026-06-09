@@ -20,7 +20,8 @@ Response shape
       {
         "property_tag": "TAG1",
         "name": "Sunrise Residency",
-        "rm_name": "Bhoomika Prajapati"
+        "rm_name": "Bhoomika Prajapati",
+        "phone": "9876543210"
       }
     ],
     "tag_filter": null | "TAG1",
@@ -104,6 +105,7 @@ class SellerSummaryController(http.Controller):
                 "property_tag": prop.property_tag,
                 "name": prop.name or None,
                 "rm_name": prop.rm_user_id.name if prop.rm_user_id else None,
+                "phone": prop.rm_user_id.phone if prop.rm_user_id else None,
             }
             for prop in properties
         ]
