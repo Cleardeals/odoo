@@ -191,8 +191,11 @@ class WaLeadEventPublisher(models.Model):
         ``actor.rm.email``, ``actor.property.tag``, etc.
         """
         self.ensure_one()
-        prop = self.property_base_id
-        rm = self.user_id
+        # sudo() so the snapshot can be built regardless of the calling user's
+        # ACLs on property.base / res.users — this is read-only metadata for
+        # Pub/Sub events and never surfaces to the UI.
+        prop = self.property_base_id.sudo()
+        rm = self.user_id.sudo()
         return {
             # ── Core identity ──────────────────────────────────────────────
             'id':             self.id,

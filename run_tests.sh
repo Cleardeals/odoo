@@ -12,6 +12,7 @@
 #
 # Environment variable overrides (all optional):
 #   DB_PORT      — host port for Postgres (default: 5432)
+#   HTTP_PORT    — host port for Odoo HTTP (default: 8899); avoids conflict with dev server on 8069
 #   KEEP_DB      — if set to "1", the Postgres container is left running after tests
 #   REBUILD      — if set to "1", forces a fresh Docker image build even if one exists
 #   LOG_LEVEL    — odoo log level (default: test)
@@ -20,6 +21,7 @@ set -euo pipefail
 
 # ── Configurable defaults ────────────────────────────────────────────────────
 DB_PORT="${DB_PORT:-5432}"
+HTTP_PORT="${HTTP_PORT:-8899}"
 DB_USER="odoo"
 DB_PASSWORD="odoo"
 DB_NAME="odoo_test_db"
@@ -131,7 +133,8 @@ docker run --rm \
         --test-enable \
         --test-tags "${TAGS}" \
         --stop-after-init \
-        --log-level="${LOG_LEVEL}"
+        --log-level="${LOG_LEVEL}" \
+        --http-port="${HTTP_PORT}"
 
 # docker run exits with non-zero if Odoo reports test failures
 TEST_EXIT=$?
