@@ -96,6 +96,13 @@ _VERIFY_PATCH = (
     'odoo.addons.wa_communication.controllers.push_controller.verify_push_token'
 )
 
+# Patch target for the dispatch method, so error-handling branches in the
+# controller can be exercised without a real concurrency conflict.
+_PROCESS_PATCH = (
+    'odoo.addons.wa_communication.models.wa_conversation.'
+    'WaConversation._process_push_event'
+)
+
 
 @tagged('post_install', '-at_install', 'wa_communication')
 class TestWaPushController(HttpCase):
@@ -207,6 +214,42 @@ class TestWaPushController(HttpCase):
         self.assertEqual(resp.status_code, 200)
         msg.invalidate_recordset()
         self.assertEqual(msg.status, 'read')
+
+    # ------------------------------------------------------------------
+    # Error handling: concurrency conflicts must not be swallowed
+    # ------------------------------------------------------------------
+
+    def test_serialization_conflict_propagates_not_swallowed(self):
+        """A Postgres serialization failure must NOT be swallowed as 200.
+
+        Two workers updating the same wa.message row (delivered + read receipts)
+        can collide under REPEATABLE READ.  Swallowing the error would silently
+        drop the event's writes; instead it must propagate so Odoo retries the
+        request in a fresh transaction (test mode → no retry → the error surfaces).
+        """
+        import psycopg2
+
+        class _SerErr(psycopg2.OperationalError):
+            pgcode = psycopg2.errorcodes.SERIALIZATION_FAILURE
+
+        payload = _wa_status_payload(wa_msg_id='wamid.conflict', status='read')
+        with patch(_VERIFY_PATCH), patch(
+            _PROCESS_PATCH, side_effect=_SerErr('could not serialize access')
+        ):
+            resp = self._post_push(payload)
+        self.assertNotEqual(
+            resp.status_code, 200,
+            "a serialization conflict must propagate (for retry), not return 200",
+        )
+
+    def test_non_concurrency_error_is_swallowed_as_200(self):
+        """Genuine processing errors are still ACKed (200) so GCP stops retrying."""
+        payload = _wa_status_payload(wa_msg_id='wamid.boom', status='read')
+        with patch(_VERIFY_PATCH), patch(
+            _PROCESS_PATCH, side_effect=ValueError('boom')
+        ):
+            resp = self._post_push(payload)
+        self.assertEqual(resp.status_code, 200)
 
     # ------------------------------------------------------------------
     # Event log tests

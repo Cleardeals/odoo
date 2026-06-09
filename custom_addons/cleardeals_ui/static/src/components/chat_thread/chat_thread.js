@@ -1,6 +1,6 @@
 /** @odoo-module */
 
-import { Component, useRef, useState, onMounted, onPatched } from "@odoo/owl";
+import { Component, useRef, useState, onMounted, onPatched, onWillUnmount } from "@odoo/owl";
 import { CdChatBubble } from "../chat_bubble/chat_bubble";
 import { istDayKey, formatDayLabel } from "../../utils/datetime";
 
@@ -24,6 +24,10 @@ export class CdChatThread extends Component {
     setup() {
         this.lightbox = useState({ open: false, url: "", kind: "", filename: "" });
         this.search = useState({ open: false, query: "", matches: [], idx: 0 });
+        // WhatsApp-style floating date pill: shows the day of the topmost visible
+        // message while the user scrolls, then fades out shortly after they stop.
+        this.datePill = useState({ label: "", visible: false });
+        this._dateHideTimer = null;
         this._lastCount = 0;
         onMounted(() => this._scrollToBottom());
         onPatched(() => {
@@ -35,6 +39,40 @@ export class CdChatThread extends Component {
                 if (this.search.open && this.search.query) this._recomputeMatches();
             }
         });
+        onWillUnmount(() => {
+            if (this._dateHideTimer) clearTimeout(this._dateHideTimer);
+        });
+    }
+
+    // ── Floating date pill (shows while scrolling, fades when stopped) ──────────
+
+    onThreadScroll() {
+        const label = this._topVisibleDayLabel();
+        if (label) this.datePill.label = label;
+        this.datePill.visible = true;
+        if (this._dateHideTimer) clearTimeout(this._dateHideTimer);
+        // Fade the pill out a beat after scrolling stops (WhatsApp-like).
+        this._dateHideTimer = setTimeout(() => {
+            this.datePill.visible = false;
+        }, 1200);
+    }
+
+    /** Day label of the first message bubble currently visible at the top. */
+    _topVisibleDayLabel() {
+        const el = this.scrollRef.el;
+        if (!el) return "";
+        const containerTop = el.getBoundingClientRect().top;
+        const nodes = el.querySelectorAll('[id^="cd-msg-"]');
+        for (const node of nodes) {
+            // First bubble whose bottom edge is still below the container's top.
+            if (node.getBoundingClientRect().bottom >= containerTop + 4) {
+                const id = parseInt(node.id.slice("cd-msg-".length), 10);
+                const msg = this.props.messages.find((m) => m.id === id);
+                if (msg) return formatDayLabel(msg.occurred_at);
+                break;
+            }
+        }
+        return "";
     }
 
     // ── Date separators ────────────────────────────────────────────────────────

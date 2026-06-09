@@ -154,6 +154,55 @@ class TestInboundEvents(WaTransactionCase):
         msg.invalidate_recordset()
         self.assertEqual(msg.status, 'failed')
 
+    # ── status monotonicity (out-of-order / redelivered webhooks) ─────────────
+
+    def test_read_status_not_downgraded_by_late_delivered(self):
+        """A delivered event arriving AFTER read must not revert the blue tick."""
+        conv = self.make_conversation()
+        msg = self._queued_rm_msg(conv, 'req-mono1', wa_message_id='wamid.mono1',
+                                  status='sent')
+        # read first…
+        self._process({
+            'event_type': 'message_read',
+            'wa_message_id': 'wamid.mono1',
+            'occurred_at': '2026-01-02T12:00:00Z',
+        })
+        # …then a late/redelivered delivered.
+        self._process({
+            'event_type': 'message_delivered',
+            'wa_message_id': 'wamid.mono1',
+            'cost_inr': 0.65,
+            'occurred_at': '2026-01-02T11:00:00Z',
+        })
+        msg.invalidate_recordset()
+        self.assertEqual(msg.status, 'read',
+                         "status must stay 'read' — never downgrade to delivered")
+        self.assertTrue(msg.seen_at, "seen_at stays set")
+        self.assertEqual(msg.cost_inr, 0.65,
+                         "delivered metadata is still recorded")
+
+    def test_delivered_status_not_downgraded_by_redelivered_sent(self):
+        """A redelivered message_sent must not knock a delivered row back to sent."""
+        conv = self.make_conversation()
+        msg = self._queued_rm_msg(conv, 'req-mono2', wa_message_id='wamid.mono2',
+                                  status='sent')
+        self._process({
+            'event_type': 'message_delivered',
+            'wa_message_id': 'wamid.mono2',
+            'occurred_at': '2026-01-02T11:00:00Z',
+        })
+        # Pub/Sub redelivers the earlier message_sent.
+        self._process({
+            'event_type': 'message_sent',
+            'phone': conv.phone_number,
+            'request_id': 'req-mono2',
+            'wa_message_id': 'wamid.mono2',
+            'occurred_at': '2026-01-02T10:00:00Z',
+        })
+        msg.invalidate_recordset()
+        self.assertEqual(msg.status, 'delivered',
+                         "status must stay 'delivered' — never downgrade to sent")
+
     # ── lead_replied ──────────────────────────────────────────────────────────
 
     def test_lead_replied_creates_inbound_and_increments_unread(self):
@@ -260,6 +309,81 @@ class TestInboundEvents(WaTransactionCase):
         self.assertTrue(reply.wa_message_id.startswith('wamid.tpl:r:'))
         self.assertEqual(reply.quoted_message_id, tpl,
                          "reply should quote the outbound template it answered")
+
+    def test_lead_replied_companion_text_does_not_duplicate_button(self):
+        """One tap → button click + companion text must record ONE inbound bubble.
+
+        The button click reuses the template's id; the companion message_received
+        carries its own id but the SAME message_context (source_message_id =
+        template).  When the platform's click-shadow misses (redelivery / batch),
+        both reach Odoo — the second must be deduped against the first.
+        """
+        conv = self.make_conversation()
+        tpl = self.Msg.sudo().create({
+            'conversation_id': conv.id,
+            'direction': 'outbound',
+            'initiator': 'workflow',
+            'kind': 'template',
+            'template_name': 'site_visit',
+            'wa_message_id': 'wamid.tpl2',
+            'status': 'delivered',
+            'occurred_at': '2026-03-01 07:00:00',
+        })
+        # 1) Button click — id collides with the outbound template.
+        self._process({
+            'event_type': 'lead_replied',
+            'phone': conv.phone_number,
+            'wa_message_id': 'wamid.tpl2',
+            'button_reply_id': 'Schedule Visit',
+            'message_text': 'Schedule Visit',
+            'occurred_at': '2026-03-01T08:00:00Z',
+        }, msg_id='tap-click')
+        # 2) Companion text — its OWN id, but references the same template.
+        self._process({
+            'event_type': 'lead_replied',
+            'phone': conv.phone_number,
+            'wa_message_id': 'wamid.companion-text',
+            'source_message_id': 'wamid.tpl2',
+            'message_text': 'Schedule Visit',
+            'occurred_at': '2026-03-01T08:00:01Z',
+        }, msg_id='tap-companion')
+
+        inbound = self.Msg.sudo().search([
+            ('conversation_id', '=', conv.id),
+            ('direction', '=', 'inbound'),
+        ])
+        self.assertEqual(len(inbound), 1,
+                         "button click + companion text = ONE inbound bubble")
+        self.assertEqual(inbound.quoted_message_id, tpl)
+
+    def test_lead_replied_distinct_buttons_are_not_deduped(self):
+        """Two DIFFERENT taps on the same template stay as two separate replies."""
+        conv = self.make_conversation()
+        self.Msg.sudo().create({
+            'conversation_id': conv.id,
+            'direction': 'outbound',
+            'initiator': 'workflow',
+            'kind': 'template',
+            'template_name': 'site_visit',
+            'wa_message_id': 'wamid.tpl3',
+            'status': 'delivered',
+            'occurred_at': '2026-03-01 07:00:00',
+        })
+        for label, mid in (('Schedule Visit', 'a'), ('More Options', 'b')):
+            self._process({
+                'event_type': 'lead_replied',
+                'phone': conv.phone_number,
+                'wa_message_id': 'wamid.tpl3',
+                'button_reply_id': label,
+                'message_text': label,
+                'occurred_at': '2026-03-01T08:00:00Z',
+            }, msg_id='tap-%s' % mid)
+        inbound = self.Msg.sudo().search([
+            ('conversation_id', '=', conv.id),
+            ('direction', '=', 'inbound'),
+        ])
+        self.assertEqual(len(inbound), 2,
+                         "different button labels must each be recorded")
 
     def test_lead_replied_uses_platform_window_expiry_when_supplied(self):
         conv = self.make_conversation()

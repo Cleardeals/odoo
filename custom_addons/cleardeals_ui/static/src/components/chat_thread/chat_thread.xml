@@ -38,7 +38,14 @@
                 </div>
             </t>
 
-            <div class="cd-chat-thread" t-ref="scrollContainer">
+            <!-- Floating date pill — appears while scrolling, fades when stopped -->
+            <div class="cd-chat-thread__floating-date"
+                 t-att-class="{ 'cd-chat-thread__floating-date--visible': datePill.visible }">
+                <span class="cd-chat-thread__floating-date-chip" t-esc="datePill.label"/>
+            </div>
+
+            <div class="cd-chat-thread" t-ref="scrollContainer"
+                 t-on-scroll="() => this.onThreadScroll()">
                 <t t-if="props.messages.length === 0">
                     <div class="cd-chat-thread__empty">
                         <i class="fa fa-comments-o" aria-hidden="true"/>

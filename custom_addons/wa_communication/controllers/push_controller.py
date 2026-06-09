@@ -28,8 +28,21 @@ import json
 import logging
 import os
 
+import psycopg2
+
 from odoo import http
 from odoo.http import request
+
+# Postgres concurrency errors that must NOT be swallowed: a serialization
+# failure or deadlock means the transaction has to be retried in a FRESH one
+# (Odoo runs the request inside ``service.model.retrying``, which does exactly
+# that).  Swallowing them here would silently drop the event's writes — e.g. a
+# 'read' status + seen_at lost because a concurrent 'delivered' event touched
+# the same wa.message row.
+_PG_RETRY_ERRORS = (
+    psycopg2.errorcodes.SERIALIZATION_FAILURE,
+    psycopg2.errorcodes.DEADLOCK_DETECTED,
+)
 
 from odoo.addons.cleardeals_pubsub.controllers.push_utils import (
     InvalidPushTokenError,
@@ -117,6 +130,23 @@ class WaPubSubPushController(http.Controller):
         try:
             request.env['wa.conversation'].sudo()._process_push_event(
                 payload, attributes, pubsub_message_id
+            )
+        except psycopg2.OperationalError as exc:
+            # Concurrency conflict (two workers updating the same wa.message row,
+            # e.g. delivered + read receipts for one message).  Re-raise so Odoo's
+            # request-level retry re-runs this handler in a fresh transaction —
+            # swallowing it would lose this event's writes.  GCP redelivers if the
+            # retries are ultimately exhausted (the handlers are idempotent).
+            if exc.pgcode in _PG_RETRY_ERRORS:
+                _logger.info(
+                    "wa_push: concurrency conflict (pgcode=%s) on message %s — "
+                    "retrying in a fresh transaction",
+                    exc.pgcode, pubsub_message_id,
+                )
+                raise
+            _logger.exception(
+                "wa_push: dispatch raised for message %s: %s",
+                pubsub_message_id, exc,
             )
         except Exception as exc:
             _logger.exception(

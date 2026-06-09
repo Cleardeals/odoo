@@ -5,6 +5,34 @@
     flex-direction: column;
     position: relative;
 
+    // ── Floating date pill ─────────────────────────────────────────────────
+    // Overlays the top-centre of the thread; visible only while scrolling, then
+    // fades out (WhatsApp-style).  Sits in the wrap (not the scroll container)
+    // so it stays pinned regardless of scroll position.
+    .cd-chat-thread__floating-date {
+        position: absolute;
+        top: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 5;
+        opacity: 0;
+        transition: opacity 0.25s ease;
+        pointer-events: none;
+
+        &--visible { opacity: 1; }
+    }
+
+    .cd-chat-thread__floating-date-chip {
+        display: inline-block;
+        background: #ffffff;
+        color: #54656f;
+        font-size: 12px;
+        font-weight: 500;
+        padding: 4px 12px;
+        border-radius: 8px;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+    }
+
     // Floating "search in chat" button (top-right of the thread).
     .cd-chat-thread__search-toggle {
         position: absolute;
@@ -76,13 +104,15 @@
     position: relative;
 
     // ── Date separators (WhatsApp-style centred chip) ──────────────────────
+    // NOT sticky: each separator is its own flex sibling, so making them all
+    // `position: sticky; top: 6px` pins EVERY chip to the same offset.  Near a
+    // day boundary two chips overlap — the wider "6 June 2026" peeks out on both
+    // sides of a centred "Today" (you literally see "6 … 6").  Inline chips that
+    // scroll with their day's messages never collide.
     &__date-sep {
         display: flex;
         justify-content: center;
         margin: 10px 0 6px;
-        position: sticky;
-        top: 6px;
-        z-index: 2;
         pointer-events: none;
     }
 

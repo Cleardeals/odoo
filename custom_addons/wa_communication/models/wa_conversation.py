@@ -97,6 +97,33 @@ _FAILURE_CODE_TO_STATUS = {
     132001: 'template_error',
 }
 
+# Monotonic rank of the happy-path delivery lifecycle.  Interakt/Pub/Sub deliver
+# status webhooks AT-LEAST-ONCE and with NO ordering guarantee, so a redelivered
+# (or simply late) ``message_delivered`` can arrive AFTER ``message_read`` — if we
+# wrote status blindly it would knock a read message back to "delivered" (grey
+# double-tick) even though ``seen_at`` is set.  Statuses only ever move FORWARD
+# through these ranks; terminal failure states are handled separately and are not
+# in this map (a failure should always be recorded).
+_STATUS_RANK = {
+    'queued':    0,
+    'pending':   0,
+    'sent':      1,
+    'delivered': 2,
+    'read':      3,
+}
+
+
+def _max_status(current: str, incoming: str) -> str:
+    """Return whichever of *current* / *incoming* is further along the lifecycle.
+
+    Only applies to the ranked happy-path statuses.  If either status is not in
+    ``_STATUS_RANK`` (e.g. a failure state), *incoming* wins so failures and other
+    non-lifecycle transitions are never suppressed.
+    """
+    if current not in _STATUS_RANK or incoming not in _STATUS_RANK:
+        return incoming
+    return current if _STATUS_RANK[current] >= _STATUS_RANK[incoming] else incoming
+
 
 def _parse_iso_dt(dt_str: str) -> datetime:
     """Parse an ISO 8601 UTC timestamp string to a naive UTC datetime.
@@ -873,9 +900,11 @@ class WaConversation(models.Model):
         )
         if msg:
             # RM-initiated send: update the queued record created by send_message()
+            # Never move status backwards — a redelivered message_sent must not
+            # downgrade a row already marked delivered/read.
             vals = {
                 'wa_message_id':   wa_message_id or msg.wa_message_id,
-                'status':          'sent',
+                'status':          _max_status(msg.status, 'sent'),
                 'status_updated_at': fields.Datetime.now(),
             }
             vals.update(self._owa_template_content_vals(event, msg))
@@ -931,8 +960,10 @@ class WaConversation(models.Model):
             step_id=step_id,
         )
         if msg:
+            # delivered_at/cost are always recorded, but status only advances —
+            # a late/redelivered delivered event must not knock a read row back.
             vals = {
-                'status':          'delivered',
+                'status':          _max_status(msg.status, 'delivered'),
                 'cost_inr':        cost_inr,
                 'delivered_at':    occurred_at,
                 'status_updated_at': fields.Datetime.now(),
@@ -961,8 +992,10 @@ class WaConversation(models.Model):
             step_id=step_id,
         )
         if msg:
+            # seen_at is always recorded; status advances to read (and stays there
+            # even if an out-of-order delivered event follows).
             vals = {
-                'status':          'read',
+                'status':          _max_status(msg.status, 'read'),
                 'seen_at':         occurred_at,
                 'status_updated_at': fields.Datetime.now(),
             }
@@ -1093,6 +1126,38 @@ class WaConversation(models.Model):
                     or ''
                 )[:140] or False
                 quoted_sender = quoted_sender or quoted_src.sender_name or 'You'
+
+        # Defensive dedup for the button-tap "companion" duplicate.
+        #
+        # A quick-reply tap emits TWO inbound events from Interakt: the button
+        # CLICK (whose id is the template's outbound id) and a companion
+        # `message_received` TEXT (its own id) carrying the same message_context.
+        # The platform is meant to click-shadow the companion so only ONE reaches
+        # us, but that shadow is time-windowed (~4s) and can miss — on a redelivery
+        # or an out-of-order batch BOTH events arrive and, because the companion
+        # carries a different wa_message_id, the id-based dedup above doesn't catch
+        # it → two identical bubbles.  Both events resolve to the SAME quoted
+        # source message with the SAME body, so when a reply references a specific
+        # prior message, treat an existing inbound with the same (quoted source,
+        # body) as the same tap and skip.  Scoped to replies that quote a source
+        # so genuine repeated free-text ("ok", "ok") is never suppressed.  Runs
+        # under the conversation's FOR UPDATE lock (acquired above), so two
+        # concurrent deliveries are serialized and the second sees the first.
+        if quoted_src:
+            twin = self.env['wa.message'].sudo().search([
+                ('conversation_id', '=', conv.id),
+                ('direction', '=', 'inbound'),
+                ('quoted_message_id', '=', quoted_src.id),
+                ('body', '=', body),
+            ], limit=1)
+            if twin:
+                _logger.info(
+                    "wa_push: lead_replied companion duplicate skipped "
+                    "(conv=%s quoted=%s body=%r existing=%s)",
+                    conv.id, quoted_src.id, body[:40], twin.id,
+                )
+                return
+
         self.env['wa.message'].sudo().create({
             'conversation_id':   conv.id,
             'wa_message_id':     store_wa_message_id or False,
