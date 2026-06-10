@@ -36,6 +36,23 @@ class TestBulkReassign(PortalLeadTestCase):
             [("code", "=", "scheduled")], limit=1
         )
 
+        # BDE fixtures for OPS-sale handling. The base class already provides
+        # cls.test_bde_open (open to all) and cls.test_bde_restricted (only
+        # test_rm_b). Add one restricted to test_rm_a and a third RM allowed
+        # for no restricted BDE.
+        cls.bde_only_a = cls.env["leads.bde"].sudo().create(
+            {
+                "name": f"BDE Only A {cls.suffix}",
+                "allowed_rm_ids": [(6, 0, [cls.test_rm_a.id])],
+            }
+        )
+        cls.rm_c = new_test_user(
+            cls.env,
+            login=f"test_rm_c_{cls.suffix}",
+            name="Test RM Gamma",
+            groups="base.group_user,leads.group_lead_score_rm",
+        )
+
     # -- helpers --------------------------------------------------------
 
     def _make_lead(self, rm_user, name="Bulk Lead", phone=None):
@@ -56,6 +73,26 @@ class TestBulkReassign(PortalLeadTestCase):
             )
         )
 
+    def _make_ops_lead(self, rm_user, bde, name="Ops Lead", phone=None):
+        """Create an OPS-sale lead (requires a BDE the owner RM is allowed for)."""
+        return (
+            self.env["leads.new"]
+            .with_context(automated_lead_creation=True)
+            .create(
+                {
+                    "name": name,
+                    "phone": phone or f"97{self.suffix[-8:]}",
+                    "source_id": self.source_magicbricks.id,
+                    "property_base_id": self.test_property.id,
+                    "user_id": rm_user.id,
+                    "state": "assigned",
+                    "inquiry_type": "primary",
+                    "is_ops_sale_lead": True,
+                    "bde_id": bde.id,
+                }
+            )
+        )
+
     def _open_wizard(self, leads, user=None):
         """Open the wizard the way the bound server action does."""
         return (
@@ -64,6 +101,13 @@ class TestBulkReassign(PortalLeadTestCase):
             .with_context(active_model="leads.new", active_ids=leads.ids)
             .create({})
         )
+
+    def _reassign(self, leads, new_rm, reason="bulk test"):
+        wiz = self._open_wizard(leads)
+        wiz.new_rm_id = new_rm
+        wiz.reason = reason
+        wiz.action_confirm_reassign()
+        return wiz
 
     # -- preview / scope resolution ------------------------------------
 
@@ -255,3 +299,83 @@ class TestBulkReassign(PortalLeadTestCase):
 
         with self.assertRaises(AccessError):
             batch.with_user(self.test_rm_a).read(["reason"])
+
+    # -- OPS-sale / BDE handling ---------------------------------------
+
+    def test_20_ops_bde_kept_when_valid_for_new_rm(self):
+        """An OPS-sale lead whose BDE is open (valid for any RM) keeps its BDE."""
+        lead = self._make_ops_lead(self.test_rm_a, self.test_bde_open,
+                                    "Ops open", "9720000001")
+        wiz = self._reassign(lead, self.test_rm_b)
+        self.assertEqual(lead.user_id, self.test_rm_b)
+        self.assertTrue(lead.is_ops_sale_lead)
+        self.assertEqual(lead.bde_id, self.test_bde_open, "Open BDE must be kept.")
+        self.assertEqual(wiz.bde_reassigned_count, 0)
+        self.assertEqual(wiz.failed_count, 0)
+        self.assertEqual(wiz.reassigned_count, 1)
+
+    def test_21_ops_bde_swapped_to_explicit_for_new_rm(self):
+        """Regression for the reported error: moving an OPS-sale lead to an RM
+        not authorised for its BDE no longer raises — the BDE is swapped to one
+        that explicitly lists the new RM."""
+        lead = self._make_ops_lead(self.test_rm_a, self.bde_only_a,
+                                    "Ops swap", "9720000002")
+        wiz = self._reassign(lead, self.test_rm_b)  # must not raise
+        self.assertEqual(lead.user_id, self.test_rm_b)
+        self.assertEqual(lead.bde_id, self.test_bde_restricted,
+                         "BDE should swap to the one explicitly allowing test_rm_b.")
+        self.assertEqual(wiz.bde_reassigned_count, 1)
+        self.assertEqual(wiz.failed_count, 0)
+        self.assertIn("BDE re-assigned", lead.process_notes)
+
+    def test_22_ops_bde_swapped_to_open_when_no_explicit(self):
+        """When the new RM has no explicitly-allowed BDE, fall back to an open one."""
+        lead = self._make_ops_lead(self.test_rm_a, self.bde_only_a,
+                                    "Ops open fallback", "9720000003")
+        wiz = self._reassign(lead, self.rm_c)
+        self.assertEqual(lead.user_id, self.rm_c)
+        self.assertEqual(lead.bde_id, self.test_bde_open,
+                         "Should fall back to the open BDE for rm_c.")
+        self.assertEqual(wiz.bde_reassigned_count, 1)
+        self.assertEqual(wiz.failed_count, 0)
+
+    def test_23_ops_fails_when_new_rm_allowed_for_no_bde(self):
+        """If the new RM is authorised for no BDE, the OPS-sale lead is left in
+        place and reported, while other valid leads in the batch still move."""
+        self.test_bde_open.sudo().active = False  # no open BDE remains
+        normal = self._make_lead(self.test_rm_a, "Normal", "9720000004")
+        ops = self._make_ops_lead(self.test_rm_a, self.bde_only_a,
+                                  "Ops fail", "9720000005")
+        wiz = self._reassign(normal | ops, self.rm_c)  # must not raise
+
+        # Normal lead moved; ops lead untouched and reported.
+        self.assertEqual(normal.user_id, self.rm_c)
+        self.assertEqual(ops.user_id, self.test_rm_a, "Failing lead must stay put.")
+        self.assertEqual(ops.bde_id, self.bde_only_a, "Its BDE is unchanged.")
+        self.assertEqual(wiz.reassigned_count, 1)
+        self.assertEqual(wiz.failed_count, 1)
+        self.assertIn(ops, wiz.failed_lead_ids)
+        # Recorded in the immutable log for management.
+        self.assertEqual(wiz.batch_id.failed_count, 1)
+        self.assertIn(ops, wiz.batch_id.failed_lead_ids)
+
+    def test_24_all_fail_still_creates_log_without_error(self):
+        """A batch where every movable lead fails BDE auth must not raise and
+        must still record the failures in the log."""
+        self.test_bde_open.sudo().active = False
+        ops = self._make_ops_lead(self.test_rm_a, self.bde_only_a,
+                                  "Ops only fail", "9720000006")
+        wiz = self._reassign(ops, self.rm_c)
+        self.assertEqual(ops.user_id, self.test_rm_a)
+        self.assertEqual(wiz.reassigned_count, 0)
+        self.assertEqual(wiz.failed_count, 1)
+        self.assertTrue(wiz.batch_id)
+        self.assertEqual(wiz.batch_id.failed_count, 1)
+
+    def test_25_ops_count_shown_in_preview(self):
+        """The preview reports how many OPS-sale leads are in the selection."""
+        leads = self._make_lead(self.test_rm_a, "n", "9720000007") | \
+            self._make_ops_lead(self.test_rm_a, self.test_bde_open, "o", "9720000008")
+        wiz = self._open_wizard(leads)
+        self.assertEqual(wiz.ops_sale_count, 1)
+        self.assertEqual(wiz.lead_count, 2)

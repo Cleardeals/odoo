@@ -46,6 +46,11 @@ class LeadBulkReassignWizard(models.TransientModel):
         help="The leads selected in the list view.",
     )
     lead_count = fields.Integer(string="Selected Leads", readonly=True)
+    ops_sale_count = fields.Integer(
+        string="OPS-sale leads in selection",
+        readonly=True,
+        help="OPS-sale leads whose BDE will be re-validated against the new RM.",
+    )
     over_limit = fields.Boolean(readonly=True)
     max_leads = fields.Integer(readonly=True)
     source_rm_summary = fields.Char(string="Current RMs", readonly=True)
@@ -80,6 +85,16 @@ class LeadBulkReassignWizard(models.TransientModel):
     reassigned_count = fields.Integer(string="Leads Moved", readonly=True)
     skipped_count = fields.Integer(string="Already on New RM", readonly=True)
     site_visits_moved_count = fields.Integer(string="Site Visits Moved", readonly=True)
+    bde_reassigned_count = fields.Integer(string="BDE Re-assigned", readonly=True)
+    failed_count = fields.Integer(string="Could Not Move (BDE)", readonly=True)
+    failed_lead_ids = fields.Many2many(
+        "leads.new",
+        "lead_bulk_reassign_failed_rel",
+        string="Leads Needing Attention",
+        readonly=True,
+        help="OPS-sale leads left with their current RM because the new RM is "
+        "not authorised for any BDE. Reported to management for review.",
+    )
     batch_id = fields.Many2one("lead.reassignment.log", readonly=True)
 
     # ------------------------------------------------------------------
@@ -139,6 +154,35 @@ class LeadBulkReassignWizard(models.TransientModel):
             ).format(n=remaining)
         return Markup("<div class='d-flex flex-wrap'>") + chips + Markup("</div>")
 
+    @api.model
+    def _valid_bdes_for_rm(self, new_rm):
+        """Active BDEs the RM may receive OPS-sale leads for.
+
+        A BDE is usable by an RM when it is open to everyone (empty
+        allowed_rm_ids) or explicitly lists that RM. Mirrors the
+        leads.new._check_bde_allowed_for_rm constraint.
+        """
+        bdes = self.env["leads.bde"].search([("active", "=", True)])
+        return bdes.filtered(
+            lambda b: not b.allowed_rm_ids or new_rm in b.allowed_rm_ids
+        )
+
+    @api.model
+    def _pick_bde_for_rm(self, new_rm, current_bde, valid_bdes):
+        """Choose the BDE for an OPS-sale lead being moved to new_rm.
+
+        - Keep the current BDE if it is still valid for the new RM.
+        - Otherwise pick a valid BDE, preferring one that explicitly lists the
+          new RM over an open one, deterministically by name.
+        - Return an empty recordset when the new RM is allowed for no BDE
+          (the lead then fails and is reported, not moved).
+        """
+        if current_bde and current_bde in valid_bdes:
+            return current_bde
+        explicit = valid_bdes.filtered(lambda b: new_rm in b.allowed_rm_ids)
+        pool = explicit or valid_bdes
+        return pool.sorted(lambda b: (b.name or "").lower())[:1]
+
     # ------------------------------------------------------------------
     # Default get — resolve the list-view selection
     # ------------------------------------------------------------------
@@ -163,6 +207,7 @@ class LeadBulkReassignWizard(models.TransientModel):
         res["lead_count"] = len(leads)
         res["max_leads"] = max_leads
         res["over_limit"] = len(leads) > max_leads
+        res["ops_sale_count"] = len(leads.filtered("is_ops_sale_lead"))
         res["source_rm_summary"] = self._build_source_summary(leads)
         res["source_rm_html"] = self._build_source_html(leads)
         return res
@@ -214,60 +259,97 @@ class LeadBulkReassignWizard(models.TransientModel):
                 f"{self.new_rm_id.name}. Nothing to do."
             )
 
+        # --- Resolve BDE for OPS-sale leads ---------------------------------
+        # An OPS-sale lead's BDE must allow its RM (leads.new constraint). When
+        # the new RM is not authorised for a lead's current BDE we try to swap
+        # in a BDE the new RM *is* allowed for. If the new RM is allowed for no
+        # BDE at all, that lead cannot be moved — it is reported to management
+        # and recorded in the log, while every other valid lead still moves.
+        ops_leads = leads_to_move.filtered("is_ops_sale_lead")
+        valid_bdes = (
+            self._valid_bdes_for_rm(self.new_rm_id)
+            if ops_leads
+            else self.env["leads.bde"]
+        )
+        failed = self.env["leads.new"]
+        bde_overrides = {}  # lead.id -> new leads.bde record
+        for lead in ops_leads:
+            pick = self._pick_bde_for_rm(self.new_rm_id, lead.bde_id, valid_bdes)
+            if not pick:
+                failed |= lead
+            elif pick != lead.bde_id:
+                bde_overrides[lead.id] = pick
+
+        final_leads = leads_to_move - failed
+
         # Count site visits up front so the (immutable) log can be created once
-        # with final figures.
+        # with final figures (only the leads that will actually move).
         site_visits = self.env["lead.site.visit"]
-        if self.cascade_site_visits:
+        if self.cascade_site_visits and final_leads:
             site_visits = self.env["lead.site.visit"].search(
-                [("inquiry_id", "in", leads_to_move.ids)]
+                [("inquiry_id", "in", final_leads.ids)]
             )
 
         reassign_date = fields.Datetime.now()
         batch = self.env["lead.reassignment.log"].create(
             {
-                "name": "RB/" + fields.Datetime.now().strftime("%Y%m%d/%H%M%S"),
+                "name": "RB/" + reassign_date.strftime("%Y%m%d/%H%M%S"),
                 "reassigned_by_id": self.env.user.id,
                 "reassign_date": reassign_date,
                 "new_rm_id": self.new_rm_id.id,
-                "source_rm_summary": self._build_source_summary(leads_to_move),
+                "source_rm_summary": self._build_source_summary(final_leads),
                 "reason": self.reason.strip(),
-                "lead_count": len(leads_to_move),
+                "lead_count": len(final_leads),
                 "site_visits_moved": len(site_visits),
+                "bde_reassigned_count": len(bde_overrides),
+                "failed_count": len(failed),
+                "failed_lead_ids": [(6, 0, failed.ids)],
             }
         )
 
-        note_line = (
+        note_base = (
             f"\n[{reassign_date}] Bulk reassigned to {self.new_rm_id.name} "
-            f"by {self.env.user.name} [batch {batch.name}]: {self.reason.strip()}\n"
+            f"by {self.env.user.name} [batch {batch.name}]: {self.reason.strip()}"
         )
 
         # Process in one transaction so the operation is atomic — either every
         # lead (and the log's counts) is consistent, or nothing changes. The
         # 1000-lead cap keeps a single transaction comfortably bounded. Leads
         # are still iterated in chunks to bound the in-memory recordset.
-        lead_ids = leads_to_move.ids
+        lead_ids = final_leads.ids
         total = len(lead_ids)
         for start in range(0, total, _BATCH_SIZE):
             chunk_ids = lead_ids[start : start + _BATCH_SIZE]
             for lead in self.env["leads.new"].browse(chunk_ids):
-                lead.write(
-                    {
-                        "user_id": self.new_rm_id.id,
-                        "last_reassignment_batch_id": batch.id,
-                        "process_notes": (lead.process_notes or "") + note_line,
-                    }
-                )
+                vals = {
+                    "user_id": self.new_rm_id.id,
+                    "last_reassignment_batch_id": batch.id,
+                }
+                note = note_base
+                new_bde = bde_overrides.get(lead.id)
+                if new_bde is not None:
+                    vals["bde_id"] = new_bde.id
+                    note += (
+                        f"\n    BDE re-assigned from "
+                        f"'{lead.bde_id.name or '-'}' to '{new_bde.name}' "
+                        f"(new RM not authorised for the previous BDE)."
+                    )
+                vals["process_notes"] = (lead.process_notes or "") + note + "\n"
+                lead.write(vals)
             if self.cascade_site_visits:
                 self.env["lead.site.visit"].search(
                     [("inquiry_id", "in", chunk_ids)]
                 ).write({"assigned_rm_id": self.new_rm_id.id})
 
         _logger.info(
-            "BULK REASSIGN [%s]: %d leads moved to %s by %s",
+            "BULK REASSIGN [%s]: %d moved to %s by %s (%d BDE re-assigned, "
+            "%d failed BDE auth)",
             batch.name,
             total,
             self.new_rm_id.name,
             self.env.user.name,
+            len(bde_overrides),
+            len(failed),
         )
 
         self.write(
@@ -276,6 +358,9 @@ class LeadBulkReassignWizard(models.TransientModel):
                 "reassigned_count": total,
                 "skipped_count": skipped,
                 "site_visits_moved_count": len(site_visits),
+                "bde_reassigned_count": len(bde_overrides),
+                "failed_count": len(failed),
+                "failed_lead_ids": [(6, 0, failed.ids)],
                 "batch_id": batch.id,
             }
         )

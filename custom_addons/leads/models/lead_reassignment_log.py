@@ -60,11 +60,26 @@ class LeadReassignmentLog(models.Model):
     )
     lead_count = fields.Integer(string="Leads Moved", readonly=True)
     site_visits_moved = fields.Integer(string="Site Visits Moved", readonly=True)
+    bde_reassigned_count = fields.Integer(
+        string="BDE Re-assigned",
+        readonly=True,
+        help="OPS-sale leads whose BDE was swapped because the new RM was not "
+        "authorised for the previous BDE.",
+    )
+    failed_count = fields.Integer(string="Could Not Move (BDE)", readonly=True)
     lead_ids = fields.One2many(
         "leads.new",
         "last_reassignment_batch_id",
         string="Affected Leads",
         readonly=True,
+    )
+    failed_lead_ids = fields.Many2many(
+        "leads.new",
+        "lead_reassignment_log_failed_rel",
+        string="Leads Needing Attention",
+        readonly=True,
+        help="OPS-sale leads left with their current RM because the new RM is "
+        "not authorised for any BDE — surfaced here for management review.",
     )
 
     # ------------------------------------------------------------------
