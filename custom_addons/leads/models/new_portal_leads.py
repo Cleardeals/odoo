@@ -337,6 +337,40 @@ class NewPortalLead(models.Model):
                     f"BDE '{rec.bde_id.name}'. Contact a manager to update the BDE configuration."
                 )
 
+    # --- BDE reassignment helpers (shared by bulk wizard & auto-relink) ---
+
+    @api.model
+    def _bde_candidates_for_rm(self, rm):
+        """Active BDEs ``rm`` may receive OPS-sale leads for.
+
+        A BDE is usable by an RM when it is open to everyone (empty
+        allowed_rm_ids) or explicitly lists that RM — mirrors
+        _check_bde_allowed_for_rm.
+        """
+        bdes = self.env["leads.bde"].search([("active", "=", True)])
+        return bdes.filtered(lambda b: not b.allowed_rm_ids or rm in b.allowed_rm_ids)
+
+    def _resolve_bde_for_rm(self, rm, candidates=None):
+        """Pick the BDE for this OPS-sale lead when it is reassigned to ``rm``.
+
+        Returns a leads.bde recordset:
+          * the current BDE if it is still valid for ``rm`` (keep),
+          * otherwise a valid BDE — preferring one that explicitly lists ``rm``
+            over an open one, chosen deterministically by name (swap),
+          * an empty recordset if ``rm`` is authorised for no BDE (the caller
+            must then not reassign the RM).
+
+        Call only for OPS-sale leads.
+        """
+        self.ensure_one()
+        if candidates is None:
+            candidates = self._bde_candidates_for_rm(rm)
+        if self.bde_id and self.bde_id in candidates:
+            return self.bde_id
+        explicit = candidates.filtered(lambda b: rm in b.allowed_rm_ids)
+        pool = explicit or candidates
+        return pool.sorted(lambda b: (b.name or "").lower())[:1]
+
     # --- Compute Methods ---
 
     @api.depends_context("uid")

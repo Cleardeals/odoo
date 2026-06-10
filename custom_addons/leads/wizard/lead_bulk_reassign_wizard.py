@@ -154,35 +154,6 @@ class LeadBulkReassignWizard(models.TransientModel):
             ).format(n=remaining)
         return Markup("<div class='d-flex flex-wrap'>") + chips + Markup("</div>")
 
-    @api.model
-    def _valid_bdes_for_rm(self, new_rm):
-        """Active BDEs the RM may receive OPS-sale leads for.
-
-        A BDE is usable by an RM when it is open to everyone (empty
-        allowed_rm_ids) or explicitly lists that RM. Mirrors the
-        leads.new._check_bde_allowed_for_rm constraint.
-        """
-        bdes = self.env["leads.bde"].search([("active", "=", True)])
-        return bdes.filtered(
-            lambda b: not b.allowed_rm_ids or new_rm in b.allowed_rm_ids
-        )
-
-    @api.model
-    def _pick_bde_for_rm(self, new_rm, current_bde, valid_bdes):
-        """Choose the BDE for an OPS-sale lead being moved to new_rm.
-
-        - Keep the current BDE if it is still valid for the new RM.
-        - Otherwise pick a valid BDE, preferring one that explicitly lists the
-          new RM over an open one, deterministically by name.
-        - Return an empty recordset when the new RM is allowed for no BDE
-          (the lead then fails and is reported, not moved).
-        """
-        if current_bde and current_bde in valid_bdes:
-            return current_bde
-        explicit = valid_bdes.filtered(lambda b: new_rm in b.allowed_rm_ids)
-        pool = explicit or valid_bdes
-        return pool.sorted(lambda b: (b.name or "").lower())[:1]
-
     # ------------------------------------------------------------------
     # Default get — resolve the list-view selection
     # ------------------------------------------------------------------
@@ -266,15 +237,15 @@ class LeadBulkReassignWizard(models.TransientModel):
         # BDE at all, that lead cannot be moved — it is reported to management
         # and recorded in the log, while every other valid lead still moves.
         ops_leads = leads_to_move.filtered("is_ops_sale_lead")
-        valid_bdes = (
-            self._valid_bdes_for_rm(self.new_rm_id)
+        candidates = (
+            self.env["leads.new"]._bde_candidates_for_rm(self.new_rm_id)
             if ops_leads
             else self.env["leads.bde"]
         )
         failed = self.env["leads.new"]
         bde_overrides = {}  # lead.id -> new leads.bde record
         for lead in ops_leads:
-            pick = self._pick_bde_for_rm(self.new_rm_id, lead.bde_id, valid_bdes)
+            pick = lead._resolve_bde_for_rm(self.new_rm_id, candidates)
             if not pick:
                 failed |= lead
             elif pick != lead.bde_id:

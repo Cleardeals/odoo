@@ -24,6 +24,43 @@ PORTAL_FIELD_MAP = {
 }
 
 
+def _relink_and_reassign(lead, property_rec, rm_user, portal_name, portal_id):
+    """Link one unlinked lead to ``property_rec`` and reassign it to ``rm_user``,
+    honouring the OPS-sale BDE authorisation constraint.
+
+    For an OPS-sale lead whose current BDE does not allow ``rm_user`` the BDE is
+    swapped for one ``rm_user`` is allowed for. If ``rm_user`` is allowed for no
+    BDE at all, the property is still linked but the RM is left unchanged (and
+    the situation is logged) so the relink never raises a BDE ValidationError.
+    """
+    vals = {"property_base_id": property_rec.id}
+    note = (
+        f"\nAuto-relinked: property '{property_rec.property_tag}' "
+        f"updated with {portal_name} ID '{portal_id}'. "
+    )
+
+    if lead.is_ops_sale_lead:
+        pick = lead._resolve_bde_for_rm(rm_user)
+        if not pick:
+            note += (
+                f"RM NOT reassigned — '{rm_user.name}' is not authorised for any "
+                f"BDE; lead kept with current RM '{lead.user_id.name or '-'}'. "
+                f"Update the BDE configuration.\n"
+            )
+            lead.write({**vals, "process_notes": (lead.process_notes or "") + note})
+            return
+        if pick != lead.bde_id:
+            vals["bde_id"] = pick.id
+            note += (
+                f"BDE re-assigned from '{lead.bde_id.name or '-'}' to '{pick.name}'. "
+            )
+
+    vals["user_id"] = rm_user.id
+    note += f"RM reassigned to {rm_user.name}.\n"
+    vals["process_notes"] = (lead.process_notes or "") + note
+    lead.write(vals)
+
+
 class PropertyBaseLeadRelink(models.Model):
     """
     Extends property.base (defined in the 'properties' module) to automatically
@@ -121,17 +158,8 @@ class PropertyBaseLeadRelink(models.Model):
                 rm_user = property_rec.rm_user_id or self.env.ref("base.user_admin")
 
                 for lead in unlinked_leads:
-                    lead.write(
-                        {
-                            "property_base_id": property_rec.id,
-                            "user_id": rm_user.id,
-                            "process_notes": (
-                                (lead.process_notes or "")
-                                + f"\nAuto-relinked: property '{property_rec.property_tag}' "
-                                f"updated with {portal_name} ID '{new_portal_id}'. "
-                                f"RM reassigned to {rm_user.name}.\n"
-                            ),
-                        }
+                    _relink_and_reassign(
+                        lead, property_rec, rm_user, portal_name, new_portal_id
                     )
 
         return result
@@ -171,17 +199,8 @@ def _relink_leads_for_listing(env, property_rec, portal_name, portal_listing_id)
     )
 
     for lead in unlinked_leads:
-        lead.write(
-            {
-                "property_base_id": property_rec.id,
-                "user_id": rm_user.id,
-                "process_notes": (
-                    (lead.process_notes or "")
-                    + f"\nAuto-relinked: property '{property_rec.property_tag}' "
-                    f"updated with {portal_name} ID '{portal_listing_id}'. "
-                    f"RM reassigned to {rm_user.name}.\n"
-                ),
-            }
+        _relink_and_reassign(
+            lead, property_rec, rm_user, portal_name, portal_listing_id
         )
 
 
