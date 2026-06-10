@@ -77,6 +77,18 @@ class TestBulkReassign(PortalLeadTestCase):
         self.assertFalse(wiz.over_limit)
         self.assertIn("(2)", wiz.source_rm_summary)
 
+    def test_01b_header_button_opens_wizard_for_selection(self):
+        """The list header button entry point (action_open_bulk_reassign)
+        opens the wizard pre-loaded with the selected leads."""
+        leads = self._make_lead(self.test_rm_a, "L1", "9810000003") | self._make_lead(
+            self.test_rm_a, "L2", "9810000004"
+        )
+        action = leads.with_user(self.manager).action_open_bulk_reassign()
+        self.assertEqual(action["res_model"], "lead.bulk.reassign.wizard")
+        wiz = self.env["lead.bulk.reassign.wizard"].browse(action["res_id"])
+        self.assertEqual(set(wiz.lead_ids.ids), set(leads.ids))
+        self.assertEqual(wiz.lead_count, 2)
+
     # -- happy path -----------------------------------------------------
 
     def test_02_reassign_moves_user_and_creates_log(self):

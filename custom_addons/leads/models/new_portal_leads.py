@@ -796,6 +796,20 @@ class NewPortalLead(models.Model):
             return self.sudo().with_context(bin_size=True).web_read(specification)
         return super().web_save(vals, specification, next_id=next_id)
 
+    def action_open_bulk_reassign(self):
+        """Open the Bulk Reassign wizard for the selected leads.
+
+        Triggered by the manager-only header button on the list view. ``self``
+        is the current selection; its ids are forwarded to the wizard via the
+        standard active_ids context that its default_get reads.
+        """
+        return (
+            self.env["lead.bulk.reassign.wizard"]
+            .with_context(active_model="leads.new", active_ids=self.ids)
+            .create({})
+            .action_open()
+        )
+
     # --- Lead Processing & Assignment ---
 
     @api.model

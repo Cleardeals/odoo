@@ -1,7 +1,10 @@
 import logging
 
+from markupsafe import Markup
+
 from odoo import api, fields, models
 from odoo.exceptions import UserError
+from odoo.tools import html_escape
 
 _logger = logging.getLogger(__name__)
 
@@ -13,10 +16,10 @@ _logger = logging.getLogger(__name__)
 #          Records the operation in lead.reassignment.log and cascades the new
 #          RM onto every site visit of each moved lead.
 #
-# Entry point: a server action bound to the leads.new list "Action" menu. The
-#          web client resolves the user's selection (manual tick or "select all
-#          matching") into context['active_ids'] (see web action_menus.js), so
-#          default_get reads active_ids directly.
+# Entry point: the manager-only "Bulk Reassign RM" header button on the
+#          leads.new list (calls leads.new.action_open_bulk_reassign). The web
+#          client resolves the user's selection (manual tick or "select all
+#          matching") into context['active_ids'], so default_get reads it directly.
 # Owner  : Cleardeals Tech
 # ---------------------------------------------------------------------------
 
@@ -46,6 +49,12 @@ class LeadBulkReassignWizard(models.TransientModel):
     over_limit = fields.Boolean(readonly=True)
     max_leads = fields.Integer(readonly=True)
     source_rm_summary = fields.Char(string="Current RMs", readonly=True)
+    source_rm_html = fields.Html(
+        string="Currently assigned to",
+        readonly=True,
+        sanitize=False,
+        help="Current owners of the selected leads, shown as badges.",
+    )
 
     new_rm_id = fields.Many2one(
         "res.users",
@@ -103,6 +112,33 @@ class LeadBulkReassignWizard(models.TransientModel):
             parts.append(f"+{remaining} more")
         return ", ".join(parts)
 
+    @api.model
+    def _build_source_html(self, leads):
+        """Render the current owners as Bootstrap pill badges (name + count)."""
+        counts = {}
+        for lead in leads:
+            label = lead.user_id.name or "Unassigned"
+            counts[label] = counts.get(label, 0) + 1
+        if not counts:
+            return Markup("<span class='text-muted'>No leads selected.</span>")
+        ordered = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
+        shown = ordered[:_SUMMARY_LIMIT]
+        chips = Markup("")
+        for name, n in shown:
+            chips += Markup(
+                "<span class='badge rounded-pill text-bg-light border me-1 mb-1' "
+                "style='font-weight:500;'>{name} "
+                "<span class='badge rounded-pill text-bg-secondary ms-1'>{n}</span>"
+                "</span>"
+            ).format(name=html_escape(name), n=n)
+        remaining = len(ordered) - len(shown)
+        if remaining > 0:
+            chips += Markup(
+                "<span class='badge rounded-pill text-bg-light text-muted border mb-1'>"
+                "+{n} more</span>"
+            ).format(n=remaining)
+        return Markup("<div class='d-flex flex-wrap'>") + chips + Markup("</div>")
+
     # ------------------------------------------------------------------
     # Default get — resolve the list-view selection
     # ------------------------------------------------------------------
@@ -128,6 +164,7 @@ class LeadBulkReassignWizard(models.TransientModel):
         res["max_leads"] = max_leads
         res["over_limit"] = len(leads) > max_leads
         res["source_rm_summary"] = self._build_source_summary(leads)
+        res["source_rm_html"] = self._build_source_html(leads)
         return res
 
     # ------------------------------------------------------------------

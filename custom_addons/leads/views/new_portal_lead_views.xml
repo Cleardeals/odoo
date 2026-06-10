@@ -136,6 +136,17 @@
                     decoration-info="current_status != 'lead'"
                     decoration-danger="state=='new'">
 
+                <!-- Appears in the control panel only when rows are selected.
+                     Manager-only: the groups attribute strips the node from the
+                     arch for non-managers. -->
+                <header>
+                    <button name="action_open_bulk_reassign"
+                            type="object"
+                            string="Bulk Reassign RM"
+                            class="btn-primary"
+                            groups="leads.group_lead_score_manager"/>
+                </header>
+
                 <field name="create_date"/>
                 <field name="source_id" string="Source"/>
                 <field name="name"/>

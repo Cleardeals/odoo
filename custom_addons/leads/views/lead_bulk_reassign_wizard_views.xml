@@ -8,48 +8,106 @@
         <field name="arch" type="xml">
             <form string="Bulk Reassign RM">
 
-                <!-- PREVIEW STATE -->
-                <group invisible="state != 'preview'">
+                <!-- ============================ PREVIEW ============================ -->
+                <div invisible="state != 'preview'">
 
-                    <div class="alert alert-danger" role="alert"
-                         invisible="not over_limit">
-                        <strong>Too many leads selected.</strong><br/>
-                        You selected <field name="lead_count" readonly="1" nolabel="1"
-                        class="oe_inline"/> leads, but at most
-                        <field name="max_leads" readonly="1" nolabel="1" class="oe_inline"/>
-                        can be reassigned in one operation.
-                        Narrow your filter (e.g. by status, date or property) and try again.
-                    </div>
-
-                    <group invisible="over_limit">
-                        <field name="lead_count" readonly="1"/>
-                        <field name="source_rm_summary" readonly="1"/>
-                        <field name="new_rm_id"
-                               required="1"
-                               options="{'no_create': True}"
-                               placeholder="Select the RM to move these leads to"/>
-                        <field name="reason" required="1"
-                               placeholder="Why are these leads being reassigned? (required)"/>
-                        <field name="cascade_site_visits"/>
-                        <div class="text-muted" colspan="2">
-                            The RM change is logged on each lead's chatter and recorded in the
-                            Reassignment Log. BDE links on OPS-sale leads are left unchanged.
+                    <!-- Over-limit guard -->
+                    <div class="alert alert-danger d-flex align-items-start gap-2"
+                         role="alert" invisible="not over_limit">
+                        <i class="fa fa-exclamation-triangle mt-1" title="Warning"
+                           aria-hidden="true"/>
+                        <div>
+                            <strong>Too many leads selected.</strong><br/>
+                            You selected <field name="lead_count" readonly="1" nolabel="1"
+                            class="oe_inline fw-bold"/> leads, but at most
+                            <field name="max_leads" readonly="1" nolabel="1"
+                            class="oe_inline fw-bold"/> can be reassigned in one operation.
+                            Narrow your filter (e.g. by status, date or property) and try again.
                         </div>
-                    </group>
-                </group>
-
-                <!-- DONE STATE -->
-                <group invisible="state != 'done'" string="Reassignment Complete">
-                    <field name="reassigned_count" readonly="1"/>
-                    <field name="skipped_count" readonly="1"
-                           invisible="skipped_count == 0"/>
-                    <field name="site_visits_moved_count" readonly="1"/>
-                    <div class="alert alert-success" role="alert" colspan="2">
-                        Leads were reassigned to
-                        <field name="new_rm_id" readonly="1" nolabel="1" class="oe_inline"/>.
-                        A batch record was created in the Reassignment Log.
                     </div>
-                </group>
+
+                    <div invisible="over_limit">
+                        <!-- Summary header: prominent count + current owners as badges -->
+                        <div class="d-flex align-items-center gap-4 p-3 mb-3 rounded"
+                             style="background-color: var(--o-gray-100, #f8f9fa);">
+                            <div class="text-center" style="min-width: 90px;">
+                                <field name="lead_count" readonly="1" nolabel="1"
+                                       class="d-block fw-bolder text-primary lh-1"
+                                       style="font-size: 2.4rem;"/>
+                                <span class="text-muted text-uppercase small">leads selected</span>
+                            </div>
+                            <div class="flex-grow-1">
+                                <div class="text-muted text-uppercase small mb-1">
+                                    Currently assigned to
+                                </div>
+                                <field name="source_rm_html" widget="html" nolabel="1"/>
+                            </div>
+                        </div>
+
+                        <!-- Inputs -->
+                        <group>
+                            <field name="new_rm_id"
+                                   required="1"
+                                   options="{'no_create': True}"
+                                   placeholder="Select the RM to move these leads to"/>
+                            <field name="reason" required="1"
+                                   placeholder="Why are these leads being reassigned? (required)"/>
+                            <field name="cascade_site_visits"/>
+                        </group>
+
+                        <div class="alert alert-info d-flex align-items-start gap-2 mt-2 mb-0"
+                             role="status">
+                            <i class="fa fa-info-circle mt-1" title="Information"
+                               aria-hidden="true"/>
+                            <span>
+                                The RM change is logged on each lead's chatter and recorded in
+                                the Reassignment Log. BDE links on OPS-sale leads are left
+                                unchanged.
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ============================= DONE ============================= -->
+                <div invisible="state != 'done'">
+                    <div class="alert alert-success d-flex align-items-start gap-2"
+                         role="alert">
+                        <i class="fa fa-check-circle mt-1" title="Success"
+                           aria-hidden="true"/>
+                        <div>
+                            <strong>Reassignment complete.</strong>
+                            Leads were moved to
+                            <field name="new_rm_id" readonly="1" nolabel="1"
+                                   class="oe_inline fw-bold"/>
+                            and a batch record was created in the Reassignment Log.
+                        </div>
+                    </div>
+
+                    <div class="d-flex flex-wrap gap-3 text-center">
+                        <div class="p-3 rounded flex-grow-1"
+                             style="background-color: var(--o-gray-100, #f8f9fa);">
+                            <field name="reassigned_count" readonly="1" nolabel="1"
+                                   class="d-block fw-bolder text-success lh-1"
+                                   style="font-size: 1.8rem;"/>
+                            <span class="text-muted text-uppercase small">leads moved</span>
+                        </div>
+                        <div class="p-3 rounded flex-grow-1"
+                             style="background-color: var(--o-gray-100, #f8f9fa);">
+                            <field name="site_visits_moved_count" readonly="1" nolabel="1"
+                                   class="d-block fw-bolder lh-1"
+                                   style="font-size: 1.8rem;"/>
+                            <span class="text-muted text-uppercase small">site visits moved</span>
+                        </div>
+                        <div class="p-3 rounded flex-grow-1"
+                             invisible="skipped_count == 0"
+                             style="background-color: var(--o-gray-100, #f8f9fa);">
+                            <field name="skipped_count" readonly="1" nolabel="1"
+                                   class="d-block fw-bolder text-muted lh-1"
+                                   style="font-size: 1.8rem;"/>
+                            <span class="text-muted text-uppercase small">already on new RM</span>
+                        </div>
+                    </div>
+                </div>
 
                 <footer>
                     <button name="action_confirm_reassign"
@@ -73,17 +131,9 @@
         </field>
     </record>
 
-    <!-- Server action bound to the leads.new list "Action" menu.
-         The web client puts the selection (manual tick or "select all matching")
-         into context.active_ids, which the wizard's default_get reads. -->
-    <record id="action_bulk_reassign_leads" model="ir.actions.server">
-        <field name="name">Bulk Reassign RM</field>
-        <field name="model_id" ref="leads.model_leads_new"/>
-        <field name="binding_model_id" ref="leads.model_leads_new"/>
-        <field name="binding_view_types">list</field>
-        <field name="group_ids" eval="[(4, ref('leads.group_lead_score_manager'))]"/>
-        <field name="state">code</field>
-        <field name="code">action = env['lead.bulk.reassign.wizard'].create({}).action_open()</field>
-    </record>
+    <!-- The wizard is launched from the manager-only "Bulk Reassign RM" header
+         button on the leads.new list view (see view_new_portal_lead_list), which
+         calls leads.new.action_open_bulk_reassign on the current selection. No
+         Action-menu (gear) binding is used. -->
 
 </odoo>
