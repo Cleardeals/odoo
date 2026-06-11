@@ -2,9 +2,9 @@ name: Run Odoo Tests
 
 on:
   push:
-    branches: ['development_19', '19.0']
+    branches: ['development_19', '19.0', 'feature/deal_mapping']
   pull_request:
-    branches: ['19.0', 'development_19']
+    branches: ['19.0', 'development_19', 'feature/deal_mapping']
 
 jobs:
   test:
