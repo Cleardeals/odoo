@@ -8,18 +8,52 @@
 #
 # Prerequisites:
 #   - Docker running
-#   - No existing service on port 5432 (or pass DB_PORT=5433 etc.)
+#   (Ports no longer need to be free — the script auto-picks free ones. A
+#    running local dev stack on 5432/8069/8072 will no longer cause a clash.)
 #
 # Environment variable overrides (all optional):
-#   DB_PORT      — host port for Postgres (default: 5432)
+#   DB_PORT      — host port for Postgres (default: first free port from 5432)
+#   HTTP_PORT    — host port for Odoo HTTP (default: first free port from 8069)
+#   GEVENT_PORT  — host port for Odoo websockets/longpolling
+#                  (default: first free port from HTTP_PORT+2)
 #   KEEP_DB      — if set to "1", the Postgres container is left running after tests
 #   REBUILD      — if set to "1", forces a fresh Docker image build even if one exists
 #   LOG_LEVEL    — odoo log level (default: test)
+#
+# Any port you set explicitly is honoured as-is; only unset ports are
+# auto-selected. This matters because the test container uses host networking,
+# so Odoo would otherwise fight a running dev instance for 8069/8072.
 
 set -euo pipefail
 
+# ── Free-port detection ──────────────────────────────────────────────────────
+# port_in_use returns success (0) if something is already listening on the
+# given TCP port. Uses bash's /dev/tcp so it needs no external tools and works
+# the same on macOS and the Linux CI runner.
+port_in_use() {
+    local p="$1"
+    if (exec 3<>"/dev/tcp/127.0.0.1/${p}") 2>/dev/null; then
+        exec 3>&- 3<&- 2>/dev/null || true
+        return 0
+    fi
+    return 1
+}
+
+# find_free_port echoes the first free TCP port at or above the start value.
+find_free_port() {
+    local p="$1"
+    while port_in_use "${p}"; do
+        p=$((p + 1))
+    done
+    echo "${p}"
+}
+
 # ── Configurable defaults ────────────────────────────────────────────────────
-DB_PORT="${DB_PORT:-5432}"
+# Ports default to the first free port at/above the conventional one, so a
+# running local dev stack (Postgres on 5432, Odoo on 8069/8072) does not clash.
+DB_PORT="${DB_PORT:-$(find_free_port 5432)}"
+HTTP_PORT="${HTTP_PORT:-$(find_free_port 8069)}"
+GEVENT_PORT="${GEVENT_PORT:-$(find_free_port $((HTTP_PORT + 2)))}"
 DB_USER="odoo"
 DB_PASSWORD="odoo"
 DB_NAME="odoo_test_db"
@@ -111,6 +145,7 @@ ok "Postgres is ready."
 # ── 5. Run Odoo tests ────────────────────────────────────────────────────────
 log "Running tests for modules: ${MODULES}"
 log "Test tags: ${TAGS}"
+log "Ports — Postgres: ${DB_PORT}, HTTP: ${HTTP_PORT}, gevent: ${GEVENT_PORT}"
 echo ""
 
 docker run --rm \
@@ -126,6 +161,8 @@ docker run --rm \
         --db_port="${DB_PORT}" \
         --db_user="${DB_USER}" \
         --db_password="${DB_PASSWORD}" \
+        --http-port="${HTTP_PORT}" \
+        --gevent-port="${GEVENT_PORT}" \
         --addons-path=/mnt/extra-addons,/usr/lib/python3/dist-packages/odoo/addons \
         -i "${MODULES}" \
         --test-enable \

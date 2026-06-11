@@ -204,6 +204,15 @@ class NewPortalLead(models.Model):
         tracking=True,
     )
 
+    last_reassignment_batch_id = fields.Many2one(
+        "lead.reassignment.log",
+        string="Last Reassignment Batch",
+        readonly=True,
+        copy=False,
+        index=True,
+        help="The most recent bulk reassignment operation that moved this lead.",
+    )
+
     # ------------------------------------------------------------------
     # New related fields — sourced from property.base (property_base_id).
     # Populated as property_base_id gets backfilled / set on new leads.
@@ -327,6 +336,40 @@ class NewPortalLead(models.Model):
                     f"RM '{rec.user_id.name}' is not authorised to refer leads to "
                     f"BDE '{rec.bde_id.name}'. Contact a manager to update the BDE configuration."
                 )
+
+    # --- BDE reassignment helpers (shared by bulk wizard & auto-relink) ---
+
+    @api.model
+    def _bde_candidates_for_rm(self, rm):
+        """Active BDEs ``rm`` may receive OPS-sale leads for.
+
+        A BDE is usable by an RM when it is open to everyone (empty
+        allowed_rm_ids) or explicitly lists that RM — mirrors
+        _check_bde_allowed_for_rm.
+        """
+        bdes = self.env["leads.bde"].search([("active", "=", True)])
+        return bdes.filtered(lambda b: not b.allowed_rm_ids or rm in b.allowed_rm_ids)
+
+    def _resolve_bde_for_rm(self, rm, candidates=None):
+        """Pick the BDE for this OPS-sale lead when it is reassigned to ``rm``.
+
+        Returns a leads.bde recordset:
+          * the current BDE if it is still valid for ``rm`` (keep),
+          * otherwise a valid BDE — preferring one that explicitly lists ``rm``
+            over an open one, chosen deterministically by name (swap),
+          * an empty recordset if ``rm`` is authorised for no BDE (the caller
+            must then not reassign the RM).
+
+        Call only for OPS-sale leads.
+        """
+        self.ensure_one()
+        if candidates is None:
+            candidates = self._bde_candidates_for_rm(rm)
+        if self.bde_id and self.bde_id in candidates:
+            return self.bde_id
+        explicit = candidates.filtered(lambda b: rm in b.allowed_rm_ids)
+        pool = explicit or candidates
+        return pool.sorted(lambda b: (b.name or "").lower())[:1]
 
     # --- Compute Methods ---
 
@@ -786,6 +829,20 @@ class NewPortalLead(models.Model):
             # written (whose user_id no longer matches the current user).
             return self.sudo().with_context(bin_size=True).web_read(specification)
         return super().web_save(vals, specification, next_id=next_id)
+
+    def action_open_bulk_reassign(self):
+        """Open the Bulk Reassign wizard for the selected leads.
+
+        Triggered by the manager-only header button on the list view. ``self``
+        is the current selection; its ids are forwarded to the wizard via the
+        standard active_ids context that its default_get reads.
+        """
+        return (
+            self.env["lead.bulk.reassign.wizard"]
+            .with_context(active_model="leads.new", active_ids=self.ids)
+            .create({})
+            .action_open()
+        )
 
     # --- Lead Processing & Assignment ---
 
