@@ -28,6 +28,8 @@ class DealOffer(models.Model):
         tracking=True
     )
     
+    # Constraints to ensure valid waive off values based on the selected type
+    
     @api.constrains('waive_off_type', 'waive_off_value')
     def _check_waive_off_value(self):
         for record in self:
@@ -35,4 +37,19 @@ class DealOffer(models.Model):
                 raise ValidationError("Percentage value must be greater than 0 and less than 100.")
             elif record.waive_off_type == 'amount' and record.waive_off_value <= 0:
                 raise ValidationError("Amount value must be greater than 0.")
+    
+    
+    #Helper method to calculate the reduced amount based on the waive off type and value         
+    
+    def get_reduced_amount(self, base_amount):
+        self.ensure_one()
+
+        if self.waive_off_type == 'percentage':
+            reduced_amount = base_amount - (base_amount * self.waive_off_value / 100.0)
+        elif self.waive_off_type == 'amount':
+            reduced_amount = base_amount - self.waive_off_value
+        else:
+            reduced_amount = base_amount
+
+        return max(0.0, reduced_amount)
     
