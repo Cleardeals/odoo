@@ -10,13 +10,13 @@ from odoo.addons.leads.controllers.portal_lead_controller import (
 
 from .test_portal_common import PortalLeadTestCase
 
-_API_KEY_PARAM = "cleardeals.website.api.key"
-_TEST_API_KEY = "website-test-key-123"
+_API_KEY_PARAM = "cleardeals.lead.api.key"
+_TEST_API_KEY = "cleardeals-lead-test-key-123"
 
 
 @tagged("post_install", "-at_install", "leads")
 class TestWebsiteLead(PortalLeadTestCase):
-    """Cleardeals website lead intake: model helpers + /api/v1/website_lead route.
+    """Cleardeals first-party lead intake: model helpers + /api/v1/cleardeals_lead route.
 
     Unlike the portal webhooks, the website sends our own property short-code,
     which maps directly to property.base.prop_id (no portal-listing lookup).
@@ -83,7 +83,7 @@ class TestWebsiteLead(PortalLeadTestCase):
             "odoo.addons.leads.controllers.portal_lead_controller.request",
             mock_req,
         ):
-            return PortalWebhookController().handle_website_lead()
+            return PortalWebhookController().handle_cleardeals_lead()
 
     def _website_lead(self, **vals):
         defaults = {
@@ -159,7 +159,7 @@ class TestWebsiteLead(PortalLeadTestCase):
         self.assertEqual(lead.state, "assigned")
 
     # ------------------------------------------------------------------
-    # /api/v1/website_lead route
+    # /api/v1/cleardeals_lead route
     # ------------------------------------------------------------------
 
     def test_08_endpoint_invalid_api_key_returns_401(self):

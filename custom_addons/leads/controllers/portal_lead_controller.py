@@ -224,17 +224,17 @@ class PortalWebhookController(http.Controller):
             )
 
     @http.route(
-        "/api/v1/website_lead",
+        "/api/v1/cleardeals_lead",
         type="http",
         auth="public",
         methods=["POST"],
         csrf=False,
     )
-    def handle_website_lead(self, **kwargs):
+    def handle_cleardeals_lead(self, **kwargs):
         """
-        DEDICATED webhook for leads submitted on cleardeals.in.
-        The payload carries our own property short-code (property_id), which maps
-        directly to property.base.prop_id — no portal-listing lookup needed.
+        DEDICATED webhook for first-party leads from the Cleardeals website and
+        mobile app. The payload carries our own property short-code (property_id),
+        which maps directly to property.base.prop_id — no portal-listing lookup.
         """
 
         # API KEY AUTHENTICATION
@@ -243,11 +243,11 @@ class PortalWebhookController(http.Controller):
             correct_key = (
                 request.env["ir.config_parameter"]
                 .sudo()
-                .get_param("cleardeals.website.api.key")
+                .get_param("cleardeals.lead.api.key")
             )
 
             if not sent_key or not correct_key or sent_key != correct_key:
-                _logger.warning("Website Webhook: Failed auth, invalid API key.")
+                _logger.warning("Cleardeals Lead Webhook: Failed auth, invalid API key.")
                 return Response(
                     "Failed to Push Lead: Invalid API Key",
                     status=401,
@@ -255,7 +255,7 @@ class PortalWebhookController(http.Controller):
                 )
 
         except Exception as auth_err:
-            _logger.error("Website Webhook: Auth check failed: %s", auth_err)
+            _logger.error("Cleardeals Lead Webhook: Auth check failed: %s", auth_err)
             return Response(
                 "Failed to Push Lead: Internal Server Error",
                 status=500,
@@ -271,7 +271,7 @@ class PortalWebhookController(http.Controller):
 
             if missing:
                 _logger.warning(
-                    "Website webhook rejected: Missing required Fields: %s. Data: %s",
+                    "Cleardeals Lead webhook rejected: Missing required Fields: %s. Data: %s",
                     missing,
                     data,
                 )
@@ -329,11 +329,11 @@ class PortalWebhookController(http.Controller):
                 try:
                     new_lead._process_website_lead()
                     _logger.info(
-                        f"Website Lead processed successfully: {new_lead.name}",
+                        f"Cleardeals Lead processed successfully: {new_lead.name}",
                     )
                 except Exception as process_err:
                     _logger.error(
-                        f"Failed to process website lead {new_lead.name}: {process_err}",
+                        f"Failed to process Cleardeals lead {new_lead.name}: {process_err}",
                     )
                     # Lead is created but processing failed - can be retried later
 
@@ -344,7 +344,7 @@ class PortalWebhookController(http.Controller):
             )
 
         except Exception as e:
-            _logger.error("Website Webhook Exception: %s. Raw data: %s", e, data)
+            _logger.error("Cleardeals Lead Webhook Exception: %s. Raw data: %s", e, data)
             return Response(
                 f"Failed to Push Lead: {e!s}",
                 status=500,
