@@ -555,6 +555,7 @@ class NewPortalLead(models.Model):
             "magicbricks.com": "MagicBricks",
             "olx": "OLX",
             "website inquiry": "Cleardeals",
+            "app inquiry": "Cleardeals",
             "cleardeals website": "Cleardeals",
             "cleardeals": "Cleardeals",
         }
@@ -678,9 +679,23 @@ class NewPortalLead(models.Model):
                 ("create_date", ">=", time_limit),
             ]
         else:
+            # Dedup across all sources sharing the same portal_code, so leads
+            # that arrive on different sources for the same channel are treated
+            # as one (e.g. the Cleardeals website and the Cleardeals app both
+            # use portal_code "Cleardeals"). For single-source portals the
+            # sibling set is just the source itself, preserving prior behaviour.
+            sibling_source_ids = [source_id]
+            if source and source.portal_code:
+                siblings = (
+                    self.env["lead.source"]
+                    .sudo()
+                    .search([("portal_code", "=", source.portal_code)])
+                )
+                if siblings:
+                    sibling_source_ids = siblings.ids
             domain = [
                 ("phone", "=", phone_clean),
-                ("source_id", "=", source_id),
+                ("source_id", "in", sibling_source_ids),
                 ("portal_property_id", "=", portal_prop_id),
                 ("create_date", ">=", time_limit),
             ]

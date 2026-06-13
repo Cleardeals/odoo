@@ -65,7 +65,7 @@ class LeadSource(models.Model):
             ("Housing.com", "Housing.com"),
             ("MagicBricks", "MagicBricks"),
             ("OLX", "OLX"),
-            ("Cleardeals", "Cleardeals Website"),
+            ("Cleardeals", "Cleardeals (Website/App)"),
         ],
         string="Portal",
         index=True,

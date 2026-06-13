@@ -284,8 +284,16 @@ class PortalWebhookController(http.Controller):
             lead_model = request.env["leads.new"].sudo().with_context(
                 automated_lead_creation=True,
             )
+            # Bifurcate the source by where the lead originated.
+            #   inquiry_source == "mobile_app" -> Cleardeals app
+            #   anything else / missing        -> Cleardeals website
+            # Both sources share portal_code "Cleardeals" so deduplication treats
+            # a website lead and an app lead as the same lead (see
+            # leads.new._compute_duplicate_domain).
+            inquiry_source = (data.get("inquiry_source") or "").strip().lower()
+            source_name = "App Inquiry" if inquiry_source == "mobile_app" else "Website Inquiry"
             source = lead_model._get_or_create_source(
-                "Website Inquiry",
+                source_name,
                 source_type="portal",
             )
 
