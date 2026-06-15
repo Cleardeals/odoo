@@ -76,6 +76,48 @@
                             </span>
                         </div>
                     </t>
+                    <!-- Inquiry-attribution bar: which property this chat is currently about. -->
+                    <t t-if="segmentsEnabled">
+                        <div class="wa-segment-bar">
+                            <span class="wa-segment-label" title="New messages file under this inquiry">
+                                <i class="fa fa-tag" aria-hidden="true"/>
+                                Discussing: <b t-esc="activeSegmentLabel"/>
+                            </span>
+                            <div class="wa-segment-controls">
+                                <t t-if="inquiries.length">
+                                    <select class="form-select form-select-sm wa-segment-select"
+                                            t-on-change="(ev) => this.onSegmentSelect(ev)"
+                                            title="Switch which property this conversation is about">
+                                        <option value="">Switch inquiry…</option>
+                                        <t t-foreach="inquiries" t-as="inq" t-key="inq.id">
+                                            <option t-att-value="inq.id"
+                                                    t-att-selected="inq.id === activeSegmentInquiryId"
+                                                    t-esc="inq.property || inq.name"/>
+                                        </t>
+                                    </select>
+                                </t>
+                                <t t-if="!state.showTopicInput">
+                                    <button class="btn btn-sm btn-outline-secondary"
+                                            t-on-click="() => this.toggleTopicInput()"
+                                            title="Start a new topic before its inquiry exists">
+                                        <i class="fa fa-plus" aria-hidden="true"/> New topic
+                                    </button>
+                                </t>
+                                <t t-else="">
+                                    <input type="text" class="form-control form-control-sm wa-segment-input"
+                                           placeholder="e.g. Green Acres 2BHK"
+                                           t-att-value="state.topicLabel"
+                                           t-on-input="(ev) => this.onTopicInput(ev)"
+                                           t-on-keydown="(ev) => ev.key === 'Enter' and this.addTopic()"/>
+                                    <button class="btn btn-sm btn-primary"
+                                            t-on-click="() => this.addTopic()">Add</button>
+                                    <button class="btn btn-sm btn-link"
+                                            t-on-click="() => this.toggleTopicInput()">Cancel</button>
+                                </t>
+                            </div>
+                        </div>
+                    </t>
+
                     <CdChatThread messages="messages"/>
                     <!-- Ownership action bar (shown when the RM can't send) -->
                     <t t-if="!canSend">

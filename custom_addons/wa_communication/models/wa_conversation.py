@@ -341,12 +341,15 @@ class WaConversation(models.Model):
         if self.active_segment_id != segment:
             self.active_segment_id = segment
 
-    def _owa_ensure_segment(self, inquiry=None, label=None, started_by='system'):
-        """Return an active segment for *inquiry* (or a labelled one), creating it
-        if needed, and make it the conversation's active segment.
+    def _owa_ensure_segment(self, inquiry=None, label=None, started_by='system',
+                            activate=True):
+        """Return a segment for *inquiry* (or a labelled one), creating it if needed.
 
         Idempotent: if a segment for the same inquiry already exists it is reused
-        and re-activated rather than duplicated.  Returns ``False`` when the
+        rather than duplicated.  When ``activate`` is True it also becomes the
+        conversation's active segment; pass ``activate=False`` to file a message
+        under an inquiry without hijacking the RM's current active context (e.g. a
+        swipe-reply to an *older* property's message).  Returns ``False`` when the
         feature flag is off so callers become no-ops.
         """
         self.ensure_one()
@@ -367,7 +370,8 @@ class WaConversation(models.Model):
             })
         elif label and not seg.label:
             seg.label = label
-        self._owa_activate_segment(seg)
+        if activate:
+            self._owa_activate_segment(seg)
         return seg
 
     @api.model
@@ -1269,14 +1273,19 @@ class WaConversation(models.Model):
 
         # Inquiry attribution (flag-gated, dormant when off):
         #   * a reply that QUOTES a prior message is a deterministic signal — file
-        #     it in that message's segment (the active context is left for the RM to
-        #     switch, surfaced as a suggestion in the inbox in a later phase);
-        #   * otherwise it inherits the conversation's active segment;
+        #     it under THAT message's inquiry, even when the quoted message predates
+        #     segments (use its lead_id) or belongs to another property.  This does
+        #     NOT flip the RM's active context (activate=False) — switching is a
+        #     separate, RM-driven action;
+        #   * a plain reply inherits the conversation's active segment;
         #   * with no segment yet, bootstrap one for the resolved inquiry.
         inbound_seg = False
         if conv._owa_segments_enabled():
             if quoted_src and quoted_src.segment_id:
                 inbound_seg = quoted_src.segment_id
+            elif quoted_src and quoted_src.lead_id:
+                inbound_seg = conv._owa_ensure_segment(
+                    inquiry=quoted_src.lead_id, started_by='auto_suggested', activate=False)
             elif conv.active_segment_id:
                 inbound_seg = conv.active_segment_id
             else:
@@ -2554,6 +2563,8 @@ class WaConversation(models.Model):
                 'quoted_media_url': msg.quoted_message_id.media_url if msg.quoted_message_id else None,
                 'template_replied_to': msg.template_replied_to or None,
                 'lead_id': msg.lead_id.id if msg.lead_id else None,
+                'segment_id': msg.segment_id.id if msg.segment_id else None,
+                'segment_label': msg.segment_id.display_name if msg.segment_id else None,
                 'workflow_slug': msg.workflow_slug or None,
                 'delivered_at': msg.delivered_at.isoformat() if msg.delivered_at else None,
                 'seen_at': msg.seen_at.isoformat() if msg.seen_at else None,
@@ -2628,9 +2639,44 @@ class WaConversation(models.Model):
                 ])),
                 # Handover requests awaiting THIS user's approval (persistent).
                 'incoming_requests': incoming_requests,
+                # Inquiry-attribution context (dormant unless segments_enabled).
+                **conv._owa_segment_thread_context(),
             },
             'messages': messages,
             'stats': stats,
+        }
+
+    def _owa_segment_thread_context(self) -> dict:
+        """Segment/inquiry context block merged into the get_thread payload.
+
+        Returns ``segments_enabled=False`` (and nothing else) when the feature is
+        off, so the inbox renders exactly as before.  When on, surfaces the active
+        segment, the list of segments, and every inquiry on this phone for the
+        switcher.
+        """
+        self.ensure_one()
+        if not self._owa_segments_enabled():
+            return {'segments_enabled': False}
+
+        def _seg(s):
+            return {
+                'id': s.id,
+                'label': s.display_name,
+                'inquiry_id': s.inquiry_id.id if s.inquiry_id else None,
+                'property': s.property_base_id.property_tag or None,
+                'message_count': s.message_count,
+            }
+
+        return {
+            'segments_enabled': True,
+            'active_segment': _seg(self.active_segment_id) if self.active_segment_id else None,
+            'segments': [_seg(s) for s in self.segment_ids],
+            'inquiries': [{
+                'id': lead.id,
+                'name': lead.name or '',
+                'property': lead.property_base_id.property_tag
+                            or (lead.property_base_id.display_name if lead.property_base_id else None),
+            } for lead in self.inquiry_ids],
         }
 
     @staticmethod

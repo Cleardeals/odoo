@@ -75,6 +75,10 @@ export class WaInbox extends Component {
             tplLoading:         false,
             tplError:           "",
 
+            // Inquiry segment "new topic" inline input
+            showTopicInput:     false,
+            topicLabel:         "",
+
             // Create-lead-from-chat modal (orphan / phone-only conversations)
             showCreateLead:     false,
             createLeadName:     "",
@@ -418,6 +422,66 @@ export class WaInbox extends Component {
             const msg = e.data?.message || String(e);
             this.state.sendError = msg;
             this.notification.add(msg, { type: "danger" });
+        }
+    }
+
+    // ── Inquiry segments ("Discussing: <property>") ────────────────────────────
+
+    /** Feature flag — the whole segment bar only renders when this is on. */
+    get segmentsEnabled() {
+        return !!this.activeConversation?.segments_enabled;
+    }
+
+    get activeSegmentLabel() {
+        return this.activeConversation?.active_segment?.label || "Unassigned";
+    }
+
+    /** Inquiries (one per property) on this phone, for the switcher dropdown. */
+    get inquiries() {
+        return this.activeConversation?.inquiries || [];
+    }
+
+    /** The inquiry id the active segment currently points at (for <select>). */
+    get activeSegmentInquiryId() {
+        return this.activeConversation?.active_segment?.inquiry_id || "";
+    }
+
+    /** Switch the active context to an existing inquiry. Empty value is ignored. */
+    async onSegmentSelect(ev) {
+        const inquiryId = ev.target.value ? parseInt(ev.target.value, 10) : null;
+        if (!inquiryId) return;
+        await this._startSegment({ inquiry_id: inquiryId });
+    }
+
+    toggleTopicInput() {
+        this.state.showTopicInput = !this.state.showTopicInput;
+        this.state.topicLabel = "";
+    }
+
+    onTopicInput(ev) {
+        this.state.topicLabel = ev.target.value;
+    }
+
+    /** Open a label-only segment for a topic whose inquiry doesn't exist yet. */
+    async addTopic() {
+        const label = (this.state.topicLabel || "").trim();
+        if (!label) return;
+        await this._startSegment({ label });
+        this.state.showTopicInput = false;
+        this.state.topicLabel = "";
+    }
+
+    async _startSegment(kw) {
+        const convId = this.state.activeConvId;
+        if (!convId) return;
+        try {
+            await this.orm.call("wa.conversation", "start_segment", [], {
+                conversation_id: convId, ...kw,
+            });
+            await this._loadThread(convId);
+            await this._loadConversations();
+        } catch (e) {
+            this.notification.add(e.data?.message || String(e), { type: "danger" });
         }
     }
 

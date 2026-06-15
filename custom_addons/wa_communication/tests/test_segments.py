@@ -163,6 +163,52 @@ class TestSegments(WaTransactionCase):
         self.assertEqual(msg.effective_inquiry_id.id, lead_id)
         self.assertEqual(msg.effective_property_id, prop)
 
+    # ── Swipe-reply to another property's (older) message ─────────────────────
+
+    def test_swipe_reply_to_other_property_files_under_quoted_inquiry(self):
+        """Replying to an OLD template for a different property must attribute the
+        reply to THAT property's inquiry — even if the template predates segments
+        (no segment_id) and the event's actor_id resolves to the active inquiry —
+        and must not flip the RM's active context."""
+        self._enable()
+        propA = self._property()
+        propV = self._property()
+        leadA = self.make_lead(phone='9000000010', property_base_id=propA.id)
+        leadV = self.make_lead(phone='9000000010', property_base_id=propV.id)
+        conv = self.make_conversation(phone_number='919000000010')
+
+        # Active context is property A.
+        seg_a = self.Conv.start_segment(conv.id, inquiry_id=leadA.id)
+        # An OLD outbound template for property V, predating segments (no segment).
+        tpl = self.make_message(
+            conv, direction='outbound', initiator='workflow', kind='template',
+            wa_message_id='tpl-vaish', lead_id=leadV.id,
+            occurred_at='2026-01-01 09:00:00')
+        self.assertFalse(tpl.segment_id, "the old template predates segments")
+
+        # Lead swipe-replies to that V template; actor_id resolves to A (the active
+        # inquiry) — the quoted template's inquiry (V) must still win.
+        self._process({
+            'event_type': 'lead_replied',
+            'phone': conv.phone_number,
+            'actor_id': leadA.id,
+            'actor_type': 'buyer_inquiry',
+            'wa_message_id': 'inb-vaish-1',
+            'source_message_id': 'tpl-vaish',
+            'message_text': 'Hi',
+            'occurred_at': '2026-01-02T10:00:00Z',
+        })
+
+        reply = conv.message_ids.filtered(lambda m: m.wa_message_id == 'inb-vaish-1')
+        self.assertTrue(reply)
+        self.assertEqual(reply.segment_id.inquiry_id, leadV,
+                         "reply is filed under the quoted template's inquiry")
+        self.assertEqual(reply.effective_property_id, propV)
+        # The RM's active context must NOT have flipped to V.
+        conv.invalidate_recordset()
+        self.assertEqual(conv.active_segment_id.id, seg_a,
+                         "a quoted reply must not hijack the active inquiry")
+
     # ── Immutability still holds ──────────────────────────────────────────────
 
     def test_segment_id_is_writable_but_facts_remain_immutable(self):

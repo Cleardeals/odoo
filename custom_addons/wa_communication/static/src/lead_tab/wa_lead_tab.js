@@ -46,6 +46,9 @@ export class WaLeadTab extends Component {
             templates:          [],
             tplLoading:         false,
             tplError:           "",
+            // Inquiry segment "new topic" inline input
+            showTopicInput:     false,
+            topicLabel:         "",
         });
 
         onMounted(() => {
@@ -292,6 +295,57 @@ export class WaLeadTab extends Component {
             await this._loadThread(this.state.convId);
         } catch (e) {
             this.notification.add(e.data?.message || "Could not decline the request.", { type: "danger" });
+        }
+    }
+
+    // ── Inquiry segments ("Discussing: <property>") ────────────────────────────
+
+    get segmentsEnabled() {
+        return !!this.conversation?.segments_enabled;
+    }
+    get activeSegmentLabel() {
+        return this.conversation?.active_segment?.label || "Unassigned";
+    }
+    get inquiries() {
+        return this.conversation?.inquiries || [];
+    }
+    get activeSegmentInquiryId() {
+        return this.conversation?.active_segment?.inquiry_id || "";
+    }
+
+    async onSegmentSelect(ev) {
+        const inquiryId = ev.target.value ? parseInt(ev.target.value, 10) : null;
+        if (!inquiryId) return;
+        await this._startSegment({ inquiry_id: inquiryId });
+    }
+
+    toggleTopicInput() {
+        this.state.showTopicInput = !this.state.showTopicInput;
+        this.state.topicLabel = "";
+    }
+
+    onTopicInput(ev) {
+        this.state.topicLabel = ev.target.value;
+    }
+
+    async addTopic() {
+        const label = (this.state.topicLabel || "").trim();
+        if (!label) return;
+        await this._startSegment({ label });
+        this.state.showTopicInput = false;
+        this.state.topicLabel = "";
+    }
+
+    async _startSegment(kw) {
+        const convId = this.state.convId;
+        if (!convId) return;
+        try {
+            await this.orm.call("wa.conversation", "start_segment", [], {
+                conversation_id: convId, ...kw,
+            });
+            await this._loadThread(convId);
+        } catch (e) {
+            this.notification.add(e.data?.message || String(e), { type: "danger" });
         }
     }
 

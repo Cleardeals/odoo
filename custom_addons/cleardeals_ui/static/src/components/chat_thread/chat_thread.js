@@ -78,18 +78,31 @@ export class CdChatThread extends Component {
     // ── Date separators ────────────────────────────────────────────────────────
 
     /**
-     * Flatten messages into a render list interleaved with day separators:
-     *   [{type:'date', key, label}, {type:'msg', msg}, …]
+     * Flatten messages into a render list interleaved with day separators and
+     * inquiry-segment dividers:
+     *   [{type:'date', key, label}, {type:'segment', label}, {type:'msg', msg}, …]
+     *
+     * Segment dividers are additive: they only appear when messages carry a
+     * ``segment_label`` (i.e. the segments feature is on), marking where the
+     * conversation switches the property/inquiry it is about.
      */
     get items() {
         const out = [];
         let lastKey = null;
+        let lastSeg = null;
         for (const msg of this.props.messages) {
             const key = istDayKey(msg.occurred_at);
             if (key && key !== lastKey) {
                 out.push({ type: "date", key, label: formatDayLabel(msg.occurred_at) });
                 lastKey = key;
             }
+            const seg = msg.segment_label || null;
+            if (seg && seg !== lastSeg) {
+                out.push({ type: "segment", label: seg });
+            }
+            // Track the last segment seen on any labelled message so a run of
+            // unlabelled (legacy) messages doesn't spuriously re-emit a divider.
+            if (seg) lastSeg = seg;
             out.push({ type: "msg", msg });
         }
         return out;
