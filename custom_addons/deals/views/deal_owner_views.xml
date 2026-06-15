@@ -62,10 +62,5 @@
                 </p>
             </field>
         </record>
-
-        <menuitem id="menu_deal_owner"
-                  name="Deal Owners"
-                  action="action_deal_owner"
-                  sequence="10"/>
     </data>
 </odoo>
