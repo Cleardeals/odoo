@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+
+        <record id="view_deal_owner_list" model="ir.ui.view">
+            <field name="name">deal.owner.list</field>
+            <field name="model">deal.owner</field>
+            <field name="arch" type="xml">
+                <list string="Deal Owners">
+                    <field name="name"/>
+                    <field name="phone"/>
+                    <field name="email"/>
+                    <field name="occupation"/>
+                    <field name="is_builder"/>
+                </list>
+            </field>
+        </record>
+
+        <record id="view_deal_owner_form" model="ir.ui.view">
+            <field name="name">deal.owner.form</field>
+            <field name="model">deal.owner</field>
+            <field name="arch" type="xml">
+                <form string="Deal Owner">
+                    <sheet>
+                        <group>
+                            <field name="name"/>
+                            <field name="phone"/>
+                            <field name="email"/>
+                            <field name="occupation"/>
+                            <field name="is_builder"/>
+                        </group>
+                    </sheet>
+                    <chatter/>
+                </form>
+            </field>
+        </record>
+
+        <record id="view_deal_owner_search" model="ir.ui.view">
+            <field name="name">deal.owner.search</field>
+            <field name="model">deal.owner</field>
+            <field name="arch" type="xml">
+                <search string="Search Deal Owners">
+                    <field name="name" string="Owner Name"/>
+                    <field name="phone"/>
+                    <filter name="filter_is_builder" string="Is Builder" domain="[('is_builder', '=', True)]"/>
+                    <filter name="group_by_occupation" string="Occupation" context="{'group_by': 'occupation'}"/>
+                </search>
+            </field>
+        </record>
+
+        <record id="action_deal_owner" model="ir.actions.act_window">
+            <field name="name">Deal Owners</field>
+            <field name="res_model">deal.owner</field>
+            <field name="view_mode">list,form</field>
+            <field name="search_view_id" ref="view_deal_owner_search"/>
+            <field name="help" type="html">
+                <p class="o_view_nocontent_smiling_face">
+                    No deal owners found.
+                </p>
+                <p>
+                    Use this screen to manage owners, phone numbers, emails, occupations, and builder classification in one place.
+                </p>
+            </field>
+        </record>
+
+        <menuitem id="menu_deal_owner"
+                  name="Deal Owners"
+                  action="action_deal_owner"
+                  sequence="10"/>
+    </data>
+</odoo>
