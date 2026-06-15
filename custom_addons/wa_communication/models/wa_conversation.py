@@ -400,6 +400,17 @@ class WaConversation(models.Model):
         msg.segment_id = segment_id or False
         return True
 
+    @api.model
+    def set_active_segment(self, conversation_id, segment_id):
+        """Make an existing segment the conversation's active one (RM accepting a
+        'switch to <property>?' suggestion).  Returns the segment id, or False."""
+        conv = self.browse(conversation_id)
+        seg = self.env['wa.conversation.segment'].browse(segment_id)
+        if not (conv.exists() and seg.exists() and seg.conversation_id == conv):
+            return False
+        conv._owa_activate_segment(seg)
+        return seg.id
+
     # ------------------------------------------------------------------
     # Inbound — conversation lookup / creation
     # ------------------------------------------------------------------

@@ -173,6 +173,24 @@
                                         </t>
                                     </div>
                                 </div>
+                                <t t-if="segmentSuggestion">
+                                    <div class="wa-segment-suggest">
+                                        <span class="wa-segment-suggest-text">
+                                            <i class="fa fa-lightbulb-o" aria-hidden="true"/>
+                                            Lead replied about <b t-esc="segmentSuggestion.label"/>.
+                                        </span>
+                                        <span class="wa-segment-suggest-actions">
+                                            <button class="btn btn-sm btn-primary"
+                                                    t-on-click="() => this.acceptSuggestion(segmentSuggestion.segment_id)">
+                                                Switch to this
+                                            </button>
+                                            <button class="btn btn-sm btn-link"
+                                                    t-on-click="() => this.dismissSuggestion(segmentSuggestion.segment_id)">
+                                                Dismiss
+                                            </button>
+                                        </span>
+                                    </div>
+                                </t>
                             </t>
 
                             <t t-if="state.sendError">

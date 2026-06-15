@@ -209,6 +209,27 @@ class TestSegments(WaTransactionCase):
         self.assertEqual(conv.active_segment_id.id, seg_a,
                          "a quoted reply must not hijack the active inquiry")
 
+    def test_set_active_segment_flips_active_context(self):
+        """Accepting a 'switch to X?' suggestion activates that segment and
+        deactivates the previous one."""
+        self._enable()
+        propA = self._property()
+        propB = self._property()
+        leadA = self.make_lead(phone='9000000011', property_base_id=propA.id)
+        leadB = self.make_lead(phone='9000000011', property_base_id=propB.id)
+        conv = self.make_conversation(phone_number='919000000011')
+        seg_a = self.Conv.start_segment(conv.id, inquiry_id=leadA.id)
+        # A quoted-reply created B's segment without activating it.
+        seg_b = conv._owa_ensure_segment(inquiry=leadB, activate=False)
+        conv.invalidate_recordset()
+        self.assertEqual(conv.active_segment_id.id, seg_a)
+
+        self.Conv.set_active_segment(conv.id, seg_b.id)
+        conv.invalidate_recordset()
+        self.assertEqual(conv.active_segment_id, seg_b)
+        self.assertTrue(seg_b.is_active)
+        self.assertFalse(self.Segment.browse(seg_a).is_active)
+
     # ── Immutability still holds ──────────────────────────────────────────────
 
     def test_segment_id_is_writable_but_facts_remain_immutable(self):

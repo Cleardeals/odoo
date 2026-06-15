@@ -49,6 +49,7 @@ export class WaLeadTab extends Component {
             // Inquiry segment "new topic" inline input
             showTopicInput:     false,
             topicLabel:         "",
+            dismissedSegmentId: null,
         });
 
         onMounted(() => {
@@ -347,6 +348,37 @@ export class WaLeadTab extends Component {
         } catch (e) {
             this.notification.add(e.data?.message || String(e), { type: "danger" });
         }
+    }
+
+    get segmentSuggestion() {
+        const conv = this.conversation;
+        if (!conv?.segments_enabled) return null;
+        const activeSegId = conv.active_segment?.id || null;
+        const msgs = this.messages;
+        let last = null;
+        for (let i = msgs.length - 1; i >= 0; i--) {
+            if (msgs[i].direction === "inbound" && msgs[i].segment_id) { last = msgs[i]; break; }
+        }
+        if (!last || last.segment_id === activeSegId) return null;
+        if (last.segment_id === this.state.dismissedSegmentId) return null;
+        return { segment_id: last.segment_id, label: last.segment_label };
+    }
+
+    async acceptSuggestion(segmentId) {
+        const convId = this.state.convId;
+        if (!convId) return;
+        try {
+            await this.orm.call("wa.conversation", "set_active_segment", [], {
+                conversation_id: convId, segment_id: segmentId });
+            this.state.dismissedSegmentId = null;
+            await this._loadThread(convId);
+        } catch (e) {
+            this.notification.add(e.data?.message || String(e), { type: "danger" });
+        }
+    }
+
+    dismissSuggestion(segmentId) {
+        this.state.dismissedSegmentId = segmentId;
     }
 
     // ── Derived from thread ───────────────────────────────────────────────────

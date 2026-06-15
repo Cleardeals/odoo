@@ -78,6 +78,7 @@ export class WaInbox extends Component {
             // Inquiry segment "new topic" inline input
             showTopicInput:     false,
             topicLabel:         "",
+            dismissedSegmentId: null,   // suggestion the RM dismissed this session
 
             // Create-lead-from-chat modal (orphan / phone-only conversations)
             showCreateLead:     false,
@@ -483,6 +484,40 @@ export class WaInbox extends Component {
         } catch (e) {
             this.notification.add(e.data?.message || String(e), { type: "danger" });
         }
+    }
+
+    /** Suggest switching the active context when the lead's latest reply is about
+     *  a different inquiry than the banner shows. Returns {segment_id, label} or null. */
+    get segmentSuggestion() {
+        const conv = this.activeConversation;
+        if (!conv?.segments_enabled) return null;
+        const activeSegId = conv.active_segment?.id || null;
+        const msgs = this.activeMessages;
+        let last = null;
+        for (let i = msgs.length - 1; i >= 0; i--) {
+            if (msgs[i].direction === "inbound" && msgs[i].segment_id) { last = msgs[i]; break; }
+        }
+        if (!last || last.segment_id === activeSegId) return null;
+        if (last.segment_id === this.state.dismissedSegmentId) return null;
+        return { segment_id: last.segment_id, label: last.segment_label };
+    }
+
+    async acceptSuggestion(segmentId) {
+        const convId = this.state.activeConvId;
+        if (!convId) return;
+        try {
+            await this.orm.call("wa.conversation", "set_active_segment", [], {
+                conversation_id: convId, segment_id: segmentId });
+            this.state.dismissedSegmentId = null;
+            await this._loadThread(convId);
+            await this._loadConversations();
+        } catch (e) {
+            this.notification.add(e.data?.message || String(e), { type: "danger" });
+        }
+    }
+
+    dismissSuggestion(segmentId) {
+        this.state.dismissedSegmentId = segmentId;
     }
 
     // ── Create lead from chat (orphan / phone-only conversations) ──────────────

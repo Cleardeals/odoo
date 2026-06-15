@@ -439,6 +439,24 @@ $topbar-h: 52px;
     .wa-segment-input  { width: 180px; }
 }
 
+// "Switch to <property>?" suggestion when the lead's latest reply is about a
+// different inquiry than the active banner. Shared by inbox + lead-form tab.
+.wa-segment-suggest {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 5px 12px;
+    margin: 0 8px 6px;
+    background: #eef6ff;
+    border: 1px solid #b6d4fe;
+    border-radius: 6px;
+    font-size: 12.5px;
+    color: #084298;
+
+    .wa-segment-suggest-text { flex: 1; .fa { margin-right: 4px; opacity: 0.85; } }
+    .wa-segment-suggest-actions { display: flex; gap: 4px; flex-shrink: 0; }
+}
+
 // Create-lead-from-chat modal (orphan / phone-only conversations)
 .wa-inbox__modal-overlay {
     position: fixed;
