@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+        
+        <record id="view_deal_offer_list" model ="ir.ui.view">
+            <field name="name">deal.offer.list</field>
+            <field name="model">deal.offer</field>
+            <field name="arch" type="xml">
+                <list string="Deal Offers">
+                    <field name="name"/>
+                    <field name="waive_off_type"/>
+                    <field name="waive_off_value"/>
+                    <field name="is_active"/>
+                </list>
+            </field>
+        </record>
+
+        <record id="view_deal_offer_form" model="ir.ui.view">
+            <field name="name">deal.offer.form</field>
+            <field name="model">deal.offer</field>
+            <field name="arch" type="xml">
+                <form string="Deal Offer">
+                    <sheet>
+                        <group>
+                            <field name="name"/>
+                            <field name="waive_off_type"/>
+                            <field name="waive_off_value"/>
+                            <field name="is_active"/>
+                        </group>
+                    </sheet>
+                    <chatter/>
+                </form>
+            </field>
+        </record>
+
+        <record id="view_deal_offer_search" model="ir.ui.view">
+            <field name="name">deal.offer.search</field>
+            <field name="model">deal.offer</field>
+            <field name="arch" type="xml">
+                <search string="Search Deal Offers">
+                    <field name="name"/>
+                    <filter name="filter_is_active" string="Active" domain="[('is_active', '=', True)]"/>
+                    <filter name="filter_archived" string="Archived" domain="[('is_active', '=', False)]"/>
+                    <filter name="group_by_waive_off_type" string="Waive Off Type" context="{'group_by': 'waive_off_type'}"/>
+                </search>
+            </field>
+        </record>
+
+        <record id="action_deal_offer" model="ir.actions.act_window">
+            <field name="name">Deal Offers</field>
+            <field name="res_model">deal.offer</field>
+            <field name="view_mode">list,form</field>
+            <field name="search_view_id" ref="view_deal_offer_search"/>
+            <field name="context">{'search_default_filter_is_active': 1}</field>
+            <field name="help" type="html">
+                <p class="o_view_nocontent_smiling_face">
+                    No deal offers found.
+                </p>
+                <p>
+                    Create deal offers with a waive off type and value, then use the Active filter to review current records.
+                </p>
+            </field>
+        </record>
+    </data>
+</odoo>
