@@ -3,6 +3,8 @@ access_wa_conversation_manager,wa.conversation manager,model_wa_conversation,bas
 access_wa_conversation_user,wa.conversation user,model_wa_conversation,base.group_user,1,1,1,0
 access_wa_message_manager,wa.message manager,model_wa_message,base.group_system,1,1,1,1
 access_wa_message_user,wa.message user,model_wa_message,base.group_user,1,1,1,0
+access_wa_segment_manager,wa.conversation.segment manager,model_wa_conversation_segment,base.group_system,1,1,1,1
+access_wa_segment_user,wa.conversation.segment user,model_wa_conversation_segment,base.group_user,1,1,1,0
 access_wa_event_log_manager,wa.event.log manager,model_wa_event_log,base.group_system,1,0,1,0
 access_wa_event_log_user,wa.event.log user,model_wa_event_log,base.group_user,1,0,1,0
 access_wa_workflow_manager,wa.workflow manager,model_wa_workflow,base.group_system,1,1,1,1

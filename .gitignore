@@ -8,6 +8,10 @@ _build/
 !.github
 !.mailmap
 !.weblate.json
+# Claude Code: team-share skills only; keep the rest of .claude local
+!.claude/
+.claude/*
+!.claude/skills/
 # compiled python files
 *.py[co]
 __pycache__/
