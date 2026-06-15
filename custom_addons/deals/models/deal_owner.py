@@ -1,9 +1,10 @@
 from odoo import fields, models
 
+
 class DealOwner(models.Model):
     _name = "deal.owner"
     _description = "Owner of the property"
-    _inherit = ['mail.thread']
+    _inherit = ["mail.thread"]
     _order = "name"
     _rec_name = "name"
 
@@ -17,5 +18,3 @@ class DealOwner(models.Model):
     email = fields.Char(string="Email")
     occupation = fields.Char(string="Occupation")
     is_builder = fields.Boolean(string="Is Builder?", default=False, tracking=True)
-
-        
