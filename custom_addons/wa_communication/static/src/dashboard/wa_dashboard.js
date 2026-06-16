@@ -67,6 +67,17 @@ export class WaDashboard extends Component {
             chartCustomTo:     "",
             // Last refresh timestamp
             lastFetched:       null,
+            // ── "By Property" view ──
+            activeTab:         "overview",   // 'overview' | 'property'
+            propertyRows:      [],
+            propertyTotal:     0,
+            propertySearch:    "",
+            propertySort:      "messages",
+            propertyLoading:   false,
+            rescue:            null,
+            expandedPropertyId: null,
+            inquiryRows:       [],
+            inquiryLoading:    false,
         });
 
         onMounted(() => {
@@ -241,10 +252,87 @@ export class WaDashboard extends Component {
         );
     }
 
+    // ── "By Property" view ─────────────────────────────────────────────────
+
+    /** Load the ranked property table + the WhatsApp-rescue numbers together. */
+    async _loadPropertyView() {
+        this.state.propertyLoading = true;
+        try {
+            const [engagement, rescue] = await Promise.all([
+                this.orm.call("wa.dashboard", "get_property_engagement", [], {
+                    date_from:      this.state.dateFrom,
+                    date_to:        this.state.dateTo,
+                    workflow_slugs: this.state.workflowSlugs,
+                    search:         this.state.propertySearch,
+                    sort:           this.state.propertySort,
+                }),
+                this.orm.call("wa.dashboard", "get_whatsapp_rescue", [], {
+                    date_from: this.state.dateFrom,
+                    date_to:   this.state.dateTo,
+                }),
+            ]);
+            this.state.propertyRows  = engagement.rows;
+            this.state.propertyTotal = engagement.total;
+            this.state.rescue        = rescue;
+        } finally {
+            this.state.propertyLoading = false;
+        }
+    }
+
+    async onSwitchTab(tab) {
+        this.state.activeTab = tab;
+        if (tab === "property" && this.state.propertyRows.length === 0) {
+            await this._loadPropertyView();
+        }
+    }
+
+    async onPropertySort(sort) {
+        this.state.propertySort = sort;
+        await this._loadPropertyView();
+    }
+
+    onPropertySearchInput(value) {
+        this.state.propertySearch = value;
+    }
+
+    async onApplyPropertySearch() {
+        this.state.expandedPropertyId = null;
+        await this._loadPropertyView();
+    }
+
+    /** Toggle the per-inquiry drill-down for a property row. */
+    async onToggleProperty(propertyId) {
+        if (!propertyId) return;  // the "Unassigned" bucket has no drill-down
+        if (this.state.expandedPropertyId === propertyId) {
+            this.state.expandedPropertyId = null;
+            this.state.inquiryRows = [];
+            return;
+        }
+        this.state.expandedPropertyId = propertyId;
+        this.state.inquiryLoading = true;
+        try {
+            this.state.inquiryRows = await this.orm.call(
+                "wa.dashboard", "get_inquiry_engagement",
+                [propertyId, this.state.dateFrom, this.state.dateTo],
+            );
+        } finally {
+            this.state.inquiryLoading = false;
+        }
+    }
+
+    /** Rescue numbers for a property row (per_property is keyed by id string). */
+    rescueForProperty(propertyId) {
+        if (!this.state.rescue || !propertyId) return null;
+        return this.state.rescue.per_property[String(propertyId)] || null;
+    }
+
     // ── Actions ──────────────────────────────────────────────────────────────
 
     async onRefresh() {
         await this._loadAll();
+        if (this.state.activeTab === "property") {
+            await this._loadPropertyView();
+        }
     }
 
     // --- Date picker presets ---
@@ -257,6 +345,10 @@ export class WaDashboard extends Component {
         this._loadMetrics();
         this._loadHourlyData();
         this._loadFailures();
+        if (this.state.activeTab === "property") {
+            this.state.expandedPropertyId = null;
+            this._loadPropertyView();
+        }
     }
 
     onPresetToday()         { this._applyPreset("Today",          this._todayStart(), this._todayEnd()); }
@@ -290,6 +382,7 @@ export class WaDashboard extends Component {
         this._loadMetrics();
         this._loadHourlyData();
         this._loadFailures();
+        if (this.state.activeTab === "property") this._loadPropertyView();
     }
 
     /** Clear all workflow filters and close the dropdown. */
@@ -300,6 +393,7 @@ export class WaDashboard extends Component {
         this._loadMetrics();
         this._loadHourlyData();
         this._loadFailures();
+        if (this.state.activeTab === "property") this._loadPropertyView();
     }
 
     /** Close the workflow dropdown without changing selection. */
@@ -412,6 +506,29 @@ export class WaDashboard extends Component {
     fmtRate(val) {
         if (val == null) return "—";
         return `${val.toFixed(1)}%`;
+    }
+
+    /** Format a duration in seconds as "Ns" / "Nm" / "Nh", or "—". */
+    fmtSecs(val) {
+        if (val == null) return "—";
+        if (val < 60)   return `${Math.round(val)}s`;
+        if (val < 3600) return `${Math.round(val / 60)}m`;
+        return `${(val / 3600).toFixed(1)}h`;
+    }
+
+    /** Format an ISO datetime as "25 Apr, 14:30", or "—". */
+    fmtDateTime(isoStr) {
+        if (!isoStr) return "—";
+        const d = new Date(isoStr.includes("T") ? isoStr : isoStr + "T00:00:00");
+        return d.toLocaleString("en-GB", {
+            day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
+        });
+    }
+
+    /** Money — plain rupee amount with 2 decimals. */
+    fmtCost(val) {
+        if (!val) return "₹0";
+        return `₹${val.toFixed(2)}`;
     }
 
     get metricsReady() {

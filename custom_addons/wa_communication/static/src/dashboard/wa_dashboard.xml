@@ -122,6 +122,21 @@
         </div>
       </div>
 
+      <!-- ── Tabs ────────────────────────────────────────────────────── -->
+      <div class="o-wa-dashboard__tabs">
+        <button t-att-class="'o-wa-dashboard__tab' + (state.activeTab === 'overview' ? ' o-wa-dashboard__tab--active' : '')"
+                t-on-click="() => this.onSwitchTab('overview')">
+          Overview
+        </button>
+        <button t-att-class="'o-wa-dashboard__tab' + (state.activeTab === 'property' ? ' o-wa-dashboard__tab--active' : '')"
+                t-on-click="() => this.onSwitchTab('property')">
+          By Property
+        </button>
+      </div>
+
+      <!-- ════════════════════════ OVERVIEW TAB ════════════════════════ -->
+      <t t-if="state.activeTab === 'overview'">
+
       <!-- ── Loading state ───────────────────────────────────────────── -->
       <t t-if="state.loading and !metricsReady">
         <div class="o-wa-dashboard__loading">Loading dashboard data...</div>
@@ -270,6 +285,160 @@
           onOpenLead="(leadId) => this.onOpenLead(leadId)"
         />
       </div>
+
+      </t><!-- /Overview tab -->
+
+      <!-- ════════════════════════ BY-PROPERTY TAB ═════════════════════ -->
+      <t t-if="state.activeTab === 'property'">
+
+        <!-- WhatsApp-rescue KPI cards -->
+        <t t-if="state.rescue">
+          <div class="o-wa-dashboard__metrics-grid">
+            <CdMetricCard
+              label="'Hard-to-Reach Leads'"
+              value="fmt(state.rescue.overall.cohort)"
+              subValue="'unreachable by phone'"
+            />
+            <CdMetricCard
+              label="'WhatsApp Re-engaged'"
+              value="fmtRate(state.rescue.overall.rescue_engagement_rate)"
+              subValue="fmt(state.rescue.overall.rescue_engaged) + ' replied on WA'"
+            />
+            <CdMetricCard
+              label="'WA-Attributed Close Rate'"
+              value="fmtRate(state.rescue.overall.wa_attributed_close_rate)"
+              subValue="fmt(state.rescue.overall.rescued_to_visit) + ' of ' + fmt(state.rescue.overall.rescued) + ' booked → visited'"
+            />
+          </div>
+          <div class="o-wa-dashboard__rescue-note">
+            <i class="fa fa-info-circle"/>
+            <span t-esc="state.rescue.note"/>
+          </div>
+        </t>
+
+        <!-- Ranked property table -->
+        <div class="o-wa-dashboard__section">
+          <div class="o-wa-dashboard__section-header">
+            <span class="o-wa-dashboard__section-title">
+              WhatsApp by Property
+              <t t-if="state.propertyTotal"> (<t t-esc="state.propertyTotal"/>)</t>
+            </span>
+            <div class="o-wa-dashboard__prop-search">
+              <i class="fa fa-search"/>
+              <input type="text" placeholder="Search property..."
+                     t-att-value="state.propertySearch"
+                     t-on-input="(e) => this.onPropertySearchInput(e.target.value)"
+                     t-on-keydown="(e) => e.key === 'Enter' &amp;&amp; this.onApplyPropertySearch()"/>
+            </div>
+          </div>
+
+          <t t-if="state.propertyLoading">
+            <div class="o-wa-dashboard__loading">Loading…</div>
+          </t>
+          <t t-elif="!state.propertyRows.length">
+            <div class="o-wa-dashboard__empty">No WhatsApp activity in this period.</div>
+          </t>
+          <t t-else="">
+            <table class="o-wa-prop-table">
+              <thead>
+                <tr>
+                  <th>Property</th>
+                  <th class="o-num" t-on-click="() => this.onPropertySort('leads')">Leads</th>
+                  <th class="o-num" t-on-click="() => this.onPropertySort('messages')">Msgs</th>
+                  <th class="o-num">In / Out</th>
+                  <th class="o-num" t-on-click="() => this.onPropertySort('reply_rate')">Reply</th>
+                  <th class="o-num" t-on-click="() => this.onPropertySort('response')">Response</th>
+                  <th class="o-num" t-on-click="() => this.onPropertySort('conversion')">Conv.</th>
+                  <th class="o-num">Rescue</th>
+                  <th class="o-num" t-on-click="() => this.onPropertySort('cost')">Cost</th>
+                  <th class="o-num" t-on-click="() => this.onPropertySort('last_activity')">Last</th>
+                </tr>
+              </thead>
+              <tbody>
+                <t t-foreach="state.propertyRows" t-as="row" t-key="row.property_id || 'unassigned'">
+                  <tr t-att-class="'o-wa-prop-row' + (row.property_id ? ' o-clickable' : '') + (state.expandedPropertyId === row.property_id ? ' o-expanded' : '')"
+                      t-on-click="() => this.onToggleProperty(row.property_id)">
+                    <td>
+                      <i t-if="row.property_id" class="fa o-wa-prop-caret"
+                         t-att-class="state.expandedPropertyId === row.property_id ? 'fa-caret-down' : 'fa-caret-right'"/>
+                      <span t-esc="row.property_name"/>
+                    </td>
+                    <td class="o-num" t-esc="row.leads_engaged"/>
+                    <td class="o-num" t-esc="row.messages_total"/>
+                    <td class="o-num"><t t-esc="row.inbound"/> / <t t-esc="row.outbound"/></td>
+                    <td class="o-num" t-esc="fmtRate(row.reply_rate)"/>
+                    <td class="o-num" t-esc="fmtSecs(row.response_secs_median)"/>
+                    <td class="o-num">
+                      <t t-esc="fmtRate(row.conversion_rate)"/>
+                      <span class="o-wa-prop-sub"><t t-esc="row.visits_done"/>/<t t-esc="row.leads_engaged"/></span>
+                    </td>
+                    <td class="o-num">
+                      <t t-set="resc" t-value="rescueForProperty(row.property_id)"/>
+                      <t t-if="resc and resc.cohort" t-esc="fmtRate(resc.rescue_engagement_rate)"/>
+                      <t t-else="">—</t>
+                    </td>
+                    <td class="o-num" t-esc="fmtCost(row.cost)"/>
+                    <td class="o-num" t-esc="fmtDateTime(row.last_activity)"/>
+                  </tr>
+
+                  <!-- Drill-down: per-inquiry rows -->
+                  <t t-if="state.expandedPropertyId === row.property_id">
+                    <tr class="o-wa-inq-wrap">
+                      <td colspan="10">
+                        <t t-if="state.inquiryLoading">
+                          <div class="o-wa-dashboard__loading">Loading inquiries…</div>
+                        </t>
+                        <t t-else="">
+                          <table class="o-wa-inq-table">
+                            <thead>
+                              <tr>
+                                <th>Lead</th><th>Phone</th><th>Type</th>
+                                <th class="o-num">Msgs</th><th class="o-num">Response</th>
+                                <th class="o-num">Cost</th><th>Site visit</th>
+                                <th class="o-num">Last</th><th/>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <t t-foreach="state.inquiryRows" t-as="inq" t-key="inq.inquiry_id || 'na'">
+                                <tr>
+                                  <td t-esc="inq.lead_name"/>
+                                  <td t-esc="inq.phone"/>
+                                  <td t-esc="inq.inquiry_type"/>
+                                  <td class="o-num" t-esc="inq.messages_total"/>
+                                  <td class="o-num" t-esc="fmtSecs(inq.response_secs)"/>
+                                  <td class="o-num" t-esc="fmtCost(inq.cost)"/>
+                                  <td>
+                                    <span t-if="inq.visit_status"
+                                          t-att-class="'o-wa-visit-pill' + (inq.visit_done ? ' o-done' : '')"
+                                          t-esc="inq.visit_status"/>
+                                    <span t-else="" class="o-wa-prop-sub">—</span>
+                                  </td>
+                                  <td class="o-num" t-esc="fmtDateTime(inq.last_activity)"/>
+                                  <td class="o-num">
+                                    <button t-if="inq.inquiry_id" class="btn btn-link btn-sm o-wa-open-btn"
+                                            t-on-click="() => this.onOpenLead(inq.inquiry_id)"
+                                            title="Open lead">
+                                      <i class="fa fa-external-link"/>
+                                    </button>
+                                  </td>
+                                </tr>
+                              </t>
+                              <t t-if="!state.inquiryRows.length">
+                                <tr><td colspan="9" class="o-wa-dashboard__empty">No inquiries.</td></tr>
+                              </t>
+                            </tbody>
+                          </table>
+                        </t>
+                      </td>
+                    </tr>
+                  </t>
+                </t>
+              </tbody>
+            </table>
+          </t>
+        </div>
+
+      </t><!-- /By-Property tab -->
 
     </div>
   </t>

@@ -29,7 +29,7 @@ Configurable topics (ir.config_parameter):
 
 import logging
 
-from odoo import api, models
+from odoo import api, fields, models
 
 _logger = logging.getLogger(__name__)
 
@@ -51,6 +51,13 @@ _ACTOR_STATUS_SET = {
     'lead', 'busy', 'call_back_later', 'requirement_closed', 'no_requirements',
 }
 
+# current_status values that mean the RM could not reach the lead by phone.
+# Entering any of these stamps ``hard_to_reach_since``; leaving clears it.
+# Drives the WhatsApp-rescue dashboard metric (wa.dashboard.get_whatsapp_rescue).
+_HARD_TO_REACH_STATUSES = frozenset({
+    'ringing', 'call_back_later', 'busy', 'switched_off',
+})
+
 
 class WaLeadEventPublisher(models.Model):
     """Pub/Sub event hooks on leads.new.
@@ -63,6 +70,18 @@ class WaLeadEventPublisher(models.Model):
 
     _inherit = 'leads.new'
 
+    hard_to_reach_since = fields.Datetime(
+        string='Hard-to-Reach Since',
+        index=True,
+        copy=False,
+        help="Timestamp this inquiry most recently entered a hard-to-reach call "
+             "status (ringing / call-back-later / busy / switched-off).  It is "
+             "NOT cleared when the lead later recovers — a rescued lead must stay "
+             "in the cohort — so it means 'last became hard-to-reach at', and is "
+             "overwritten only on a fresh re-entry.  Powers the WhatsApp-rescue "
+             "dashboard metric (wa.dashboard.get_whatsapp_rescue).",
+    )
+
     # ------------------------------------------------------------------
     # Create hook — actor.created
     # ------------------------------------------------------------------
@@ -70,6 +89,13 @@ class WaLeadEventPublisher(models.Model):
     @api.model_create_multi
     def create(self, vals_list):
         records = super().create(vals_list)
+        # Stamp leads that are created directly in a hard-to-reach status so the
+        # rescue cohort is correct even when the first status isn't 'lead'.
+        born_stuck = records.filtered(
+            lambda r: r.current_status in _HARD_TO_REACH_STATUSES)
+        if born_stuck:
+            born_stuck.with_context(wa_skip_htr=True).write(
+                {'hard_to_reach_since': fields.Datetime.now()})
         for rec in records:
             rec._wa_schedule_publish(
                 _TOPIC_ACTOR,
@@ -107,6 +133,12 @@ class WaLeadEventPublisher(models.Model):
             pre = {}
 
         result = super().write(vals)
+
+        # Maintain hard_to_reach_since on current_status transitions (per record;
+        # the new status is uniform across self, but the old status is not).
+        # Guarded so the maintenance write below doesn't re-enter this branch.
+        if 'current_status' in vals and not self.env.context.get('wa_skip_htr'):
+            self._wa_maintain_hard_to_reach_since(pre)
 
         for rec in self:
             snap = pre.get(rec.id, {})
@@ -176,6 +208,32 @@ class WaLeadEventPublisher(models.Model):
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+
+    def _wa_maintain_hard_to_reach_since(self, pre: dict) -> None:
+        """Stamp ``hard_to_reach_since`` when ``current_status`` enters the set.
+
+        Stamps the moment an inquiry enters the hard-to-reach set from outside it
+        (and re-stamps on a fresh re-entry after recovering).  Deliberately does
+        **not** clear on leaving: a rescued lead leaves the set by definition, so
+        clearing would drop it from the rescue cohort.  A transition *within* the
+        set (e.g. ringing → busy) is a no-op.  Runs under the ``wa_skip_htr``
+        context so the field write doesn't recurse.
+
+        :param pre: ``{rec.id: {'current_status': <old>, ...}}`` snapshot taken
+                    before ``super().write``.
+        """
+        now = fields.Datetime.now()
+        for rec in self:
+            old_status = pre.get(rec.id, {}).get('current_status')
+            new_status = rec.current_status
+            if new_status == old_status:
+                continue
+            entered_from_outside = (
+                new_status in _HARD_TO_REACH_STATUSES
+                and old_status not in _HARD_TO_REACH_STATUSES
+            )
+            if entered_from_outside:
+                rec.with_context(wa_skip_htr=True).hard_to_reach_since = now
 
     def _wa_actor_snapshot(self) -> dict:
         """Current lead fields as a plain dict.

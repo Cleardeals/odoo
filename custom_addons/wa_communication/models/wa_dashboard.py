@@ -12,6 +12,7 @@ Example call from the OWL dashboard component::
 """
 
 import logging
+from collections import defaultdict
 from datetime import datetime, date
 
 from odoo import api, models
@@ -374,3 +375,392 @@ class WaDashboard(models.Model):
                 'occurred_at':    msg.occurred_at.isoformat() if msg.occurred_at else '',
             })
         return rows
+
+    # ------------------------------------------------------------------
+    # Per-property / per-inquiry engagement ("By Property" view)
+    # ------------------------------------------------------------------
+    #
+    # All three methods below group on the *stored* attribution fields
+    # ``effective_property_id`` / ``effective_inquiry_id`` on wa.message (Phase
+    # 1a), never on the immutable ``lead_id``, so re-pointing a conversation
+    # segment correctly moves the engagement.  Outcomes are read from the
+    # canonical ``lead.site.visit`` model + its status flags — NOT the
+    # ``current_status`` snapshot, which deliberately omits cancelled/no-show.
+
+    # sort key -> row key (all "biggest / most-recent first")
+    _PROPERTY_SORT_KEYS = {
+        'messages':      'messages_total',
+        'leads':         'leads_engaged',
+        'reply_rate':    'reply_rate',
+        'response':      'response_secs_median',
+        'conversion':    'conversion_rate',
+        'cost':          'cost',
+        'last_activity': 'last_activity',
+    }
+
+    def _wa_window_messages(self, dt_from, dt_to, slugs=None, extra_domain=None):
+        """Return non-system wa.message in ``[dt_from, dt_to)``, oldest first."""
+        domain = [
+            ('kind', '!=', 'system'),
+            ('occurred_at', '>=', dt_from),
+            ('occurred_at', '<', dt_to),
+        ]
+        if slugs:
+            domain += self._slug_domain(slugs)
+        if extra_domain:
+            domain += extra_domain
+        return self.env['wa.message'].sudo().search(
+            domain, order='occurred_at asc, id asc')
+
+    @staticmethod
+    def _first_response_secs(msgs):
+        """First-RM-reply latency in seconds for one inquiry's messages.
+
+        ``msgs`` must be ordered oldest-first.  Returns the gap between the
+        first buyer inbound and the first RM outbound that follows it, or
+        ``None`` when the buyer never wrote or no RM reply followed (a reply
+        that *precedes* the first inbound does not count).
+        """
+        first_buyer = None
+        for m in msgs:
+            if m.direction == 'inbound' and m.initiator == 'buyer' and m.occurred_at:
+                first_buyer = m.occurred_at
+                break
+        if not first_buyer:
+            return None
+        for m in msgs:
+            if (m.direction == 'outbound' and m.initiator == 'rm'
+                    and m.occurred_at and m.occurred_at >= first_buyer):
+                return (m.occurred_at - first_buyer).total_seconds()
+        return None
+
+    @staticmethod
+    def _median(values):
+        """Median of the non-None values, or ``None`` when there are none."""
+        vals = sorted(v for v in values if v is not None)
+        if not vals:
+            return None
+        n = len(vals)
+        mid = n // 2
+        if n % 2:
+            return vals[mid]
+        return (vals[mid - 1] + vals[mid]) / 2.0
+
+    def _visit_state_by_inquiry(self, inquiry_ids):
+        """Map inquiry id -> visit-state flags read from ``lead.site.visit``.
+
+        ``{iid: {'done', 'open', 'cancelled', 'no_show'}}`` where ``done`` means
+        the inquiry has at least one *completed* visit and ``open`` a
+        scheduled/rescheduled one.  Counting is per inquiry, so a reschedule
+        chain (several visit rows) is never double-counted by the caller.
+        """
+        res = {}
+        ids = [i for i in inquiry_ids if i]
+        if not ids:
+            return res
+        visits = self.env['lead.site.visit'].sudo().search(
+            [('inquiry_id', 'in', ids)])
+        for v in visits:
+            d = res.setdefault(v.inquiry_id.id, {
+                'done': False, 'open': False, 'cancelled': False, 'no_show': False,
+            })
+            s = v.status_id
+            if s.is_completed_status:
+                d['done'] = True
+            elif s.is_scheduled_status or s.is_reschedule_status:
+                d['open'] = True
+            elif s.is_no_show_status:
+                d['no_show'] = True
+            elif s.is_cancelled_status:
+                d['cancelled'] = True
+        return res
+
+    def _sort_property_rows(self, rows, sort):
+        """Sort engagement rows by the requested key (biggest/most-recent first).
+
+        ``None`` values sort last: numeric keys fall back to ``-1`` and the
+        string ``last_activity`` to ``''`` so the mixed list never raises.
+        """
+        key = self._PROPERTY_SORT_KEYS.get(sort, 'messages_total')
+        numeric = key != 'last_activity'
+
+        def _sk(row):
+            val = row.get(key)
+            if val is None:
+                return -1 if numeric else ''
+            return val
+
+        return sorted(rows, key=_sk, reverse=True)
+
+    @api.model
+    def get_property_engagement(
+        self, date_from=None, date_to=None, workflow_slugs=None,
+        search='', sort='messages', limit=100, offset=0,
+    ):
+        """Ranked WhatsApp engagement per property over the window.
+
+        One row per property (plus a single ``Unassigned`` bucket for messages
+        with no resolved property).  Each row carries activity (messages,
+        in/out, leads engaged, reply rate, median first-response, cost,
+        last activity) and outcomes from ``lead.site.visit``
+        (visits scheduled/done, conversion rate).
+
+        :returns: ``{rows, total, date_from, date_to}`` — ``rows`` already
+                  sorted + paged, ``total`` is the pre-paging count.
+        """
+        dt_from = self._parse_date(date_from)
+        dt_to   = self._parse_date(date_to) if date_to else datetime.utcnow()
+        slugs   = [s for s in (workflow_slugs or []) if s]
+
+        props = {}
+
+        def _acc(pid):
+            return props.setdefault(pid, {
+                'messages': 0, 'inbound': 0, 'outbound': 0, 'cost': 0.0,
+                'last': None, 'inquiries': set(), 'replied_inq': set(),
+                'msgs_by_inq': defaultdict(list),
+            })
+
+        for m in self._wa_window_messages(dt_from, dt_to, slugs):
+            pid = m.effective_property_id.id if m.effective_property_id else False
+            iid = m.effective_inquiry_id.id if m.effective_inquiry_id else False
+            a = _acc(pid)
+            a['messages'] += 1
+            if m.direction == 'inbound':
+                a['inbound'] += 1
+                if m.initiator == 'buyer' and iid:
+                    a['replied_inq'].add(iid)
+            elif m.direction == 'outbound':
+                a['outbound'] += 1
+            a['cost'] += m.cost_inr or 0.0
+            if m.occurred_at and (a['last'] is None or m.occurred_at > a['last']):
+                a['last'] = m.occurred_at
+            if iid:
+                a['inquiries'].add(iid)
+                a['msgs_by_inq'][iid].append(m)
+
+        # Outcomes — one batched lead.site.visit read across all engaged inquiries.
+        all_inq = set()
+        for a in props.values():
+            all_inq |= a['inquiries']
+        visit_state = self._visit_state_by_inquiry(all_inq)
+
+        # Property display names — one batched browse.
+        names = {}
+        real_ids = [pid for pid in props if pid]
+        if real_ids:
+            for p in self.env['property.base'].sudo().browse(real_ids):
+                names[p.id] = (
+                    p.display_name or p.property_tag or ('Property %s' % p.id))
+
+        rows = []
+        for pid, a in props.items():
+            engaged = a['inquiries']
+            n_engaged = len(engaged)
+            done = sum(
+                1 for iid in engaged if visit_state.get(iid, {}).get('done'))
+            scheduled = sum(
+                1 for iid in engaged if visit_state.get(iid, {}).get('open'))
+            latencies = [
+                self._first_response_secs(a['msgs_by_inq'][iid]) for iid in engaged]
+            rows.append({
+                'property_id':          pid or False,
+                'property_name':        names.get(pid, 'Unassigned') if pid else 'Unassigned',
+                'messages_total':       a['messages'],
+                'inbound':              a['inbound'],
+                'outbound':             a['outbound'],
+                'leads_engaged':        n_engaged,
+                'replied':              len(a['replied_inq']),
+                'reply_rate':           self._rate(len(a['replied_inq']), n_engaged),
+                'response_secs_median': self._median(latencies),
+                'cost':                 round(a['cost'], 2),
+                'last_activity':        a['last'].isoformat() if a['last'] else None,
+                'visits_scheduled':     scheduled,
+                'visits_done':          done,
+                'conversion_rate':      self._rate(done, n_engaged),
+            })
+
+        if search:
+            needle = search.strip().lower()
+            rows = [
+                r for r in rows
+                if r['property_id'] and needle in (r['property_name'] or '').lower()]
+
+        rows = self._sort_property_rows(rows, sort)
+        total = len(rows)
+        if limit:
+            rows = rows[int(offset):int(offset) + int(limit)]
+        return {
+            'rows':      rows,
+            'total':     total,
+            'date_from': dt_from.isoformat(),
+            'date_to':   dt_to.isoformat(),
+        }
+
+    @api.model
+    def get_inquiry_engagement(self, property_id, date_from=None, date_to=None):
+        """Per-inquiry drill-down rows for one property over the window.
+
+        :returns: list of dicts (lead name/phone, inquiry_type, message counts,
+                  first-response latency, cost, last activity, latest site-visit
+                  state, and ``conversation_id`` for UI navigation), sorted by
+                  message volume.  Unknown / falsy ``property_id`` -> ``[]``.
+        """
+        if not property_id:
+            return []
+        dt_from = self._parse_date(date_from)
+        dt_to   = self._parse_date(date_to) if date_to else datetime.utcnow()
+
+        msgs = self._wa_window_messages(
+            dt_from, dt_to,
+            extra_domain=[('effective_property_id', '=', int(property_id))])
+
+        by_inq = defaultdict(list)
+        for m in msgs:
+            iid = m.effective_inquiry_id.id if m.effective_inquiry_id else False
+            by_inq[iid].append(m)
+
+        inquiry_ids = [iid for iid in by_inq if iid]
+        inq_map = {
+            i.id: i for i in self.env['leads.new'].sudo().browse(inquiry_ids)}
+        visit_state = self._visit_state_by_inquiry(inquiry_ids)
+
+        # Latest visit per inquiry (for the status label) — one batched read.
+        latest_visit = {}
+        if inquiry_ids:
+            for v in self.env['lead.site.visit'].sudo().search(
+                    [('inquiry_id', 'in', inquiry_ids)],
+                    order='scheduled_datetime desc, id desc'):
+                latest_visit.setdefault(v.inquiry_id.id, v)
+
+        rows = []
+        for iid, mlist in by_inq.items():
+            inq = inq_map.get(iid)
+            conv = next((m.conversation_id for m in mlist if m.conversation_id), False)
+            last = max((m.occurred_at for m in mlist if m.occurred_at), default=None)
+            lv = latest_visit.get(iid)
+            rows.append({
+                'inquiry_id':     iid or False,
+                'lead_name':      inq.name if inq else 'Unassigned',
+                'phone':          (conv.phone_number if conv
+                                   else (inq.phone if inq else '')) or '',
+                'inquiry_type':   inq.inquiry_type if inq else '',
+                'messages_total': len(mlist),
+                'inbound':        sum(1 for m in mlist if m.direction == 'inbound'),
+                'outbound':       sum(1 for m in mlist if m.direction == 'outbound'),
+                'response_secs':  self._first_response_secs(mlist),
+                'cost':           round(sum(m.cost_inr or 0.0 for m in mlist), 2),
+                'last_activity':  last.isoformat() if last else None,
+                'visit_status':   lv.status_id.name if lv else '',
+                'visit_date':     (lv.scheduled_datetime.isoformat()
+                                   if lv and lv.scheduled_datetime else None),
+                'visit_done':     visit_state.get(iid, {}).get('done', False),
+                'conversation_id': conv.id if conv else False,
+            })
+
+        rows.sort(key=lambda r: r['messages_total'], reverse=True)
+        return rows
+
+    @api.model
+    def get_whatsapp_rescue(self, date_from=None, date_to=None, property_id=None):
+        """The WhatsApp-rescue metric — overall + per-property.
+
+        Of leads the RM could not reach by phone (the *cohort*: inquiries whose
+        ``hard_to_reach_since`` falls in the window), how many re-engaged on
+        WhatsApp and then booked a site visit.
+
+        **Strict, sequence-based attribution (a proxy, not proof — no call logs
+        exist):** an inquiry is *rescued* only when, in order, it became
+        hard-to-reach (``T_stuck``), the **buyer** then replied on WhatsApp
+        (``T_wa > T_stuck``), and a ``lead.site.visit`` was **booked after** that
+        reply (``create_date > T_wa``).  Requiring the visit to be booked after
+        the WA reply is what prevents crediting WhatsApp for a later RM call.
+        ``rescued_to_visit`` further requires that visit to be *completed*.
+
+        :returns: ``{overall, per_property, date_from, date_to, note}`` where
+                  each bucket carries cohort / rescue_engaged / rescued /
+                  rescued_to_visit counts + the two derived rates.
+        """
+        dt_from = self._parse_date(date_from)
+        dt_to   = self._parse_date(date_to) if date_to else datetime.utcnow()
+
+        cohort_domain = [
+            ('hard_to_reach_since', '>=', dt_from),
+            ('hard_to_reach_since', '<', dt_to),
+        ]
+        if property_id:
+            cohort_domain.append(('property_base_id', '=', int(property_id)))
+        cohort = self.env['leads.new'].sudo().search(cohort_domain)
+
+        overall = {
+            'cohort': 0, 'rescue_engaged': 0, 'rescued': 0, 'rescued_to_visit': 0}
+        per_property = {}
+        if not cohort:
+            return self._rescue_payload(overall, per_property, dt_from, dt_to)
+
+        cohort_ids = cohort.ids
+
+        # First buyer WA reply per cohort inquiry (grouped on effective_inquiry_id).
+        first_reply = {}
+        for m in self.env['wa.message'].sudo().search([
+            ('effective_inquiry_id', 'in', cohort_ids),
+            ('direction', '=', 'inbound'),
+            ('initiator', '=', 'buyer'),
+        ], order='occurred_at asc, id asc'):
+            iid = m.effective_inquiry_id.id
+            if iid not in first_reply and m.occurred_at:
+                first_reply[iid] = m.occurred_at
+
+        # Site visits per cohort inquiry (for progression + completion).
+        visits_by_inq = defaultdict(list)
+        for v in self.env['lead.site.visit'].sudo().search(
+                [('inquiry_id', 'in', cohort_ids)]):
+            visits_by_inq[v.inquiry_id.id].append(v)
+
+        for lead in cohort:
+            pid = lead.property_base_id.id or False
+            pp = per_property.setdefault(pid, {
+                'cohort': 0, 'rescue_engaged': 0, 'rescued': 0, 'rescued_to_visit': 0})
+            overall['cohort'] += 1
+            pp['cohort'] += 1
+
+            t_stuck = lead.hard_to_reach_since
+            t_wa = first_reply.get(lead.id)
+            if not (t_wa and t_stuck and t_wa > t_stuck):
+                continue
+            overall['rescue_engaged'] += 1
+            pp['rescue_engaged'] += 1
+
+            booked_after = [
+                v for v in visits_by_inq.get(lead.id, [])
+                if v.create_date and v.create_date > t_wa]
+            if not booked_after:
+                continue
+            overall['rescued'] += 1
+            pp['rescued'] += 1
+            if any(v.status_id.is_completed_status for v in booked_after):
+                overall['rescued_to_visit'] += 1
+                pp['rescued_to_visit'] += 1
+
+        return self._rescue_payload(overall, per_property, dt_from, dt_to)
+
+    def _rescue_payload(self, overall, per_property, dt_from, dt_to):
+        """Attach derived rates and the honesty note to the rescue buckets."""
+        def _with_rates(d):
+            return {
+                **d,
+                'rescue_engagement_rate':   self._rate(d['rescue_engaged'], d['cohort']),
+                'wa_attributed_close_rate': self._rate(d['rescued_to_visit'], d['rescued']),
+            }
+        return {
+            'overall':      _with_rates(overall),
+            'per_property': {pid: _with_rates(v) for pid, v in per_property.items()},
+            'date_from':    dt_from.isoformat(),
+            'date_to':      dt_to.isoformat(),
+            'note': (
+                'Sequence/recency proxy, not proven causation: a lead counts as '
+                'WhatsApp-rescued when, after the RM could not reach it by phone, '
+                'the buyer replied on WhatsApp and only then booked a site visit. '
+                'No call logs exist, so attribution is by ordering.'
+            ),
+        }

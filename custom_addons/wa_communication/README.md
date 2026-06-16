@@ -1,6 +1,6 @@
 # `wa_communication` — WhatsApp ↔ Odoo Communication Layer
 
-**Version:** 1.1.8 · **Depends:** `cleardeals_pubsub`, `leads`, `cleardeals_ui`,
+**Version:** 1.1.9 · **Depends:** `cleardeals_pubsub`, `leads`, `cleardeals_ui`,
 `cleardeals_notification` · **External Python:** `google-cloud-pubsub`, `google-auth`
 
 The WhatsApp application module: it receives inbound WhatsApp traffic over GCP
@@ -393,7 +393,7 @@ root menu.
 |---|---|---|
 | **Lead form tab** | `static/src/lead_tab/` | Embedded `<widget>` on the lead form (`wa_lead_form_inherit.xml`). |
 | **Inbox** (full screen) | `static/src/inbox/` | `action_wa_inbox` (tag `wa_inbox`). |
-| **Dashboard** | `static/src/dashboard/` | `action_wa_dashboard` (tag `wa_dashboard`). |
+| **Dashboard** | `static/src/dashboard/` | `action_wa_dashboard` (tag `wa_dashboard`). Two tabs: **Overview** and **By Property** (per-property engagement + drill-down + WhatsApp-rescue — see §17). |
 | **Message Log** | `static/src/message_log/` | `action_wa_message_log` (tag `wa_message_log`). |
 | **Quick Replies manager** | `static/src/quick_replies/` | `action_wa_quick_replies` (tag `wa_quick_replies`). |
 | **Webhook Log** | `static/src/webhook_log/` | Audit viewer. |
@@ -402,6 +402,30 @@ root menu.
 The lead tab and inbox both subscribe to `cleardeals_notification_{uid}` to live-
 refresh the open thread when a relevant notification arrives. They read the user
 id from `@web/core/user` (`user.userId`) — **not** `session.uid`.
+
+### By-Property analytics (Dashboard → "By Property")
+
+Three `@api.model` methods on `wa.dashboard` (no table; computed live) power the tab:
+
+- **`get_property_engagement`** — one ranked row per property (plus an *Unassigned*
+  bucket): messages in/out, leads engaged, reply rate, median first-response, cost,
+  last activity, and **outcomes read from `lead.site.visit`** (visits scheduled/done,
+  conversion rate). Grouped on the **stored** `wa.message.effective_property_id` /
+  `effective_inquiry_id` (Phase-1a attribution), so re-pointing a segment moves the
+  engagement. Sortable / searchable / paged.
+- **`get_inquiry_engagement(property_id, …)`** — per-inquiry drill-down for one property.
+- **`get_whatsapp_rescue`** — the **WhatsApp-rescue** metric: of leads the RM could not
+  reach by phone (the *cohort*: inquiries whose `leads.new.hard_to_reach_since` is in the
+  window), how many re-engaged on WhatsApp and then booked a site visit. **Strict,
+  sequence-based attribution** — a lead counts only when it became hard-to-reach, *then*
+  the buyer replied on WhatsApp, *then* a `lead.site.visit` was booked after that reply.
+  It is an honest **sequence/recency proxy, not causal proof** (no call logs exist); the
+  UI shows the caveat. Outcomes always come from `lead.site.visit` status flags, never the
+  `current_status` snapshot (which omits cancelled/no-show).
+
+`leads.new.hard_to_reach_since` (added here via the `wa_lead_event_publisher` inherit) is
+stamped by the `current_status` write-hook when a lead enters ringing/call-back/busy/
+switched-off and is **retained** (not cleared) so a recovered lead stays in the cohort.
 
 ---
 
@@ -413,12 +437,17 @@ id from `@web/core/user` (`user.userId`) — **not** `session.uid`.
 **idempotent** and **skips fresh installs** (guarded by an `ir_model_data`
 existence check), so CI's fresh install is never broken.
 
+`migrations/1.1.9/post-migrate.py` — backfills `leads.new.hard_to_reach_since` from
+existing `current_status` field-tracking (`mail.tracking.value`), so historical leads
+join the WhatsApp-rescue cohort. **Idempotent** (only `NULL` rows) and best-effort
+(any unexpected tracking shape is logged and skipped, never failing the upgrade).
+
 ---
 
 ## 16. Testing
 
 Tagged `wa_communication`; base class `WaTransactionCase` (see `tests/common.py`).
-**122 tests** at the time of writing.
+**143 tests** at the time of writing.
 
 The model is split across several files (§2) but the suite is unaffected — tests
 exercise the merged `wa.conversation` model and its public RPC API, not individual
@@ -428,6 +457,7 @@ files, so the split required **zero test changes**.
 |---|---|
 | `test_inbound_events.py` | The `OdooWaEvent` dispatch table, dedup, audit logging, error isolation, **notification routing to the assigned RM**. |
 | `test_segments.py` | Inquiry-segment attribution: flag-gating (off = no-op), workflow-send tagging, two-inquiry split, relink/move recompute, swipe-reply-to-other-property filing, `set_active_segment`, immutability. |
+| `test_property_dashboard.py` | The "By Property" view (20 cases): per-property aggregates, ranking/paging, date window, segment attribution + re-point, Unassigned bucket, one-phone-two-properties, first-response latency + median, reply rate, `lead.site.visit` outcomes (cancelled/no-show/reschedule), cost, drill-down, workflow filter, `hard_to_reach_since` capture, and the strict WhatsApp-rescue rule (positive / negative-ordering / engaged-no-progress / progressed-without-WA / never-stuck / rate-guards). |
 | `test_send_message.py` | Outbound queueing, the 24h window gate, media/template paths. |
 | `test_send_template.py` | `fetch_templates` parsing + `send_message(kind='template')`. |
 | `test_assignment.py` | Send gate, `_request_assign`, confirmation handler, request lifecycle, claim/force. |
