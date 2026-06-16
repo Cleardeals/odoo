@@ -1,4 +1,4 @@
-from odoo import fields, models, api
+from odoo import api, fields, models
 from odoo.exceptions import ValidationError
 
 
@@ -32,11 +32,13 @@ class DealOffer(models.Model):
             if record.waive_off_type == "percentage" and not (
                 0 < record.waive_off_value < 100
             ):
+                msg = "Percentage value must be greater than 0 and less than 100."
                 raise ValidationError(
-                    "Percentage value must be greater than 0 and less than 100."
+                    msg,
                 )
-            elif record.waive_off_type == "fixed" and record.waive_off_value <= 0:
-                raise ValidationError("Fixed amount value must be greater than 0.")
+            elif record.waive_off_type == "fixed" and record.waive_off_value <= 0:  # noqa: RET506
+                msg_0 = "Fixed amount value must be greater than 0."
+                raise ValidationError(msg_0)
 
     # Helper method to calculate the reduced amount based on the waive off type and value
 
