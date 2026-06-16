@@ -516,12 +516,18 @@ export class WaDashboard extends Component {
         return `${(val / 3600).toFixed(1)}h`;
     }
 
-    /** Format an ISO datetime as "25 Apr, 14:30", or "—". */
+    /** Format a backend (naive-UTC) ISO datetime as "25 Apr, 14:30" in IST, or "—". */
     fmtDateTime(isoStr) {
         if (!isoStr) return "—";
-        const d = new Date(isoStr.includes("T") ? isoStr : isoStr + "T00:00:00");
-        return d.toLocaleString("en-GB", {
+        // The server returns naive UTC (no tz suffix). Mark it UTC, then render
+        // in Asia/Kolkata so RMs see IST, not the browser's local/UTC guess.
+        let s = isoStr.includes("T") ? isoStr : isoStr.replace(" ", "T");
+        if (!/[zZ]|[+-]\d\d:?\d\d$/.test(s)) {
+            s += "Z";
+        }
+        return new Date(s).toLocaleString("en-GB", {
             day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
+            timeZone: "Asia/Kolkata",
         });
     }
 

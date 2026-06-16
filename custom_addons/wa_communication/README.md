@@ -447,7 +447,14 @@ join the WhatsApp-rescue cohort. **Idempotent** (only `NULL` rows) and best-effo
 ## 16. Testing
 
 Tagged `wa_communication`; base class `WaTransactionCase` (see `tests/common.py`).
-**143 tests** at the time of writing.
+**144 tests** at the time of writing.
+
+**Dev seed for manual testing.** `tools/dev_seed.py` (not loaded by the addon) builds a
+small, correct, tagged demo slice so the "By Property" dashboard can be hand-verified on a
+dev DB cluttered with stale pre-attribution data — including a fully-worked WhatsApp-rescue
+lead. `tools/dev_seed.py::seed(env)` (idempotent; purges its own demo rows first) and
+`purge(env)` are run from an `odoo shell`; everything is tagged (`DEVSEED-*` property uuid,
+`DEVSEED` lead source, `919999…` phones) so purge only ever touches demo rows.
 
 The model is split across several files (§2) but the suite is unaffected — tests
 exercise the merged `wa.conversation` model and its public RPC API, not individual

@@ -12,3 +12,4 @@ from . import test_interakt_client
 from . import test_conversation_model
 from . import test_segments
 from . import test_property_dashboard
+from . import test_dev_seed
