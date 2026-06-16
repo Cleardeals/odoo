@@ -1,6 +1,6 @@
 # `wa_communication` — WhatsApp ↔ Odoo Communication Layer
 
-**Version:** 1.1.1 · **Depends:** `cleardeals_pubsub`, `leads`, `cleardeals_ui`,
+**Version:** 1.1.8 · **Depends:** `cleardeals_pubsub`, `leads`, `cleardeals_ui`,
 `cleardeals_notification` · **External Python:** `google-cloud-pubsub`, `google-auth`
 
 The WhatsApp application module: it receives inbound WhatsApp traffic over GCP
@@ -103,6 +103,27 @@ quoting (`quoted_message_id`, `quoted_body`, `quoted_sender`), `cost_inr`,
 
 **`kind` values:** `template`, `freetext`, `image`, `document`, `video`, `audio`,
 `button_reply`, `text_reply`, `system`, `unknown`.
+
+### `wa.conversation` source layout
+
+`wa.conversation` is one model, but it is large, so its methods are split across
+partial-class files by responsibility. Each declares `_inherit = 'wa.conversation'`
+and is merged into the single model at registry build time — there is no behaviour
+or API difference from a one-file model; it is purely for readability.
+
+| File | Responsibility |
+|---|---|
+| `models/wa_conversation.py` | Base: record definition (fields, constraints, computes), the inbound push **dispatcher** `_process_push_event`, core lookups, and the shared `_owa_*` helpers. Module-level constants and free functions live here and are imported by the others. |
+| `models/wa_conversation_segments.py` | Inquiry-segment attribution (the "Discussing: <property>" context). |
+| `models/wa_conversation_inbound.py` | WA Cloud API webhook handlers (legacy/direct-push format). |
+| `models/wa_conversation_events.py` | `OdooWaEvent` handlers (status receipts, replies, enrollments, workflow sync). |
+| `models/wa_conversation_assignment.py` | Ownership: claim, the reassignment handshake, the send gate. |
+| `models/wa_conversation_outbound.py` | Outbound send paths (`send_message`, `send_first_message`, templates). |
+| `models/wa_conversation_serializers.py` | Read-side serializers for the OWL UI (`get_inbox`, `get_thread`). |
+
+> `_process_push_event` must stay on the base class — `test_push_controller.py`
+> patches it by its fully-qualified path. `models/__init__.py` imports the base
+> first so the partial-class files can import its module-level helpers.
 
 ---
 
@@ -397,16 +418,23 @@ existence check), so CI's fresh install is never broken.
 ## 16. Testing
 
 Tagged `wa_communication`; base class `WaTransactionCase` (see `tests/common.py`).
+**122 tests** at the time of writing.
+
+The model is split across several files (§2) but the suite is unaffected — tests
+exercise the merged `wa.conversation` model and its public RPC API, not individual
+files, so the split required **zero test changes**.
 
 | Test file | Covers |
 |---|---|
 | `test_inbound_events.py` | The `OdooWaEvent` dispatch table, dedup, audit logging, error isolation, **notification routing to the assigned RM**. |
+| `test_segments.py` | Inquiry-segment attribution: flag-gating (off = no-op), workflow-send tagging, two-inquiry split, relink/move recompute, swipe-reply-to-other-property filing, `set_active_segment`, immutability. |
 | `test_send_message.py` | Outbound queueing, the 24h window gate, media/template paths. |
 | `test_send_template.py` | `fetch_templates` parsing + `send_message(kind='template')`. |
 | `test_assignment.py` | Send gate, `_request_assign`, confirmation handler, request lifecycle, claim/force. |
 | `test_quick_reply.py` | Personal-vs-shared isolation, `get_for_composer`, record-rule access. |
 | `test_thread_serializers.py` | `get_thread` / `get_inbox` shapes incl. `can_send`. |
-| `test_push_controller.py` | OIDC verification + the HTTP push path (`WaHttpCase`). |
+| `test_push_controller.py` | OIDC verification + the HTTP push path (`WaHttpCase`). Patches `WaConversation._process_push_event` by its fully-qualified path — which is why that method stays on the base class (§2). |
+| `test_inbound_migration.py` | The conversation dedup/canonicalization pre-migration. |
 | `test_interakt_client.py`, `test_wa_message_model.py`, `test_conversation_model.py` | Client helper, message model, conversation model. |
 
 Fixtures: `make_conversation`, `make_user(manager=…)`, `make_message`,
