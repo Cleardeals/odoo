@@ -1158,7 +1158,13 @@ class WaConversation(models.Model):
             )
 
     def _handle_odoo_lead_replied(self, event: dict, pubsub_message_id: str) -> None:
-        """Handle lead_replied — buyer sent a message; create wa.message + notify RM."""
+        """Handle lead_replied — buyer sent a message; create wa.message + notify RM.
+
+        Reads as a sequence: dedup → resolve conv/lead → lock → resolve the quoted
+        context → drop companion duplicates → attribute a segment → persist the
+        message → refresh the conversation → self-heal ownership → notify.  Each
+        step's mechanics live in a named ``_owa_*`` helper below.
+        """
         phone           = event.get('phone', '')
         wa_message_id   = event.get('wa_message_id') or ''
         actor_id        = event.get('actor_id')
@@ -1182,34 +1188,12 @@ class WaConversation(models.Model):
             or ('button_reply' if button_reply_id else 'text_reply')
         )
 
-        # Deduplicate by wa_message_id — with a twist for button / CTA replies.
-        #
-        # A quick-reply tap reuses the TEMPLATE's outbound Interakt id as the
-        # reply's message id (the gateway sets it for click→template correlation).
-        # Naively deduping on that id finds the OUTBOUND template row and silently
-        # drops EVERY button reply (and makes a second, different-button tap look
-        # like a duplicate of the first).  Detect that case: when the id only
-        # matches an OUTBOUND message, that message IS the one being replied to —
-        # store the reply under a distinct id derived from the button so each tap
-        # is recorded, and link it as the quoted original.
-        store_wa_message_id = wa_message_id
-        quoted_src_from_collision = None
-        if wa_message_id:
-            existing = self._owa_find_message(wa_message_id=wa_message_id)
-            if existing and existing.direction == 'inbound':
-                _logger.debug("wa_push: lead_replied duplicate wa_message_id=%s", wa_message_id)
-                return
-            if existing and existing.direction == 'outbound':
-                quoted_src_from_collision = existing
-                suffix = (button_reply_id or message_text or 'reply').strip().replace(' ', '_')[:40]
-                store_wa_message_id = f"{wa_message_id}:r:{suffix}"
-                # Re-dedup on the synthetic id so Pub/Sub redelivery of the same
-                # tap doesn't create a second row.
-                if self._owa_find_message(wa_message_id=store_wa_message_id):
-                    _logger.debug(
-                        "wa_push: lead_replied duplicate synthetic id=%s", store_wa_message_id
-                    )
-                    return
+        # Deduplicate by wa_message_id, with the button/CTA-collision twist.
+        store_wa_message_id, quoted_src_from_collision, is_duplicate = (
+            self._owa_resolve_inbound_dedup(wa_message_id, button_reply_id, message_text)
+        )
+        if is_duplicate:
+            return
 
         conv = self._owa_get_conversation(phone)
         lead = self._owa_resolve_lead(actor_id, actor_type, phone)
@@ -1251,56 +1235,11 @@ class WaConversation(models.Model):
                 )[:140] or False
                 quoted_sender = quoted_sender or quoted_src.sender_name or 'You'
 
-        # Defensive dedup for the button-tap "companion" duplicate.
-        #
-        # A quick-reply tap emits TWO inbound events from Interakt: the button
-        # CLICK (whose id is the template's outbound id) and a companion
-        # `message_received` TEXT (its own id) carrying the same message_context.
-        # The platform is meant to click-shadow the companion so only ONE reaches
-        # us, but that shadow is time-windowed (~4s) and can miss — on a redelivery
-        # or an out-of-order batch BOTH events arrive and, because the companion
-        # carries a different wa_message_id, the id-based dedup above doesn't catch
-        # it → two identical bubbles.  Both events resolve to the SAME quoted
-        # source message with the SAME body, so when a reply references a specific
-        # prior message, treat an existing inbound with the same (quoted source,
-        # body) as the same tap and skip.  Scoped to replies that quote a source
-        # so genuine repeated free-text ("ok", "ok") is never suppressed.  Runs
-        # under the conversation's FOR UPDATE lock (acquired above), so two
-        # concurrent deliveries are serialized and the second sees the first.
-        if quoted_src:
-            twin = self.env['wa.message'].sudo().search([
-                ('conversation_id', '=', conv.id),
-                ('direction', '=', 'inbound'),
-                ('quoted_message_id', '=', quoted_src.id),
-                ('body', '=', body),
-            ], limit=1)
-            if twin:
-                _logger.info(
-                    "wa_push: lead_replied companion duplicate skipped "
-                    "(conv=%s quoted=%s body=%r existing=%s)",
-                    conv.id, quoted_src.id, body[:40], twin.id,
-                )
-                return
+        # Skip the button-tap "companion" text duplicate (same quoted source + body).
+        if self._owa_is_companion_duplicate(conv, quoted_src, body):
+            return
 
-        # Inquiry attribution (flag-gated, dormant when off):
-        #   * a reply that QUOTES a prior message is a deterministic signal — file
-        #     it under THAT message's inquiry, even when the quoted message predates
-        #     segments (use its lead_id) or belongs to another property.  This does
-        #     NOT flip the RM's active context (activate=False) — switching is a
-        #     separate, RM-driven action;
-        #   * a plain reply inherits the conversation's active segment;
-        #   * with no segment yet, bootstrap one for the resolved inquiry.
-        inbound_seg = False
-        if conv._owa_segments_enabled():
-            if quoted_src and quoted_src.segment_id:
-                inbound_seg = quoted_src.segment_id
-            elif quoted_src and quoted_src.lead_id:
-                inbound_seg = conv._owa_ensure_segment(
-                    inquiry=quoted_src.lead_id, started_by='auto_suggested', activate=False)
-            elif conv.active_segment_id:
-                inbound_seg = conv.active_segment_id
-            else:
-                inbound_seg = conv._owa_ensure_segment(inquiry=lead, started_by='system')
+        inbound_seg = self._owa_attribute_inbound_segment(conv, quoted_src, lead)
 
         self.env['wa.message'].sudo().create({
             'conversation_id':   conv.id,
@@ -1322,17 +1261,7 @@ class WaConversation(models.Model):
             'occurred_at':       occurred_at,
         })
 
-        # Update window_expires_at from platform if provided, else derive from occurred_at.
-        window_expires_at_raw = event.get('window_expires_at')
-        if window_expires_at_raw:
-            try:
-                window_expires_at = _parse_iso_dt(window_expires_at_raw)
-            except Exception:
-                window_expires_at = None
-        else:
-            from datetime import timedelta
-            window_expires_at = occurred_at + timedelta(hours=24) if occurred_at else None
-
+        window_expires_at = self._owa_inbound_window_expiry(event, occurred_at)
         conv_vals = {
             'last_message_at':      occurred_at,
             'last_message_preview': (message_text or '')[:100],
@@ -1348,29 +1277,142 @@ class WaConversation(models.Model):
         # chat yet, hand it to the lead's RM (establishes ownership on both sides).
         self._owa_autoassign_to_lead_rm(conv, lead)
 
-        # Central notification to the chat's owner — the assigned RM if the chat
-        # is assigned, else the lead's routed RM as a fallback (persistent + live).
-        recipient_id = self._owa_chat_recipient(conv, rm_odoo_id)
-        if recipient_id:
-            lead_label = self._owa_lead_label(lead, phone)
-            self._push_user_notification(
-                recipient_id, 'lead_replied',
-                title='%s replied on WhatsApp' % lead_label,
-                # Keep the actual reply text in the body so the RM can judge
-                # urgency at a glance without opening the lead.
-                body=(message_text[:160] if message_text else 'New WhatsApp reply'),
-                payload={
-                    'actor_id':  actor_id,
-                    'lead_id':   lead.id if lead else None,
-                    'lead_name': lead.name if lead else '',
-                    'phone':     phone,
-                    'suppress_key': phone,
-                },
+        # Notify the chat owner, or fan out to managers when nobody owns it.
+        self._owa_notify_reply(conv, lead, phone, rm_odoo_id, actor_id, message_text)
+
+    def _owa_resolve_inbound_dedup(self, wa_message_id, button_reply_id, message_text):
+        """Resolve the storage id and button-collision source for an inbound reply.
+
+        Returns ``(store_wa_message_id, collision_src, is_duplicate)``.  When
+        ``is_duplicate`` is True the caller must drop the event.
+
+        A quick-reply tap reuses the TEMPLATE's outbound Interakt id as the
+        reply's message id (the gateway sets it for click→template correlation).
+        Naively deduping on that id finds the OUTBOUND template row and silently
+        drops EVERY button reply (and makes a second, different-button tap look
+        like a duplicate of the first).  Detect that case: when the id only
+        matches an OUTBOUND message, that message IS the one being replied to —
+        store the reply under a distinct id derived from the button so each tap
+        is recorded, and return it as the quoted original (``collision_src``).
+        """
+        store_wa_message_id = wa_message_id
+        collision_src = None
+        if not wa_message_id:
+            return store_wa_message_id, collision_src, False
+
+        existing = self._owa_find_message(wa_message_id=wa_message_id)
+        if existing and existing.direction == 'inbound':
+            _logger.debug("wa_push: lead_replied duplicate wa_message_id=%s", wa_message_id)
+            return store_wa_message_id, collision_src, True
+        if existing and existing.direction == 'outbound':
+            collision_src = existing
+            suffix = (button_reply_id or message_text or 'reply').strip().replace(' ', '_')[:40]
+            store_wa_message_id = f"{wa_message_id}:r:{suffix}"
+            # Re-dedup on the synthetic id so Pub/Sub redelivery of the same
+            # tap doesn't create a second row.
+            if self._owa_find_message(wa_message_id=store_wa_message_id):
+                _logger.debug(
+                    "wa_push: lead_replied duplicate synthetic id=%s", store_wa_message_id
+                )
+                return store_wa_message_id, collision_src, True
+        return store_wa_message_id, collision_src, False
+
+    def _owa_is_companion_duplicate(self, conv, quoted_src, body) -> bool:
+        """True when an inbound reply quoting *quoted_src* with the same body
+        already exists — the button-tap "companion" text duplicate.
+
+        A quick-reply tap emits TWO inbound events from Interakt: the button
+        CLICK (whose id is the template's outbound id) and a companion
+        ``message_received`` TEXT (its own id) carrying the same message_context.
+        The platform is meant to click-shadow the companion so only ONE reaches
+        us, but that shadow is time-windowed (~4s) and can miss — on a redelivery
+        or an out-of-order batch BOTH events arrive and, because the companion
+        carries a different wa_message_id, the id-based dedup doesn't catch it →
+        two identical bubbles.  Both events resolve to the SAME quoted source with
+        the SAME body, so treat an existing inbound with the same (quoted source,
+        body) as the same tap and skip.  Scoped to replies that quote a source so
+        genuine repeated free-text ("ok", "ok") is never suppressed.  Runs under
+        the conversation's FOR UPDATE lock (held by the caller), so two concurrent
+        deliveries are serialized and the second sees the first.
+        """
+        if not quoted_src:
+            return False
+        twin = self.env['wa.message'].sudo().search([
+            ('conversation_id', '=', conv.id),
+            ('direction', '=', 'inbound'),
+            ('quoted_message_id', '=', quoted_src.id),
+            ('body', '=', body),
+        ], limit=1)
+        if twin:
+            _logger.info(
+                "wa_push: lead_replied companion duplicate skipped "
+                "(conv=%s quoted=%s body=%r existing=%s)",
+                conv.id, quoted_src.id, body[:40], twin.id,
             )
-        else:
-            # Nobody to route to (unknown number, or lead with no RM) — fan out to
-            # WhatsApp managers so the message isn't silently stranded in the Inbox.
+            return True
+        return False
+
+    def _owa_attribute_inbound_segment(self, conv, quoted_src, lead):
+        """Resolve the inquiry segment an inbound reply files into (flag-gated).
+
+        Dormant (returns ``False``) when segments are off.  Otherwise:
+          * a reply that QUOTES a prior message is a deterministic signal — file
+            it under THAT message's inquiry, even when the quoted message predates
+            segments (use its ``lead_id``) or belongs to another property.  This
+            does NOT flip the RM's active context (``activate=False``) — switching
+            is a separate, RM-driven action;
+          * a plain reply inherits the conversation's active segment;
+          * with no segment yet, bootstrap one for the resolved inquiry.
+        """
+        if not conv._owa_segments_enabled():
+            return False
+        if quoted_src and quoted_src.segment_id:
+            return quoted_src.segment_id
+        if quoted_src and quoted_src.lead_id:
+            return conv._owa_ensure_segment(
+                inquiry=quoted_src.lead_id, started_by='auto_suggested', activate=False)
+        if conv.active_segment_id:
+            return conv.active_segment_id
+        return conv._owa_ensure_segment(inquiry=lead, started_by='system')
+
+    @staticmethod
+    def _owa_inbound_window_expiry(event, occurred_at):
+        """Window expiry for an inbound reply: the platform value when supplied,
+        else ``occurred_at + 24h`` (``None`` when neither is available)."""
+        raw = event.get('window_expires_at')
+        if raw:
+            try:
+                return _parse_iso_dt(raw)
+            except Exception:
+                return None
+        return occurred_at + timedelta(hours=24) if occurred_at else None
+
+    def _owa_notify_reply(self, conv, lead, phone, rm_odoo_id, actor_id, message_text):
+        """Notify the chat's owner of an inbound reply (persistent + live).
+
+        Routes to the assigned RM if the chat is assigned, else the lead's routed
+        RM as a fallback.  When nobody owns it (unknown number, or a lead with no
+        RM), fan out to WhatsApp managers so the message isn't silently stranded.
+        """
+        recipient_id = self._owa_chat_recipient(conv, rm_odoo_id)
+        if not recipient_id:
             self._owa_notify_unrouted(conv, lead, phone, message_text)
+            return
+        lead_label = self._owa_lead_label(lead, phone)
+        self._push_user_notification(
+            recipient_id, 'lead_replied',
+            title='%s replied on WhatsApp' % lead_label,
+            # Keep the actual reply text in the body so the RM can judge
+            # urgency at a glance without opening the lead.
+            body=(message_text[:160] if message_text else 'New WhatsApp reply'),
+            payload={
+                'actor_id':  actor_id,
+                'lead_id':   lead.id if lead else None,
+                'lead_name': lead.name if lead else '',
+                'phone':     phone,
+                'suppress_key': phone,
+            },
+        )
 
     def _handle_odoo_ambiguous_reply(
         self, event: dict, pubsub_message_id: str
