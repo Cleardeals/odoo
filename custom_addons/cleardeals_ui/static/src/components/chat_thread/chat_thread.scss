@@ -126,6 +126,28 @@
         box-shadow: 0 1px 1px rgba(0, 0, 0, 0.12);
     }
 
+    // Inquiry-segment divider — marks where the conversation switches the
+    // property/inquiry it is about. Visually distinct from the date chip
+    // (tinted "tag" pill) so attribution boundaries are obvious.
+    &__segment-sep {
+        display: flex;
+        justify-content: center;
+        margin: 12px 0 8px;
+        pointer-events: none;
+    }
+
+    &__segment-chip {
+        background: #fff3d6;
+        color: #8a6d3b;
+        font-size: 11.5px;
+        font-weight: 600;
+        padding: 4px 12px;
+        border-radius: 10px;
+        box-shadow: 0 1px 1px rgba(0, 0, 0, 0.10);
+
+        .fa { margin-right: 4px; opacity: 0.8; }
+    }
+
     &__empty {
         flex: 1;
         display: flex;

@@ -400,6 +400,9 @@ $topbar-h: 52px;
     }
 }
 
+// The inquiry-attribution bar + switcher + suggestion now live in the reusable
+// CdInquirySwitcher component (cleardeals_ui) — see inquiry_switcher.scss.
+
 // Create-lead-from-chat modal (orphan / phone-only conversations)
 .wa-inbox__modal-overlay {
     position: fixed;

@@ -185,6 +185,27 @@ class WaConversation(models.Model):
         ondelete='set null',
         copy=False,
     )
+    active_segment_id = fields.Many2one(
+        'wa.conversation.segment',
+        string='Active Segment',
+        ondelete='set null',
+        copy=False,
+        help="The inquiry segment new messages currently file into.  Drives the "
+             "'Discussing: <property>' context in the inbox.  Dormant unless "
+             "wa_communication.segments_enabled is on.",
+    )
+    segment_ids = fields.One2many(
+        'wa.conversation.segment',
+        'conversation_id',
+        string='Segments',
+    )
+    inquiry_ids = fields.Many2many(
+        'leads.new',
+        string='Inquiries',
+        compute='_compute_inquiry_ids',
+        help="All leads.new inquiries that share this conversation's phone "
+             "(one per property).  Drives the inbox inquiry switcher.",
+    )
     message_ids = fields.One2many(
         'wa.message',
         'conversation_id',
@@ -290,6 +311,105 @@ class WaConversation(models.Model):
                 )
             else:
                 rec.interakt_inbox_url = False
+
+    def _compute_inquiry_ids(self):
+        Lead = self.env['leads.new'].sudo()
+        for rec in self:
+            phone10 = self._owa_standardize_lead_phone(rec.phone_number)
+            rec.inquiry_ids = (
+                Lead.search([('phone', '=', phone10)], order='create_date desc')
+                if phone10 else Lead.browse()
+            )
+
+    # ------------------------------------------------------------------
+    # Inquiry segments — correctable attribution (Part 1)
+    # ------------------------------------------------------------------
+
+    @api.model
+    def _owa_segments_enabled(self) -> bool:
+        """Master feature flag.  When off, no segment is created or attached and
+        the conversation behaves exactly as before this feature existed."""
+        return self.env['ir.config_parameter'].sudo().get_param(
+            'wa_communication.segments_enabled', '') in ('1', 'true', 'True')
+
+    def _owa_activate_segment(self, segment) -> None:
+        """Make *segment* the sole active segment of this conversation."""
+        self.ensure_one()
+        (self.segment_ids - segment).filtered('is_active').write({'is_active': False})
+        if not segment.is_active:
+            segment.is_active = True
+        if self.active_segment_id != segment:
+            self.active_segment_id = segment
+
+    def _owa_ensure_segment(self, inquiry=None, label=None, started_by='system',
+                            activate=True):
+        """Return a segment for *inquiry* (or a labelled one), creating it if needed.
+
+        Idempotent: if a segment for the same inquiry already exists it is reused
+        rather than duplicated.  When ``activate`` is True it also becomes the
+        conversation's active segment; pass ``activate=False`` to file a message
+        under an inquiry without hijacking the RM's current active context (e.g. a
+        swipe-reply to an *older* property's message).  Returns ``False`` when the
+        feature flag is off so callers become no-ops.
+        """
+        self.ensure_one()
+        if not self._owa_segments_enabled():
+            return False
+        Segment = self.env['wa.conversation.segment'].sudo()
+        seg = False
+        if inquiry:
+            seg = self.segment_ids.filtered(
+                lambda s: s.inquiry_id.id == inquiry.id
+            )[:1]
+        if not seg:
+            seg = Segment.create({
+                'conversation_id': self.id,
+                'inquiry_id': inquiry.id if inquiry else False,
+                'label': label or (inquiry.property_base_id.property_tag if inquiry else False),
+                'started_by': started_by,
+            })
+        elif label and not seg.label:
+            seg.label = label
+        if activate:
+            self._owa_activate_segment(seg)
+        return seg
+
+    @api.model
+    def start_segment(self, conversation_id, inquiry_id=None, label=None):
+        """RM action: open/activate a segment, optionally on a not-yet-created
+        inquiry (label-only).  Returns the segment id."""
+        conv = self.browse(conversation_id)
+        inquiry = self.env['leads.new'].browse(inquiry_id) if inquiry_id else None
+        seg = conv._owa_ensure_segment(inquiry=inquiry, label=label, started_by='rm')
+        return seg.id if seg else False
+
+    @api.model
+    def relink_segment(self, segment_id, inquiry_id):
+        """Point an existing segment at *inquiry_id* — reclassifies the whole span.
+        Used when an RM corrects attribution or when an inquiry is created later."""
+        seg = self.env['wa.conversation.segment'].browse(segment_id)
+        seg.inquiry_id = inquiry_id or False
+        if inquiry_id and not seg.label:
+            seg.label = seg.inquiry_id.property_base_id.property_tag
+        return True
+
+    @api.model
+    def move_message_to_segment(self, message_id, segment_id):
+        """Move a single mis-filed message to another segment (audited)."""
+        msg = self.env['wa.message'].browse(message_id)
+        msg.segment_id = segment_id or False
+        return True
+
+    @api.model
+    def set_active_segment(self, conversation_id, segment_id):
+        """Make an existing segment the conversation's active one (RM accepting a
+        'switch to <property>?' suggestion).  Returns the segment id, or False."""
+        conv = self.browse(conversation_id)
+        seg = self.env['wa.conversation.segment'].browse(segment_id)
+        if not (conv.exists() and seg.exists() and seg.conversation_id == conv):
+            return False
+        conv._owa_activate_segment(seg)
+        return seg.id
 
     # ------------------------------------------------------------------
     # Inbound — conversation lookup / creation
@@ -913,6 +1033,9 @@ class WaConversation(models.Model):
             # Workflow-initiated send: Odoo never created a wa.message for this
             conv  = self._owa_get_conversation(phone)
             lead  = self._owa_resolve_lead(actor_id, actor_type, phone)
+            # Deterministic attribution: a workflow send carries the true inquiry
+            # as actor_id (→ lead), so open/activate that inquiry's segment.
+            seg = conv._owa_ensure_segment(inquiry=lead, started_by='auto_suggested')
             create_vals = {
                 'conversation_id':  conv.id,
                 'wa_message_id':    wa_message_id or False,
@@ -925,6 +1048,7 @@ class WaConversation(models.Model):
                 'step_id':          step_id,
                 'enrollment_id':    enrollment_id,
                 'lead_id':          lead.id if lead else False,
+                'segment_id':       seg.id if seg else False,
                 'platform_actor_id': actor_id or 0,
                 'status':           'sent',
                 'status_updated_at': fields.Datetime.now(),
@@ -1158,6 +1282,26 @@ class WaConversation(models.Model):
                 )
                 return
 
+        # Inquiry attribution (flag-gated, dormant when off):
+        #   * a reply that QUOTES a prior message is a deterministic signal — file
+        #     it under THAT message's inquiry, even when the quoted message predates
+        #     segments (use its lead_id) or belongs to another property.  This does
+        #     NOT flip the RM's active context (activate=False) — switching is a
+        #     separate, RM-driven action;
+        #   * a plain reply inherits the conversation's active segment;
+        #   * with no segment yet, bootstrap one for the resolved inquiry.
+        inbound_seg = False
+        if conv._owa_segments_enabled():
+            if quoted_src and quoted_src.segment_id:
+                inbound_seg = quoted_src.segment_id
+            elif quoted_src and quoted_src.lead_id:
+                inbound_seg = conv._owa_ensure_segment(
+                    inquiry=quoted_src.lead_id, started_by='auto_suggested', activate=False)
+            elif conv.active_segment_id:
+                inbound_seg = conv.active_segment_id
+            else:
+                inbound_seg = conv._owa_ensure_segment(inquiry=lead, started_by='system')
+
         self.env['wa.message'].sudo().create({
             'conversation_id':   conv.id,
             'wa_message_id':     store_wa_message_id or False,
@@ -1172,6 +1316,7 @@ class WaConversation(models.Model):
             'quoted_sender':     quoted_sender or False,
             'quoted_message_id': quoted_src.id if quoted_src else False,
             'lead_id':           lead.id if lead else False,
+            'segment_id':        inbound_seg.id if inbound_seg else False,
             'platform_actor_id': actor_id or 0,
             'status':            'delivered',
             'occurred_at':       occurred_at,
@@ -1559,6 +1704,15 @@ class WaConversation(models.Model):
         # Odoo can correlate status receipts with this wa.message record.
         effective_request_id = request_id if request_id else str(_uuid.uuid4())
 
+        # File the send into the conversation's active inquiry segment (flag-gated).
+        # The RM is the source of truth for which property a free-text send is about
+        # and sets it via the inbox banner; we honour the current active segment, or
+        # bootstrap one for the linked lead if none is active yet.
+        send_seg = False
+        if self._owa_segments_enabled():
+            send_seg = self.active_segment_id or self._owa_ensure_segment(
+                inquiry=self.lead_id or None, started_by='rm')
+
         wa_msg = self.env['wa.message'].create({
             'conversation_id': self.id,
             'direction': 'outbound',
@@ -1573,6 +1727,7 @@ class WaConversation(models.Model):
             'step_id': step_id or False,
             'enrollment_id': enrollment_id or False,
             'lead_id': self.lead_id.id if self.lead_id else False,
+            'segment_id': send_seg.id if send_seg else False,
             'sender_name': self.env.user.name if initiator == 'rm' else None,
             'status': 'queued',
             'occurred_at': fields.Datetime.now(),
@@ -2363,6 +2518,18 @@ class WaConversation(models.Model):
 
         # Establish chat ownership for the resolved RM (platform round-trip).
         self._owa_autoassign_to_lead_rm(conv, lead)
+
+        # Keystone for the "inquiry created after the conversation" case: bind the
+        # active (label-only) segment to the freshly-created inquiry, so its
+        # messages reclassify to this property without touching their immutable
+        # lead_id.  Falls back to ensuring a segment for the lead when none active.
+        if conv._owa_segments_enabled():
+            seg = conv.active_segment_id
+            if seg and not seg.inquiry_id:
+                self.relink_segment(seg.id, lead.id)
+            else:
+                conv._owa_ensure_segment(inquiry=lead, started_by='rm')
+
         conv._owa_log_system_event("Lead created from chat: %s" % lead.name)
         return lead.id
 
@@ -2407,6 +2574,8 @@ class WaConversation(models.Model):
                 'quoted_media_url': msg.quoted_message_id.media_url if msg.quoted_message_id else None,
                 'template_replied_to': msg.template_replied_to or None,
                 'lead_id': msg.lead_id.id if msg.lead_id else None,
+                'segment_id': msg.segment_id.id if msg.segment_id else None,
+                'segment_label': msg.segment_id.display_name if msg.segment_id else None,
                 'workflow_slug': msg.workflow_slug or None,
                 'delivered_at': msg.delivered_at.isoformat() if msg.delivered_at else None,
                 'seen_at': msg.seen_at.isoformat() if msg.seen_at else None,
@@ -2481,9 +2650,44 @@ class WaConversation(models.Model):
                 ])),
                 # Handover requests awaiting THIS user's approval (persistent).
                 'incoming_requests': incoming_requests,
+                # Inquiry-attribution context (dormant unless segments_enabled).
+                **conv._owa_segment_thread_context(),
             },
             'messages': messages,
             'stats': stats,
+        }
+
+    def _owa_segment_thread_context(self) -> dict:
+        """Segment/inquiry context block merged into the get_thread payload.
+
+        Returns ``segments_enabled=False`` (and nothing else) when the feature is
+        off, so the inbox renders exactly as before.  When on, surfaces the active
+        segment, the list of segments, and every inquiry on this phone for the
+        switcher.
+        """
+        self.ensure_one()
+        if not self._owa_segments_enabled():
+            return {'segments_enabled': False}
+
+        def _seg(s):
+            return {
+                'id': s.id,
+                'label': s.display_name,
+                'inquiry_id': s.inquiry_id.id if s.inquiry_id else None,
+                'property': s.property_base_id.property_tag or None,
+                'message_count': s.message_count,
+            }
+
+        return {
+            'segments_enabled': True,
+            'active_segment': _seg(self.active_segment_id) if self.active_segment_id else None,
+            'segments': [_seg(s) for s in self.segment_ids],
+            'inquiries': [{
+                'id': lead.id,
+                'name': lead.name or '',
+                'property': lead.property_base_id.property_tag
+                            or (lead.property_base_id.display_name if lead.property_base_id else None),
+            } for lead in self.inquiry_ids],
         }
 
     @staticmethod

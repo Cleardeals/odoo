@@ -39,3 +39,4 @@ export { CdChatComposer }            from "./components/chat_composer/chat_compo
 export { CdConversationListItem }    from "./components/conversation_list_item/conversation_list_item";
 export { CdQuickReplyPicker }        from "./components/quick_reply_picker/quick_reply_picker";
 export { CdTemplatePickerModal }     from "./components/template_picker_modal/template_picker_modal";
+export { CdInquirySwitcher }         from "./components/inquiry_switcher/inquiry_switcher";

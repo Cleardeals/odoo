@@ -10,3 +10,4 @@ from . import test_thread_serializers
 from . import test_wa_message_model
 from . import test_interakt_client
 from . import test_conversation_model
+from . import test_segments

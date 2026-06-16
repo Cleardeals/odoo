@@ -52,10 +52,17 @@
                         <p>No messages yet</p>
                     </div>
                 </t>
-                <t t-foreach="items" t-as="item" t-key="item.type === 'date' ? ('d-' + item.key) : ('m-' + item.msg.id)">
+                <t t-foreach="items" t-as="item" t-key="item.type === 'date' ? ('d-' + item.key) : (item.type === 'segment' ? ('s-' + item_index) : ('m-' + item.msg.id))">
                     <t t-if="item.type === 'date'">
                         <div class="cd-chat-thread__date-sep">
                             <span class="cd-chat-thread__date-chip" t-esc="item.label"/>
+                        </div>
+                    </t>
+                    <t t-elif="item.type === 'segment'">
+                        <div class="cd-chat-thread__segment-sep">
+                            <span class="cd-chat-thread__segment-chip">
+                                <i class="fa fa-tag" aria-hidden="true"/> <t t-esc="item.label"/>
+                            </span>
                         </div>
                     </t>
                     <t t-else="">

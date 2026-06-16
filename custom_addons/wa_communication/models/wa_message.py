@@ -227,6 +227,56 @@ class WaMessage(models.Model):
     )
 
     # ------------------------------------------------------------------
+    # Inquiry attribution (additive, correctable — see wa.conversation.segment)
+    # ------------------------------------------------------------------
+    #
+    # ``lead_id`` above is the immutable create-time best-guess and is never
+    # touched.  ``segment_id`` is a *mutable* overlay: re-pointing a segment (or
+    # moving a message to another segment) reclassifies the message for analytics
+    # via ``effective_inquiry_id`` / ``effective_property_id`` WITHOUT mutating any
+    # immutable fact.  With no segment set, the effective_* fields fall back to
+    # ``lead_id`` — i.e. today's behaviour, unchanged.
+
+    segment_id = fields.Many2one(
+        'wa.conversation.segment',
+        string='Segment',
+        index=True,
+        ondelete='set null',
+        copy=False,
+        help="The attribution segment this message belongs to.  Writable/audited "
+             "so an RM can move a mis-filed message to the right inquiry.  Null "
+             "behaves exactly as before (effective_* fall back to lead_id).",
+    )
+    effective_inquiry_id = fields.Many2one(
+        'leads.new',
+        string='Effective Inquiry',
+        compute='_compute_effective_attribution',
+        store=True,
+        index=True,
+        help="The corrected inquiry for analytics: segment's inquiry if set, "
+             "else the create-time lead_id.  Group analytics on this, not lead_id.",
+    )
+    effective_property_id = fields.Many2one(
+        'property.base',
+        string='Effective Property',
+        compute='_compute_effective_attribution',
+        store=True,
+        index=True,
+        help="Property of the effective inquiry — the analytics group key for "
+             "'messages per property' that stays correct after re-pointing.",
+    )
+
+    @api.depends(
+        'segment_id', 'segment_id.inquiry_id', 'segment_id.inquiry_id.property_base_id',
+        'lead_id', 'lead_id.property_base_id',
+    )
+    def _compute_effective_attribution(self):
+        for rec in self:
+            inquiry = rec.segment_id.inquiry_id or rec.lead_id
+            rec.effective_inquiry_id = inquiry
+            rec.effective_property_id = inquiry.property_base_id if inquiry else False
+
+    # ------------------------------------------------------------------
     # Delivery status
     # ------------------------------------------------------------------
 

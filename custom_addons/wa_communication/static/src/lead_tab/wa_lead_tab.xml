@@ -76,6 +76,18 @@
                             </span>
                         </div>
                     </t>
+                    <!-- Inquiry-attribution bar: which property this chat is currently about. -->
+                    <CdInquirySwitcher
+                        segmentsEnabled="segmentsEnabled"
+                        activeLabel="activeSegmentLabel"
+                        activeInquiryId="activeSegmentInquiryId"
+                        inquiries="inquiries"
+                        suggestion="segmentSuggestion"
+                        onSwitch.bind="switchInquiry"
+                        onStartTopic.bind="startTopic"
+                        onAcceptSuggestion.bind="acceptSuggestion"
+                        onDismissSuggestion.bind="dismissSuggestion"/>
+
                     <CdChatThread messages="messages"/>
                     <!-- Ownership action bar (shown when the RM can't send) -->
                     <t t-if="!canSend">
