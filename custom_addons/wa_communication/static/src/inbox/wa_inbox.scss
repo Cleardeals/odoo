@@ -400,62 +400,8 @@ $topbar-h: 52px;
     }
 }
 
-// Inquiry-attribution bar — "Discussing: <property>" + switcher.
-// Neutral class (wa-segment-*) so the inbox AND the lead-form WhatsApp tab share
-// one style block; both live in the wa_communication asset bundle.
-.wa-segment-bar {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 6px 12px;
-    margin: 6px 8px;
-    background: #fff8e8;
-    border: 1px solid #f3e0b3;
-    border-radius: 6px;
-    font-size: 13px;
-    color: #6b5320;
-
-    .wa-segment-label {
-        flex: 1;
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-
-        .fa { opacity: 0.8; }
-        b { color: #4a3a12; }
-    }
-
-    .wa-segment-controls {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        flex-shrink: 0;
-    }
-
-    .wa-segment-select { max-width: 200px; }
-    .wa-segment-input  { width: 180px; }
-}
-
-// "Switch to <property>?" suggestion when the lead's latest reply is about a
-// different inquiry than the active banner. Shared by inbox + lead-form tab.
-.wa-segment-suggest {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 5px 12px;
-    margin: 0 8px 6px;
-    background: #eef6ff;
-    border: 1px solid #b6d4fe;
-    border-radius: 6px;
-    font-size: 12.5px;
-    color: #084298;
-
-    .wa-segment-suggest-text { flex: 1; .fa { margin-right: 4px; opacity: 0.85; } }
-    .wa-segment-suggest-actions { display: flex; gap: 4px; flex-shrink: 0; }
-}
+// The inquiry-attribution bar + switcher + suggestion now live in the reusable
+// CdInquirySwitcher component (cleardeals_ui) — see inquiry_switcher.scss.
 
 // Create-lead-from-chat modal (orphan / phone-only conversations)
 .wa-inbox__modal-overlay {

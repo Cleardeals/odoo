@@ -9,6 +9,7 @@ import { CdChatThread }  from "@cleardeals_ui/index";
 import { CdChatComposer } from "@cleardeals_ui/index";
 import { CdWindowBadge } from "@cleardeals_ui/index";
 import { CdTemplatePickerModal } from "@cleardeals_ui/index";
+import { CdInquirySwitcher } from "@cleardeals_ui/index";
 import { relativeTime } from "@cleardeals_ui/utils/datetime";
 
 const DATE_RANGES = [
@@ -35,7 +36,7 @@ const STATUS_COLORS = {
 export class WaInbox extends Component {
     static template   = "wa_communication.WaInbox";
     static props      = { "*": true };
-    static components = { CdChatThread, CdChatComposer, CdWindowBadge, CdTemplatePickerModal, AutoComplete };
+    static components = { CdChatThread, CdChatComposer, CdWindowBadge, CdTemplatePickerModal, CdInquirySwitcher, AutoComplete };
 
     setup() {
         this.orm        = useService("orm");
@@ -75,10 +76,8 @@ export class WaInbox extends Component {
             tplLoading:         false,
             tplError:           "",
 
-            // Inquiry segment "new topic" inline input
-            showTopicInput:     false,
-            topicLabel:         "",
-            dismissedSegmentId: null,   // suggestion the RM dismissed this session
+            // Inquiry segment: suggestion the RM dismissed this session
+            dismissedSegmentId: null,
 
             // Create-lead-from-chat modal (orphan / phone-only conversations)
             showCreateLead:     false,
@@ -442,34 +441,19 @@ export class WaInbox extends Component {
         return this.activeConversation?.inquiries || [];
     }
 
-    /** The inquiry id the active segment currently points at (for <select>). */
+    /** The inquiry id the active segment currently points at. */
     get activeSegmentInquiryId() {
-        return this.activeConversation?.active_segment?.inquiry_id || "";
+        return this.activeConversation?.active_segment?.inquiry_id || null;
     }
 
-    /** Switch the active context to an existing inquiry. Empty value is ignored. */
-    async onSegmentSelect(ev) {
-        const inquiryId = ev.target.value ? parseInt(ev.target.value, 10) : null;
-        if (!inquiryId) return;
-        await this._startSegment({ inquiry_id: inquiryId });
-    }
-
-    toggleTopicInput() {
-        this.state.showTopicInput = !this.state.showTopicInput;
-        this.state.topicLabel = "";
-    }
-
-    onTopicInput(ev) {
-        this.state.topicLabel = ev.target.value;
+    /** Switch the active context to an existing inquiry (CdInquirySwitcher onSwitch). */
+    switchInquiry(inquiryId) {
+        return this._startSegment({ inquiry_id: inquiryId });
     }
 
     /** Open a label-only segment for a topic whose inquiry doesn't exist yet. */
-    async addTopic() {
-        const label = (this.state.topicLabel || "").trim();
-        if (!label) return;
-        await this._startSegment({ label });
-        this.state.showTopicInput = false;
-        this.state.topicLabel = "";
+    startTopic(label) {
+        return this._startSegment({ label });
     }
 
     async _startSegment(kw) {

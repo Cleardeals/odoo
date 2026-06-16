@@ -1,0 +1,290 @@
+// CdInquirySwitcher — the "Discussing: <property>" attribution bar.
+// A clean, product-grade header: muted lead label, a green inquiry pill with a
+// custom dropdown (no native <select>), an inline topic creator, and an info
+// suggestion chip.
+
+.cd-inq {
+    --cd-inq-accent: #1b7f4b;          // cleardeals green
+    --cd-inq-accent-soft: #e7f4ec;
+    --cd-inq-accent-line: #c5e6d4;
+    position: relative;
+    z-index: 6;
+
+    &__bar {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 14px;
+        background: #fbfcfe;
+        border-bottom: 1px solid #e8edf3;
+    }
+
+    // "Discussing" lead label
+    &__lead {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: #8a94a6;
+        white-space: nowrap;
+
+        .fa { font-size: 12px; opacity: 0.8; }
+    }
+
+    // ── The pill button + dropdown ─────────────────────────────────────────────
+    &__picker { position: relative; }
+
+    &__pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        max-width: 320px;
+        padding: 5px 10px 5px 13px;
+        border: 1px solid var(--cd-inq-accent-line);
+        border-radius: 999px;
+        background: var(--cd-inq-accent-soft);
+        color: #14633a;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
+
+        &:hover { background: #dcefe4; }
+        &--open {
+            background: #fff;
+            border-color: var(--cd-inq-accent);
+            box-shadow: 0 0 0 3px rgba(27, 127, 75, 0.12);
+        }
+    }
+
+    &__pill-label {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    &__pill-caret {
+        font-size: 13px;
+        opacity: 0.7;
+        transition: transform 0.15s ease;
+        .cd-inq__pill--open & { transform: rotate(180deg); }
+    }
+
+    // ── Dropdown menu ──────────────────────────────────────────────────────────
+    &__menu {
+        position: absolute;
+        top: calc(100% + 6px);
+        left: 0;
+        display: flex;
+        flex-direction: column;
+        min-width: 268px;
+        max-width: 360px;
+        // Never taller than the viewport allows; the option list scrolls inside.
+        // Interpolated so Sass emits raw CSS min() instead of trying to evaluate
+        // it at compile time (px/vh can't be compared by the Sass compiler).
+        max-height: #{"min(340px, 60vh)"};
+        background: #fff;
+        border: 1px solid #e4e9f0;
+        border-radius: 12px;
+        box-shadow: 0 12px 32px rgba(16, 24, 40, 0.16);
+        padding: 6px;
+        z-index: 30;
+        animation: cd-inq-pop 0.12s ease-out;
+    }
+
+    // The scrollable region — header and the "New topic" footer stay pinned.
+    &__menu-list {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+        overscroll-behavior: contain;   // don't scroll-chain into the chat thread
+
+        // slim, unobtrusive scrollbar
+        scrollbar-width: thin;
+        scrollbar-color: #cdd5e0 transparent;
+        &::-webkit-scrollbar { width: 8px; }
+        &::-webkit-scrollbar-thumb {
+            background: #cdd5e0;
+            border-radius: 8px;
+            border: 2px solid #fff;
+        }
+        &::-webkit-scrollbar-thumb:hover { background: #b6c0cf; }
+    }
+
+    &__menu-head {
+        flex: 0 0 auto;
+        font-size: 10.5px;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: #98a2b3;
+        padding: 6px 10px 4px;
+    }
+
+    &__menu-sep {
+        height: 1px;
+        background: #eef1f5;
+        margin: 5px 4px;
+    }
+
+    &__opt {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        width: 100%;
+        text-align: left;
+        padding: 8px 10px;
+        border: 0;
+        border-radius: 8px;
+        background: transparent;
+        cursor: pointer;
+        transition: background 0.1s ease;
+
+        &:hover { background: #f4f7fb; }
+
+        &--active {
+            background: var(--cd-inq-accent-soft);
+            &:hover { background: #ddeee4; }
+        }
+
+        &--new {
+            color: var(--cd-inq-accent);
+            font-weight: 600;
+            font-size: 13px;
+            .fa { font-size: 12px; }
+        }
+    }
+
+    &__opt-main {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        line-height: 1.25;
+    }
+
+    &__opt-prop {
+        font-size: 13px;
+        font-weight: 600;
+        color: #1f2a37;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    &__opt-sub {
+        font-size: 11.5px;
+        color: #98a2b3;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    &__opt-check {
+        color: var(--cd-inq-accent);
+        font-size: 13px;
+        flex-shrink: 0;
+    }
+
+    &__empty {
+        padding: 8px 10px;
+        font-size: 12.5px;
+        color: #98a2b3;
+    }
+
+    // ── Inline "new topic" creator ─────────────────────────────────────────────
+    &__topic {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        flex: 1;
+        min-width: 0;
+    }
+
+    &__topic-input {
+        flex: 1;
+        max-width: 280px;
+        height: 30px;
+        padding: 4px 10px;
+        border: 1px solid #d6dde7;
+        border-radius: 8px;
+        font-size: 13px;
+        outline: none;
+        transition: border-color 0.12s ease, box-shadow 0.12s ease;
+
+        &:focus {
+            border-color: var(--cd-inq-accent);
+            box-shadow: 0 0 0 3px rgba(27, 127, 75, 0.12);
+        }
+    }
+
+    &__topic-cancel { padding-left: 4px; padding-right: 4px; }
+
+    // ── Suggestion chip ────────────────────────────────────────────────────────
+    &__suggest {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 7px 14px;
+        background: #eff5ff;
+        border-bottom: 1px solid #d5e4fb;
+        font-size: 12.5px;
+        color: #1d4ed8;
+        animation: cd-inq-slide 0.16s ease-out;
+    }
+
+    &__suggest-text {
+        flex: 1;
+        min-width: 0;
+        .fa { margin-right: 5px; opacity: 0.85; }
+        b { color: #1e3a8a; }
+    }
+
+    &__suggest-actions {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-shrink: 0;
+    }
+
+    &__suggest-switch {
+        border: 0;
+        border-radius: 7px;
+        padding: 4px 12px;
+        background: #2563eb;
+        color: #fff;
+        font-size: 12.5px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.12s ease;
+        &:hover { background: #1d4ed8; }
+    }
+
+    &__suggest-x {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
+        border: 0;
+        border-radius: 6px;
+        background: transparent;
+        color: #6b86c4;
+        cursor: pointer;
+        transition: background 0.12s ease, color 0.12s ease;
+        &:hover { background: #dde9fd; color: #1d4ed8; }
+    }
+}
+
+@keyframes cd-inq-pop {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes cd-inq-slide {
+    from { opacity: 0; transform: translateY(-3px); }
+    to   { opacity: 1; transform: translateY(0); }
+}

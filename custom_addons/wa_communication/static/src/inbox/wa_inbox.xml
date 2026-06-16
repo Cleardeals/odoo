@@ -134,64 +134,16 @@
                             </div>
 
                             <!-- Inquiry-attribution bar: which property this chat is currently about. -->
-                            <t t-if="segmentsEnabled">
-                                <div class="wa-segment-bar">
-                                    <span class="wa-segment-label" title="New messages file under this inquiry">
-                                        <i class="fa fa-tag" aria-hidden="true"/>
-                                        Discussing: <b t-esc="activeSegmentLabel"/>
-                                    </span>
-                                    <div class="wa-segment-controls">
-                                        <t t-if="inquiries.length">
-                                            <select class="form-select form-select-sm wa-segment-select"
-                                                    t-on-change="(ev) => this.onSegmentSelect(ev)"
-                                                    title="Switch which property this conversation is about">
-                                                <option value="">Switch inquiry…</option>
-                                                <t t-foreach="inquiries" t-as="inq" t-key="inq.id">
-                                                    <option t-att-value="inq.id"
-                                                            t-att-selected="inq.id === activeSegmentInquiryId"
-                                                            t-esc="inq.property || inq.name"/>
-                                                </t>
-                                            </select>
-                                        </t>
-                                        <t t-if="!state.showTopicInput">
-                                            <button class="btn btn-sm btn-outline-secondary"
-                                                    t-on-click="() => this.toggleTopicInput()"
-                                                    title="Start a new topic before its inquiry exists">
-                                                <i class="fa fa-plus" aria-hidden="true"/> New topic
-                                            </button>
-                                        </t>
-                                        <t t-else="">
-                                            <input type="text" class="form-control form-control-sm wa-segment-input"
-                                                   placeholder="e.g. Green Acres 2BHK"
-                                                   t-att-value="state.topicLabel"
-                                                   t-on-input="(ev) => this.onTopicInput(ev)"
-                                                   t-on-keydown="(ev) => ev.key === 'Enter' and this.addTopic()"/>
-                                            <button class="btn btn-sm btn-primary"
-                                                    t-on-click="() => this.addTopic()">Add</button>
-                                            <button class="btn btn-sm btn-link"
-                                                    t-on-click="() => this.toggleTopicInput()">Cancel</button>
-                                        </t>
-                                    </div>
-                                </div>
-                                <t t-if="segmentSuggestion">
-                                    <div class="wa-segment-suggest">
-                                        <span class="wa-segment-suggest-text">
-                                            <i class="fa fa-lightbulb-o" aria-hidden="true"/>
-                                            Lead replied about <b t-esc="segmentSuggestion.label"/>.
-                                        </span>
-                                        <span class="wa-segment-suggest-actions">
-                                            <button class="btn btn-sm btn-primary"
-                                                    t-on-click="() => this.acceptSuggestion(segmentSuggestion.segment_id)">
-                                                Switch to this
-                                            </button>
-                                            <button class="btn btn-sm btn-link"
-                                                    t-on-click="() => this.dismissSuggestion(segmentSuggestion.segment_id)">
-                                                Dismiss
-                                            </button>
-                                        </span>
-                                    </div>
-                                </t>
-                            </t>
+                            <CdInquirySwitcher
+                                segmentsEnabled="segmentsEnabled"
+                                activeLabel="activeSegmentLabel"
+                                activeInquiryId="activeSegmentInquiryId"
+                                inquiries="inquiries"
+                                suggestion="segmentSuggestion"
+                                onSwitch.bind="switchInquiry"
+                                onStartTopic.bind="startTopic"
+                                onAcceptSuggestion.bind="acceptSuggestion"
+                                onDismissSuggestion.bind="dismissSuggestion"/>
 
                             <t t-if="state.sendError">
                                 <div class="alert alert-danger wa-inbox__send-error" t-esc="state.sendError"/>

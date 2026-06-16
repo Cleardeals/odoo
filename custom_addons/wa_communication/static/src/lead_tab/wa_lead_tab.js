@@ -9,6 +9,7 @@ import { CdChatThread }   from "@cleardeals_ui/index";
 import { CdChatComposer } from "@cleardeals_ui/index";
 import { CdWindowBadge }  from "@cleardeals_ui/index";
 import { CdTemplatePickerModal } from "@cleardeals_ui/index";
+import { CdInquirySwitcher } from "@cleardeals_ui/index";
 
 const WF_STATUS_MAP = {
     active:   { label: "Active",   key: "active" },
@@ -22,7 +23,7 @@ const WF_STATUS_MAP = {
 export class WaLeadTab extends Component {
     static template   = "wa_communication.WaLeadTab";
     static props      = { ...standardWidgetProps };
-    static components = { CdChatThread, CdChatComposer, CdWindowBadge, CdTemplatePickerModal };
+    static components = { CdChatThread, CdChatComposer, CdWindowBadge, CdTemplatePickerModal, CdInquirySwitcher };
 
     setup() {
         this.orm        = useService("orm");
@@ -46,9 +47,7 @@ export class WaLeadTab extends Component {
             templates:          [],
             tplLoading:         false,
             tplError:           "",
-            // Inquiry segment "new topic" inline input
-            showTopicInput:     false,
-            topicLabel:         "",
+            // Inquiry segment: suggestion the RM dismissed this session
             dismissedSegmentId: null,
         });
 
@@ -311,30 +310,15 @@ export class WaLeadTab extends Component {
         return this.conversation?.inquiries || [];
     }
     get activeSegmentInquiryId() {
-        return this.conversation?.active_segment?.inquiry_id || "";
+        return this.conversation?.active_segment?.inquiry_id || null;
     }
 
-    async onSegmentSelect(ev) {
-        const inquiryId = ev.target.value ? parseInt(ev.target.value, 10) : null;
-        if (!inquiryId) return;
-        await this._startSegment({ inquiry_id: inquiryId });
+    switchInquiry(inquiryId) {
+        return this._startSegment({ inquiry_id: inquiryId });
     }
 
-    toggleTopicInput() {
-        this.state.showTopicInput = !this.state.showTopicInput;
-        this.state.topicLabel = "";
-    }
-
-    onTopicInput(ev) {
-        this.state.topicLabel = ev.target.value;
-    }
-
-    async addTopic() {
-        const label = (this.state.topicLabel || "").trim();
-        if (!label) return;
-        await this._startSegment({ label });
-        this.state.showTopicInput = false;
-        this.state.topicLabel = "";
+    startTopic(label) {
+        return this._startSegment({ label });
     }
 
     async _startSegment(kw) {
