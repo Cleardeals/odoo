@@ -82,6 +82,8 @@ export class WaDashboard extends Component {
             trends:            [],
             worklists:         null,
             commandLoading:    false,
+            // Needs-reply aging filter ("" = all, else "0-4h" | "4-24h" | ">24h")
+            needsReplyAge:     "",
             // ── By RM ──
             rmRows:            [],
             rmLoading:         false,
@@ -199,6 +201,37 @@ export class WaDashboard extends Component {
         const s = isoStr.includes("T") ? isoStr : isoStr + "T00:00:00";
         const d = new Date(s);
         return d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+    }
+
+    /** True when the trend series spans more than one calendar day. */
+    get _trendsMultiDay() {
+        const days = new Set(this.state.trends.map((t) => (t.date || "").split("T")[0]));
+        return days.size > 1;
+    }
+
+    /**
+     * Adaptive trend-axis label. Hourly points (≤2-day ranges) read as a clean
+     * local hour ("2 PM"), prefixed with the day ("16 Jun 2 PM") when the range
+     * covers more than one day. Daily points fall back to "25 Apr".
+     * Backend hourly timestamps are already in business-tz, so we read the hour
+     * straight from the string (no second tz conversion).
+     */
+    _fmtTrendLabel(isoStr, granularity) {
+        if (!isoStr) return "—";
+        if (granularity === "hour") {
+            const [datePart, timePart = "00"] = isoStr.split("T");
+            const hour = parseInt(timePart.slice(0, 2), 10) || 0;
+            const ampm = hour < 12 ? "AM" : "PM";
+            const h12 = ((hour + 11) % 12) + 1;
+            const hourLabel = `${h12} ${ampm}`;
+            if (this._trendsMultiDay) {
+                const day = new Date(datePart + "T00:00:00").toLocaleDateString(
+                    "en-GB", { day: "numeric", month: "short" });
+                return `${day} ${hourLabel}`;
+            }
+            return hourLabel;
+        }
+        return this._fmtDateShort(isoStr);
     }
 
     // ── Data loaders ─────────────────────────────────────────────────────────
@@ -369,10 +402,15 @@ export class WaDashboard extends Component {
     // ── Navigation (analytics → action) ──────────────────────────────────────
 
     openConversation(row) {
-        // Open the WhatsApp inbox focused on this conversation.
+        // Open the WhatsApp inbox focused on this exact conversation. We pass the
+        // conversation id (to auto-open the thread) and the phone (so the inbox can
+        // widen its list filter and surface just this chat, even if it's days old).
         this.action.doAction(
             { type: "ir.actions.client", tag: "wa_inbox" },
-            { additionalContext: { default_conversation_id: row.conversation_id } },
+            { additionalContext: {
+                default_conversation_id: row.conversation_id,
+                default_phone: row.phone || "",
+            } },
         );
     }
 
@@ -383,26 +421,30 @@ export class WaDashboard extends Component {
         if (!m) return [];
         const d = m.deltas || {};
         const dl = (k) => (d[k] == null ? undefined : d[k]);   // null → absent (OWL props)
+        const u = m.delta_units || {};
         const spark = (key) => this.state.trends.map((t) => t[key]);
         return [
             { label: "Reply rate", value: this.fmtRate(m.reply_rate), delta: dl("reply_rate"),
-              sub: `${m.replied} of ${m.leads_messaged} messaged`, spark: spark("replies"),
+              unit: u.reply_rate, sub: `${m.replied} of ${m.leads_messaged} messaged`,
+              spark: spark("replies"),
               tooltip: "Of leads we messaged on WhatsApp, the share that replied." },
             { label: "Median response", value: this.fmtSecs(m.first_response_median),
-              delta: dl("first_response_median"), invert: true,
+              delta: dl("first_response_median"), unit: u.first_response_median, invert: true,
               sub: `p90 ${this.fmtSecs(m.first_response_p90)}`,
               tooltip: "Median time for an RM's first reply, counted in business hours only." },
             { label: "SLA adherence", value: this.fmtRate(m.sla_pct), delta: dl("sla_pct"),
-              sub: `within ${m.sla_minutes}m`,
+              unit: u.sla_pct, sub: `within ${m.sla_minutes}m`,
               tooltip: "Share of customers first-replied-to within the SLA target (business hours)." },
             { label: "Delivery rate", value: this.fmtRate(m.delivery_rate), delta: dl("delivery_rate"),
-              sub: `${m.delivered} delivered`,
+              unit: u.delivery_rate, sub: `${m.delivered} delivered`,
               tooltip: "Delivered (or read) messages as a share of those sent." },
             { label: "Failure rate", value: this.fmtRate(m.failure_rate), delta: dl("failure_rate"),
-              invert: true, sub: m.opt_outs ? `${m.opt_outs} opt-outs` : "channel health",
+              unit: u.failure_rate, invert: true,
+              sub: m.opt_outs ? `${m.opt_outs} opt-outs` : "channel health",
               spark: spark("failed"),
               tooltip: "Failed sends (blocked / invalid / opted-out / rate-limited / template errors) as a share of sent." },
-            { label: "WhatsApp spend", value: this.fmtMoney(m.spend), delta: dl("spend"), invert: true,
+            { label: "WhatsApp spend", value: this.fmtMoney(m.spend), delta: dl("spend"),
+              unit: u.spend, invert: true,
               sub: `₹${m.cost_per_reply}/reply`, spark: spark("spend"),
               tooltip: "Total WhatsApp message cost, and cost per reply earned." },
         ];
@@ -410,7 +452,7 @@ export class WaDashboard extends Component {
 
     get volumeChart() {
         const t = this.state.trends;
-        const labels = t.map((x) => this._fmtDateShort(x.date));
+        const labels = t.map((x) => this._fmtTrendLabel(x.date, x.granularity));
         return {
             data: {
                 labels,
@@ -431,7 +473,7 @@ export class WaDashboard extends Component {
         const t = this.state.trends;
         return {
             data: {
-                labels: t.map((x) => this._fmtDateShort(x.date)),
+                labels: t.map((x) => this._fmtTrendLabel(x.date, x.granularity)),
                 datasets: [
                     { label: "Failed", data: t.map((x) => x.failed), backgroundColor: "#ef4444" },
                 ],
@@ -442,34 +484,92 @@ export class WaDashboard extends Component {
 
     get needsReplyBuckets() {
         const b = (this.state.worklists && this.state.worklists.needs_reply.buckets) || {};
+        // Three wall-clock "how long waiting" buckets that partition the total,
+        // plus a cross-cutting SLA "Overdue" filter — the breach count managers act on.
         return [
-            { label: "0-4h", value: b["0-4h"] || 0 },
-            { label: "4-24h", value: b["4-24h"] || 0, tone: "warn" },
-            { label: ">24h", value: b[">24h"] || 0, tone: "bad" },
+            { label: "Overdue", key: "overdue", value: b["overdue"] || 0, tone: "alert" },
+            { label: "0–4h", key: "0-4h", value: b["0-4h"] || 0, tone: "good" },
+            { label: "4–24h", key: "4-24h", value: b["4-24h"] || 0, tone: "warn" },
+            { label: ">24h", key: ">24h", value: b[">24h"] || 0, tone: "bad" },
         ];
     }
 
-    _worklistRows(key, metaFn) {
+    /** Toggle the needs-reply aging filter (click an active chip again to clear). */
+    onNeedsReplyBucket(bucket) {
+        this.state.needsReplyAge =
+            this.state.needsReplyAge === bucket.key ? "" : bucket.key;
+    }
+
+    /** "good" | "warn" | "bad" colour rail from a row's age in hours. */
+    _ageTone(hours) {
+        if (hours == null) return "";
+        if (hours < 4) return "good";
+        if (hours < 24) return "warn";
+        return "bad";
+    }
+
+    _worklistRows(key, metaFn, opts = {}) {
         const wl = this.state.worklists;
         if (!wl) return [];
-        return wl[key].rows.map((r) => ({
-            ...r,
-            title: r.lead_name || r.phone || "Unknown",
-            sub: r.lead_name ? r.phone : "",
-            meta: metaFn(r),
-        }));
+        return wl[key].rows.map((r) => {
+            // CRM owner context: an unclaimed chat whose lead already has an RM
+            // isn't truly ownerless — show "RM <name>" so the row is self-explanatory.
+            const ownerCtx = r.lead_rm ? `RM ${r.lead_rm}` : "Unassigned";
+            const sub = opts.showOwner
+                ? (r.lead_name ? `${r.phone} · ${ownerCtx}` : ownerCtx)
+                : (r.lead_name ? r.phone : "");
+            return {
+                ...r,
+                title: r.lead_name || r.phone || "Unknown",
+                sub,
+                meta: metaFn(r),
+                tone: opts.tone ? opts.tone(r) : "",
+            };
+        });
+    }
+
+    /** Human "waiting for" duration with minute granularity: 45m · 1h 20m · 3h · 1d 5h · 29d. */
+    _fmtAge(row) {
+        const mins = row.age_minutes != null
+            ? row.age_minutes
+            : Math.round((row.age_hours || 0) * 60);
+        if (mins < 60) return `${mins}m`;
+        const hours = mins / 60;
+        if (hours < 24) {
+            const h = Math.floor(hours);
+            const m = mins - h * 60;
+            return m ? `${h}h ${m}m` : `${h}h`;
+        }
+        let d = Math.floor(hours / 24);
+        let h = Math.round(hours - d * 24);
+        if (h >= 24) { d += 1; h = 0; }
+        return h ? `${d}d ${h}h` : `${d}d`;
     }
 
     get needsReplyRows() {
-        return this._worklistRows("needs_reply", (r) => `${r.age_hours}h`);
+        const age = this.state.needsReplyAge;
+        const rows = this._worklistRows(
+            "needs_reply", (r) => this._fmtAge(r),
+            { tone: (r) => (r.overdue ? "bad" : this._ageTone(r.age_hours)) },
+        );
+        if (!age) return rows;
+        if (age === "overdue") return rows.filter((r) => r.overdue);
+        return rows.filter((r) => this._ageTone(r.age_hours) === this._bucketTone(age));
+    }
+
+    /** Map a bucket key to its tone so the filter and the row rails agree. */
+    _bucketTone(key) {
+        return key === "0-4h" ? "good" : key === "4-24h" ? "warn" : "bad";
     }
 
     get windowClosingRows() {
-        return this._worklistRows("window_closing", (r) => this.fmtDateTime(r.expires_at));
+        return this._worklistRows(
+            "window_closing", (r) => this.fmtDateTime(r.expires_at), { showOwner: true });
     }
 
     get unassignedRows() {
-        return this._worklistRows("unassigned", (r) => this.fmtDateTime(r.last_message_at));
+        return this._worklistRows(
+            "unassigned", (r) => this.fmtDateTime(r.last_message_at), { showOwner: true });
     }
 
     // ── Lens column configs + filtered rows ──────────────────────────────────

@@ -24,7 +24,8 @@ export class CdKpiCard extends Component {
         label:   { type: String },
         value:   { type: [String, Number] },
         sub:     { type: String, optional: true },
-        delta:   { type: Number, optional: true },
+        delta:     { type: Number, optional: true },
+        deltaUnit: { type: String, optional: true },
         invert:  { type: Boolean, optional: true },
         spark:   { type: Array, optional: true },
         tooltip: { type: String, optional: true },
@@ -51,7 +52,8 @@ export class CdKpiCard extends Component {
 
     get deltaText() {
         if (this.props.delta == null) return "";
-        return `${Math.abs(this.props.delta).toFixed(1)}%`;
+        const unit = this.props.deltaUnit === "pts" ? " pts" : "%";
+        return `${Math.abs(this.props.delta).toFixed(1)}${unit}`;
     }
 
     /** SVG points for the sparkline polyline (0..100 viewBox). */

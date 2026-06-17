@@ -43,25 +43,73 @@
     &__buckets {
         display: flex;
         flex-wrap: wrap;
-        gap: 6px;
-        padding: 10px 14px 4px;
+        gap: 8px;
+        padding: 12px 14px 6px;
     }
 
+    // Faceted-filter pill: a clearly-separated count badge + a range label, so the
+    // count never visually merges into the label (e.g. "2" + "0–4h", not "20–4h").
     &__chip {
-        font-size: 11px;
-        padding: 2px 8px;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 11.5px;
+        padding: 3px 9px 3px 4px;
         border-radius: var(--cd-radius-pill);
         background: var(--cd-surface-3);
         color: var(--cd-muted);
-        &--bad  { background: var(--cd-danger-bg); color: var(--cd-danger); }
-        &--warn { background: var(--cd-warning-bg); color: var(--cd-warning); }
+        border: 1px solid var(--cd-border-soft);
+        line-height: 1.4;
+
+        &-count {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 18px;
+            height: 18px;
+            padding: 0 5px;
+            border-radius: var(--cd-radius-pill);
+            background: rgba(255, 255, 255, 0.85);
+            color: inherit;
+            font-weight: 700;
+            font-size: 11px;
+            font-variant-numeric: tabular-nums;
+        }
+
+        &-label { font-weight: 600; letter-spacing: 0.1px; }
+
+        &--good { background: var(--cd-success-bg); color: var(--cd-success); border-color: transparent; }
+        &--warn { background: var(--cd-warning-bg); color: var(--cd-warning); border-color: transparent; }
+        &--bad  { background: var(--cd-danger-bg);  color: var(--cd-danger);  border-color: transparent; }
+
+        // SLA "Overdue" — a solid alert pill so it reads as the priority action.
+        &--alert {
+            background: var(--cd-danger);
+            color: #fff;
+            border-color: transparent;
+            .cd-worklist__chip-count { background: #fff; color: var(--cd-danger); }
+        }
+
+        // When the chips act as filters they become real buttons.
+        &--btn {
+            cursor: pointer;
+            transition: filter 0.1s ease, box-shadow 0.1s ease;
+            &:hover { filter: brightness(0.97); }
+        }
+        // The active filter is outlined so it reads as "currently applied".
+        &--active {
+            border-color: currentColor;
+            box-shadow: 0 0 0 1px currentColor inset;
+        }
     }
 
     &__rows {
         display: flex;
         flex-direction: column;
         overflow-y: auto;
-        max-height: 320px;
+        // Shorter by default (~5 rows) so the panel doesn't dominate the page;
+        // overflow scrolls within the panel when a bucket has many items.
+        max-height: 232px;
         padding: 4px 0;
     }
 
@@ -72,11 +120,17 @@
         width: 100%;
         text-align: left;
         border: 0;
+        border-left: 3px solid transparent;   // colour rail set per-tone below
         background: transparent;
-        padding: 8px 14px;
+        padding: 8px 14px 8px 11px;
         cursor: pointer;
         transition: background 0.1s ease;
         &:hover { background: var(--cd-primary-soft); }
+
+        // Age/urgency colour rail so a row's status reads at a glance.
+        &--good { border-left-color: var(--cd-success); }
+        &--warn { border-left-color: var(--cd-warning); }
+        &--bad  { border-left-color: var(--cd-danger); }
     }
 
     &__row-main {
@@ -105,9 +159,13 @@
 
     &__row-meta {
         font-size: 11.5px;
+        font-weight: 600;
         color: var(--cd-muted);
         white-space: nowrap;
         flex-shrink: 0;
+        &--good { color: var(--cd-success); }
+        &--warn { color: var(--cd-warning); }
+        &--bad  { color: var(--cd-danger); }
     }
 
     &__row-caret { color: var(--cd-muted-2); font-size: 13px; flex-shrink: 0; }

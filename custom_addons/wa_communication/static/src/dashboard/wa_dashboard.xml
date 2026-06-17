@@ -142,7 +142,7 @@
           <div class="o-wa-kpi-grid">
             <t t-foreach="kpiCards" t-as="k" t-key="k.label">
               <CdKpiCard label="k.label" value="k.value" sub="k.sub or ''"
-                         delta="k.delta" invert="k.invert or false"
+                         delta="k.delta" deltaUnit="k.unit or '%'" invert="k.invert or false"
                          spark="k.spark or []" tooltip="k.tooltip or ''"/>
             </t>
           </div>
@@ -170,6 +170,8 @@
             <CdWorklistPanel title="'Needs reply'" icon="'fa-reply'" accent="'danger'"
                              count="state.worklists.needs_reply.count"
                              buckets="needsReplyBuckets" rows="needsReplyRows"
+                             activeBucket="state.needsReplyAge"
+                             onBucketClick="(b) => this.onNeedsReplyBucket(b)"
                              onRowClick="(r) => this.openConversation(r)"
                              emptyText="'No unanswered chats — nice.'"/>
             <CdWorklistPanel title="'Window closing'" icon="'fa-hourglass-half'" accent="'warn'"

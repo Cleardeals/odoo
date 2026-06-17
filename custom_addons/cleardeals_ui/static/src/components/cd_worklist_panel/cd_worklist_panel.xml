@@ -15,9 +15,16 @@
       <t t-if="props.buckets.length">
         <div class="cd-worklist__buckets">
           <t t-foreach="props.buckets" t-as="b" t-key="b.label">
-            <span t-att-class="'cd-worklist__chip' + (b.tone ? ' cd-worklist__chip--' + b.tone : '')">
-              <t t-esc="b.value"/> <t t-esc="b.label"/>
-            </span>
+            <button t-att-class="'cd-worklist__chip'
+                        + (b.tone ? ' cd-worklist__chip--' + b.tone : '')
+                        + (props.onBucketClick ? ' cd-worklist__chip--btn' : '')
+                        + (props.activeBucket and props.activeBucket === (b.key || b.label) ? ' cd-worklist__chip--active' : '')"
+                    t-att-disabled="props.onBucketClick ? undefined : 'disabled'"
+                    t-att-aria-pressed="props.activeBucket and props.activeBucket === (b.key || b.label) ? 'true' : 'false'"
+                    t-on-click="() => this.onBucket(b)">
+              <span class="cd-worklist__chip-count"><t t-esc="b.value"/></span>
+              <span class="cd-worklist__chip-label"><t t-esc="b.label"/></span>
+            </button>
           </t>
         </div>
       </t>
@@ -25,12 +32,13 @@
       <div class="cd-worklist__rows">
         <t t-if="props.rows.length">
           <t t-foreach="props.rows" t-as="row" t-key="row_index">
-            <button class="cd-worklist__row" t-on-click="() => this.onClick(row)">
+            <button t-att-class="'cd-worklist__row' + (row.tone ? ' cd-worklist__row--' + row.tone : '')"
+                    t-on-click="() => this.onClick(row)">
               <span class="cd-worklist__row-main">
                 <span class="cd-worklist__row-title"><t t-esc="row.title"/></span>
                 <span t-if="row.sub" class="cd-worklist__row-sub"><t t-esc="row.sub"/></span>
               </span>
-              <span t-if="row.meta" class="cd-worklist__row-meta"><t t-esc="row.meta"/></span>
+              <span t-if="row.meta" t-att-class="'cd-worklist__row-meta' + (row.tone ? ' cd-worklist__row-meta--' + row.tone : '')"><t t-esc="row.meta"/></span>
               <i class="fa fa-angle-right cd-worklist__row-caret" aria-hidden="true"/>
             </button>
           </t>

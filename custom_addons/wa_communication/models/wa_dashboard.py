@@ -986,11 +986,20 @@ class WaDashboard(models.Model):
         cur = self._command_metrics(dt_from, dt_to, slugs)
         delta = dt_to - dt_from
         prev = self._command_metrics(dt_from - delta, dt_from, slugs)
-        cur['deltas'] = {
-            k: self._pct_change(cur.get(k), prev.get(k))
-            for k in ('reply_rate', 'sla_pct', 'delivery_rate', 'failure_rate',
-                      'spend', 'replied', 'msgs_sent', 'first_response_median')
-        }
+        # Rate metrics compare as percentage *points* (a % change of a % is
+        # misleading); counts/time/money keep % change.
+        pct_keys = ('reply_rate', 'sla_pct', 'delivery_rate', 'failure_rate')
+        deltas, units = {}, {}
+        for k in pct_keys + ('spend', 'replied', 'msgs_sent', 'first_response_median'):
+            cv, pv = cur.get(k), prev.get(k)
+            if k in pct_keys:
+                deltas[k] = None if (cv is None or pv is None) else round(cv - pv, 1)
+                units[k] = 'pts'
+            else:
+                deltas[k] = self._pct_change(cv, pv)
+                units[k] = '%'
+        cur['deltas'] = deltas
+        cur['delta_units'] = units
         cur['sla_minutes'] = int(self._sla_seconds() / 60)
         cur['date_from'] = dt_from.isoformat()
         cur['date_to'] = dt_to.isoformat()
@@ -998,14 +1007,28 @@ class WaDashboard(models.Model):
 
     @api.model
     def get_trends(self, date_from=None, date_to=None, workflow_slugs=None):
-        """Daily series for the Command Center charts/sparklines.
+        """Adaptive time-series for the Command Center charts/sparklines.
 
-        :returns: ``[{date, sent, failed, replies, spend}]`` ascending by day.
+        Buckets adapt to the selected range so short windows aren't squashed into
+        a single bar: a range of **≤2 days** (e.g. "Today" / "Yesterday" / a 2-day
+        custom range) is bucketed **hourly** (in business-tz time, so labels land on
+        clean local hours); anything longer is bucketed **daily**.
+
+        :returns: ``[{date, sent, failed, replies, spend, granularity}]`` ascending,
+                  where ``date`` is an ISO datetime (hourly) or date (daily) and
+                  ``granularity`` is ``'hour'`` or ``'day'``.
         """
         dt_from = self._parse_date(date_from)
         dt_to = self._parse_date(date_to) if date_to else datetime.utcnow()
         wf = [s for s in (workflow_slugs or []) if s]
 
+        # ≤ ~2 days → hourly; the +2h tolerance covers a 2-day range whose end is
+        # the 23:59:59 of the second day.
+        if (dt_to - dt_from) <= timedelta(days=2, hours=2):
+            return self._trends_hourly(dt_from, dt_to, wf)
+        return self._trends_daily(dt_from, dt_to, wf)
+
+    def _trends_daily(self, dt_from, dt_to, wf):
         out_params = [dt_from, dt_to]
         wf_clause = self._sql_slug_clause(wf, out_params)
         self.env.cr.execute(
@@ -1045,19 +1068,92 @@ class WaDashboard(models.Model):
                 'sent': sent, 'failed': failed,
                 'replies': rep_by_day.get(day, 0),
                 'spend': round(spend or 0.0, 2),
+                'granularity': 'day',
             })
             day += timedelta(days=1)
             if day > dt_to.date():
                 break
         return rows
 
+    def _trends_hourly(self, dt_from, dt_to, wf):
+        """Hourly buckets aligned to the business timezone (clean local hours).
+
+        ``occurred_at`` is naive UTC; we shift it into the configured tz before
+        truncating so a bucket starts on a whole local hour (otherwise IST's +5:30
+        offset yields :30 labels). The incoming ``dt_from``/``dt_to`` are the
+        operator's local wall-clock, so they're compared against the shifted column.
+        """
+        tz_name = self._business_config()[3]
+        # Validate against pytz (raises on a bad name) so the tz is safe to inline.
+        tz = pytz.timezone(tz_name)
+        local = f"((occurred_at AT TIME ZONE 'UTC') AT TIME ZONE '{tz_name}')"
+
+        out_params = [dt_from, dt_to]
+        wf_clause = self._sql_slug_clause(wf, out_params)
+        self.env.cr.execute(
+            f"""
+            SELECT DATE_TRUNC('hour', {local}) AS h,
+                   SUM(CASE WHEN status NOT IN ('queued') THEN 1 ELSE 0 END)::int AS sent,
+                   SUM(CASE WHEN status IN (
+                       'failed','meta_blocked','invalid_number','opted_out',
+                       'rate_limited','template_error','expired'
+                   ) THEN 1 ELSE 0 END)::int AS failed,
+                   COALESCE(SUM(cost_inr), 0)::float AS spend
+              FROM wa_message
+             WHERE direction='outbound' AND kind!='system'
+               AND {local} >= %s AND {local} < %s {wf_clause}
+          GROUP BY 1
+            """, out_params)
+        out_by_hour = {r[0]: (r[1], r[2], r[3]) for r in self.env.cr.fetchall()}
+
+        in_params = [dt_from, dt_to]
+        in_wf_clause = self._sql_slug_clause(wf, in_params)
+        self.env.cr.execute(
+            f"""
+            SELECT DATE_TRUNC('hour', {local}) AS h, COUNT(*)::int AS replies
+              FROM wa_message
+             WHERE direction='inbound' AND initiator='buyer' AND kind!='system'
+               AND {local} >= %s AND {local} < %s {in_wf_clause}
+          GROUP BY 1
+            """, in_params)
+        rep_by_hour = {r[0]: r[1] for r in self.env.cr.fetchall()}
+
+        # Don't draw a long flat tail of future hours (e.g. "Today" runs to 23:59):
+        # stop at the current local hour.
+        now_local = datetime.now(tz).replace(tzinfo=None)
+        last = min(dt_to, now_local)
+        rows = []
+        cur = dt_from.replace(minute=0, second=0, microsecond=0)
+        while cur <= last:
+            sent, failed, spend = out_by_hour.get(cur, (0, 0, 0.0))
+            rows.append({
+                'date': cur.isoformat(),
+                'sent': sent, 'failed': failed,
+                'replies': rep_by_hour.get(cur, 0),
+                'spend': round(spend or 0.0, 2),
+                'granularity': 'hour',
+            })
+            cur += timedelta(hours=1)
+        return rows
+
     @api.model
-    def get_worklists(self, needs_reply_limit=25):
+    def get_worklists(self, per_bucket=150, list_limit=150):
         """Live, action-oriented worklists (snapshot — not date-bounded).
 
         :returns: ``{needs_reply, window_closing, unassigned}`` each with a count,
                   and ``needs_reply`` additionally with aging buckets + top rows
                   carrying conversation/lead ids for navigation.
+
+        Built for production volume (≈800 leads/day, 7 days a week). The bucket
+        *counts* (0–4h / 4–24h / >24h / overdue) are computed over the **full**
+        result set, so the headline numbers a manager tracks are always exact.
+        Rows are capped **per bucket** (``per_bucket``) rather than globally: the
+        client filters rows by bucket, and at scale a single bucket (typically the
+        >24h backlog) can run into the hundreds — a global cap on oldest-first rows
+        would starve the small recent buckets, so clicking "0–4h" would show a
+        count but render nothing. Per-bucket caps keep every chip clickable while
+        bounding the payload. Each row carries an ``overdue`` flag (past the
+        business-hours SLA) so the SLA-breach worklist is filterable too.
         """
         now = datetime.utcnow()
         sla = self._sla_seconds()
@@ -1079,26 +1175,36 @@ class WaDashboard(models.Model):
           ORDER BY m.occurred_at ASC
             """)
         buckets = {'0-4h': 0, '4-24h': 0, '>24h': 0, 'overdue': 0}
-        rows = []
+        bucket_rows = {'0-4h': [], '4-24h': [], '>24h': []}
         lead_ids = set()
         for cid, phone, lead_id, rm_id, occ in self.env.cr.fetchall():
             age_h = (now - occ).total_seconds() / 3600.0 if occ else 0
             bucket = '0-4h' if age_h < 4 else ('4-24h' if age_h < 24 else '>24h')
             buckets[bucket] += 1
-            if occ and self._business_seconds(occ, now) > sla:
+            overdue = bool(occ and self._business_seconds(occ, now) > sla)
+            if overdue:
                 buckets['overdue'] += 1
-            if len(rows) < needs_reply_limit:
-                rows.append({
+            if len(bucket_rows[bucket]) < per_bucket:
+                bucket_rows[bucket].append({
                     'conversation_id': cid, 'phone': phone, 'lead_id': lead_id or False,
                     'rm_id': rm_id or False, 'waiting_since': occ.isoformat() if occ else None,
-                    'age_hours': round(age_h, 1),
+                    'age_hours': round(age_h, 1), 'age_minutes': int(round((now - occ).total_seconds() / 60.0)) if occ else 0,
+                    'overdue': overdue,
                 })
                 if lead_id:
                     lead_ids.add(lead_id)
-        # Resolve lead names for the rows.
-        names = {l.id: l.name for l in self.env['leads.new'].sudo().browse(list(lead_ids))}
+        # Most-overdue first (the rows arrive oldest-first per bucket), then fresher
+        # buckets — so the default unfiltered view leads with the worst SLA breaches.
+        rows = bucket_rows['>24h'] + bucket_rows['4-24h'] + bucket_rows['0-4h']
+        # Resolve lead names + CRM owner (lead.user_id) for the rows. The CRM owner
+        # is the RM who *should* handle the chat even when it isn't claimed on
+        # WhatsApp yet — surfaced as context so a worklist row is self-explanatory.
+        leads = self.env['leads.new'].sudo().browse(list(lead_ids))
+        names = {l.id: l.name for l in leads}
+        lead_rms = {l.id: (l.user_id.name if l.user_id else '') for l in leads}
         for r in rows:
             r['lead_name'] = names.get(r['lead_id'], '')
+            r['lead_rm'] = lead_rms.get(r['lead_id'], '')
 
         needs_reply_count = sum(v for k, v in buckets.items() if k != 'overdue')
 
@@ -1108,10 +1214,11 @@ class WaDashboard(models.Model):
             ('state', '=', 'active'),
             ('window_expires_at', '>', fields.Datetime.now()),
             ('window_expires_at', '<', fields.Datetime.now() + timedelta(hours=6)),
-        ], order='window_expires_at asc', limit=needs_reply_limit)
+        ], order='window_expires_at asc', limit=list_limit)
         closing_rows = [{
             'conversation_id': c.id, 'phone': c.phone_number,
             'lead_id': c.lead_id.id or False, 'lead_name': c.lead_id.name or '',
+            'lead_rm': c.lead_id.user_id.name if c.lead_id.user_id else '',
             'expires_at': c.window_expires_at.isoformat() if c.window_expires_at else None,
         } for c in closing]
 
@@ -1119,10 +1226,11 @@ class WaDashboard(models.Model):
         unassigned = Conv.search([
             ('state', '=', 'active'), ('assigned_user_id', '=', False),
             ('last_message_at', '>', fields.Datetime.now() - timedelta(days=7)),
-        ], order='last_message_at desc', limit=needs_reply_limit)
+        ], order='last_message_at desc', limit=list_limit)
         unassigned_rows = [{
             'conversation_id': c.id, 'phone': c.phone_number,
             'lead_id': c.lead_id.id or False, 'lead_name': c.lead_id.name or '',
+            'lead_rm': c.lead_id.user_id.name if c.lead_id.user_id else '',
             'last_message_at': c.last_message_at.isoformat() if c.last_message_at else None,
         } for c in unassigned]
 

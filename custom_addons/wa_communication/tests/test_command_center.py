@@ -126,8 +126,32 @@ class TestCommandCenterRPCs(WaTransactionCase):
         cc = self.Dash.get_command_center(date_from='2025-01-01', date_to='2025-02-01')
         self.assertEqual(cc['reply_rate'], 0.0)
         self.assertIsNone(cc['first_response_median'])
+        # median has no data in either period → % delta is None
         self.assertIsNone(cc['deltas']['first_response_median'])
-        self.assertIsNone(cc['deltas']['reply_rate'])
+        # reply rate is a points delta: 0% vs 0% = 0.0 pts (not None)
+        self.assertEqual(cc['deltas']['reply_rate'], 0.0)
+        self.assertEqual(cc['delta_units']['reply_rate'], 'pts')
+
+    def test_trends_granularity_adapts_to_range(self):
+        # An outbound + a buyer reply on a single day.
+        ca = self._conv()
+        a = self._inq(self._prop())
+        self._msg(ca, '2026-03-10 05:00:00', direction='outbound', initiator='rm',
+                  lead=a, status='delivered', cost_inr=1.0)
+        self._msg(ca, '2026-03-10 05:30:00', direction='inbound', initiator='buyer', lead=a)
+
+        # ≤2-day range → hourly buckets (also a regression guard for the hourly SQL).
+        hourly = self.Dash.get_trends(
+            date_from='2026-03-10T00:00:00', date_to='2026-03-10T23:59:59')
+        self.assertTrue(hourly)
+        self.assertEqual(hourly[0]['granularity'], 'hour')
+        self.assertTrue(any(r['sent'] for r in hourly))
+        self.assertTrue(any(r['replies'] for r in hourly))
+
+        # Longer range → daily buckets.
+        daily = self.Dash.get_trends(
+            date_from='2026-03-08T00:00:00', date_to='2026-03-13T00:00:00')
+        self.assertEqual(daily[0]['granularity'], 'day')
 
     # ── Worklists ────────────────────────────────────────────────────────────
 

@@ -45,12 +45,20 @@ export class WaInbox extends Component {
         this.notification = useService("notification");
         this.cdNotif    = useService("cd_notification");
 
+        // Deep-link: when opened from the dashboard worklists (or any caller) with
+        // a target conversation, drop the default "today" filter and pre-search the
+        // phone so that exact chat surfaces in the list even if it's days old; the
+        // thread itself is opened directly in onMounted.
+        const ctx = this.props.action?.context || {};
+        this._focusConvId = ctx.default_conversation_id || null;
+        const focusPhone  = ctx.default_phone || "";
+
         this.state = useState({
             // Filters (sidebar)
             statusFilters:  [],    // array of active status keys
             assignedRms:    [],    // array of active RM ids
-            dateRange:      "today",
-            searchText:     "",
+            dateRange:      this._focusConvId ? "" : "today",
+            searchText:     this._focusConvId ? focusPhone : "",
 
             // List
             conversations:  [],
@@ -110,6 +118,11 @@ export class WaInbox extends Component {
             this._loadConversations();
             this._loadQuickReplies();
             this._subscribeBus();
+            // Auto-open the deep-linked conversation's thread (independent of the
+            // list filter — the thread panel loads the conversation directly).
+            if (this._focusConvId) {
+                this._loadThread(this._focusConvId);
+            }
         });
 
         onWillUnmount(() => {
