@@ -12,12 +12,22 @@ Example call from the OWL dashboard component::
 """
 
 import logging
+import math
 from collections import defaultdict
-from datetime import datetime, date
+from datetime import datetime, date, time, timedelta
 
-from odoo import api, models
+import pytz
+
+from odoo import api, fields, models
 
 _logger = logging.getLogger(__name__)
+
+# ir.config_parameter keys for the response-SLA / business-hours model.
+_SLA_MINUTES_KEY = 'wa_communication.response_sla_minutes'
+_BH_START_KEY = 'wa_communication.business_hours_start'
+_BH_END_KEY = 'wa_communication.business_hours_end'
+_BH_GRACE_KEY = 'wa_communication.business_hours_grace_minutes'
+_BH_TZ_KEY = 'wa_communication.business_tz'
 
 # ---------------------------------------------------------------------------
 # Module : wa_communication
@@ -93,8 +103,9 @@ class WaDashboard(models.Model):
 
     @staticmethod
     def _pct_change(current, previous):
-        """Return % change from previous to current, or None if previous is 0."""
-        if not previous:
+        """Return % change from previous to current, or None when either side is
+        missing / previous is zero (e.g. a median with no data in a period)."""
+        if current is None or not previous:
             return None
         return round((current - previous) / previous * 100, 1)
 
@@ -446,6 +457,87 @@ class WaDashboard(models.Model):
             return vals[mid]
         return (vals[mid - 1] + vals[mid]) / 2.0
 
+    @staticmethod
+    def _p90(values):
+        """90th-percentile (nearest-rank) of non-None values, or ``None``."""
+        vals = sorted(v for v in values if v is not None)
+        if not vals:
+            return None
+        k = max(0, math.ceil(0.9 * len(vals)) - 1)
+        return vals[k]
+
+    # --- Business-hours / SLA --------------------------------------------
+
+    def _business_config(self):
+        """Return (start_hour, end_hour, grace_minutes, tz_name) for response/SLA.
+
+        A single company-wide window applied to all 7 days; the grace buffer
+        tolerates activity just outside the window (e.g. a 19:45 reply).
+        """
+        ICP = self.env['ir.config_parameter'].sudo()
+        start_h = float(ICP.get_param(_BH_START_KEY) or 9)
+        end_h = float(ICP.get_param(_BH_END_KEY) or 19)
+        grace = int(float(ICP.get_param(_BH_GRACE_KEY) or 45))
+        tz_name = ICP.get_param(_BH_TZ_KEY) or 'Asia/Kolkata'
+        return start_h, end_h, grace, tz_name
+
+    def _sla_seconds(self):
+        """Configured first-response SLA target, in seconds (default 60 min)."""
+        minutes = float(self.env['ir.config_parameter'].sudo().get_param(
+            _SLA_MINUTES_KEY) or 60)
+        return minutes * 60.0
+
+    def _business_seconds(self, start, end):
+        """Elapsed *working* seconds between two naive-UTC datetimes.
+
+        Clamps each calendar day (in the configured tz) to the working window
+        ``[start_h, end_h]`` extended by the grace buffer on both edges; sums the
+        overlap with ``[start, end]``.  All 7 days count (per-RM week-offs are a
+        future HRMS concern).  Returns 0.0 for a null / non-positive interval.
+        """
+        if not start or not end or end <= start:
+            return 0.0
+        start_h, end_h, grace, tz_name = self._business_config()
+        tz = pytz.timezone(tz_name)
+        win_start_min = start_h * 60 - grace
+        win_end_min = end_h * 60 + grace
+
+        s_local = pytz.utc.localize(start).astimezone(tz)
+        e_local = pytz.utc.localize(end).astimezone(tz)
+
+        total = 0.0
+        day = s_local.date()
+        last_day = e_local.date()
+        while day <= last_day:
+            midnight = tz.localize(datetime.combine(day, time(0, 0)))
+            w_start = midnight + timedelta(minutes=win_start_min)
+            w_end = midnight + timedelta(minutes=win_end_min)
+            ov_start = max(s_local, w_start)
+            ov_end = min(e_local, w_end)
+            if ov_end > ov_start:
+                total += (ov_end - ov_start).total_seconds()
+            day += timedelta(days=1)
+        return total
+
+    def _first_response_business_secs(self, msgs):
+        """Business-hours first-RM-reply latency (seconds) for one inquiry's msgs.
+
+        ``msgs`` ordered oldest-first.  ``None`` when the buyer never wrote or no
+        RM reply followed the first buyer inbound.
+        """
+        first_buyer = None
+        for m in msgs:
+            if m.direction == 'inbound' and m.initiator == 'buyer' and m.occurred_at:
+                first_buyer = m.occurred_at
+                break
+        if not first_buyer:
+            return None
+        for m in msgs:
+            if (m.direction == 'outbound' and m.initiator == 'rm'
+                    and m.occurred_at and m.occurred_at >= first_buyer):
+                return self._business_seconds(first_buyer, m.occurred_at)
+        return None
+
     def _visit_state_by_inquiry(self, inquiry_ids):
         """Map inquiry id -> visit-state flags read from ``lead.site.visit``.
 
@@ -764,3 +856,418 @@ class WaDashboard(models.Model):
                 'No call logs exist, so attribution is by ordering.'
             ),
         }
+
+    # ------------------------------------------------------------------
+    # Command Center — WhatsApp-native headline KPIs + worklists + trends
+    # ------------------------------------------------------------------
+    #
+    # These deliberately exclude conversion/funnel (multi-touch, driven by RM
+    # phone effort too) — that belongs on the future leads dashboard. Here we
+    # report what WhatsApp data alone tells management: responsiveness, channel
+    # health, cost and re-engagement.
+
+    def _reengagement_counts(self, dt_from, dt_to, extra_lead_domain=None):
+        """Re-engagement of hard-to-reach leads (pure WhatsApp signal).
+
+        Cohort = leads that became hard-to-reach in the window; ``reengaged`` =
+        those whose buyer replied on WhatsApp *after* going hard-to-reach.
+        Returns ``{cohort, reengaged, reengagement_rate}``. No visit/outcome
+        fields (that attribution lives on the leads dashboard).
+        """
+        domain = [
+            ('hard_to_reach_since', '>=', dt_from),
+            ('hard_to_reach_since', '<', dt_to),
+        ]
+        if extra_lead_domain:
+            domain += extra_lead_domain
+        cohort = self.env['leads.new'].sudo().search(domain)
+        if not cohort:
+            return {'cohort': 0, 'reengaged': 0, 'reengagement_rate': 0.0}
+        first_reply = {}
+        for m in self.env['wa.message'].sudo().search([
+            ('effective_inquiry_id', 'in', cohort.ids),
+            ('direction', '=', 'inbound'),
+            ('initiator', '=', 'buyer'),
+        ], order='occurred_at asc, id asc'):
+            iid = m.effective_inquiry_id.id
+            if iid not in first_reply and m.occurred_at:
+                first_reply[iid] = m.occurred_at
+        reengaged = sum(
+            1 for lead in cohort
+            if first_reply.get(lead.id) and lead.hard_to_reach_since
+            and first_reply[lead.id] > lead.hard_to_reach_since)
+        return {
+            'cohort': len(cohort),
+            'reengaged': reengaged,
+            'reengagement_rate': self._rate(reengaged, len(cohort)),
+        }
+
+    def _command_metrics(self, dt_from, dt_to, slugs):
+        """Compute the WhatsApp-native KPI bundle for one window."""
+        WaMsg = self.env['wa.message'].sudo()
+        out_base = self._outbound_domain(dt_from, dt_to, slugs)
+
+        sent = WaMsg.search_count(out_base + [('status', 'not in', ['queued'])])
+        delivered = WaMsg.search_count(out_base + [('status', 'in', ['delivered', 'read'])])
+        read = WaMsg.search_count(out_base + [('status', '=', 'read')])
+        failed = WaMsg.search_count(out_base + [('status', 'in', _FAILED_STATUSES)])
+        opt_outs = WaMsg.search_count(out_base + [('status', '=', 'opted_out')])
+        failed_breakdown = {}
+        for st in _FAILED_STATUSES:
+            n = WaMsg.search_count(out_base + [('status', '=', st)])
+            if n:
+                failed_breakdown[_FAILURE_LABELS[st]] = n
+
+        in_domain = [
+            ('direction', '=', 'inbound'), ('initiator', '=', 'buyer'),
+            ('kind', '!=', 'system'),
+            ('occurred_at', '>=', dt_from), ('occurred_at', '<', dt_to),
+        ] + self._slug_domain(slugs)
+        msgs_received = WaMsg.search_count(in_domain)
+
+        # One windowed pass for distinct-lead counts + spend + per-conv response.
+        messaged, replied, reach = set(), set(), set()
+        spend = 0.0
+        by_conv = defaultdict(list)
+        for m in self._wa_window_messages(dt_from, dt_to, slugs):
+            by_conv[m.conversation_id.id].append(m)
+            iid = m.effective_inquiry_id.id if m.effective_inquiry_id else False
+            if m.direction == 'outbound':
+                spend += m.cost_inr or 0.0
+                if iid:
+                    messaged.add(iid)
+                if m.conversation_id:
+                    reach.add(m.conversation_id.phone_number)
+            elif m.direction == 'inbound' and m.initiator == 'buyer' and iid:
+                replied.add(iid)
+        spend = round(spend, 2)
+
+        latencies = [self._first_response_business_secs(ms) for ms in by_conv.values()]
+        latencies = [x for x in latencies if x is not None]
+        sla = self._sla_seconds()
+        sla_pct = self._rate(sum(1 for x in latencies if x <= sla), len(latencies))
+
+        # Reply rate = of leads we *messaged*, how many replied (so it can't exceed
+        # 100% when buyers also message us unprompted).
+        replied_to_us = messaged & replied
+
+        reng = self._reengagement_counts(dt_from, dt_to)
+        return {
+            'msgs_sent': sent, 'msgs_received': msgs_received,
+            'delivered': delivered, 'read': read, 'failed': failed,
+            'failed_breakdown': failed_breakdown, 'opt_outs': opt_outs,
+            'delivery_rate': self._rate(delivered, sent),
+            'read_rate': self._rate(read, sent),
+            'failure_rate': self._rate(failed, sent),
+            'reply_rate': self._rate(len(replied_to_us), len(messaged)),
+            'replied': len(replied_to_us), 'leads_messaged': len(messaged),
+            'reach': len(reach),
+            'spend': spend,
+            'cost_per_reply': round(spend / len(replied_to_us), 2) if replied_to_us else 0.0,
+            'first_response_median': self._median(latencies),
+            'first_response_p90': self._p90(latencies),
+            'sla_pct': sla_pct,
+            'reengagement_rate': reng['reengagement_rate'],
+            'reengaged': reng['reengaged'], 'cohort': reng['cohort'],
+        }
+
+    @api.model
+    def get_command_center(self, date_from=None, date_to=None, workflow_slugs=None):
+        """Headline WhatsApp-native KPIs + vs-previous-period deltas.
+
+        :returns: the KPI bundle (see ``_command_metrics``) plus ``deltas``
+                  (% change vs the preceding equal-length period for the key
+                  metrics), ``sla_minutes``, and the window bounds.
+        """
+        dt_from = self._parse_date(date_from)
+        dt_to = self._parse_date(date_to) if date_to else datetime.utcnow()
+        slugs = [s for s in (workflow_slugs or []) if s]
+
+        cur = self._command_metrics(dt_from, dt_to, slugs)
+        delta = dt_to - dt_from
+        prev = self._command_metrics(dt_from - delta, dt_from, slugs)
+        cur['deltas'] = {
+            k: self._pct_change(cur.get(k), prev.get(k))
+            for k in ('reply_rate', 'sla_pct', 'delivery_rate', 'failure_rate',
+                      'spend', 'replied', 'msgs_sent', 'first_response_median')
+        }
+        cur['sla_minutes'] = int(self._sla_seconds() / 60)
+        cur['date_from'] = dt_from.isoformat()
+        cur['date_to'] = dt_to.isoformat()
+        return cur
+
+    @api.model
+    def get_trends(self, date_from=None, date_to=None, workflow_slugs=None):
+        """Daily series for the Command Center charts/sparklines.
+
+        :returns: ``[{date, sent, failed, replies, spend}]`` ascending by day.
+        """
+        dt_from = self._parse_date(date_from)
+        dt_to = self._parse_date(date_to) if date_to else datetime.utcnow()
+        wf = [s for s in (workflow_slugs or []) if s]
+
+        out_params = [dt_from, dt_to]
+        wf_clause = self._sql_slug_clause(wf, out_params)
+        self.env.cr.execute(
+            f"""
+            SELECT DATE_TRUNC('day', occurred_at) AS d,
+                   SUM(CASE WHEN status NOT IN ('queued') THEN 1 ELSE 0 END)::int AS sent,
+                   SUM(CASE WHEN status IN (
+                       'failed','meta_blocked','invalid_number','opted_out',
+                       'rate_limited','template_error','expired'
+                   ) THEN 1 ELSE 0 END)::int AS failed,
+                   COALESCE(SUM(cost_inr), 0)::float AS spend
+              FROM wa_message
+             WHERE direction='outbound' AND kind!='system'
+               AND occurred_at >= %s AND occurred_at < %s {wf_clause}
+          GROUP BY DATE_TRUNC('day', occurred_at)
+            """, out_params)
+        out_by_day = {r[0].date(): (r[1], r[2], r[3]) for r in self.env.cr.fetchall()}
+
+        in_params = [dt_from, dt_to]
+        in_wf_clause = self._sql_slug_clause(wf, in_params)
+        self.env.cr.execute(
+            f"""
+            SELECT DATE_TRUNC('day', occurred_at) AS d, COUNT(*)::int AS replies
+              FROM wa_message
+             WHERE direction='inbound' AND initiator='buyer' AND kind!='system'
+               AND occurred_at >= %s AND occurred_at < %s {in_wf_clause}
+          GROUP BY DATE_TRUNC('day', occurred_at)
+            """, in_params)
+        rep_by_day = {r[0].date(): r[1] for r in self.env.cr.fetchall()}
+
+        rows = []
+        day = dt_from.date()
+        while day < dt_to.date() or day == dt_from.date():
+            sent, failed, spend = out_by_day.get(day, (0, 0, 0.0))
+            rows.append({
+                'date': day.isoformat(),
+                'sent': sent, 'failed': failed,
+                'replies': rep_by_day.get(day, 0),
+                'spend': round(spend or 0.0, 2),
+            })
+            day += timedelta(days=1)
+            if day > dt_to.date():
+                break
+        return rows
+
+    @api.model
+    def get_worklists(self, needs_reply_limit=25):
+        """Live, action-oriented worklists (snapshot — not date-bounded).
+
+        :returns: ``{needs_reply, window_closing, unassigned}`` each with a count,
+                  and ``needs_reply`` additionally with aging buckets + top rows
+                  carrying conversation/lead ids for navigation.
+        """
+        now = datetime.utcnow()
+        sla = self._sla_seconds()
+
+        # Needs reply: the conversation's latest message is an unanswered buyer.
+        self.env.cr.execute(
+            """
+            SELECT c.id, c.phone_number, c.lead_id, c.assigned_user_id, m.occurred_at
+              FROM wa_conversation c
+              JOIN LATERAL (
+                    SELECT occurred_at, direction, initiator
+                      FROM wa_message
+                     WHERE conversation_id = c.id
+                  ORDER BY occurred_at DESC, id DESC
+                     LIMIT 1
+                   ) m ON TRUE
+             WHERE c.state = 'active'
+               AND m.direction = 'inbound' AND m.initiator = 'buyer'
+          ORDER BY m.occurred_at ASC
+            """)
+        buckets = {'0-4h': 0, '4-24h': 0, '>24h': 0, 'overdue': 0}
+        rows = []
+        lead_ids = set()
+        for cid, phone, lead_id, rm_id, occ in self.env.cr.fetchall():
+            age_h = (now - occ).total_seconds() / 3600.0 if occ else 0
+            bucket = '0-4h' if age_h < 4 else ('4-24h' if age_h < 24 else '>24h')
+            buckets[bucket] += 1
+            if occ and self._business_seconds(occ, now) > sla:
+                buckets['overdue'] += 1
+            if len(rows) < needs_reply_limit:
+                rows.append({
+                    'conversation_id': cid, 'phone': phone, 'lead_id': lead_id or False,
+                    'rm_id': rm_id or False, 'waiting_since': occ.isoformat() if occ else None,
+                    'age_hours': round(age_h, 1),
+                })
+                if lead_id:
+                    lead_ids.add(lead_id)
+        # Resolve lead names for the rows.
+        names = {l.id: l.name for l in self.env['leads.new'].sudo().browse(list(lead_ids))}
+        for r in rows:
+            r['lead_name'] = names.get(r['lead_id'], '')
+
+        needs_reply_count = sum(v for k, v in buckets.items() if k != 'overdue')
+
+        # Window closing soon (open window expiring within 6h).
+        Conv = self.env['wa.conversation'].sudo()
+        closing = Conv.search([
+            ('state', '=', 'active'),
+            ('window_expires_at', '>', fields.Datetime.now()),
+            ('window_expires_at', '<', fields.Datetime.now() + timedelta(hours=6)),
+        ], order='window_expires_at asc', limit=needs_reply_limit)
+        closing_rows = [{
+            'conversation_id': c.id, 'phone': c.phone_number,
+            'lead_id': c.lead_id.id or False, 'lead_name': c.lead_id.name or '',
+            'expires_at': c.window_expires_at.isoformat() if c.window_expires_at else None,
+        } for c in closing]
+
+        # Unassigned conversations with a recent inbound.
+        unassigned = Conv.search([
+            ('state', '=', 'active'), ('assigned_user_id', '=', False),
+            ('last_message_at', '>', fields.Datetime.now() - timedelta(days=7)),
+        ], order='last_message_at desc', limit=needs_reply_limit)
+        unassigned_rows = [{
+            'conversation_id': c.id, 'phone': c.phone_number,
+            'lead_id': c.lead_id.id or False, 'lead_name': c.lead_id.name or '',
+            'last_message_at': c.last_message_at.isoformat() if c.last_message_at else None,
+        } for c in unassigned]
+
+        return {
+            'needs_reply': {'count': needs_reply_count, 'buckets': buckets, 'rows': rows},
+            'window_closing': {'count': len(closing_rows), 'rows': closing_rows},
+            'unassigned': {'count': len(unassigned_rows), 'rows': unassigned_rows},
+        }
+
+    # ------------------------------------------------------------------
+    # Lens tabs — By RM, By Campaign/Template
+    # ------------------------------------------------------------------
+
+    @api.model
+    def get_rm_leaderboard(self, date_from=None, date_to=None, workflow_slugs=None):
+        """Per-RM responsiveness league table (the coaching lens).
+
+        A conversation is credited to the RM who first replied on it
+        (`sender_user_id`), falling back to the conversation's `assigned_user_id`,
+        else an *Unassigned* bucket. Per RM: conversations, sent/received, reply
+        rate, median first-response (business hours), SLA %, spend.
+        """
+        dt_from = self._parse_date(date_from)
+        dt_to = self._parse_date(date_to) if date_to else datetime.utcnow()
+        slugs = [s for s in (workflow_slugs or []) if s]
+
+        by_conv = defaultdict(list)
+        for m in self._wa_window_messages(dt_from, dt_to, slugs):
+            by_conv[m.conversation_id].append(m)
+
+        rm = {}
+
+        def _acc(uid):
+            return rm.setdefault(uid, {
+                'convs': 0, 'sent': 0, 'received': 0, 'cost': 0.0,
+                'messaged': set(), 'replied': set(), 'latencies': [],
+            })
+
+        for conv, msgs in by_conv.items():
+            responder = False
+            for m in msgs:
+                if m.direction == 'outbound' and m.initiator == 'rm' and m.sender_user_id:
+                    responder = m.sender_user_id.id
+                    break
+            uid = responder or (conv.assigned_user_id.id if conv.assigned_user_id else False)
+            a = _acc(uid)
+            a['convs'] += 1
+            for m in msgs:
+                iid = m.effective_inquiry_id.id if m.effective_inquiry_id else False
+                if m.direction == 'outbound':
+                    a['sent'] += 1
+                    a['cost'] += m.cost_inr or 0.0
+                    if iid:
+                        a['messaged'].add(iid)
+                elif m.direction == 'inbound' and m.initiator == 'buyer':
+                    a['received'] += 1
+                    if iid:
+                        a['replied'].add(iid)
+            lat = self._first_response_business_secs(msgs)
+            if lat is not None:
+                a['latencies'].append(lat)
+
+        names = {
+            u.id: u.name
+            for u in self.env['res.users'].sudo().browse([x for x in rm if x])}
+        sla = self._sla_seconds()
+        rows = []
+        for uid, a in rm.items():
+            replied = a['replied'] & a['messaged']
+            rows.append({
+                'rm_id': uid or False,
+                'rm_name': names.get(uid, 'Unassigned') if uid else 'Unassigned',
+                'conversations': a['convs'],
+                'msgs_sent': a['sent'], 'msgs_received': a['received'],
+                'leads_messaged': len(a['messaged']),
+                'replied': len(replied),
+                'reply_rate': self._rate(len(replied), len(a['messaged'])),
+                'first_response_median': self._median(a['latencies']),
+                'sla_pct': self._rate(
+                    sum(1 for x in a['latencies'] if x <= sla), len(a['latencies'])),
+                'spend': round(a['cost'], 2),
+            })
+        rows.sort(key=lambda r: (r['reply_rate'], r['msgs_sent']), reverse=True)
+        return {'rows': rows}
+
+    @staticmethod
+    def _campaign_tally(acc, status, cost, iid):
+        if status != 'queued':
+            acc['sent'] += 1
+        if status in ('delivered', 'read'):
+            acc['delivered'] += 1
+        if status == 'read':
+            acc['read'] += 1
+        if status in _FAILED_STATUSES:
+            acc['failed'] += 1
+        if status == 'opted_out':
+            acc['opt_out'] += 1
+        acc['cost'] += cost or 0.0
+        if iid:
+            acc['sent_leads'].add(iid)
+
+    @api.model
+    def get_campaign_performance(self, date_from=None, date_to=None):
+        """Per-workflow and per-template performance: which automations/messages
+        earn replies, get delivered, cause opt-outs, and cost what.
+
+        Reply rate per campaign = of leads that received its sends, the % that
+        later replied on WhatsApp (in-window).
+        """
+        dt_from = self._parse_date(date_from)
+        dt_to = self._parse_date(date_to) if date_to else datetime.utcnow()
+
+        wf, tpl = {}, {}
+
+        def _acc(d, key):
+            return d.setdefault(key, {
+                'sent': 0, 'delivered': 0, 'read': 0, 'failed': 0, 'opt_out': 0,
+                'cost': 0.0, 'sent_leads': set(),
+            })
+
+        replied_leads = set()
+        for m in self._wa_window_messages(dt_from, dt_to, None):
+            iid = m.effective_inquiry_id.id if m.effective_inquiry_id else False
+            if m.direction == 'outbound':
+                if m.workflow_slug:
+                    self._campaign_tally(_acc(wf, m.workflow_slug), m.status, m.cost_inr, iid)
+                if m.template_name:
+                    self._campaign_tally(_acc(tpl, m.template_name), m.status, m.cost_inr, iid)
+            elif m.direction == 'inbound' and m.initiator == 'buyer' and iid:
+                replied_leads.add(iid)
+
+        def _rows(d):
+            out = []
+            for key, a in d.items():
+                replied = a['sent_leads'] & replied_leads
+                out.append({
+                    'name': key,
+                    'sent': a['sent'], 'delivered': a['delivered'], 'read': a['read'],
+                    'failed': a['failed'], 'opt_out': a['opt_out'],
+                    'cost': round(a['cost'], 2),
+                    'leads': len(a['sent_leads']),
+                    'reply_rate': self._rate(len(replied), len(a['sent_leads'])),
+                    'delivery_rate': self._rate(a['delivered'], a['sent']),
+                })
+            out.sort(key=lambda r: r['sent'], reverse=True)
+            return out
+
+        return {'workflows': _rows(wf), 'templates': _rows(tpl)}

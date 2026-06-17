@@ -1,0 +1,93 @@
+.cd-lb {
+    width: 100%;
+    overflow-x: auto;
+
+    &__table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+    }
+
+    &__th {
+        text-align: left;
+        padding: 9px 12px;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--cd-muted-2);
+        border-bottom: 2px solid var(--cd-border-soft);
+        white-space: nowrap;
+        cursor: pointer;
+        user-select: none;
+        &:hover { color: var(--cd-primary); }
+        &.o-r { text-align: right; }
+        &--bar { min-width: 140px; }
+    }
+
+    &__sort { margin-left: 4px; font-size: 11px; }
+
+    &__row {
+        border-bottom: 1px solid var(--cd-border-soft);
+        &.o-click { cursor: pointer; }
+        &.o-click:hover { background: var(--cd-primary-soft); }
+    }
+
+    &__td {
+        padding: 10px 12px;
+        color: var(--cd-ink-2);
+        vertical-align: middle;
+        white-space: nowrap;
+        &.o-r { text-align: right; font-variant-numeric: tabular-nums; }
+    }
+
+    &__muted { color: var(--cd-muted-2); }
+
+    &__chip {
+        display: inline-block;
+        font-size: 11px;
+        font-weight: 600;
+        padding: 2px 8px;
+        border-radius: var(--cd-radius-pill);
+        background: var(--cd-info-bg);
+        color: var(--cd-info);
+    }
+
+    &__bar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 120px;
+    }
+
+    &__bar-track {
+        flex: 1;
+        height: 6px;
+        border-radius: var(--cd-radius-pill);
+        background: var(--cd-surface-3);
+        overflow: hidden;
+    }
+
+    &__bar-fill {
+        height: 100%;
+        border-radius: var(--cd-radius-pill);
+        background: var(--cd-muted-2);
+        &.is-good { background: var(--cd-success); }
+        &.is-mid  { background: var(--cd-warning); }
+        &.is-low  { background: var(--cd-danger); }
+    }
+
+    &__bar-val {
+        min-width: 38px;
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+        color: var(--cd-ink-2);
+    }
+
+    &__empty {
+        padding: 28px;
+        text-align: center;
+        color: var(--cd-muted-2);
+        font-size: 13px;
+    }
+}

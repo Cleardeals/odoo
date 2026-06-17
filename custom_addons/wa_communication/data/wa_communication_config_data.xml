@@ -83,6 +83,31 @@
         <field name="value">https://api.interakt.ai</field>
     </record>
 
+    <!-- Dashboard: response-SLA + business-hours model (manager-tunable).
+         A single company-wide working window applied to all 7 days; the grace
+         buffer tolerates activity just outside it (e.g. a 19:45 reply). Per-RM
+         week-offs/leaves are a future HRMS concern. -->
+    <record id="param_response_sla_minutes" model="ir.config_parameter">
+        <field name="key">wa_communication.response_sla_minutes</field>
+        <field name="value">60</field>
+    </record>
+    <record id="param_business_hours_start" model="ir.config_parameter">
+        <field name="key">wa_communication.business_hours_start</field>
+        <field name="value">9</field>
+    </record>
+    <record id="param_business_hours_end" model="ir.config_parameter">
+        <field name="key">wa_communication.business_hours_end</field>
+        <field name="value">19</field>
+    </record>
+    <record id="param_business_hours_grace_minutes" model="ir.config_parameter">
+        <field name="key">wa_communication.business_hours_grace_minutes</field>
+        <field name="value">45</field>
+    </record>
+    <record id="param_business_tz" model="ir.config_parameter">
+        <field name="key">wa_communication.business_tz</field>
+        <field name="value">Asia/Kolkata</field>
+    </record>
+
     </data>
 
     <!-- noupdate="0": code constants that must always be applied on upgrade. -->

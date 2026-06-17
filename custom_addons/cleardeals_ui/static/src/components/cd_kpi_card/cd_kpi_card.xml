@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<templates xml:space="preserve">
+
+  <t t-name="cleardeals_ui.CdKpiCard">
+    <div t-att-class="'cd-kpi' + (props.accent ? ' cd-kpi--' + props.accent : '')">
+
+      <div class="cd-kpi__head">
+        <span class="cd-kpi__label"><t t-esc="props.label"/></span>
+        <t t-if="props.tooltip">
+          <span class="cd-kpi__info"
+                t-on-mouseenter="() => this.ui.showTip = true"
+                t-on-mouseleave="() => this.ui.showTip = false">
+            <i class="fa fa-info-circle" aria-hidden="true"/>
+            <t t-if="ui.showTip">
+              <span class="cd-kpi__tip"><t t-esc="props.tooltip"/></span>
+            </t>
+          </span>
+        </t>
+      </div>
+
+      <div class="cd-kpi__value-row">
+        <span class="cd-kpi__value"><t t-esc="props.value"/></span>
+        <t t-if="props.spark and props.spark.length > 1">
+          <svg class="cd-kpi__spark" viewBox="0 0 100 28" preserveAspectRatio="none" aria-hidden="true">
+            <polyline t-att-points="sparkPoints" fill="none" stroke-width="2"
+                      vector-effect="non-scaling-stroke"/>
+          </svg>
+        </t>
+      </div>
+
+      <div class="cd-kpi__foot">
+        <t t-if="deltaDir">
+          <span t-att-class="'cd-kpi__delta cd-kpi__delta--' + (deltaTone or 'flat')">
+            <i t-att-class="'fa ' + (deltaDir === 'up' ? 'fa-arrow-up' : 'fa-arrow-down')" aria-hidden="true"/>
+            <t t-esc="deltaText"/>
+          </span>
+        </t>
+        <t t-if="props.sub">
+          <span class="cd-kpi__sub"><t t-esc="props.sub"/></span>
+        </t>
+      </div>
+
+    </div>
+  </t>
+
+</templates>

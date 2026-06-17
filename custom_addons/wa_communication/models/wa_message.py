@@ -159,6 +159,15 @@ class WaMessage(models.Model):
         'Sender Name',
         help="Display name from the WA contact profile (inbound only).",
     )
+    sender_user_id = fields.Many2one(
+        'res.users',
+        string='Sent By',
+        index=True,
+        ondelete='set null',
+        help="The Odoo user who sent this message (set for RM manual sends only). "
+             "Drives accurate per-RM dashboard analytics; falls back to the "
+             "conversation's assigned RM for historical / workflow rows.",
+    )
 
     # ------------------------------------------------------------------
     # Template / workflow context

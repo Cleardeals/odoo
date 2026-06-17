@@ -40,3 +40,9 @@ export { CdConversationListItem }    from "./components/conversation_list_item/c
 export { CdQuickReplyPicker }        from "./components/quick_reply_picker/quick_reply_picker";
 export { CdTemplatePickerModal }     from "./components/template_picker_modal/template_picker_modal";
 export { CdInquirySwitcher }         from "./components/inquiry_switcher/inquiry_switcher";
+
+// ── analytics primitives (redesigned dashboard) ──────────────────────────────
+export { CdChart }                   from "./components/cd_chart/cd_chart";
+export { CdKpiCard }                 from "./components/cd_kpi_card/cd_kpi_card";
+export { CdWorklistPanel }           from "./components/cd_worklist_panel/cd_worklist_panel";
+export { CdLeaderboardTable }        from "./components/cd_leaderboard_table/cd_leaderboard_table";

@@ -111,6 +111,7 @@ class WaConversation(models.Model):
             'lead_id': self.lead_id.id if self.lead_id else False,
             'segment_id': send_seg.id if send_seg else False,
             'sender_name': self.env.user.name if initiator == 'rm' else None,
+            'sender_user_id': self.env.uid if initiator == 'rm' else False,
             'status': 'queued',
             'occurred_at': fields.Datetime.now(),
         })

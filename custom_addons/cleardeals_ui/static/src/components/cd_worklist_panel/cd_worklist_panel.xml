@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<templates xml:space="preserve">
+
+  <t t-name="cleardeals_ui.CdWorklistPanel">
+    <div t-att-class="'cd-worklist' + (props.accent ? ' cd-worklist--' + props.accent : '')">
+
+      <div class="cd-worklist__head">
+        <span class="cd-worklist__title">
+          <i t-if="props.icon" t-att-class="'fa ' + props.icon" aria-hidden="true"/>
+          <t t-esc="props.title"/>
+        </span>
+        <span class="cd-worklist__count"><t t-esc="props.count or 0"/></span>
+      </div>
+
+      <t t-if="props.buckets.length">
+        <div class="cd-worklist__buckets">
+          <t t-foreach="props.buckets" t-as="b" t-key="b.label">
+            <span t-att-class="'cd-worklist__chip' + (b.tone ? ' cd-worklist__chip--' + b.tone : '')">
+              <t t-esc="b.value"/> <t t-esc="b.label"/>
+            </span>
+          </t>
+        </div>
+      </t>
+
+      <div class="cd-worklist__rows">
+        <t t-if="props.rows.length">
+          <t t-foreach="props.rows" t-as="row" t-key="row_index">
+            <button class="cd-worklist__row" t-on-click="() => this.onClick(row)">
+              <span class="cd-worklist__row-main">
+                <span class="cd-worklist__row-title"><t t-esc="row.title"/></span>
+                <span t-if="row.sub" class="cd-worklist__row-sub"><t t-esc="row.sub"/></span>
+              </span>
+              <span t-if="row.meta" class="cd-worklist__row-meta"><t t-esc="row.meta"/></span>
+              <i class="fa fa-angle-right cd-worklist__row-caret" aria-hidden="true"/>
+            </button>
+          </t>
+        </t>
+        <t t-else="">
+          <div class="cd-worklist__empty"><t t-esc="props.emptyText"/></div>
+        </t>
+      </div>
+
+    </div>
+  </t>
+
+</templates>

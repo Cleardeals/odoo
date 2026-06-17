@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<templates xml:space="preserve">
+
+  <t t-name="cleardeals_ui.CdChart">
+    <div class="cd-chart" t-att-style="heightStyle">
+      <canvas t-ref="canvas" role="img" t-att-aria-label="props.ariaLabel"/>
+    </div>
+  </t>
+
+</templates>

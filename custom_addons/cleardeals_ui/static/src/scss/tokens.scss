@@ -1,0 +1,44 @@
+// Cleardeals UI design tokens — one source of truth for the analytics surfaces.
+// Plain CSS custom properties (no Sass partials) so the asset glob picks this up
+// and every component can reference var(--cd-*).  New dashboard components use
+// these; existing components keep their hardcoded values until refactored.
+
+:root {
+    // Brand + semantic
+    --cd-primary:       #7c3aed;
+    --cd-primary-700:   #5b21b6;
+    --cd-primary-soft:  #f5f3ff;
+
+    --cd-success:       #16a34a;
+    --cd-success-bg:    #dcfce7;
+    --cd-warning:       #b45309;
+    --cd-warning-bg:    #fef3c7;
+    --cd-danger:        #dc2626;
+    --cd-danger-bg:     #fee2e2;
+    --cd-info:          #2563eb;
+    --cd-info-bg:       #eff6ff;
+    --cd-info-border:   #dbeafe;
+
+    // Ink + neutrals
+    --cd-ink:           #111827;
+    --cd-ink-2:         #374151;
+    --cd-muted:         #6b7280;
+    --cd-muted-2:       #9ca3af;
+    --cd-border:        #e5e7eb;
+    --cd-border-soft:   #f0f0f0;
+    --cd-surface:       #ffffff;
+    --cd-surface-2:     #f9fafb;
+    --cd-surface-3:     #f3f4f6;
+
+    // Shape + elevation
+    --cd-radius:        8px;
+    --cd-radius-lg:     12px;
+    --cd-radius-pill:   999px;
+    --cd-shadow:        0 1px 3px rgba(16, 24, 40, 0.06);
+    --cd-shadow-pop:    0 8px 24px rgba(16, 24, 40, 0.12);
+
+    // Chart palette (canvas can't read CSS vars — these mirror the hexes used in JS)
+    --cd-chart-1:       #7c3aed;
+    --cd-chart-2:       #2563eb;
+    --cd-chart-grid:    #eef0f3;
+}

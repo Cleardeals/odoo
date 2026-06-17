@@ -1,0 +1,106 @@
+.cd-kpi {
+    background: var(--cd-surface);
+    border: 1px solid var(--cd-border);
+    border-radius: var(--cd-radius-lg);
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+
+    &--good { border-left: 3px solid var(--cd-success); }
+    &--warn { border-left: 3px solid var(--cd-warning); }
+    &--bad  { border-left: 3px solid var(--cd-danger); }
+
+    &__head {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    &__label {
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--cd-muted);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    &__info {
+        position: relative;
+        color: var(--cd-muted-2);
+        cursor: help;
+        font-size: 12px;
+        flex-shrink: 0;
+    }
+
+    &__tip {
+        position: absolute;
+        top: 18px;
+        left: -8px;
+        z-index: 40;
+        width: 220px;
+        background: var(--cd-ink);
+        color: #fff;
+        font-size: 11.5px;
+        font-weight: 400;
+        line-height: 1.4;
+        letter-spacing: 0;
+        text-transform: none;
+        padding: 8px 10px;
+        border-radius: var(--cd-radius);
+        box-shadow: var(--cd-shadow-pop);
+    }
+
+    &__value-row {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 10px;
+    }
+
+    &__value {
+        font-size: 28px;
+        font-weight: 700;
+        color: var(--cd-ink);
+        line-height: 1;
+        font-variant-numeric: tabular-nums;
+    }
+
+    &__spark {
+        width: 84px;
+        height: 28px;
+        flex-shrink: 0;
+        polyline { stroke: var(--cd-primary); opacity: 0.75; }
+    }
+
+    &__foot {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-height: 16px;
+    }
+
+    &__delta {
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        font-size: 12px;
+        font-weight: 600;
+        .fa { font-size: 10px; }
+        &--good { color: var(--cd-success); }
+        &--bad  { color: var(--cd-danger); }
+        &--flat { color: var(--cd-muted); }
+    }
+
+    &__sub {
+        font-size: 12px;
+        color: var(--cd-muted);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+}

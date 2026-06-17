@@ -9,6 +9,10 @@ import {
     CdWorkflowHealthTable,
     CdLineChart,
     CdRecentFailuresTable,
+    CdChart,
+    CdKpiCard,
+    CdWorklistPanel,
+    CdLeaderboardTable,
 } from "@cleardeals_ui/index";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -27,6 +31,10 @@ export class WaDashboard extends Component {
         CdWorkflowHealthTable,
         CdLineChart,
         CdRecentFailuresTable,
+        CdChart,
+        CdKpiCard,
+        CdWorklistPanel,
+        CdLeaderboardTable,
     };
 
     // ── Services ─────────────────────────────────────────────────────────────
@@ -67,8 +75,22 @@ export class WaDashboard extends Component {
             chartCustomTo:     "",
             // Last refresh timestamp
             lastFetched:       null,
+            // ── tabs ── 'command' | 'overview' | 'rm' | 'property' | 'campaign'
+            activeTab:         "command",
+            // ── Command Center ──
+            command:           null,
+            trends:            [],
+            worklists:         null,
+            commandLoading:    false,
+            // ── By RM ──
+            rmRows:            [],
+            rmLoading:         false,
+            rmSearch:          "",
+            // ── By Campaign ──
+            campaign:          null,
+            campaignLoading:   false,
+            campaignSearch:    "",
             // ── "By Property" view ──
-            activeTab:         "overview",   // 'overview' | 'property'
             propertyRows:      [],
             propertyTotal:     0,
             propertySearch:    "",
@@ -81,7 +103,8 @@ export class WaDashboard extends Component {
         });
 
         onMounted(() => {
-            this._loadAll();
+            this._loadWorkflows();
+            this._loadActiveTab();
         });
     }
 
@@ -279,11 +302,225 @@ export class WaDashboard extends Component {
         }
     }
 
+    // ── Command Center / lens loaders ────────────────────────────────────────
+
+    _dateArgs() {
+        return {
+            date_from:      this.state.dateFrom,
+            date_to:        this.state.dateTo,
+            workflow_slugs: this.state.workflowSlugs,
+        };
+    }
+
+    async _loadActiveTab() {
+        const tab = this.state.activeTab;
+        if (tab === "command") return this._loadCommand();
+        if (tab === "overview") return this._loadAll();
+        if (tab === "rm") return this._loadRm();
+        if (tab === "campaign") return this._loadCampaign();
+        if (tab === "property") return this._loadPropertyView();
+    }
+
+    async _loadCommand() {
+        this.state.commandLoading = true;
+        try {
+            const [cmd, trends, worklists] = await Promise.all([
+                this.orm.call("wa.dashboard", "get_command_center", [], this._dateArgs()),
+                this.orm.call("wa.dashboard", "get_trends", [], this._dateArgs()),
+                this.orm.call("wa.dashboard", "get_worklists", []),
+            ]);
+            this.state.command = cmd;
+            this.state.trends = trends;
+            this.state.worklists = worklists;
+            this.state.lastFetched = new Date().toLocaleTimeString();
+        } finally {
+            this.state.commandLoading = false;
+        }
+    }
+
+    async _loadRm() {
+        this.state.rmLoading = true;
+        try {
+            const res = await this.orm.call(
+                "wa.dashboard", "get_rm_leaderboard", [], this._dateArgs());
+            this.state.rmRows = res.rows;
+        } finally {
+            this.state.rmLoading = false;
+        }
+    }
+
+    async _loadCampaign() {
+        this.state.campaignLoading = true;
+        try {
+            this.state.campaign = await this.orm.call(
+                "wa.dashboard", "get_campaign_performance", [], {
+                    date_from: this.state.dateFrom, date_to: this.state.dateTo,
+                });
+        } finally {
+            this.state.campaignLoading = false;
+        }
+    }
+
     async onSwitchTab(tab) {
         this.state.activeTab = tab;
-        if (tab === "property" && this.state.propertyRows.length === 0) {
-            await this._loadPropertyView();
-        }
+        await this._loadActiveTab();
+    }
+
+    // ── Navigation (analytics → action) ──────────────────────────────────────
+
+    openConversation(row) {
+        // Open the WhatsApp inbox focused on this conversation.
+        this.action.doAction(
+            { type: "ir.actions.client", tag: "wa_inbox" },
+            { additionalContext: { default_conversation_id: row.conversation_id } },
+        );
+    }
+
+    // ── Command Center derived data (KPI cards, charts, worklists) ────────────
+
+    get kpiCards() {
+        const m = this.state.command;
+        if (!m) return [];
+        const d = m.deltas || {};
+        const dl = (k) => (d[k] == null ? undefined : d[k]);   // null → absent (OWL props)
+        const spark = (key) => this.state.trends.map((t) => t[key]);
+        return [
+            { label: "Reply rate", value: this.fmtRate(m.reply_rate), delta: dl("reply_rate"),
+              sub: `${m.replied} of ${m.leads_messaged} messaged`, spark: spark("replies"),
+              tooltip: "Of leads we messaged on WhatsApp, the share that replied." },
+            { label: "Median response", value: this.fmtSecs(m.first_response_median),
+              delta: dl("first_response_median"), invert: true,
+              sub: `p90 ${this.fmtSecs(m.first_response_p90)}`,
+              tooltip: "Median time for an RM's first reply, counted in business hours only." },
+            { label: "SLA adherence", value: this.fmtRate(m.sla_pct), delta: dl("sla_pct"),
+              sub: `within ${m.sla_minutes}m`,
+              tooltip: "Share of customers first-replied-to within the SLA target (business hours)." },
+            { label: "Delivery rate", value: this.fmtRate(m.delivery_rate), delta: dl("delivery_rate"),
+              sub: `${m.delivered} delivered`,
+              tooltip: "Delivered (or read) messages as a share of those sent." },
+            { label: "Failure rate", value: this.fmtRate(m.failure_rate), delta: dl("failure_rate"),
+              invert: true, sub: m.opt_outs ? `${m.opt_outs} opt-outs` : "channel health",
+              spark: spark("failed"),
+              tooltip: "Failed sends (blocked / invalid / opted-out / rate-limited / template errors) as a share of sent." },
+            { label: "WhatsApp spend", value: this.fmtMoney(m.spend), delta: dl("spend"), invert: true,
+              sub: `₹${m.cost_per_reply}/reply`, spark: spark("spend"),
+              tooltip: "Total WhatsApp message cost, and cost per reply earned." },
+        ];
+    }
+
+    get volumeChart() {
+        const t = this.state.trends;
+        const labels = t.map((x) => this._fmtDateShort(x.date));
+        return {
+            data: {
+                labels,
+                datasets: [
+                    { label: "Sent", data: t.map((x) => x.sent), borderColor: "#7c3aed",
+                      backgroundColor: "rgba(124,58,237,0.08)", fill: true, tension: 0.3,
+                      pointRadius: 2, borderWidth: 2 },
+                    { label: "Replies", data: t.map((x) => x.replies), borderColor: "#2563eb",
+                      backgroundColor: "rgba(37,99,235,0.06)", fill: true, tension: 0.3,
+                      pointRadius: 2, borderWidth: 2 },
+                ],
+            },
+            options: { scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } },
+        };
+    }
+
+    get healthChart() {
+        const t = this.state.trends;
+        return {
+            data: {
+                labels: t.map((x) => this._fmtDateShort(x.date)),
+                datasets: [
+                    { label: "Failed", data: t.map((x) => x.failed), backgroundColor: "#ef4444" },
+                ],
+            },
+            options: { scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } },
+        };
+    }
+
+    get needsReplyBuckets() {
+        const b = (this.state.worklists && this.state.worklists.needs_reply.buckets) || {};
+        return [
+            { label: "0-4h", value: b["0-4h"] || 0 },
+            { label: "4-24h", value: b["4-24h"] || 0, tone: "warn" },
+            { label: ">24h", value: b[">24h"] || 0, tone: "bad" },
+        ];
+    }
+
+    _worklistRows(key, metaFn) {
+        const wl = this.state.worklists;
+        if (!wl) return [];
+        return wl[key].rows.map((r) => ({
+            ...r,
+            title: r.lead_name || r.phone || "Unknown",
+            sub: r.lead_name ? r.phone : "",
+            meta: metaFn(r),
+        }));
+    }
+
+    get needsReplyRows() {
+        return this._worklistRows("needs_reply", (r) => `${r.age_hours}h`);
+    }
+
+    get windowClosingRows() {
+        return this._worklistRows("window_closing", (r) => this.fmtDateTime(r.expires_at));
+    }
+
+    get unassignedRows() {
+        return this._worklistRows("unassigned", (r) => this.fmtDateTime(r.last_message_at));
+    }
+
+    // ── Lens column configs + filtered rows ──────────────────────────────────
+
+    get rmColumns() {
+        return [
+            { key: "rm_name", label: "RM", type: "text", align: "left" },
+            { key: "conversations", label: "Convs", type: "num" },
+            { key: "msgs_sent", label: "Sent", type: "num" },
+            { key: "reply_rate", label: "Reply rate", type: "bar" },
+            { key: "first_response_median", label: "Response", type: "secs" },
+            { key: "sla_pct", label: "SLA", type: "pct" },
+            { key: "spend", label: "Cost", type: "money" },
+        ];
+    }
+
+    get rmFilteredRows() {
+        const q = (this.state.rmSearch || "").toLowerCase();
+        if (!q) return this.state.rmRows;
+        return this.state.rmRows.filter((r) => (r.rm_name || "").toLowerCase().includes(q));
+    }
+
+    get campaignWorkflowColumns() {
+        return [
+            { key: "name", label: "Workflow", type: "text", align: "left" },
+            { key: "sent", label: "Sent", type: "num" },
+            { key: "delivery_rate", label: "Delivered", type: "pct" },
+            { key: "reply_rate", label: "Reply rate", type: "bar" },
+            { key: "opt_out", label: "Opt-outs", type: "num" },
+            { key: "failed", label: "Failed", type: "num" },
+            { key: "cost", label: "Cost", type: "money" },
+        ];
+    }
+
+    get campaignTemplateColumns() {
+        return [{ ...this.campaignWorkflowColumns[0], label: "Template" },
+            ...this.campaignWorkflowColumns.slice(1)];
+    }
+
+    _campaignFilter(rows) {
+        const q = (this.state.campaignSearch || "").toLowerCase();
+        if (!q) return rows;
+        return rows.filter((r) => (r.name || "").toLowerCase().includes(q));
+    }
+
+    get campaignWorkflowRows() {
+        return this.state.campaign ? this._campaignFilter(this.state.campaign.workflows) : [];
+    }
+
+    get campaignTemplateRows() {
+        return this.state.campaign ? this._campaignFilter(this.state.campaign.templates) : [];
     }
 
     async onPropertySort(sort) {
@@ -329,10 +566,19 @@ export class WaDashboard extends Component {
     // ── Actions ──────────────────────────────────────────────────────────────
 
     async onRefresh() {
-        await this._loadAll();
-        if (this.state.activeTab === "property") {
-            await this._loadPropertyView();
-        }
+        this._loadWorkflows();
+        await this._loadActiveTab();
+    }
+
+    onRmSearchInput(value) { this.state.rmSearch = value; }
+    onCampaignSearchInput(value) { this.state.campaignSearch = value; }
+
+    /** Money — compact rupee for spend (₹k / ₹L), plain otherwise. */
+    fmtMoney(val) {
+        if (val == null) return "₹0";
+        if (val >= 100000) return `₹${(val / 100000).toFixed(1)}L`;
+        if (val >= 1000) return `₹${(val / 1000).toFixed(1)}k`;
+        return `₹${val.toFixed(0)}`;
     }
 
     // --- Date picker presets ---
@@ -342,13 +588,8 @@ export class WaDashboard extends Component {
         this.state.dateFrom       = dateFrom;
         this.state.dateTo         = dateTo;
         this.state.showDatePicker = false;
-        this._loadMetrics();
-        this._loadHourlyData();
-        this._loadFailures();
-        if (this.state.activeTab === "property") {
-            this.state.expandedPropertyId = null;
-            this._loadPropertyView();
-        }
+        this.state.expandedPropertyId = null;
+        this._loadActiveTab();
     }
 
     onPresetToday()         { this._applyPreset("Today",          this._todayStart(), this._todayEnd()); }
@@ -379,10 +620,7 @@ export class WaDashboard extends Component {
             slugs.push(wf.slug);
         }
         this.state.workflowSlugs = slugs;
-        this._loadMetrics();
-        this._loadHourlyData();
-        this._loadFailures();
-        if (this.state.activeTab === "property") this._loadPropertyView();
+        this._loadActiveTab();
     }
 
     /** Clear all workflow filters and close the dropdown. */
@@ -390,10 +628,7 @@ export class WaDashboard extends Component {
         this.state.workflowSlugs   = [];
         this.state.showWorkflowMenu = false;
         this.state.workflowSearch   = "";
-        this._loadMetrics();
-        this._loadHourlyData();
-        this._loadFailures();
-        if (this.state.activeTab === "property") this._loadPropertyView();
+        this._loadActiveTab();
     }
 
     /** Close the workflow dropdown without changing selection. */

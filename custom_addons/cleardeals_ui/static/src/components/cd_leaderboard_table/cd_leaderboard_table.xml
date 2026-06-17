@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<templates xml:space="preserve">
+
+  <t t-name="cleardeals_ui.CdLeaderboardTable">
+    <div class="cd-lb">
+      <table class="cd-lb__table">
+        <thead>
+          <tr>
+            <t t-foreach="props.columns" t-as="col" t-key="col.key">
+              <th t-att-class="'cd-lb__th' + (col.align === 'right' || (col.type and col.type !== 'text' and col.type !== 'bar') ? ' o-r' : '') + (col.type === 'bar' ? ' cd-lb__th--bar' : '')"
+                  t-on-click="() => this.onSort(col)">
+                <span t-esc="col.label"/>
+                <t t-if="state.sortKey === col.key">
+                  <i t-att-class="'fa cd-lb__sort ' + (state.sortDir === 'desc' ? 'fa-caret-down' : 'fa-caret-up')" aria-hidden="true"/>
+                </t>
+              </th>
+            </t>
+          </tr>
+        </thead>
+        <tbody>
+          <t t-if="sortedRows.length">
+            <t t-foreach="sortedRows" t-as="row" t-key="row_index">
+              <tr t-att-class="'cd-lb__row' + (props.onRowClick ? ' o-click' : '')"
+                  t-on-click="() => this.onClick(row)">
+                <t t-foreach="props.columns" t-as="col" t-key="col.key">
+                  <td t-att-class="'cd-lb__td' + (col.align === 'right' || (col.type and col.type !== 'text' and col.type !== 'bar') ? ' o-r' : '')">
+
+                    <t t-if="col.type === 'bar'">
+                      <div class="cd-lb__bar">
+                        <div class="cd-lb__bar-track">
+                          <div class="cd-lb__bar-fill"
+                               t-attf-style="width: {{ barPct(col, row) }}%;"
+                               t-att-class="barPct(col, row) >= 50 ? 'is-good' : (barPct(col, row) >= 20 ? 'is-mid' : 'is-low')"/>
+                        </div>
+                        <span class="cd-lb__bar-val" t-esc="fmt(col, row)"/>
+                      </div>
+                    </t>
+
+                    <t t-elif="col.type === 'chip'">
+                      <t t-if="row[col.key] == null">
+                        <span class="cd-lb__muted">—</span>
+                      </t>
+                      <t t-else="">
+                        <span class="cd-lb__chip" t-esc="fmt(col, row)"/>
+                      </t>
+                    </t>
+
+                    <t t-else="">
+                      <span t-att-class="(row[col.key] == null and col.type !== 'money') ? 'cd-lb__muted' : ''"
+                            t-esc="fmt(col, row)"/>
+                    </t>
+
+                  </td>
+                </t>
+              </tr>
+            </t>
+          </t>
+          <t t-else="">
+            <tr>
+              <td class="cd-lb__empty" t-att-colspan="props.columns.length">
+                <t t-esc="props.emptyText"/>
+              </td>
+            </tr>
+          </t>
+        </tbody>
+      </table>
+    </div>
+  </t>
+
+</templates>

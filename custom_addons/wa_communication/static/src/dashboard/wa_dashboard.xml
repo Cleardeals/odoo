@@ -124,15 +124,121 @@
 
       <!-- ── Tabs ────────────────────────────────────────────────────── -->
       <div class="o-wa-dashboard__tabs">
-        <button t-att-class="'o-wa-dashboard__tab' + (state.activeTab === 'overview' ? ' o-wa-dashboard__tab--active' : '')"
-                t-on-click="() => this.onSwitchTab('overview')">
-          Overview
-        </button>
-        <button t-att-class="'o-wa-dashboard__tab' + (state.activeTab === 'property' ? ' o-wa-dashboard__tab--active' : '')"
-                t-on-click="() => this.onSwitchTab('property')">
-          By Property
-        </button>
+        <t t-foreach="[['command','Command Center'],['overview','Overview'],['rm','By RM'],['property','By Property'],['campaign','By Campaign']]" t-as="tb" t-key="tb[0]">
+          <button t-att-class="'o-wa-dashboard__tab' + (state.activeTab === tb[0] ? ' o-wa-dashboard__tab--active' : '')"
+                  t-on-click="() => this.onSwitchTab(tb[0])">
+            <t t-esc="tb[1]"/>
+          </button>
+        </t>
       </div>
+
+      <!-- ════════════════════════ COMMAND CENTER ══════════════════════ -->
+      <t t-if="state.activeTab === 'command'">
+        <t t-if="state.commandLoading and !state.command">
+          <div class="o-wa-dashboard__loading">Loading…</div>
+        </t>
+        <t t-if="state.command">
+          <!-- Headline KPI cards -->
+          <div class="o-wa-kpi-grid">
+            <t t-foreach="kpiCards" t-as="k" t-key="k.label">
+              <CdKpiCard label="k.label" value="k.value" sub="k.sub or ''"
+                         delta="k.delta" invert="k.invert or false"
+                         spark="k.spark or []" tooltip="k.tooltip or ''"/>
+            </t>
+          </div>
+
+          <!-- Trend charts -->
+          <div class="o-wa-dashboard__panels">
+            <div class="o-wa-dashboard__section">
+              <div class="o-wa-dashboard__section-header">
+                <span class="o-wa-dashboard__section-title">Volume &amp; replies</span>
+              </div>
+              <CdChart type="'line'" data="volumeChart.data" options="volumeChart.options"
+                       height="200" ariaLabel="'Daily sent messages and replies'"/>
+            </div>
+            <div class="o-wa-dashboard__section">
+              <div class="o-wa-dashboard__section-header">
+                <span class="o-wa-dashboard__section-title">Failures</span>
+              </div>
+              <CdChart type="'bar'" data="healthChart.data" options="healthChart.options"
+                       height="200" ariaLabel="'Daily failed messages'"/>
+            </div>
+          </div>
+
+          <!-- Action worklists -->
+          <div class="o-wa-worklist-grid">
+            <CdWorklistPanel title="'Needs reply'" icon="'fa-reply'" accent="'danger'"
+                             count="state.worklists.needs_reply.count"
+                             buckets="needsReplyBuckets" rows="needsReplyRows"
+                             onRowClick="(r) => this.openConversation(r)"
+                             emptyText="'No unanswered chats — nice.'"/>
+            <CdWorklistPanel title="'Window closing'" icon="'fa-hourglass-half'" accent="'warn'"
+                             count="state.worklists.window_closing.count"
+                             rows="windowClosingRows"
+                             onRowClick="(r) => this.openConversation(r)"
+                             emptyText="'No 24h windows closing soon.'"/>
+            <CdWorklistPanel title="'Unassigned'" icon="'fa-user-plus'" accent="'info'"
+                             count="state.worklists.unassigned.count"
+                             rows="unassignedRows"
+                             onRowClick="(r) => this.openConversation(r)"
+                             emptyText="'Every active chat is assigned.'"/>
+          </div>
+        </t>
+      </t>
+
+      <!-- ════════════════════════ BY RM ═══════════════════════════════ -->
+      <t t-if="state.activeTab === 'rm'">
+        <div class="o-wa-dashboard__section">
+          <div class="o-wa-dashboard__section-header">
+            <span class="o-wa-dashboard__section-title">RM responsiveness</span>
+            <div class="o-wa-dashboard__prop-search">
+              <i class="fa fa-search"/>
+              <input type="text" placeholder="Search RM…"
+                     t-att-value="state.rmSearch"
+                     t-on-input="(e) => this.onRmSearchInput(e.target.value)"/>
+            </div>
+          </div>
+          <t t-if="state.rmLoading">
+            <div class="o-wa-dashboard__loading">Loading…</div>
+          </t>
+          <t t-else="">
+            <CdLeaderboardTable columns="rmColumns" rows="rmFilteredRows"
+                                defaultSort="'reply_rate'"
+                                emptyText="'No RM activity in this period.'"/>
+          </t>
+        </div>
+      </t>
+
+      <!-- ════════════════════════ BY CAMPAIGN ═════════════════════════ -->
+      <t t-if="state.activeTab === 'campaign'">
+        <div class="o-wa-dashboard__section">
+          <div class="o-wa-dashboard__section-header">
+            <span class="o-wa-dashboard__section-title">Workflows</span>
+            <div class="o-wa-dashboard__prop-search">
+              <i class="fa fa-search"/>
+              <input type="text" placeholder="Search…"
+                     t-att-value="state.campaignSearch"
+                     t-on-input="(e) => this.onCampaignSearchInput(e.target.value)"/>
+            </div>
+          </div>
+          <t t-if="state.campaignLoading">
+            <div class="o-wa-dashboard__loading">Loading…</div>
+          </t>
+          <t t-else="">
+            <CdLeaderboardTable columns="campaignWorkflowColumns" rows="campaignWorkflowRows"
+                                defaultSort="'sent'"
+                                emptyText="'No workflow sends in this period.'"/>
+          </t>
+        </div>
+        <div class="o-wa-dashboard__section">
+          <div class="o-wa-dashboard__section-header">
+            <span class="o-wa-dashboard__section-title">Templates</span>
+          </div>
+          <CdLeaderboardTable columns="campaignTemplateColumns" rows="campaignTemplateRows"
+                              defaultSort="'sent'"
+                              emptyText="'No template sends in this period.'"/>
+        </div>
+      </t>
 
       <!-- ════════════════════════ OVERVIEW TAB ════════════════════════ -->
       <t t-if="state.activeTab === 'overview'">
