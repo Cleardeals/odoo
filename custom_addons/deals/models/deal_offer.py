@@ -20,9 +20,7 @@ class DealOffer(models.Model):
     waive_off_value = fields.Float(
         string="Waive Off Value", required=True, tracking=True
     )
-    is_active = fields.Boolean(
-        string="Is Active?", default=True, index=True, tracking=True
-    )
+    is_active = fields.Boolean(string="Active", default=True, index=True, tracking=True)
 
     # Constraints to ensure valid waive off values based on the selected type
 
@@ -36,7 +34,7 @@ class DealOffer(models.Model):
                 raise ValidationError(
                     msg,
                 )
-            elif record.waive_off_type == "fixed" and record.waive_off_value <= 0:  # noqa: RET506
+            if record.waive_off_type == "fixed" and record.waive_off_value <= 0:
                 msg_0 = "Fixed amount value must be greater than 0."
                 raise ValidationError(msg_0)
 
