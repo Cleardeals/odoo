@@ -18,7 +18,7 @@ class DealOffer(models.Model):
         default="percentage",
     )
     waive_off_value = fields.Float(
-        string="Waive Off Value", required=True, tracking=True
+        string="Waive Off Value", required=True, tracking=True,
     )
     is_active = fields.Boolean(string="Active", default=True, index=True, tracking=True)
 
