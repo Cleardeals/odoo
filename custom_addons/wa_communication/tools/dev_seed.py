@@ -37,6 +37,7 @@ All times are placed within the last few hours so the dashboard's default
 "Today" window shows the demo immediately (the rescue cards included).
 """
 
+import random
 from datetime import timedelta
 
 from odoo import fields
@@ -64,12 +65,14 @@ def purge(env):
     leads = Lead.search([('phone', '=like', _LEAD_PREFIX + '%')])
     visits = Visit.search([('inquiry_id', 'in', leads.ids)]) if leads else Visit.browse()
     props = Prop.search([('uuid', '=like', _PROP_PREFIX + '%')])
+    workflows = env['wa.workflow'].sudo().search([('slug', '=like', 'devseed%')])
 
     counts = {
         'conversations': len(convs),   # messages + segments cascade with these
         'visits': len(visits),
         'leads': len(leads),
         'properties': len(props),
+        'workflows': len(workflows),
     }
 
     # Order matters: visits reference property (restrict); conversations cascade
@@ -78,6 +81,10 @@ def purge(env):
     convs.unlink()
     leads.unlink()
     props.unlink()
+    try:
+        workflows.unlink()
+    except Exception:  # noqa: BLE001 — workflow_slug on messages is a plain Char, no FK
+        pass
     return {'purged': counts}
 
 
@@ -324,4 +331,178 @@ def seed(env):
         ],
         'tip': 'Open WhatsApp → Dashboard → By Property. Default "Today" window shows it all; '
                'times render in IST.',
+    }
+
+
+# ───────────────────────────────────────────────────────────────────────────
+# Showcase seed — a rich, varied month for the Command Center / lens tabs
+# ───────────────────────────────────────────────────────────────────────────
+
+def seed_showcase(env):
+    """Wipe demo rows and create a *varied* month of WhatsApp activity so the
+    Command Center, By-Campaign and By-RM views all show realistic spread.
+
+    Unlike :func:`seed` (which is tuned for the By-Property scenarios), this
+    spreads messages across the **current month** and exercises every status —
+    so the Failure-reasons card shows all six Meta reasons, the Quality-risk card
+    shows opt-outs + blocks, the trend charts have shape, and the campaign / RM
+    tables have multiple rows. Idempotent (purges first). Uses the same demo
+    markers, so :func:`purge` cleans it up.
+
+    Run from an Odoo shell against the **dev** DB with the venv interpreter::
+
+        from odoo.addons.wa_communication.tools.dev_seed import seed_showcase
+        print(seed_showcase(env)); env.cr.commit()
+    """
+    purge(env)
+    random.seed(42)
+
+    now = fields.Datetime.now()
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    source = env['leads.new'].sudo()._get_or_create_source(_SOURCE)
+
+    # RMs for the By-RM lens — reuse up to 5 real internal users (falls back to
+    # the current user) so the leaderboard shows recognisable names.
+    rms = env['res.users'].sudo().search(
+        [('share', '=', False), ('active', '=', True), ('id', '>', 1)], limit=5)
+    if not rms:
+        rms = env.user
+    rms = list(rms)
+
+    # Workflows (one paused) + the templates each one sends.
+    wf_specs = [
+        ('devseed_welcome',  'DEVSEED · Welcome',     True,  ['welcome_v1']),
+        ('devseed_nurture',  'DEVSEED · Nurture',     True,  ['nurture_day3', 'site_visit_invite']),
+        ('devseed_reengage', 'DEVSEED · Re-engage',   True,  ['still_interested']),
+        ('devseed_promo',    'DEVSEED · Promo Blast', False, ['price_drop', 'festive_offer']),
+    ]
+    WF = env['wa.workflow'].sudo()
+    workflows = []
+    for slug, name, active, tpls in wf_specs:
+        wf = WF.create({'slug': slug, 'name': name, 'is_active': active})
+        workflows.append((slug, tpls, wf))
+
+    # Status mix (weighted) — every failure reason is represented.
+    status_pool = (
+        ['read'] * 30 + ['delivered'] * 28 + ['sent'] * 4 +
+        ['failed'] * 7 + ['meta_blocked'] * 6 + ['invalid_number'] * 5 +
+        ['opted_out'] * 6 + ['rate_limited'] * 4 + ['template_error'] * 4 +
+        ['expired'] * 4
+    )
+    _DELIVERED = {'delivered', 'read'}
+
+    # A few demo properties so leads attribute (and By-Property isn't empty).
+    props = [
+        env['property.base'].sudo().create({
+            'name': nm, 'property_tag': tag,
+            'uuid': '%s%d' % (_PROP_PREFIX, i), 'prop_id': '%sP%d' % (_PROP_PREFIX, i),
+            'rm_user_id': rms[0].id,
+        })
+        for i, (nm, tag) in enumerate(
+            [('Demo Orchard', 'DEMO-ORCHARD'), ('Demo Bay', 'DEMO-BAY'),
+             ('Demo Vista', 'DEMO-VISTA')], start=10)
+    ]
+
+    seq = {'n': 0}
+
+    def next_phone():
+        seq['n'] += 1
+        return '9999%06d' % seq['n']            # 9999000NNN — matches purge marker
+
+    def rand_when():
+        """A business-hours-ish UTC moment within the current month, ≤ now."""
+        day = random.randint(1, max(1, now.day))
+        when = month_start + timedelta(
+            days=day - 1, hours=random.randint(4, 13), minutes=random.randint(0, 59))
+        return when if when <= now else now - timedelta(hours=random.randint(1, 6))
+
+    def make_msg(conv, lead, when, direction, initiator, status, kind, cost,
+                 wf=None, tpl=None, rm=None):
+        vals = {
+            'conversation_id': conv.id, 'direction': direction, 'initiator': initiator,
+            'kind': kind, 'status': status, 'cost_inr': cost,
+            'occurred_at': when, 'body': 'Demo message',
+        }
+        if lead is not None:
+            vals['lead_id'] = lead.id
+        if wf:
+            vals['workflow_slug'] = wf
+        if tpl:
+            vals['template_name'] = tpl
+        if rm and direction == 'outbound':
+            vals['sender_user_id'] = rm.id
+        return env['wa.message'].sudo().create(vals)
+
+    counts = {'leads': 0, 'sends': 0, 'replies': 0, 'rm_responses': 0, 'failures': 0}
+
+    # ── 60 campaign sends spread across the month ────────────────────────────
+    for _ in range(60):
+        slug, tpls, _wf = random.choice(workflows)
+        tpl = random.choice(tpls)
+        status = random.choice(status_pool)
+        rm = random.choice(rms)
+        prop = random.choice(props)
+        phone = next_phone()
+
+        lead = env['leads.new'].with_context(automated_lead_creation=True).create({
+            'name': '[DEMO] %s %s' % (prop.property_tag, phone),
+            'source_id': source.id, 'phone': phone,
+            'property_base_id': prop.id, 'user_id': rm.id, 'current_status': 'lead',
+            'inquiry_type': 'primary',
+        })
+        counts['leads'] += 1
+        conv = env['wa.conversation'].sudo().create({
+            'phone_number': '91' + phone, 'assigned_user_id': rm.id, 'lead_id': lead.id})
+
+        sent_at = rand_when()
+        cost = round(random.uniform(0.62, 0.92), 2) if status in _DELIVERED or status == 'sent' else 0.0
+        make_msg(conv, lead, sent_at, 'outbound', 'workflow', status,
+                 'template', cost, wf=slug, tpl=tpl, rm=rm)
+        counts['sends'] += 1
+        if status not in _DELIVERED and status != 'sent':
+            counts['failures'] += 1
+
+        # Only delivered/read sends can earn a reply.
+        if status in _DELIVERED and random.random() < 0.62:
+            reply_at = sent_at + timedelta(minutes=random.randint(8, 320))
+            if reply_at > now:
+                reply_at = now - timedelta(minutes=random.randint(5, 90))
+            make_msg(conv, lead, reply_at, 'inbound', 'buyer', 'delivered', 'text_reply', 0.0)
+            counts['replies'] += 1
+            # 80% get an RM response (varied latency → SLA hits and misses); the
+            # rest stay unanswered and land in the Needs-reply worklist.
+            if random.random() < 0.8:
+                resp_at = reply_at + timedelta(minutes=random.randint(5, 180))
+                if resp_at > now:
+                    resp_at = now
+                make_msg(conv, lead, resp_at, 'outbound', 'rm', 'read',
+                         'freetext', round(random.uniform(0.3, 0.4), 2), rm=rm)
+                counts['rm_responses'] += 1
+
+    # ── A few fresh unanswered chats for the 0–4h / 4–24h needs-reply buckets ─
+    for hrs in (0.5, 2, 3.5, 9, 20):
+        rm = random.choice(rms)
+        prop = random.choice(props)
+        phone = next_phone()
+        lead = env['leads.new'].with_context(automated_lead_creation=True).create({
+            'name': '[DEMO] %s %s' % (prop.property_tag, phone),
+            'source_id': source.id, 'phone': phone,
+            'property_base_id': prop.id, 'user_id': rm.id, 'current_status': 'lead',
+            'inquiry_type': 'primary',
+        })
+        counts['leads'] += 1
+        conv = env['wa.conversation'].sudo().create({
+            'phone_number': '91' + phone, 'assigned_user_id': rm.id, 'lead_id': lead.id})
+        when = now - timedelta(hours=hrs)
+        make_msg(conv, lead, when - timedelta(minutes=30), 'outbound', 'workflow',
+                 'read', 'template', 0.8, wf='devseed_welcome', tpl='welcome_v1', rm=rm)
+        make_msg(conv, lead, when, 'inbound', 'buyer', 'delivered', 'text_reply', 0.0)
+
+    return {
+        'created': counts,
+        'workflows': [s for s, _t, _w in workflows],
+        'rms': [u.name for u in rms],
+        'tip': 'Open WhatsApp → Dashboard. Set the date filter to "Current Month". The '
+               'Command Center failure-reasons + quality-risk cards, the trend charts, and '
+               'the By-Campaign / By-RM tabs all light up.',
     }

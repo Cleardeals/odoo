@@ -64,6 +64,8 @@ export class WaDashboard extends Component {
             commandLoading:    false,
             // Needs-reply aging filter ("" = all, else "0-4h" | "4-24h" | ">24h")
             needsReplyAge:     "",
+            // KPI card click-to-expand detail (null = closed, else the card id)
+            expandedKpiId:     null,
             // ── By RM ──
             rmRows:            [],
             rmLoading:         false,
@@ -312,38 +314,112 @@ export class WaDashboard extends Component {
         const u = m.delta_units || {};
         const spark = (key) => this.state.trends.map((t) => t[key]);
         return [
-            { label: "Reply rate", value: this.fmtRate(m.reply_rate), delta: dl("reply_rate"),
-              unit: u.reply_rate, sub: `${m.replied} of ${m.leads_messaged} messaged`,
-              spark: spark("replies"),
+            { id: "reply_rate", label: "Reply rate", value: this.fmtRate(m.reply_rate),
+              delta: dl("reply_rate"), unit: u.reply_rate,
+              sub: `${m.replied} of ${m.leads_messaged} messaged`,
+              spark: spark("replies"), seriesKey: "replies", seriesLabel: "Replies / day",
+              stats: [["Leads messaged", this.fmt(m.leads_messaged)], ["Replied", this.fmt(m.replied)],
+                      ["Messages received", this.fmt(m.msgs_received)]],
               tooltip: "Of leads we messaged on WhatsApp, the share that replied." },
-            { label: "Median response", value: this.fmtSecs(m.first_response_median),
+            { id: "response", label: "Median response", value: this.fmtSecs(m.first_response_median),
               delta: dl("first_response_median"), unit: u.first_response_median, invert: true,
               sub: `p90 ${this.fmtSecs(m.first_response_p90)}`,
+              stats: [["Median (business hrs)", this.fmtSecs(m.first_response_median)],
+                      ["p90 (business hrs)", this.fmtSecs(m.first_response_p90)],
+                      ["SLA target", `${m.sla_minutes}m`]],
               tooltip: "Median time for an RM's first reply, counted in business hours only." },
-            { label: "SLA adherence", value: this.fmtRate(m.sla_pct), delta: dl("sla_pct"),
+            { id: "sla", label: "SLA adherence", value: this.fmtRate(m.sla_pct), delta: dl("sla_pct"),
               unit: u.sla_pct, sub: `within ${m.sla_minutes}m`,
+              stats: [["SLA target", `${m.sla_minutes}m`], ["Adherence", this.fmtRate(m.sla_pct)]],
               tooltip: "Share of customers first-replied-to within the SLA target (business hours)." },
-            { label: "Delivery rate", value: this.fmtRate(m.delivery_rate), delta: dl("delivery_rate"),
-              unit: u.delivery_rate, sub: `${m.delivered} delivered`,
+            { id: "delivery", label: "Delivery rate", value: this.fmtRate(m.delivery_rate),
+              delta: dl("delivery_rate"), unit: u.delivery_rate, sub: `${m.delivered} delivered`,
+              stats: [["Sent", this.fmt(m.msgs_sent)], ["Delivered", this.fmt(m.delivered)],
+                      ["Read", this.fmt(m.read)], ["Read rate", this.fmtRate(m.read_rate)]],
               tooltip: "Delivered (or read) messages as a share of those sent." },
-            { label: "Failure rate", value: this.fmtRate(m.failure_rate), delta: dl("failure_rate"),
-              unit: u.failure_rate, invert: true,
-              sub: m.opt_outs ? `${m.opt_outs} opt-outs` : "channel health",
-              spark: spark("failed"),
-              tooltip: "Failed sends (blocked / invalid / opted-out / rate-limited / template errors) as a share of sent." },
-            { label: "WhatsApp spend", value: this.fmtMoney(m.spend), delta: dl("spend"),
-              unit: u.spend, invert: true,
-              sub: `₹${m.cost_per_reply}/reply`, spark: spark("spend"),
-              tooltip: "Total WhatsApp message cost, and cost per reply earned." },
-            { label: "Failure reasons", value: this.fmt(m.failed), accent: "bad",
+            // Single failure card: the rate is the headline, the reason breakdown is
+            // inline, and the full per-reason table + trend live in the click detail.
+            { id: "failure_rate", label: "Failure rate", value: this.fmtRate(m.failure_rate),
+              delta: dl("failure_rate"), unit: u.failure_rate, invert: true,
+              sub: m.failed ? `${this.fmt(m.failed)} failed` : "no failed sends",
+              spark: spark("failed"), seriesKey: "failed", seriesLabel: "Failed / day",
               breakdown: this._failureBreakdown(m),
-              sub: m.failed ? "" : "no failed sends",
-              tooltip: "Why sends failed in this period, by Meta reason — biggest cause first." },
-            { label: "Quality risk", value: this.fmtRate(m.opt_out_rate), delta: dl("opt_out_rate"),
-              unit: u.opt_out_rate, invert: true, accent: "warn",
+              stats: [["Sent", this.fmt(m.msgs_sent)], ["Failed", this.fmt(m.failed)],
+                      ["Failure rate", this.fmtRate(m.failure_rate)]],
+              tooltip: "Failed sends as a share of those sent, broken down by Meta reason (biggest cause first)." },
+            { id: "spend", label: "WhatsApp spend", value: this.fmtMoney(m.spend), delta: dl("spend"),
+              unit: u.spend, invert: true, sub: `₹${m.cost_per_reply}/reply`,
+              spark: spark("spend"), seriesKey: "spend", seriesLabel: "Spend / day (₹)",
+              stats: [["Total spend", `₹${m.spend}`], ["Cost per reply", `₹${m.cost_per_reply}`],
+                      ["Replies earned", this.fmt(m.replied)]],
+              tooltip: "Total WhatsApp message cost, and cost per reply earned." },
+            { id: "quality_risk", label: "Quality risk", value: this.fmtRate(m.opt_out_rate),
+              delta: dl("opt_out_rate"), unit: u.opt_out_rate, invert: true, accent: "warn",
               sub: `${m.opt_outs} opt-outs · ${m.blocks} blocks`,
+              stats: [["Opt-out rate", this.fmtRate(m.opt_out_rate)], ["Opt-outs", this.fmt(m.opt_outs)],
+                      ["Blocks (Meta)", this.fmt(m.blocks)]],
               tooltip: "Opt-out rate and blocks — rising values threaten your WhatsApp sender quality (Meta can throttle you)." },
         ];
+    }
+
+    // ── KPI detail (click-to-expand) ─────────────────────────────────────────
+
+    onExpandKpi(id) { this.state.expandedKpiId = id; }
+    closeKpiDetail() { this.state.expandedKpiId = null; }
+
+    get expandedCard() {
+        if (!this.state.expandedKpiId) return null;
+        return this.kpiCards.find((c) => c.id === this.state.expandedKpiId) || null;
+    }
+
+    /** Formatted delta for the detail header: {dir, tone, text} or null. */
+    get expandedDelta() {
+        const c = this.expandedCard;
+        if (!c || c.delta == null) return null;
+        const tone = ((c.delta >= 0) === !c.invert) ? "is-good" : "is-bad";
+        const unit = c.unit === "pts" ? " pts" : "%";
+        return { dir: c.delta >= 0 ? "up" : "down", tone,
+                 text: `${Math.abs(c.delta).toFixed(1)}${unit}` };
+    }
+
+    /** "n.n%" share for a breakdown row in the detail table. */
+    bdSharePct(pct) {
+        return `${pct.toFixed(1)}%`;
+    }
+
+    /** Full breakdown (all reasons) with share-of-total, for the detail table. */
+    get kpiDetailBreakdown() {
+        const c = this.expandedCard;
+        if (!c || !c.breakdown) return [];
+        const total = c.breakdown.reduce((s, b) => s + b.value, 0) || 1;
+        return c.breakdown.map((b, i) => ({
+            ...b, pct: (b.value / total) * 100, color: this._segColor(i),
+        }));
+    }
+
+    _segColor(i) {
+        const palette = ["#dc2626", "#ea580c", "#d97706", "#ca8a04",
+            "#9333ea", "#0891b2", "#64748b"];
+        return palette[i % palette.length];
+    }
+
+    /** A larger labelled trend for the expanded card (when a series exists). */
+    get kpiDetailChart() {
+        const c = this.expandedCard;
+        const t = this.state.trends;
+        if (!c || !c.seriesKey || !t.length) return null;
+        return {
+            data: {
+                labels: t.map((x) => this._fmtTrendLabel(x.date, x.granularity)),
+                datasets: [{
+                    label: c.seriesLabel || c.label,
+                    data: t.map((x) => x[c.seriesKey]),
+                    borderColor: "#7c3aed", backgroundColor: "rgba(124,58,237,0.10)",
+                    fill: true, tension: 0.3, pointRadius: 2, borderWidth: 2,
+                }],
+            },
+            options: { scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } },
+        };
     }
 
     /** failed_breakdown {label: count} → [{label, value}] biggest-first for the mini bars. */

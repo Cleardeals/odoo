@@ -33,10 +33,17 @@ export class CdKpiCard extends Component {
         tooltip: { type: String, optional: true },
         accent:  { type: String, optional: true },
         breakdown: { type: Array, optional: true },
+        onClick: { type: Function, optional: true },
     };
 
     setup() {
         this.ui = useState({ showTip: false });
+    }
+
+    onCardClick() {
+        if (this.props.onClick) {
+            this.props.onClick();
+        }
     }
 
     /** "up" | "down" | null */
@@ -56,14 +63,33 @@ export class CdKpiCard extends Component {
     get deltaText() {
         if (this.props.delta == null) return "";
         const unit = this.props.deltaUnit === "pts" ? " pts" : "%";
-        return `${Math.abs(this.props.delta).toFixed(1)}${unit}`;
+        const abs = Math.abs(this.props.delta);
+        // A % change off a near-zero base (e.g. ₹1 → ₹17) explodes into a
+        // meaningless figure — cap the display so it reads cleanly.
+        if (unit === "%" && abs >= 1000) return "999%+";
+        return `${abs.toFixed(1)}${unit}`;
     }
 
-    /** Width % for a breakdown bar, scaled to the largest item (min 4% so a 1 shows). */
-    bdPct(value) {
-        const items = this.props.breakdown || [];
-        const max = Math.max(...items.map((b) => b.value), 1);
-        return Math.max(4, Math.round((value / max) * 100));
+    /** Total across all breakdown items (≥1 to avoid divide-by-zero). */
+    get bdTotal() {
+        return (this.props.breakdown || []).reduce((s, b) => s + (b.value || 0), 0) || 1;
+    }
+
+    /** Top 3 breakdown items for the compact legend (already sorted by caller). */
+    get bdTop() {
+        return (this.props.breakdown || []).slice(0, 3);
+    }
+
+    /** Segment width as a share of the total (min 2% so a tiny slice is visible). */
+    segPct(value) {
+        return Math.max(2, (value / this.bdTotal) * 100);
+    }
+
+    /** Distinct categorical colour per breakdown segment, by position. */
+    segColor(i) {
+        const palette = ["#dc2626", "#ea580c", "#d97706", "#ca8a04",
+            "#9333ea", "#0891b2", "#64748b"];
+        return palette[i % palette.length];
     }
 
     /** SVG points for the sparkline polyline (0..100 viewBox). */

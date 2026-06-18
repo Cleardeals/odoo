@@ -144,7 +144,8 @@
               <CdKpiCard label="k.label" value="k.value" sub="k.sub or ''"
                          delta="k.delta" deltaUnit="k.unit or '%'" invert="k.invert or false"
                          spark="k.spark or []" tooltip="k.tooltip or ''"
-                         accent="k.accent or ''" breakdown="k.breakdown or []"/>
+                         accent="k.accent or ''" breakdown="k.breakdown or []"
+                         onClick="() => this.onExpandKpi(k.id)"/>
             </t>
           </div>
 
@@ -186,6 +187,70 @@
                              onRowClick="(r) => this.openConversation(r)"
                              emptyText="'Every active chat is assigned.'"/>
           </div>
+
+          <!-- KPI detail (click-to-expand) -->
+          <t t-if="expandedCard">
+            <div class="o-wa-kpimodal__backdrop" t-on-click="() => this.closeKpiDetail()">
+              <div class="o-wa-kpimodal" t-on-click.stop="() => {}">
+                <div class="o-wa-kpimodal__head">
+                  <div>
+                    <div class="o-wa-kpimodal__label"><t t-esc="expandedCard.label"/></div>
+                    <div class="o-wa-kpimodal__value">
+                      <t t-esc="expandedCard.value"/>
+                      <span t-if="expandedDelta"
+                            t-att-class="'o-wa-kpimodal__delta ' + expandedDelta.tone">
+                        <i t-att-class="'fa ' + (expandedDelta.dir === 'up' ? 'fa-arrow-up' : 'fa-arrow-down')"/>
+                        <t t-esc="expandedDelta.text"/>
+                      </span>
+                    </div>
+                  </div>
+                  <button class="o-wa-kpimodal__close" t-on-click="() => this.closeKpiDetail()">
+                    <i class="fa fa-times"/>
+                  </button>
+                </div>
+
+                <p t-if="expandedCard.tooltip" class="o-wa-kpimodal__def"><t t-esc="expandedCard.tooltip"/></p>
+
+                <!-- Full failure-reason breakdown — fixed columns so everything aligns -->
+                <t t-if="kpiDetailBreakdown.length">
+                  <div class="o-wa-kpimodal__section-title">Breakdown</div>
+                  <div class="o-wa-kpimodal__bd">
+                    <t t-foreach="kpiDetailBreakdown" t-as="b" t-key="b.label">
+                      <div class="o-wa-kpimodal__bd-row">
+                        <span class="o-wa-kpimodal__bd-dot" t-attf-style="background:{{ b.color }};"/>
+                        <span class="o-wa-kpimodal__bd-label"><t t-esc="b.label"/></span>
+                        <span class="o-wa-kpimodal__bd-track">
+                          <span class="o-wa-kpimodal__bd-fill"
+                                t-attf-style="width:{{ b.pct }}%; background:{{ b.color }};"/>
+                        </span>
+                        <span class="o-wa-kpimodal__bd-val"><t t-esc="b.value"/></span>
+                        <span class="o-wa-kpimodal__bd-pct"><t t-esc="bdSharePct(b.pct)"/></span>
+                      </div>
+                    </t>
+                  </div>
+                </t>
+
+                <!-- Key stats -->
+                <t t-if="expandedCard.stats and expandedCard.stats.length">
+                  <div class="o-wa-kpimodal__stats">
+                    <t t-foreach="expandedCard.stats" t-as="s" t-key="s[0]">
+                      <div class="o-wa-kpimodal__stat">
+                        <div class="o-wa-kpimodal__stat-val"><t t-esc="s[1]"/></div>
+                        <div class="o-wa-kpimodal__stat-key"><t t-esc="s[0]"/></div>
+                      </div>
+                    </t>
+                  </div>
+                </t>
+
+                <!-- Larger trend chart -->
+                <t t-if="kpiDetailChart">
+                  <div class="o-wa-kpimodal__section-title"><t t-esc="expandedCard.seriesLabel"/></div>
+                  <CdChart type="'line'" data="kpiDetailChart.data" options="kpiDetailChart.options"
+                           height="220" ariaLabel="'Metric trend'"/>
+                </t>
+              </div>
+            </div>
+          </t>
         </t>
       </t>
 
