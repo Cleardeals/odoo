@@ -34,9 +34,12 @@ class DealOffer(models.Model):
                 raise ValidationError(
                     msg,
                 )
+
             if record.waive_off_type == "fixed" and record.waive_off_value <= 0:
-                msg_0 = "Fixed amount value must be greater than 0."
-                raise ValidationError(msg_0)
+                msg = "Fixed amount value must be greater than 0."
+                raise ValidationError(
+                    msg,
+                )
 
     # Helper method to calculate the reduced amount based on the waive off type and value
 
