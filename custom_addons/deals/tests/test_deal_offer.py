@@ -2,11 +2,12 @@ from time import time
 
 from odoo.exceptions import ValidationError
 from odoo.tests import tagged
-from odoo.tests.common import TransactionCase
+
+from .test_deal_common import DealCommonTestCase
 
 
-@tagged('post_install', '-at_install')
-class TestDealOffer(TransactionCase):
+@tagged("-at_install", "post_install")
+class TestDealOffer(DealCommonTestCase):
     """Tests for deal.offer behavior (offer table)."""
 
     @classmethod
