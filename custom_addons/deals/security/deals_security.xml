@@ -1,0 +1,11 @@
+<odoo>
+    <!-- Deal Manager -->
+    <record id="group_deal_manager" model="res.groups">
+        <field name="name">Deal Manager</field>
+    </record>
+
+    <!-- Data Entry Operator -->
+    <record id="group_data_entry_operator" model="res.groups">
+        <field name="name">Data Entry Operator</field>
+    </record>
+</odoo>
