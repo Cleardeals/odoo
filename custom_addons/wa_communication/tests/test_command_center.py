@@ -120,6 +120,11 @@ class TestCommandCenterRPCs(WaTransactionCase):
         self.assertEqual(cc_data['sla_pct'], 100.0)     # within 60-min SLA
         self.assertIn('deltas', cc_data)
         self.assertEqual(cc_data['sla_minutes'], 60)
+        # Channel-health fields the Command Center cards now render.
+        self.assertEqual(cc_data['failed_breakdown'], {'Failed': 1})
+        self.assertEqual(cc_data['blocks'], 0)
+        self.assertEqual(cc_data['opt_out_rate'], 0.0)
+        self.assertEqual(cc_data['delta_units']['opt_out_rate'], 'pts')
 
     def test_command_center_empty_window_no_crash(self):
         # No messages / no responses → median is None; deltas must be None, not crash.
@@ -236,5 +241,9 @@ class TestCommandCenterRPCs(WaTransactionCase):
         self.assertEqual(wf['reply_rate'], 50.0)   # a replied, b didn't
         self.assertEqual(wf['opt_out'], 1)
         self.assertEqual(wf['cost'], 1.6)
+        # Workflow rows carry the pause/resume control fields + a failure rate.
+        self.assertIn('id', wf)
+        self.assertIn('is_active', wf)
+        self.assertEqual(wf['failure_rate'], 50.0)   # the opted-out send counts as failed
         tpl = {r['name']: r for r in perf['templates']}['welcome_v1']
         self.assertEqual(tpl['sent'], 2)

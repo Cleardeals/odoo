@@ -5,9 +5,9 @@ There is no database table — this is a pure analytics utility model.
 
 Example call from the OWL dashboard component::
 
-    const metrics = await this.orm.call(
-        'wa.dashboard', 'get_metrics', [],
-        { date_from: '2026-05-01', date_to: '2026-05-02', workflow_slug: '' }
+    const data = await this.orm.call(
+        'wa.dashboard', 'get_command_center', [],
+        { date_from: '2026-05-01', date_to: '2026-05-02', workflow_slugs: [] }
     );
 """
 
@@ -136,256 +136,6 @@ class WaDashboard(models.Model):
         params.extend(wf_slugs)
         ph = ', '.join(['%s'] * len(wf_slugs))
         return f'AND workflow_slug IN ({ph})'
-
-    # --- Public API -------------------------------------------------------
-
-    @api.model
-    def get_metrics(self, date_from=None, date_to=None, workflow_slug=None, workflow_slugs=None):
-        """Return headline KPI metrics for the dashboard header cards.
-
-        Computes counts for the current period and a comparison to the
-        preceding period of equal duration.
-
-        :param date_from:      Start of window (inclusive). ISO string.
-        :param date_to:        End of window (exclusive). ISO string.
-        :param workflow_slug:  Legacy single-slug filter (backward compat).
-        :param workflow_slugs: Multi-slug filter list (preferred).
-        :returns: Dict with keys: sent, delivered, read, failed,
-                  active_enrollments, replied, delivery_rate, read_rate,
-                  reply_rate, failed_breakdown, trend, date_from, date_to,
-                  comparison_from, comparison_to.
-        """
-        dt_from = self._parse_date(date_from)
-        dt_to   = self._parse_date(date_to) if date_to else datetime.utcnow()
-
-        # Normalise slugs: accept legacy single string or new list
-        slugs = [s for s in (workflow_slugs or []) if s]
-        if not slugs and workflow_slug:
-            slugs = [str(workflow_slug).strip()]
-        slugs = [s for s in slugs if s]
-
-        # Previous period: same duration, shifted back
-        delta        = dt_to - dt_from
-        dt_prev_from = dt_from - delta
-        dt_prev_to   = dt_from
-
-        WaMsg = self.env['wa.message'].sudo()
-        base  = self._outbound_domain(dt_from, dt_to, slugs)
-
-        # --- Current period ---
-        sent      = WaMsg.search_count(base + [('status', 'not in', ['queued'])])
-        delivered = WaMsg.search_count(base + [('status', 'in', ['delivered', 'read'])])
-        read      = WaMsg.search_count(base + [('status', '=', 'read')])
-        failed    = WaMsg.search_count(base + [('status', 'in', _FAILED_STATUSES)])
-
-        # Failed breakdown by sub-status (only statuses that actually occurred)
-        failed_breakdown = {}
-        for status in _FAILED_STATUSES:
-            n = WaMsg.search_count(base + [('status', '=', status)])
-            if n:
-                failed_breakdown[_FAILURE_LABELS[status]] = n
-
-        # Inbound buyer replies in window
-        inbound_domain = [
-            ('direction', '=', 'inbound'),
-            ('initiator', '=', 'buyer'),
-            ('occurred_at', '>=', dt_from),
-            ('occurred_at', '<', dt_to),
-        ] + self._slug_domain(slugs)
-        replied = WaMsg.search_count(inbound_domain)
-
-        # Active enrollments — current snapshot, not bounded to date range
-        enroll_domain = [('state', '=', 'active')] + self._slug_domain(slugs)
-        active_enrollments = self.env['wa.enrollment'].sudo().search_count(enroll_domain)
-
-        # --- Previous period ---
-        prev_base    = self._outbound_domain(dt_prev_from, dt_prev_to, slugs)
-        prev_sent    = WaMsg.search_count(prev_base + [('status', 'not in', ['queued'])])
-        prev_failed  = WaMsg.search_count(prev_base + [('status', 'in', _FAILED_STATUSES)])
-        prev_replied = WaMsg.search_count([
-            ('direction', '=', 'inbound'),
-            ('initiator', '=', 'buyer'),
-            ('occurred_at', '>=', dt_prev_from),
-            ('occurred_at', '<', dt_prev_to),
-        ] + self._slug_domain(slugs))
-
-        return {
-            'sent':               sent,
-            'delivered':          delivered,
-            'read':               read,
-            'failed':             failed,
-            'replied':            replied,
-            'active_enrollments': active_enrollments,
-            'delivery_rate':      self._rate(delivered, sent),
-            'read_rate':          self._rate(read, sent),
-            'reply_rate':         self._rate(replied, sent),
-            'failed_breakdown':   failed_breakdown,
-            'trend': {
-                'sent':    self._pct_change(sent, prev_sent),
-                'failed':  self._pct_change(failed, prev_failed),
-                'replied': self._pct_change(replied, prev_replied),
-            },
-            'date_from':        dt_from.isoformat(),
-            'date_to':          dt_to.isoformat(),
-            'comparison_from':  dt_prev_from.isoformat(),
-            'comparison_to':    dt_prev_to.isoformat(),
-        }
-
-    @api.model
-    def get_workflow_health(self, date_from=None, date_to=None):
-        """Return per-workflow KPI rows for the Workflow Health table.
-
-        :param date_from: Start of window. ISO string.
-        :param date_to:   End of window. ISO string.
-        :returns: List of dicts ordered by workflow name. Each dict:
-                  {id, slug, name, is_active, sent, delivery_rate, failed}.
-        """
-        dt_from = self._parse_date(date_from)
-        dt_to   = self._parse_date(date_to) if date_to else datetime.utcnow()
-
-        workflows = self.env['wa.workflow'].sudo().search([], order='name')
-        WaMsg = self.env['wa.message'].sudo()
-
-        rows = []
-        for wf in workflows:
-            base = [
-                ('direction', '=', 'outbound'),
-                ('kind', '!=', 'system'),
-                ('workflow_slug', '=', wf.slug),
-                ('occurred_at', '>=', dt_from),
-                ('occurred_at', '<', dt_to),
-            ]
-            sent      = WaMsg.search_count(base + [('status', 'not in', ['queued'])])
-            delivered = WaMsg.search_count(base + [('status', 'in', ['delivered', 'read'])])
-            failed    = WaMsg.search_count(base + [('status', 'in', _FAILED_STATUSES)])
-            rows.append({
-                'id':            wf.id,
-                'slug':          wf.slug,
-                'name':          wf.name,
-                'is_active':     wf.is_active,
-                'sent':          sent,
-                'delivery_rate': self._rate(delivered, sent),
-                'failed':        failed,
-            })
-        return rows
-
-    @api.model
-    def get_hourly_volume(
-        self, date_from=None, date_to=None,
-        workflow_slug=None, workflow_slugs=None, time_range='12h',
-    ):
-        """Return time-bucketed sent/failed counts for the line chart.
-
-        Groups by hour for short ranges (12h/24h/custom ≤3 days) and by day
-        for longer ranges (7d/30d/custom >3 days).  Results are ordered
-        ascending by bucket timestamp.
-
-        :param date_from:      Start of window. ISO string.
-        :param date_to:        End of window. ISO string.
-        :param workflow_slug:  Legacy single-slug filter (backward compat).
-        :param workflow_slugs: Multi-slug filter list.
-        :param time_range:     '12h' | '24h' | '7d' | '30d' | 'custom'.
-        :returns: List of dicts: [{hour (int), hour_label (str), sent, failed}].
-        """
-        dt_from = self._parse_date(date_from)
-        dt_to   = self._parse_date(date_to) if date_to else datetime.utcnow()
-
-        # Normalise slugs
-        wf_slugs = [s for s in (workflow_slugs or []) if s]
-        if not wf_slugs and workflow_slug:
-            wf_slugs = [str(workflow_slug).strip()]
-        wf_slugs = [s for s in wf_slugs if s]
-
-        # Choose time-bucket granularity
-        if time_range in ('7d', '30d'):
-            bucket = 'day'
-        elif time_range == 'custom':
-            delta_days = max(1, (dt_to - dt_from).days)
-            bucket = 'day' if delta_days > 3 else 'hour'
-        else:
-            bucket = 'hour'  # 12h, 24h
-
-        params = [dt_from, dt_to]
-        wf_clause = self._sql_slug_clause(wf_slugs, params)
-
-        self.env.cr.execute(
-            f"""
-            SELECT
-                DATE_TRUNC('{bucket}', occurred_at) AS bucket_time,
-                SUM(CASE WHEN status NOT IN (
-                    'failed','meta_blocked','invalid_number','opted_out',
-                    'rate_limited','template_error','expired'
-                ) THEN 1 ELSE 0 END)::int AS sent,
-                SUM(CASE WHEN status IN (
-                    'failed','meta_blocked','invalid_number','opted_out',
-                    'rate_limited','template_error','expired'
-                ) THEN 1 ELSE 0 END)::int AS failed
-            FROM wa_message
-            WHERE direction = 'outbound'
-              AND kind != 'system'
-              AND occurred_at >= %s
-              AND occurred_at < %s
-              {wf_clause}
-            GROUP BY DATE_TRUNC('{bucket}', occurred_at)
-            ORDER BY bucket_time
-            """,
-            params,
-        )
-        result = []
-        for i, row in enumerate(self.env.cr.fetchall()):
-            bucket_time = row[0]
-            if bucket_time is None:
-                label = ''
-            elif bucket == 'day':
-                label = bucket_time.strftime('%Y-%m-%d')
-            else:
-                label = bucket_time.strftime('%Y-%m-%dT%H:00:00')
-            result.append({
-                'hour':       i,
-                'hour_label': label,
-                'sent':       row[1] or 0,
-                'failed':     row[2] or 0,
-            })
-        return result
-
-    @api.model
-    def get_recent_failures(self, limit=20, workflow_slug=None, workflow_slugs=None):
-        """Return the most recent delivery failures for the Failures table.
-
-        :param limit:          Maximum rows (default 20).
-        :param workflow_slug:  Legacy single-slug filter (backward compat).
-        :param workflow_slugs: Multi-slug filter list.
-        :returns: List of dicts ordered by occurred_at desc. Each dict:
-                  {id, lead_id, lead_name, phone, workflow_name,
-                   failure_reason, failure_status, occurred_at}.
-        """
-        slugs = [s for s in (workflow_slugs or []) if s]
-        if not slugs and workflow_slug:
-            slugs = [str(workflow_slug).strip()]
-        slugs = [s for s in slugs if s]
-        domain = [
-            ('direction', '=', 'outbound'),
-            ('status',    'in', _FAILED_STATUSES),
-            ('kind',      '!=', 'system'),
-        ] + self._slug_domain(slugs)
-
-        failures = self.env['wa.message'].sudo().search(
-            domain, order='occurred_at desc', limit=int(limit)
-        )
-        rows = []
-        for msg in failures:
-            lead = msg.lead_id
-            rows.append({
-                'id':             msg.id,
-                'lead_id':        lead.id if lead else False,
-                'lead_name':      lead.name if lead else '',
-                'phone':          msg.conversation_id.phone_number if msg.conversation_id else '',
-                'workflow_name':  msg.workflow_slug or '',
-                'failure_reason': _FAILURE_LABELS.get(msg.status, msg.status),
-                'failure_status': msg.status,
-                'occurred_at':    msg.occurred_at.isoformat() if msg.occurred_at else '',
-            })
-        return rows
 
     # ------------------------------------------------------------------
     # Per-property / per-inquiry engagement ("By Property" view)
@@ -912,6 +662,7 @@ class WaDashboard(models.Model):
         read = WaMsg.search_count(out_base + [('status', '=', 'read')])
         failed = WaMsg.search_count(out_base + [('status', 'in', _FAILED_STATUSES)])
         opt_outs = WaMsg.search_count(out_base + [('status', '=', 'opted_out')])
+        blocks = WaMsg.search_count(out_base + [('status', '=', 'meta_blocked')])
         failed_breakdown = {}
         for st in _FAILED_STATUSES:
             n = WaMsg.search_count(out_base + [('status', '=', st)])
@@ -956,6 +707,7 @@ class WaDashboard(models.Model):
             'msgs_sent': sent, 'msgs_received': msgs_received,
             'delivered': delivered, 'read': read, 'failed': failed,
             'failed_breakdown': failed_breakdown, 'opt_outs': opt_outs,
+            'blocks': blocks, 'opt_out_rate': self._rate(opt_outs, sent),
             'delivery_rate': self._rate(delivered, sent),
             'read_rate': self._rate(read, sent),
             'failure_rate': self._rate(failed, sent),
@@ -988,9 +740,9 @@ class WaDashboard(models.Model):
         prev = self._command_metrics(dt_from - delta, dt_from, slugs)
         # Rate metrics compare as percentage *points* (a % change of a % is
         # misleading); counts/time/money keep % change.
-        pct_keys = ('reply_rate', 'sla_pct', 'delivery_rate', 'failure_rate')
+        pct_keys = ('reply_rate', 'sla_pct', 'delivery_rate', 'failure_rate', 'opt_out_rate')
         deltas, units = {}, {}
-        for k in pct_keys + ('spend', 'replied', 'msgs_sent', 'first_response_median'):
+        for k in pct_keys + ('spend', 'replied', 'msgs_sent', 'first_response_median', 'blocks'):
             cv, pv = cur.get(k), prev.get(k)
             if k in pct_keys:
                 deltas[k] = None if (cv is None or pv is None) else round(cv - pv, 1)
@@ -1362,11 +1114,15 @@ class WaDashboard(models.Model):
             elif m.direction == 'inbound' and m.initiator == 'buyer' and iid:
                 replied_leads.add(iid)
 
-        def _rows(d):
+        # Resolve workflow records by slug so the workflow rows can carry their id +
+        # active state — driving the pause/resume control on the By-Campaign table.
+        wf_by_slug = {w.slug: w for w in self.env['wa.workflow'].sudo().search([])}
+
+        def _rows(d, resolve_wf=False):
             out = []
             for key, a in d.items():
                 replied = a['sent_leads'] & replied_leads
-                out.append({
+                row = {
                     'name': key,
                     'sent': a['sent'], 'delivered': a['delivered'], 'read': a['read'],
                     'failed': a['failed'], 'opt_out': a['opt_out'],
@@ -1374,8 +1130,14 @@ class WaDashboard(models.Model):
                     'leads': len(a['sent_leads']),
                     'reply_rate': self._rate(len(replied), len(a['sent_leads'])),
                     'delivery_rate': self._rate(a['delivered'], a['sent']),
-                })
+                    'failure_rate': self._rate(a['failed'], a['sent']),
+                }
+                if resolve_wf:
+                    rec = wf_by_slug.get(key)
+                    row['id'] = rec.id if rec else False
+                    row['is_active'] = bool(rec.is_active) if rec else False
+                out.append(row)
             out.sort(key=lambda r: r['sent'], reverse=True)
             return out
 
-        return {'workflows': _rows(wf), 'templates': _rows(tpl)}
+        return {'workflows': _rows(wf, resolve_wf=True), 'templates': _rows(tpl)}

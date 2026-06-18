@@ -13,6 +13,8 @@ import { Component, useState } from "@odoo/owl";
  *                    sorting are handled here).
  *   defaultSort {String}  Column key to sort by initially (desc).
  *   onRowClick  {Function} Optional, called with the row.
+ *   onAction    {Function} Optional, called with the row from a "toggle" cell
+ *                          (e.g. pause/resume a workflow); does not trigger row-click.
  *   emptyText   {String}
  */
 export class CdLeaderboardTable extends Component {
@@ -23,6 +25,7 @@ export class CdLeaderboardTable extends Component {
         rows:        { type: Array },
         defaultSort: { type: String, optional: true },
         onRowClick:  { type: Function, optional: true },
+        onAction:    { type: Function, optional: true },
         emptyText:   { type: String, optional: true },
     };
 
@@ -69,6 +72,12 @@ export class CdLeaderboardTable extends Component {
     onClick(row) {
         if (this.props.onRowClick) {
             this.props.onRowClick(row);
+        }
+    }
+
+    onAction(row) {
+        if (this.props.onAction) {
+            this.props.onAction(row);
         }
     }
 

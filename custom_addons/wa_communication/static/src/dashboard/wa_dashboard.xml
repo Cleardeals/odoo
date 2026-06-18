@@ -124,7 +124,7 @@
 
       <!-- ── Tabs ────────────────────────────────────────────────────── -->
       <div class="o-wa-dashboard__tabs">
-        <t t-foreach="[['command','Command Center'],['overview','Overview'],['rm','By RM'],['property','By Property'],['campaign','By Campaign']]" t-as="tb" t-key="tb[0]">
+        <t t-foreach="[['command','Command Center'],['rm','By RM'],['property','By Property'],['campaign','By Campaign']]" t-as="tb" t-key="tb[0]">
           <button t-att-class="'o-wa-dashboard__tab' + (state.activeTab === tb[0] ? ' o-wa-dashboard__tab--active' : '')"
                   t-on-click="() => this.onSwitchTab(tb[0])">
             <t t-esc="tb[1]"/>
@@ -143,7 +143,8 @@
             <t t-foreach="kpiCards" t-as="k" t-key="k.label">
               <CdKpiCard label="k.label" value="k.value" sub="k.sub or ''"
                          delta="k.delta" deltaUnit="k.unit or '%'" invert="k.invert or false"
-                         spark="k.spark or []" tooltip="k.tooltip or ''"/>
+                         spark="k.spark or []" tooltip="k.tooltip or ''"
+                         accent="k.accent or ''" breakdown="k.breakdown or []"/>
             </t>
           </div>
 
@@ -229,6 +230,7 @@
           <t t-else="">
             <CdLeaderboardTable columns="campaignWorkflowColumns" rows="campaignWorkflowRows"
                                 defaultSort="'sent'"
+                                onAction="(row) => this.onCampaignToggle(row)"
                                 emptyText="'No workflow sends in this period.'"/>
           </t>
         </div>
@@ -241,160 +243,6 @@
                               emptyText="'No template sends in this period.'"/>
         </div>
       </t>
-
-      <!-- ════════════════════════ OVERVIEW TAB ════════════════════════ -->
-      <t t-if="state.activeTab === 'overview'">
-
-      <!-- ── Loading state ───────────────────────────────────────────── -->
-      <t t-if="state.loading and !metricsReady">
-        <div class="o-wa-dashboard__loading">Loading dashboard data...</div>
-      </t>
-
-      <!-- ── Metric cards grid ────────────────────────────────────────── -->
-      <t t-if="metricsReady">
-        <div class="o-wa-dashboard__metrics-grid">
-
-          <CdMetricCard
-            label="'Messages Sent'"
-            value="fmt(state.metrics.sent)"
-            trend="state.metrics.trend.sent"
-            trendLabel="trendLabel"
-          />
-
-          <CdMetricCard
-            label="'Delivered'"
-            value="fmt(state.metrics.delivered)"
-            subValue="fmtRate(state.metrics.delivery_rate)"
-          />
-
-          <CdMetricCard
-            label="'Read'"
-            value="fmt(state.metrics.read)"
-            subValue="fmtRate(state.metrics.read_rate)"
-          />
-
-          <CdMetricCard
-            label="'Failed'"
-            value="fmt(state.metrics.failed)"
-            variant="failedVariant"
-            trend="state.metrics.trend.failed"
-            trendLabel="trendLabel"
-            breakdown="failedBreakdownText"
-          />
-
-          <CdMetricCard
-            label="'Active Enrollments'"
-            value="fmt(state.metrics.active_enrollments)"
-          />
-
-          <CdMetricCard
-            label="'Replied'"
-            value="fmt(state.metrics.replied)"
-            subValue="fmtRate(state.metrics.reply_rate) + ' Reply Rate'"
-            trend="state.metrics.trend.replied"
-            trendLabel="trendLabel"
-          />
-
-        </div>
-      </t>
-
-      <!-- ── Two-panel section (Workflow Health + Line Chart) ─────────── -->
-      <div class="o-wa-dashboard__panels">
-
-        <!-- Workflow Health -->
-        <div class="o-wa-dashboard__section o-wa-dashboard__section--health">
-          <div class="o-wa-dashboard__section-header">
-            <span class="o-wa-dashboard__section-title">Workflow Health</span>
-            <div class="o-wa-dashboard__time-range-tabs">
-              <t t-foreach="['12h','24h','7d','30d']" t-as="r" t-key="r">
-                <button
-                  t-att-class="'o-wa-dashboard__range-tab ' + (state.healthTimeRange === r ? 'o-wa-dashboard__range-tab--active' : '')"
-                  t-on-click="() => this.onHealthTimeRangeChange(r)">
-                  <t t-esc="r"/>
-                </button>
-              </t>
-              <button
-                t-att-class="'o-wa-dashboard__range-tab o-wa-dashboard__range-tab--custom ' + (state.healthTimeRange === 'custom' ? 'o-wa-dashboard__range-tab--active' : '')"
-                t-on-click="() => state.showHealthCustomPicker = !state.showHealthCustomPicker">
-                <i class="fa fa-calendar-o"/> Custom
-              </button>
-            </div>
-          </div>
-          <!-- Inline custom range picker for health section -->
-          <t t-if="state.showHealthCustomPicker">
-            <div class="o-wa-dashboard__custom-range-bar">
-              <input type="date"
-                     t-att-value="state.healthCustomFrom"
-                     t-on-change="(e) => state.healthCustomFrom = e.target.value"/>
-              <span class="o-wa-dashboard__custom-range-sep">to</span>
-              <input type="date"
-                     t-att-value="state.healthCustomTo"
-                     t-on-change="(e) => state.healthCustomTo = e.target.value"/>
-              <button class="o-wa-dashboard__custom-range-apply"
-                      t-on-click="onApplyHealthCustomRange">
-                Apply
-              </button>
-            </div>
-          </t>
-          <CdWorkflowHealthTable
-            rows="state.workflowHealth"
-            onToggle="(id) => this.onToggleWorkflow(id)"
-            loading="state.loading"
-          />
-        </div>
-
-        <!-- Line Chart -->
-        <div class="o-wa-dashboard__section o-wa-dashboard__section--chart">
-          <div class="o-wa-dashboard__section-header">
-            <span class="o-wa-dashboard__section-title">Send Volume</span>
-            <div class="o-wa-dashboard__time-range-tabs">
-              <t t-foreach="['12h','24h','7d','30d']" t-as="r" t-key="r">
-                <button
-                  t-att-class="'o-wa-dashboard__range-tab ' + (state.chartTimeRange === r ? 'o-wa-dashboard__range-tab--active' : '')"
-                  t-on-click="() => this.onChartTimeRangeChange(r)">
-                  <t t-esc="r"/>
-                </button>
-              </t>
-              <button
-                t-att-class="'o-wa-dashboard__range-tab o-wa-dashboard__range-tab--custom ' + (state.chartTimeRange === 'custom' ? 'o-wa-dashboard__range-tab--active' : '')"
-                t-on-click="() => state.showChartCustomPicker = !state.showChartCustomPicker">
-                <i class="fa fa-calendar-o"/> Custom
-              </button>
-            </div>
-          </div>
-          <!-- Inline custom range picker for chart section -->
-          <t t-if="state.showChartCustomPicker">
-            <div class="o-wa-dashboard__custom-range-bar">
-              <input type="date"
-                     t-att-value="state.chartCustomFrom"
-                     t-on-change="(e) => state.chartCustomFrom = e.target.value"/>
-              <span class="o-wa-dashboard__custom-range-sep">to</span>
-              <input type="date"
-                     t-att-value="state.chartCustomTo"
-                     t-on-change="(e) => state.chartCustomTo = e.target.value"/>
-              <button class="o-wa-dashboard__custom-range-apply"
-                      t-on-click="onApplyChartCustomRange">
-                Apply
-              </button>
-            </div>
-          </t>
-          <CdLineChart bars="state.hourlyData"/>
-        </div>
-
-      </div>
-
-      <!-- ── Recent Failures ──────────────────────────────────────────── -->
-      <div class="o-wa-dashboard__section o-wa-dashboard__section--failures">
-        <div class="o-wa-dashboard__section-header">
-          <span class="o-wa-dashboard__section-title">Recent Failures</span>
-        </div>
-        <CdRecentFailuresTable
-          rows="state.failures"
-          onOpenLead="(leadId) => this.onOpenLead(leadId)"
-        />
-      </div>
-
-      </t><!-- /Overview tab -->
 
       <!-- ════════════════════════ BY-PROPERTY TAB ═════════════════════ -->
       <t t-if="state.activeTab === 'property'">

@@ -16,6 +16,8 @@ import { Component, useState } from "@odoo/owl";
  *   spark   {Array}   Optional numbers for a tiny sparkline.
  *   tooltip {String}  Optional plain-English definition (shown on the info icon).
  *   accent  {String}  Optional left accent: "good" | "warn" | "bad".
+ *   breakdown {Array} Optional [{label, value}] — labelled mini bars under the
+ *                     value (e.g. failure reasons + counts).
  */
 export class CdKpiCard extends Component {
     static template = "cleardeals_ui.CdKpiCard";
@@ -30,6 +32,7 @@ export class CdKpiCard extends Component {
         spark:   { type: Array, optional: true },
         tooltip: { type: String, optional: true },
         accent:  { type: String, optional: true },
+        breakdown: { type: Array, optional: true },
     };
 
     setup() {
@@ -54,6 +57,13 @@ export class CdKpiCard extends Component {
         if (this.props.delta == null) return "";
         const unit = this.props.deltaUnit === "pts" ? " pts" : "%";
         return `${Math.abs(this.props.delta).toFixed(1)}${unit}`;
+    }
+
+    /** Width % for a breakdown bar, scaled to the largest item (min 4% so a 1 shows). */
+    bdPct(value) {
+        const items = this.props.breakdown || [];
+        const max = Math.max(...items.map((b) => b.value), 1);
+        return Math.max(4, Math.round((value / max) * 100));
     }
 
     /** SVG points for the sparkline polyline (0..100 viewBox). */

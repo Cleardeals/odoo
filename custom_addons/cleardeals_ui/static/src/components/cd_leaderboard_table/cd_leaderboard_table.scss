@@ -2,6 +2,25 @@
     width: 100%;
     overflow-x: auto;
 
+    // Pause/resume control cell (workflow active state).
+    &__toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 11.5px;
+        font-weight: 600;
+        padding: 3px 9px;
+        border-radius: var(--cd-radius-pill);
+        border: 1px solid transparent;
+        cursor: pointer;
+        transition: filter 0.1s ease;
+        .fa { font-size: 9px; }
+        &:hover { filter: brightness(0.96); }
+
+        &.is-on  { background: var(--cd-success-bg); color: var(--cd-success); }
+        &.is-off { background: var(--cd-surface-3); color: var(--cd-muted); }
+    }
+
     &__table {
         width: 100%;
         border-collapse: collapse;

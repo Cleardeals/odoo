@@ -36,6 +36,14 @@
                       </div>
                     </t>
 
+                    <t t-elif="col.type === 'toggle'">
+                      <button t-att-class="'cd-lb__toggle ' + (row[col.key] ? 'is-on' : 'is-off')"
+                              t-on-click.stop="() => this.onAction(row)">
+                        <i t-att-class="'fa ' + (row[col.key] ? 'fa-pause' : 'fa-play')" aria-hidden="true"/>
+                        <span t-esc="row[col.key] ? 'Active' : 'Paused'"/>
+                      </button>
+                    </t>
+
                     <t t-elif="col.type === 'chip'">
                       <t t-if="row[col.key] == null">
                         <span class="cd-lb__muted">—</span>

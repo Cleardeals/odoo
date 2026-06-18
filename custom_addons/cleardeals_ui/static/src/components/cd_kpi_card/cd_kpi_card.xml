@@ -20,13 +20,27 @@
 
       <div class="cd-kpi__value-row">
         <span class="cd-kpi__value"><t t-esc="props.value"/></span>
-        <t t-if="props.spark and props.spark.length > 1">
+        <t t-if="!(props.breakdown and props.breakdown.length) and props.spark and props.spark.length > 1">
           <svg class="cd-kpi__spark" viewBox="0 0 100 28" preserveAspectRatio="none" aria-hidden="true">
             <polyline t-att-points="sparkPoints" fill="none" stroke-width="2"
                       vector-effect="non-scaling-stroke"/>
           </svg>
         </t>
       </div>
+
+      <t t-if="props.breakdown and props.breakdown.length">
+        <div class="cd-kpi__breakdown">
+          <t t-foreach="props.breakdown" t-as="b" t-key="b.label">
+            <div class="cd-kpi__bd-row">
+              <span class="cd-kpi__bd-label"><t t-esc="b.label"/></span>
+              <span class="cd-kpi__bd-track">
+                <span class="cd-kpi__bd-fill" t-attf-style="width:{{ bdPct(b.value) }}%"/>
+              </span>
+              <span class="cd-kpi__bd-val"><t t-esc="b.value"/></span>
+            </div>
+          </t>
+        </div>
+      </t>
 
       <div class="cd-kpi__foot">
         <t t-if="deltaDir">

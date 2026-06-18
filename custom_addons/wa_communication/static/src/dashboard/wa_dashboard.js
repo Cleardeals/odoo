@@ -6,9 +6,6 @@ import { useService } from "@web/core/utils/hooks";
 
 import {
     CdMetricCard,
-    CdWorkflowHealthTable,
-    CdLineChart,
-    CdRecentFailuresTable,
     CdChart,
     CdKpiCard,
     CdWorklistPanel,
@@ -28,9 +25,6 @@ export class WaDashboard extends Component {
 
     static components = {
         CdMetricCard,
-        CdWorkflowHealthTable,
-        CdLineChart,
-        CdRecentFailuresTable,
         CdChart,
         CdKpiCard,
         CdWorklistPanel,
@@ -45,10 +39,6 @@ export class WaDashboard extends Component {
 
         this.state = useState({
             loading:           true,
-            metrics:           null,
-            workflowHealth:    [],
-            hourlyData:        [],
-            failures:          [],
             workflows:         [],
             // Global date filter
             dateFrom:          this._todayStart(),
@@ -63,19 +53,9 @@ export class WaDashboard extends Component {
             // Global custom date range inputs
             customFrom:        "",
             customTo:          "",
-            // Section-level time range selectors
-            healthTimeRange:   "12h",
-            chartTimeRange:    "12h",
-            // Section custom date pickers
-            showHealthCustomPicker: false,
-            healthCustomFrom:  "",
-            healthCustomTo:    "",
-            showChartCustomPicker: false,
-            chartCustomFrom:   "",
-            chartCustomTo:     "",
             // Last refresh timestamp
             lastFetched:       null,
-            // ── tabs ── 'command' | 'overview' | 'rm' | 'property' | 'campaign'
+            // ── tabs ── 'command' | 'rm' | 'property' | 'campaign'
             activeTab:         "command",
             // ── Command Center ──
             command:           null,
@@ -131,11 +111,6 @@ export class WaDashboard extends Component {
         return this._isoLocal(d);
     }
 
-    _hoursAgo(n) {
-        const d = new Date(Date.now() - n * 3600 * 1000);
-        return this._isoLocal(d);
-    }
-
     _startOfMonth() {
         const d = new Date();
         d.setDate(1); d.setHours(0, 0, 0, 0);
@@ -161,29 +136,6 @@ export class WaDashboard extends Component {
         const d = new Date();
         d.setMonth(0, 1); d.setHours(0, 0, 0, 0);
         return this._isoLocal(d);
-    }
-
-    /** Return {from, to} for a named time range used by the sub-section selectors. */
-    _timeRangeDates(range) {
-        const now = this._isoLocal(new Date());
-        switch (range) {
-            case "12h": return { from: this._hoursAgo(12), to: now };
-            case "24h": return { from: this._hoursAgo(24), to: now };
-            case "7d":  return { from: this._daysAgo(7),   to: now };
-            case "30d": return { from: this._daysAgo(30),  to: now };
-            default:    return { from: this._hoursAgo(12), to: now };
-        }
-    }
-
-    /**
-     * Return {from, to} for a section, using custom dates when rangeKey === 'custom'
-     * and the custom fields are filled, otherwise falling back to the preset range.
-     */
-    _sectionDates(rangeKey, customFrom, customTo) {
-        if (rangeKey === "custom" && customFrom && customTo) {
-            return { from: customFrom, to: customTo };
-        }
-        return this._timeRangeDates(rangeKey);
     }
 
     /** Format a Date as a local ISO datetime string (no timezone suffix). */
@@ -236,69 +188,6 @@ export class WaDashboard extends Component {
 
     // ── Data loaders ─────────────────────────────────────────────────────────
 
-    async _loadAll() {
-        this.state.loading = true;
-        try {
-            await Promise.all([
-                this._loadMetrics(),
-                this._loadWorkflowHealth(),
-                this._loadHourlyData(),
-                this._loadFailures(),
-                this._loadWorkflows(),
-            ]);
-            this.state.lastFetched = new Date().toLocaleTimeString();
-        } finally {
-            this.state.loading = false;
-        }
-    }
-
-    async _loadMetrics() {
-        this.state.metrics = await this.orm.call(
-            "wa.dashboard", "get_metrics", [],
-            {
-                date_from:      this.state.dateFrom,
-                date_to:        this.state.dateTo,
-                workflow_slugs: this.state.workflowSlugs,
-            }
-        );
-    }
-
-    async _loadWorkflowHealth() {
-        const { from, to } = this._sectionDates(
-            this.state.healthTimeRange,
-            this.state.healthCustomFrom,
-            this.state.healthCustomTo,
-        );
-        this.state.workflowHealth = await this.orm.call(
-            "wa.dashboard", "get_workflow_health", [],
-            { date_from: from, date_to: to }
-        );
-    }
-
-    async _loadHourlyData() {
-        const { from, to } = this._sectionDates(
-            this.state.chartTimeRange,
-            this.state.chartCustomFrom,
-            this.state.chartCustomTo,
-        );
-        this.state.hourlyData = await this.orm.call(
-            "wa.dashboard", "get_hourly_volume", [],
-            {
-                date_from:      from,
-                date_to:        to,
-                workflow_slugs: this.state.workflowSlugs,
-                time_range:     this.state.chartTimeRange,
-            }
-        );
-    }
-
-    async _loadFailures() {
-        this.state.failures = await this.orm.call(
-            "wa.dashboard", "get_recent_failures", [],
-            { workflow_slugs: this.state.workflowSlugs }
-        );
-    }
-
     async _loadWorkflows() {
         this.state.workflows = await this.orm.searchRead(
             "wa.workflow",
@@ -348,7 +237,6 @@ export class WaDashboard extends Component {
     async _loadActiveTab() {
         const tab = this.state.activeTab;
         if (tab === "command") return this._loadCommand();
-        if (tab === "overview") return this._loadAll();
         if (tab === "rm") return this._loadRm();
         if (tab === "campaign") return this._loadCampaign();
         if (tab === "property") return this._loadPropertyView();
@@ -447,7 +335,22 @@ export class WaDashboard extends Component {
               unit: u.spend, invert: true,
               sub: `₹${m.cost_per_reply}/reply`, spark: spark("spend"),
               tooltip: "Total WhatsApp message cost, and cost per reply earned." },
+            { label: "Failure reasons", value: this.fmt(m.failed), accent: "bad",
+              breakdown: this._failureBreakdown(m),
+              sub: m.failed ? "" : "no failed sends",
+              tooltip: "Why sends failed in this period, by Meta reason — biggest cause first." },
+            { label: "Quality risk", value: this.fmtRate(m.opt_out_rate), delta: dl("opt_out_rate"),
+              unit: u.opt_out_rate, invert: true, accent: "warn",
+              sub: `${m.opt_outs} opt-outs · ${m.blocks} blocks`,
+              tooltip: "Opt-out rate and blocks — rising values threaten your WhatsApp sender quality (Meta can throttle you)." },
         ];
+    }
+
+    /** failed_breakdown {label: count} → [{label, value}] biggest-first for the mini bars. */
+    _failureBreakdown(m) {
+        return Object.entries(m.failed_breakdown || {})
+            .map(([label, value]) => ({ label, value }))
+            .sort((a, b) => b.value - a.value);
     }
 
     get volumeChart() {
@@ -592,21 +495,27 @@ export class WaDashboard extends Component {
         return this.state.rmRows.filter((r) => (r.rm_name || "").toLowerCase().includes(q));
     }
 
-    get campaignWorkflowColumns() {
+    /** Shared metric columns for both campaign tables (name label varies). */
+    _campaignBaseColumns(nameLabel) {
         return [
-            { key: "name", label: "Workflow", type: "text", align: "left" },
+            { key: "name", label: nameLabel, type: "text", align: "left" },
             { key: "sent", label: "Sent", type: "num" },
             { key: "delivery_rate", label: "Delivered", type: "pct" },
             { key: "reply_rate", label: "Reply rate", type: "bar" },
+            { key: "failure_rate", label: "Fail %", type: "pct" },
             { key: "opt_out", label: "Opt-outs", type: "num" },
-            { key: "failed", label: "Failed", type: "num" },
             { key: "cost", label: "Cost", type: "money" },
         ];
     }
 
+    get campaignWorkflowColumns() {
+        // Workflow rows additionally carry a pause/resume control (is_active).
+        return [...this._campaignBaseColumns("Workflow"),
+            { key: "is_active", label: "Status", type: "toggle" }];
+    }
+
     get campaignTemplateColumns() {
-        return [{ ...this.campaignWorkflowColumns[0], label: "Template" },
-            ...this.campaignWorkflowColumns.slice(1)];
+        return this._campaignBaseColumns("Template");
     }
 
     _campaignFilter(rows) {
@@ -745,41 +654,13 @@ export class WaDashboard extends Component {
         );
     }
 
-    // --- Workflow toggle (active/inactive state) ---
+    // --- Workflow pause/resume (By-Campaign toggle) ---
 
-    async onToggleWorkflow(workflowId) {
-        await this.orm.call("wa.workflow", "action_toggle_active", [[workflowId]]);
-        await Promise.all([this._loadWorkflowHealth(), this._loadWorkflows()]);
-    }
-
-    // --- Section time-range selectors ---
-
-    async onHealthTimeRangeChange(range) {
-        this.state.healthTimeRange        = range;
-        this.state.showHealthCustomPicker = false;
-        await this._loadWorkflowHealth();
-    }
-
-    async onChartTimeRangeChange(range) {
-        this.state.chartTimeRange        = range;
-        this.state.showChartCustomPicker = false;
-        await this._loadHourlyData();
-    }
-
-    // --- Section custom date range ---
-
-    async onApplyHealthCustomRange() {
-        if (!this.state.healthCustomFrom || !this.state.healthCustomTo) return;
-        this.state.healthTimeRange        = "custom";
-        this.state.showHealthCustomPicker = false;
-        await this._loadWorkflowHealth();
-    }
-
-    async onApplyChartCustomRange() {
-        if (!this.state.chartCustomFrom || !this.state.chartCustomTo) return;
-        this.state.chartTimeRange        = "custom";
-        this.state.showChartCustomPicker = false;
-        await this._loadHourlyData();
+    /** Pause/resume a workflow from the By-Campaign table, then reload its rows. */
+    async onCampaignToggle(row) {
+        if (!row || !row.id) return;   // template rows / unmatched slugs have no record
+        await this.orm.call("wa.workflow", "action_toggle_active", [[row.id]]);
+        await Promise.all([this._loadCampaign(), this._loadWorkflows()]);
     }
 
     // --- Lead navigation ---
@@ -812,19 +693,6 @@ export class WaDashboard extends Component {
             return wf ? wf.name : "1 Workflow";
         }
         return `${n} Workflows`;
-    }
-
-    /**
-     * Dynamic comparison period label shown below each metric card.
-     * Uses the comparison_from / comparison_to dates returned by get_metrics.
-     * Falls back to "vs previous period" until metrics load.
-     */
-    get trendLabel() {
-        const m = this.state.metrics;
-        if (!m || !m.comparison_from) return "vs previous period";
-        const from = this._fmtDateShort(m.comparison_from);
-        const to   = this._fmtDateShort(m.comparison_to);
-        return `vs ${from} – ${to}`;
     }
 
     // ── Template helpers ─────────────────────────────────────────────────────
@@ -870,22 +738,6 @@ export class WaDashboard extends Component {
     fmtCost(val) {
         if (!val) return "₹0";
         return `₹${val.toFixed(2)}`;
-    }
-
-    get metricsReady() {
-        return !this.state.loading && this.state.metrics !== null;
-    }
-
-    get failedVariant() {
-        if (!this.state.metrics) return "default";
-        return this.state.metrics.failed > 0 ? "warning" : "default";
-    }
-
-    get failedBreakdownText() {
-        if (!this.state.metrics || !this.state.metrics.failed_breakdown) return "";
-        return Object.entries(this.state.metrics.failed_breakdown)
-            .map(([label, count]) => `${label}: ${count}`)
-            .join(" · ");
     }
 }
 
