@@ -14,3 +14,4 @@ from . import test_segments
 from . import test_property_dashboard
 from . import test_dev_seed
 from . import test_command_center
+from . import test_rm_scorecard

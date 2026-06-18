@@ -1,6 +1,7 @@
 /** @odoo-module */
 
 import { Component, useState } from "@odoo/owl";
+import { CdHelpTip } from "../cd_help_tip/cd_help_tip";
 
 /**
  * CdLeaderboardTable — the shared sortable table for the By-RM / By-Property /
@@ -19,6 +20,7 @@ import { Component, useState } from "@odoo/owl";
  */
 export class CdLeaderboardTable extends Component {
     static template = "cleardeals_ui.CdLeaderboardTable";
+    static components = { CdHelpTip };
 
     static props = {
         columns:     { type: Array },
@@ -87,6 +89,52 @@ export class CdLeaderboardTable extends Component {
         return Math.max(0, Math.min(100, (v / max) * 100));
     }
 
+    /**
+     * Funnel segment width as a % of the first (largest) part. `col.parts` is an
+     * array of row keys in decreasing order, e.g. ["obligations","answered","sustained"].
+     */
+    funnelPct(col, row, idx) {
+        const held = row[col.parts[0]] || 0;
+        if (!held) return 0;
+        const v = row[col.parts[idx]] || 0;
+        return Math.max(0, Math.min(100, (v / held) * 100));
+    }
+
+    /** Hover label spelling out every funnel number (held / answered / sustained / missed). */
+    funnelTitle(col, row) {
+        const held = row[col.parts[0]] || 0;
+        if (col.parts.length < 3) return "";
+        const ans = row[col.parts[1]] || 0;
+        const sus = row[col.parts[2]] || 0;
+        return `Held ${held}  ·  Answered in SLA ${ans}  ·  Sustained ${sus}  ·  Missed ${held - ans}`;
+    }
+
+    /** Score tone by threshold: good ≥ col.good (def 90), warn ≥ col.warn (def 70), else bad. */
+    scoreTone(col, row) {
+        const v = row[col.key];
+        if (v == null) return "is-flat";
+        const good = col.good == null ? 90 : col.good;
+        const warn = col.warn == null ? 70 : col.warn;
+        if (v >= good) return "is-good";
+        if (v >= warn) return "is-warn";
+        return "is-bad";
+    }
+
+    /** Trend arrow tone: up is good unless col.invert (then down is good). */
+    trendTone(col, row) {
+        const v = row[col.key];
+        if (v == null || v === 0) return "is-flat";
+        const positive = v > 0;
+        const good = col.invert ? !positive : positive;
+        return good ? "is-good" : "is-bad";
+    }
+
+    trendText(col, row) {
+        const v = row[col.key];
+        if (v == null) return "—";
+        return `${Math.abs(v).toFixed(1)} pts`;
+    }
+
     /** Format a cell value for display by column type. */
     fmt(col, row) {
         const v = row[col.key];
@@ -103,7 +151,10 @@ export class CdLeaderboardTable extends Component {
             case "datetime":
                 return this._ist(v);
             case "bar":
+            case "score":
                 return v == null ? "—" : `${v.toFixed(1)}%`;
+            case "alertnum":
+                return v == null ? "—" : Math.round(v).toLocaleString();
             default:
                 return v == null ? "—" : Math.round(v).toLocaleString();
         }

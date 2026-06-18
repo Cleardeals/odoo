@@ -188,93 +188,80 @@
                              emptyText="'Every active chat is assigned.'"/>
           </div>
 
-          <!-- KPI detail (click-to-expand) -->
-          <t t-if="expandedCard">
-            <div class="o-wa-kpimodal__backdrop" t-on-click="() => this.closeKpiDetail()">
-              <div class="o-wa-kpimodal" t-on-click.stop="() => {}">
-                <div class="o-wa-kpimodal__head">
-                  <div>
-                    <div class="o-wa-kpimodal__label"><t t-esc="expandedCard.label"/></div>
-                    <div class="o-wa-kpimodal__value">
-                      <t t-esc="expandedCard.value"/>
-                      <span t-if="expandedDelta"
-                            t-att-class="'o-wa-kpimodal__delta ' + expandedDelta.tone">
-                        <i t-att-class="'fa ' + (expandedDelta.dir === 'up' ? 'fa-arrow-up' : 'fa-arrow-down')"/>
-                        <t t-esc="expandedDelta.text"/>
-                      </span>
-                    </div>
-                  </div>
-                  <button class="o-wa-kpimodal__close" t-on-click="() => this.closeKpiDetail()">
-                    <i class="fa fa-times"/>
-                  </button>
-                </div>
-
-                <p t-if="expandedCard.tooltip" class="o-wa-kpimodal__def"><t t-esc="expandedCard.tooltip"/></p>
-
-                <!-- Full failure-reason breakdown — fixed columns so everything aligns -->
-                <t t-if="kpiDetailBreakdown.length">
-                  <div class="o-wa-kpimodal__section-title">Breakdown</div>
-                  <div class="o-wa-kpimodal__bd">
-                    <t t-foreach="kpiDetailBreakdown" t-as="b" t-key="b.label">
-                      <div class="o-wa-kpimodal__bd-row">
-                        <span class="o-wa-kpimodal__bd-dot" t-attf-style="background:{{ b.color }};"/>
-                        <span class="o-wa-kpimodal__bd-label"><t t-esc="b.label"/></span>
-                        <span class="o-wa-kpimodal__bd-track">
-                          <span class="o-wa-kpimodal__bd-fill"
-                                t-attf-style="width:{{ b.pct }}%; background:{{ b.color }};"/>
-                        </span>
-                        <span class="o-wa-kpimodal__bd-val"><t t-esc="b.value"/></span>
-                        <span class="o-wa-kpimodal__bd-pct"><t t-esc="bdSharePct(b.pct)"/></span>
-                      </div>
-                    </t>
-                  </div>
-                </t>
-
-                <!-- Key stats -->
-                <t t-if="expandedCard.stats and expandedCard.stats.length">
-                  <div class="o-wa-kpimodal__stats">
-                    <t t-foreach="expandedCard.stats" t-as="s" t-key="s[0]">
-                      <div class="o-wa-kpimodal__stat">
-                        <div class="o-wa-kpimodal__stat-val"><t t-esc="s[1]"/></div>
-                        <div class="o-wa-kpimodal__stat-key"><t t-esc="s[0]"/></div>
-                      </div>
-                    </t>
-                  </div>
-                </t>
-
-                <!-- Larger trend chart -->
-                <t t-if="kpiDetailChart">
-                  <div class="o-wa-kpimodal__section-title"><t t-esc="expandedCard.seriesLabel"/></div>
-                  <CdChart type="'line'" data="kpiDetailChart.data" options="kpiDetailChart.options"
-                           height="220" ariaLabel="'Metric trend'"/>
-                </t>
-              </div>
-            </div>
-          </t>
         </t>
       </t>
 
       <!-- ════════════════════════ BY RM ═══════════════════════════════ -->
       <t t-if="state.activeTab === 'rm'">
-        <div class="o-wa-dashboard__section">
-          <div class="o-wa-dashboard__section-header">
-            <span class="o-wa-dashboard__section-title">RM responsiveness</span>
-            <div class="o-wa-dashboard__prop-search">
-              <i class="fa fa-search"/>
-              <input type="text" placeholder="Search RM…"
-                     t-att-value="state.rmSearch"
-                     t-on-input="(e) => this.onRmSearchInput(e.target.value)"/>
+        <t t-if="state.rmLoading">
+          <div class="o-wa-dashboard__loading">Loading…</div>
+        </t>
+        <t t-else="">
+
+          <!-- Team summary strip -->
+          <div class="o-wa-kpi-grid" t-if="rmTeamCards.length">
+            <t t-foreach="rmTeamCards" t-as="k" t-key="k.id">
+              <CdKpiCard label="k.label" value="k.value" sub="k.sub or ''"
+                         accent="k.accent or ''" tooltip="k.tooltip or ''"
+                         onClick="() => this.onExpandKpi(k.id)"/>
+            </t>
+          </div>
+
+          <!-- Operations band: coverage heatmap + load balance -->
+          <div class="o-wa-dashboard__panels">
+            <div class="o-wa-dashboard__section o-wa-rm-cov">
+              <div class="o-wa-dashboard__section-header">
+                <span class="o-wa-dashboard__section-title">Coverage — when buyers write vs when we answer
+                  <CdHelpTip title="'Coverage heatmap'" align="'left'"
+                             intro="'Where staffing gaps hide: when buyers message vs how well we answer in SLA.'"
+                             swatches="helpCoverageSwatches"
+                             items="helpCoverage"/>
+                </span>
+              </div>
+              <CdHeatmap cells="rmHeatmapCells"
+                         startHour="(state.rmOps and state.rmOps.business_start) or 9"
+                         endHour="(state.rmOps and state.rmOps.business_end) or 19"/>
+            </div>
+            <div class="o-wa-dashboard__section o-wa-rm-load">
+              <div class="o-wa-dashboard__section-header">
+                <span class="o-wa-dashboard__section-title">Load balance (now)
+                  <CdHelpTip title="'Load balance (live)'" align="'left'"
+                             intro="'Open and overdue conversations per RM right now — spot who is buried.'"
+                             items="helpLoad"/>
+                </span>
+              </div>
+              <CdLeaderboardTable columns="rmLoadColumns" rows="rmLoadRows"
+                                  defaultSort="'open_now'"
+                                  emptyText="'No open conversations right now.'"/>
             </div>
           </div>
-          <t t-if="state.rmLoading">
-            <div class="o-wa-dashboard__loading">Loading…</div>
-          </t>
-          <t t-else="">
+
+          <!-- Per-RM service scorecard -->
+          <div class="o-wa-dashboard__section">
+            <div class="o-wa-dashboard__section-header">
+              <span class="o-wa-dashboard__section-title">RM service scorecard
+                <CdHelpTip title="'RM service scorecard'" align="'left'"
+                           intro="'Ranks RMs only on what they control. Each column, and how to read it:'"
+                           items="helpScorecard"/>
+              </span>
+              <div class="o-wa-dashboard__prop-search">
+                <i class="fa fa-search"/>
+                <input type="text" placeholder="Search RM…"
+                       t-att-value="state.rmSearch"
+                       t-on-input="(e) => this.onRmSearchInput(e.target.value)"/>
+              </div>
+            </div>
+            <p class="o-wa-rm-legend">
+              <strong>Scores</strong> (ranked) measure what the RM controls — Service funnel
+              (held→answered→sustained), Reliability, Speed, Follow-through, Trend.
+              <strong>Context</strong> (greyed) frames the situation and is never ranked.
+            </p>
             <CdLeaderboardTable columns="rmColumns" rows="rmFilteredRows"
-                                defaultSort="'reply_rate'"
+                                defaultSort="'reliability'"
                                 emptyText="'No RM activity in this period.'"/>
-          </t>
-        </div>
+          </div>
+
+        </t>
       </t>
 
       <!-- ════════════════════════ BY CAMPAIGN ═════════════════════════ -->
@@ -460,6 +447,78 @@
         </div>
 
       </t><!-- /By-Property tab -->
+
+      <!-- KPI detail (click-to-expand) — shared across all tabs -->
+      <t t-if="expandedCard">
+        <div class="o-wa-kpimodal__backdrop" t-on-click="() => this.closeKpiDetail()">
+          <div class="o-wa-kpimodal" t-on-click.stop="() => {}">
+            <div class="o-wa-kpimodal__head">
+              <div>
+                <div class="o-wa-kpimodal__label"><t t-esc="expandedCard.label"/></div>
+                <div class="o-wa-kpimodal__value">
+                  <t t-esc="expandedCard.value"/>
+                  <span t-if="expandedDelta"
+                        t-att-class="'o-wa-kpimodal__delta ' + expandedDelta.tone">
+                    <i t-att-class="'fa ' + (expandedDelta.dir === 'up' ? 'fa-arrow-up' : 'fa-arrow-down')"/>
+                    <t t-esc="expandedDelta.text"/>
+                  </span>
+                </div>
+              </div>
+              <button class="o-wa-kpimodal__close" t-on-click="() => this.closeKpiDetail()">
+                <i class="fa fa-times"/>
+              </button>
+            </div>
+
+            <p t-if="expandedCard.tooltip" class="o-wa-kpimodal__def"><t t-esc="expandedCard.tooltip"/></p>
+
+            <!-- How to read this metric -->
+            <t t-if="expandedCard.howto">
+              <div class="o-wa-kpimodal__howto">
+                <div class="o-wa-kpimodal__howto-head"><i class="fa fa-lightbulb-o"/> How to read this</div>
+                <p class="o-wa-kpimodal__howto-body"><t t-esc="expandedCard.howto"/></p>
+              </div>
+            </t>
+
+            <!-- Full failure-reason breakdown — fixed columns so everything aligns -->
+            <t t-if="kpiDetailBreakdown.length">
+              <div class="o-wa-kpimodal__section-title">Breakdown</div>
+              <div class="o-wa-kpimodal__bd">
+                <t t-foreach="kpiDetailBreakdown" t-as="b" t-key="b.label">
+                  <div class="o-wa-kpimodal__bd-row">
+                    <span class="o-wa-kpimodal__bd-dot" t-attf-style="background:{{ b.color }};"/>
+                    <span class="o-wa-kpimodal__bd-label"><t t-esc="b.label"/></span>
+                    <span class="o-wa-kpimodal__bd-track">
+                      <span class="o-wa-kpimodal__bd-fill"
+                            t-attf-style="width:{{ b.pct }}%; background:{{ b.color }};"/>
+                    </span>
+                    <span class="o-wa-kpimodal__bd-val"><t t-esc="b.value"/></span>
+                    <span class="o-wa-kpimodal__bd-pct"><t t-esc="bdSharePct(b.pct)"/></span>
+                  </div>
+                </t>
+              </div>
+            </t>
+
+            <!-- Key stats -->
+            <t t-if="expandedCard.stats and expandedCard.stats.length">
+              <div class="o-wa-kpimodal__stats">
+                <t t-foreach="expandedCard.stats" t-as="s" t-key="s[0]">
+                  <div class="o-wa-kpimodal__stat">
+                    <div class="o-wa-kpimodal__stat-val"><t t-esc="s[1]"/></div>
+                    <div class="o-wa-kpimodal__stat-key"><t t-esc="s[0]"/></div>
+                  </div>
+                </t>
+              </div>
+            </t>
+
+            <!-- Larger trend chart -->
+            <t t-if="kpiDetailChart">
+              <div class="o-wa-kpimodal__section-title"><t t-esc="expandedCard.seriesLabel"/></div>
+              <CdChart type="'line'" data="kpiDetailChart.data" options="kpiDetailChart.options"
+                       height="220" ariaLabel="'Metric trend'"/>
+            </t>
+          </div>
+        </div>
+      </t>
 
     </div>
   </t>

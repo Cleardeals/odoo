@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<templates xml:space="preserve">
+
+  <t t-name="cleardeals_ui.CdHeatmap">
+    <div class="cd-hm">
+      <t t-if="hasData">
+        <div class="cd-hm__grid" t-attf-style="grid-template-columns: 40px repeat({{ hours.length }}, 1fr);">
+          <!-- header row: corner + hour labels -->
+          <div class="cd-hm__corner"/>
+          <t t-foreach="hours" t-as="h" t-key="h">
+            <div class="cd-hm__hour" t-esc="hourLabel(h)"/>
+          </t>
+          <!-- one row per weekday -->
+          <t t-foreach="days" t-as="day" t-key="day_index">
+            <div class="cd-hm__day" t-esc="day"/>
+            <t t-foreach="hours" t-as="h" t-key="h">
+              <div t-att-class="cellClass(day_index, h)"
+                   t-att-style="cellStyle(day_index, h)"
+                   t-att-title="cellTitle(day_index, h)">
+                <t t-if="cell(day_index, h) and cell(day_index, h).arrivals">
+                  <span class="cd-hm__n" t-esc="cell(day_index, h).arrivals"/>
+                </t>
+              </div>
+            </t>
+          </t>
+        </div>
+        <div class="cd-hm__legend">
+          <span class="cd-hm__key is-good"/> <span>≥90% answered</span>
+          <span class="cd-hm__key is-warn"/> <span>70–89%</span>
+          <span class="cd-hm__key is-bad"/> <span>&lt;70%</span>
+          <span class="cd-hm__legend-note">· cell brightness = volume</span>
+        </div>
+      </t>
+      <t t-else="">
+        <div class="cd-hm__empty" t-esc="props.emptyText"/>
+      </t>
+    </div>
+  </t>
+
+</templates>

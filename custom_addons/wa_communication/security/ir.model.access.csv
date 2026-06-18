@@ -17,3 +17,5 @@ access_wa_quick_reply_user,wa.quick.reply user,model_wa_quick_reply,base.group_u
 access_wa_quick_reply_manager,wa.quick.reply manager,model_wa_quick_reply,base.group_system,1,1,1,1
 access_wa_reassignment_request_user,wa.reassignment.request user,model_wa_reassignment_request,base.group_user,1,1,1,0
 access_wa_reassignment_request_manager,wa.reassignment.request manager,model_wa_reassignment_request,base.group_system,1,1,1,1
+access_wa_assignment_log_user,wa.conversation.assignment.log user,model_wa_conversation_assignment_log,base.group_user,1,0,1,0
+access_wa_assignment_log_manager,wa.conversation.assignment.log manager,model_wa_conversation_assignment_log,base.group_system,1,1,1,1

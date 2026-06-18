@@ -10,6 +10,8 @@ import {
     CdKpiCard,
     CdWorklistPanel,
     CdLeaderboardTable,
+    CdHeatmap,
+    CdHelpTip,
 } from "@cleardeals_ui/index";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -29,6 +31,8 @@ export class WaDashboard extends Component {
         CdKpiCard,
         CdWorklistPanel,
         CdLeaderboardTable,
+        CdHeatmap,
+        CdHelpTip,
     };
 
     // ── Services ─────────────────────────────────────────────────────────────
@@ -68,6 +72,8 @@ export class WaDashboard extends Component {
             expandedKpiId:     null,
             // ── By RM ──
             rmRows:            [],
+            rmTeam:            null,
+            rmOps:             null,
             rmLoading:         false,
             rmSearch:          "",
             // ── By Campaign ──
@@ -264,9 +270,13 @@ export class WaDashboard extends Component {
     async _loadRm() {
         this.state.rmLoading = true;
         try {
-            const res = await this.orm.call(
-                "wa.dashboard", "get_rm_leaderboard", [], this._dateArgs());
-            this.state.rmRows = res.rows;
+            const [board, ops] = await Promise.all([
+                this.orm.call("wa.dashboard", "get_rm_leaderboard", [], this._dateArgs()),
+                this.orm.call("wa.dashboard", "get_rm_operations", [], this._dateArgs()),
+            ]);
+            this.state.rmRows = board.rows;
+            this.state.rmTeam = { ...board.team, sla_minutes: board.sla_minutes };
+            this.state.rmOps = ops;
         } finally {
             this.state.rmLoading = false;
         }
@@ -369,7 +379,13 @@ export class WaDashboard extends Component {
 
     get expandedCard() {
         if (!this.state.expandedKpiId) return null;
-        return this.kpiCards.find((c) => c.id === this.state.expandedKpiId) || null;
+        // Search whichever card sets are live (Command Center + By-RM team strip);
+        // ids don't collide across them.
+        const pool = [
+            ...(this.state.command ? this.kpiCards : []),
+            ...(this.state.rmTeam ? this.rmTeamCards : []),
+        ];
+        return pool.find((c) => c.id === this.state.expandedKpiId) || null;
     }
 
     /** Formatted delta for the detail header: {dir, tone, text} or null. */
@@ -554,14 +570,31 @@ export class WaDashboard extends Component {
     // ── Lens column configs + filtered rows ──────────────────────────────────
 
     get rmColumns() {
+        // SLA bar (warn/good cutoffs) comes from the backend; default 90.
+        const target = (this.state.rmTeam && this.state.rmTeam.target) || 90;
         return [
             { key: "rm_name", label: "RM", type: "text", align: "left" },
-            { key: "conversations", label: "Convs", type: "num" },
-            { key: "msgs_sent", label: "Sent", type: "num" },
-            { key: "reply_rate", label: "Reply rate", type: "bar" },
-            { key: "first_response_median", label: "Response", type: "secs" },
-            { key: "sla_pct", label: "SLA", type: "pct" },
-            { key: "spend", label: "Cost", type: "money" },
+            // ── Scores (RM-owned, ranked) ──
+            { key: "obligations", label: "Service", type: "funnel",
+              parts: ["obligations", "answered", "sustained"],
+              help: {
+                  title: "Service funnel",
+                  intro: "Each RM's held queue, left to right:",
+                  sample: this.helpFunnelSample,
+                  sampleNote: "Greens fill from the left; the grey tail is what slipped.",
+                  swatches: this.helpFunnelSwatches,
+                  items: [{ term: "Numbers", desc: "Beside the bar: held · answered-in-SLA · sustained, colour-matched. Hover a bar for the full split." }],
+              } },
+            { key: "reliability", label: "Reliability", type: "score",
+              good: target, warn: target - 15 },
+            { key: "speed_p90_secs", label: "Speed p90", type: "secs" },
+            { key: "follow_through", label: "Follow-through", type: "score",
+              good: target, warn: target - 15 },
+            { key: "reliability_delta", label: "Trend", type: "trend" },
+            // ── Context (shown, never ranked) ──
+            { key: "buyer_reply_rate", label: "Buyer reply", type: "pct", context: true },
+            { key: "load", label: "Load", type: "num", context: true },
+            { key: "overdue_now", label: "Overdue now", type: "alertnum", context: true },
         ];
     }
 
@@ -569,6 +602,123 @@ export class WaDashboard extends Component {
         const q = (this.state.rmSearch || "").toLowerCase();
         if (!q) return this.state.rmRows;
         return this.state.rmRows.filter((r) => (r.rm_name || "").toLowerCase().includes(q));
+    }
+
+    /** Team-summary KPI cards for the By-RM header strip (clickable → detail). */
+    get rmTeamCards() {
+        const t = this.state.rmTeam;
+        if (!t) return [];
+        const belowTone = t.rms_below_target > 0 ? "warn" : "good";
+        return [
+            { id: "team_reliability", label: "Team reliability",
+              value: this.fmtRate(t.reliability),
+              sub: `${t.rm_count} active RM${t.rm_count === 1 ? "" : "s"}`,
+              accent: t.reliability >= t.target ? "good" : "warn",
+              tooltip: "Share of all buyer messages answered within SLA, across the whole team.",
+              howto: `Read this as the team's overall service grade. At or above the ${this.fmtRate(t.target)} `
+                   + `target is healthy; well below means buyers are routinely waiting too long — look at the `
+                   + `scorecard and coverage heatmap to find who and when.`,
+              stats: [["Within SLA", this.fmtRate(t.reliability)], ["Target", this.fmtRate(t.target)],
+                      ["Active RMs", String(t.rm_count)]] },
+            { id: "team_speed", label: "Team speed p90",
+              value: this.fmtSecs(t.speed_p90_secs),
+              sub: "first response (business hrs)",
+              tooltip: "90th-percentile first-response time — the slow tail, not the flattering median.",
+              howto: "9 in 10 first replies are faster than this. We use p90 (not the average) because the "
+                   + "leads that rot live in the slow tail — a great average can still hide painful waits.",
+              stats: [["p90 first response", this.fmtSecs(t.speed_p90_secs)],
+                      ["SLA target", `${t.target_minutes || t.sla_minutes || 60}m`]] },
+            { id: "team_below", label: "RMs below bar",
+              value: String(t.rms_below_target),
+              sub: `target ${this.fmtRate(t.target)}`,
+              accent: belowTone,
+              tooltip: `RMs whose reliability is under the ${this.fmtRate(t.target)} bar this period.`,
+              howto: "Your coaching shortlist. These RMs answered too few of their buyer messages within SLA "
+                   + "this period — start your 1:1s here. Check Load and the heatmap before judging: a buried "
+                   + "RM is a routing problem, not an effort problem.",
+              stats: [["Below target", String(t.rms_below_target)], ["Active RMs", String(t.rm_count)],
+                      ["Bar", this.fmtRate(t.target)]] },
+            { id: "team_overdue", label: "Overdue now",
+              value: String(t.overdue_now),
+              sub: `${t.open_now} open`,
+              accent: t.overdue_now > 0 ? "bad" : "good",
+              tooltip: "Buyer messages past SLA awaiting a human reply right now (live, by current owner).",
+              howto: "The live firefight — buyers waiting past SLA on someone's desk this minute. Unlike the rest "
+                   + "of this screen (a period view), this is real-time. Use the Load-balance panel to see whose "
+                   + "queue is on fire and reassign.",
+              stats: [["Overdue now", String(t.overdue_now)], ["Open now", String(t.open_now)]] },
+        ];
+    }
+
+    // ── Section help configs (what this shows + how to read it) ──────────────
+
+    // Visual explainer for the Service funnel column (sample bar + legend).
+    get helpFunnelSample() {
+        return [{ cls: "sus", pct: 40 }, { cls: "ans", pct: 28 }, { cls: "rest", pct: 32 }];
+    }
+
+    get helpFunnelSwatches() {
+        return [
+            { cls: "sus", label: "Sustained", desc: "answered in SLA AND kept replying (no ghost)" },
+            { cls: "ans", label: "Answered in SLA", desc: "first reply within target" },
+            { cls: "rest", label: "Missed", desc: "answered late, or never" },
+        ];
+    }
+
+    get helpCoverageSwatches() {
+        return [
+            { cls: "good", label: "≥90% answered in SLA" },
+            { cls: "warn", label: "70–89%" },
+            { cls: "bad", label: "below 70%" },
+        ];
+    }
+
+    get helpScorecard() {
+        return [
+            { term: "Service", desc: "Held→answered→sustained funnel — see the dedicated help on that column." },
+            { term: "Reliability", desc: "Of every buyer message they owned, the share answered within SLA. The headline score." },
+            { term: "Speed p90", desc: "9 of 10 first replies were faster than this. The slow tail, not the average." },
+            { term: "Follow-through", desc: "Once a chat is live, do they keep replying or ghost? Continuation messages answered in SLA." },
+            { term: "Trend", desc: "Reliability vs the previous equal period. Up is improving." },
+            { term: "Buyer reply", desc: "Context, not a score — pool quality. Of leads we messaged, how many wrote back." },
+            { term: "Load", desc: "Context — obligations handled this period. A buried RM reads differently from an idle one." },
+            { term: "Overdue now", desc: "Context — buyers past SLA on this RM's desk right now (live)." },
+        ];
+    }
+
+    get helpCoverage() {
+        return [
+            { term: "What", desc: "When buyers message (rows = weekday, columns = hour) vs how well we answer them in SLA." },
+            { term: "Colour", desc: "Green ≥90% answered in SLA, amber 70–89%, red below 70%." },
+            { term: "Brightness", desc: "Stronger cells = higher message volume, so busy problem-hours stand out." },
+            { term: "Act on", desc: "A red, bright block is a staffing gap — add cover for that weekday/hour." },
+        ];
+    }
+
+    get helpLoad() {
+        return [
+            { term: "What", desc: "Open and overdue conversations per RM, right now (live, by current owner)." },
+            { term: "Open now", desc: "Conversations awaiting a human reply on that RM's desk." },
+            { term: "Overdue now", desc: "Of those, the ones already past SLA — the urgent ones." },
+            { term: "Act on", desc: "Big imbalance? Reassign from a buried RM to an idle one before SLAs break." },
+        ];
+    }
+
+    /** Load-balance table columns (operations band). */
+    get rmLoadColumns() {
+        return [
+            { key: "rm_name", label: "RM", type: "text", align: "left" },
+            { key: "open_now", label: "Open now", type: "num" },
+            { key: "overdue_now", label: "Overdue now", type: "alertnum" },
+        ];
+    }
+
+    get rmLoadRows() {
+        return (this.state.rmOps && this.state.rmOps.load) || [];
+    }
+
+    get rmHeatmapCells() {
+        return (this.state.rmOps && this.state.rmOps.heatmap) || [];
     }
 
     /** Shared metric columns for both campaign tables (name label varies). */

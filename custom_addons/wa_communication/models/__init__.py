@@ -7,6 +7,7 @@ from . import (
     wa_conversation_inbound,
     wa_conversation_events,
     wa_conversation_assignment,
+    wa_conversation_assignment_log,
     wa_conversation_outbound,
     wa_conversation_serializers,
 )

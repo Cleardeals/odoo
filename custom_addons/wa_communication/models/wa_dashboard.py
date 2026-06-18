@@ -42,6 +42,9 @@ _FAILED_STATUSES = [
     'rate_limited', 'template_error', 'expired',
 ]
 
+# Reliability (SLA-hit %) a By-RM coaching screen treats as "meeting the bar".
+_RM_RELIABILITY_TARGET = 90.0
+
 _FAILURE_LABELS = {
     'failed':         'Failed',
     'meta_blocked':   'Meta Blocked',
@@ -996,77 +999,320 @@ class WaDashboard(models.Model):
     # Lens tabs — By RM, By Campaign/Template
     # ------------------------------------------------------------------
 
+    # ------------------------------------------------------------------
+    # Obligation engine — the fair, attribution-stable unit for By-RM.
+    #
+    # Every *buyer inbound* creates a response **obligation** on whoever owned
+    # the conversation when it was resolved-or-breached (clock transfers on
+    # reassignment — see ``_owner_at`` + the assignment-history ledger).  Only
+    # ``initiator='rm'`` messages satisfy an obligation; automated
+    # ``initiator='system'`` sends never stop the human clock.  Obligations
+    # split into **first-contact** (the thread's opener → first-response speed)
+    # and **continuation** (2nd+ unanswered streak → follow-through / no-ghost).
+    # ------------------------------------------------------------------
+
+    def _assignment_timelines(self, conv_ids):
+        """Map conversation id -> ascending ``[(effective_from, owner_uid)]``."""
+        timelines = defaultdict(list)
+        ids = [c for c in conv_ids if c]
+        if not ids:
+            return timelines
+        logs = self.env['wa.conversation.assignment.log'].sudo().search(
+            [('conversation_id', 'in', ids)], order='effective_from asc, id asc')
+        for lg in logs:
+            timelines[lg.conversation_id.id].append(
+                (lg.effective_from, lg.owner_user_id.id or False))
+        return timelines
+
+    @staticmethod
+    def _owner_at(timeline, ts, fallback=False):
+        """Owner of the conversation at instant ``ts`` (greatest effective_from
+        ``<= ts``).  ``fallback`` (current owner) covers timestamps before the
+        ledger's first row — only reachable for pre-ledger history."""
+        owner = fallback
+        for eff, uid in timeline:  # ascending
+            if eff <= ts:
+                owner = uid
+            else:
+                break
+        return owner
+
+    def _conversation_obligations(self, msgs, timeline, current_owner, sla, eval_end):
+        """Build obligation dicts for one conversation's window-ordered ``msgs``.
+
+        Each obligation: ``{owner, is_first, latency|None, hit, opened_at}``.
+        A trailing unanswered streak counts as a miss only once it has actually
+        breached SLA by ``eval_end`` (so a brand-new ping isn't punished early).
+        """
+        obligations = []
+        awaiting = None          # ts of the earliest unanswered buyer inbound
+        seen = False             # has this conversation produced an obligation yet
+        for m in msgs:
+            if not m.occurred_at:
+                continue
+            if m.direction == 'inbound' and m.initiator == 'buyer':
+                if awaiting is None:
+                    awaiting = m.occurred_at
+            elif m.direction == 'outbound' and m.initiator == 'rm':
+                if awaiting is not None:
+                    latency = self._business_seconds(awaiting, m.occurred_at)
+                    obligations.append({
+                        'owner': self._owner_at(timeline, m.occurred_at, current_owner),
+                        'is_first': not seen,
+                        'latency': latency,
+                        'hit': latency <= sla,
+                        'opened_at': awaiting,
+                    })
+                    seen = True
+                    awaiting = None
+            # initiator='system' (automation) and extra buyer pings while one is
+            # already open both fall through — they never satisfy or duplicate.
+        if awaiting is not None and self._business_seconds(awaiting, eval_end) > sla:
+            obligations.append({
+                'owner': self._owner_at(timeline, eval_end, current_owner),
+                'is_first': not seen,
+                'latency': None,
+                'hit': False,
+                'opened_at': awaiting,
+            })
+        return obligations
+
+    def _collect_obligations(self, dt_from, dt_to, slugs):
+        """All obligations in the window, plus the raw window messages (reused for
+        context metrics).  Returns ``(obligations, msgs)``."""
+        msgs = self._wa_window_messages(dt_from, dt_to, slugs)
+        by_conv = defaultdict(list)
+        for m in msgs:
+            by_conv[m.conversation_id.id].append(m)  # preserves oldest-first order
+        timelines = self._assignment_timelines(by_conv.keys())
+        current_owner = {}
+        if by_conv:
+            for c in self.env['wa.conversation'].sudo().browse(list(by_conv.keys())):
+                current_owner[c.id] = c.assigned_user_id.id or False
+        sla = self._sla_seconds()
+        eval_end = min(dt_to, datetime.utcnow())
+        obligations = []
+        for cid, cmsgs in by_conv.items():
+            obligations += self._conversation_obligations(
+                cmsgs, timelines.get(cid, []), current_owner.get(cid, False),
+                sla, eval_end)
+        return obligations, msgs, current_owner
+
+    def _now_backlog_by_owner(self):
+        """Real-time open/overdue obligations per *current* owner.
+
+        ``{uid|False: {'open', 'overdue'}}`` — a conversation is *open* when its
+        latest buyer inbound has no RM reply after it, *overdue* when that wait
+        has breached SLA in business time.  This is the live-triage snapshot
+        (current assignee), deliberately distinct from the historical scorecard.
+        """
+        backlog = defaultdict(lambda: {'open': 0, 'overdue': 0})
+        self.env.cr.execute(
+            """
+            SELECT c.assigned_user_id AS uid,
+                   MAX(m.occurred_at) FILTER (
+                       WHERE m.direction='inbound' AND m.initiator='buyer') AS last_buyer,
+                   MAX(m.occurred_at) FILTER (
+                       WHERE m.direction='outbound' AND m.initiator='rm') AS last_rm
+              FROM wa_conversation c
+              JOIN wa_message m ON m.conversation_id = c.id
+             WHERE c.state = 'active'
+               AND c.last_message_at > (now() AT TIME ZONE 'UTC') - interval '60 days'
+          GROUP BY c.id, c.assigned_user_id
+            """
+        )
+        sla = self._sla_seconds()
+        now = datetime.utcnow()
+        for uid, last_buyer, last_rm in self.env.cr.fetchall():
+            if not last_buyer or (last_rm and last_rm >= last_buyer):
+                continue  # never wrote, or already answered
+            owner = uid or False
+            backlog[owner]['open'] += 1
+            if self._business_seconds(last_buyer, now) > sla:
+                backlog[owner]['overdue'] += 1
+        return dict(backlog)
+
     @api.model
     def get_rm_leaderboard(self, date_from=None, date_to=None, workflow_slugs=None):
-        """Per-RM responsiveness league table (the coaching lens).
+        """Per-RM **service scorecard** (the coaching lens) — obligation-based.
 
-        A conversation is credited to the RM who first replied on it
-        (`sender_user_id`), falling back to the conversation's `assigned_user_id`,
-        else an *Unassigned* bucket. Per RM: conversations, sent/received, reply
-        rate, median first-response (business hours), SLA %, spend.
+        Scores (RM-owned, ranked): *Reliability* (SLA-hit % across all
+        obligations, misses included), *Speed* (first-response p90), *Follow-
+        through* (continuation SLA-hit %, + ``ghosts`` = missed continuations),
+        and a *Trend* (Reliability pts vs the previous equal-length period).
+
+        Context (shown, never ranked): *buyer-reply rate* (outreach engagement —
+        lead-pool quality, not RM merit), *load* (obligations handled), and
+        *overdue now* (live backlog by current assignee).  Plus a ``team``
+        summary block.  Cost / raw send counts are deliberately dropped.
         """
         dt_from = self._parse_date(date_from)
         dt_to = self._parse_date(date_to) if date_to else datetime.utcnow()
         slugs = [s for s in (workflow_slugs or []) if s]
 
-        by_conv = defaultdict(list)
-        for m in self._wa_window_messages(dt_from, dt_to, slugs):
-            by_conv[m.conversation_id].append(m)
+        obligations, msgs, conv_owner = self._collect_obligations(dt_from, dt_to, slugs)
 
-        rm = {}
+        agg = {}
 
-        def _acc(uid):
-            return rm.setdefault(uid, {
-                'convs': 0, 'sent': 0, 'received': 0, 'cost': 0.0,
-                'messaged': set(), 'replied': set(), 'latencies': [],
+        def _a(uid):
+            return agg.setdefault(uid, {
+                'total': 0, 'hits': 0, 'first_lat': [],
+                'cont_total': 0, 'cont_hits': 0,
             })
 
-        for conv, msgs in by_conv.items():
-            responder = False
-            for m in msgs:
-                if m.direction == 'outbound' and m.initiator == 'rm' and m.sender_user_id:
-                    responder = m.sender_user_id.id
-                    break
-            uid = responder or (conv.assigned_user_id.id if conv.assigned_user_id else False)
-            a = _acc(uid)
-            a['convs'] += 1
-            for m in msgs:
-                iid = m.effective_inquiry_id.id if m.effective_inquiry_id else False
-                if m.direction == 'outbound':
-                    a['sent'] += 1
-                    a['cost'] += m.cost_inr or 0.0
-                    if iid:
-                        a['messaged'].add(iid)
-                elif m.direction == 'inbound' and m.initiator == 'buyer':
-                    a['received'] += 1
-                    if iid:
-                        a['replied'].add(iid)
-            lat = self._first_response_business_secs(msgs)
-            if lat is not None:
-                a['latencies'].append(lat)
+        for o in obligations:
+            a = _a(o['owner'])
+            a['total'] += 1
+            if o['hit']:
+                a['hits'] += 1
+            if o['is_first']:
+                if o['latency'] is not None:
+                    a['first_lat'].append(o['latency'])
+            else:
+                a['cont_total'] += 1
+                if o['hit']:
+                    a['cont_hits'] += 1
 
+        # Context — buyer-reply rate = of conversations in the RM's book that we
+        # messaged (automation included), the share where the buyer wrote back.
+        # Measures *lead-pool quality / outreach engagement*, not RM merit — so
+        # it's keyed by the conversation's current owner and never ranked.
+        conv_flags = {}
+        for m in msgs:
+            f = conv_flags.setdefault(m.conversation_id.id, [False, False])
+            if m.direction == 'outbound':
+                f[0] = True
+            elif m.direction == 'inbound' and m.initiator == 'buyer':
+                f[1] = True
+        reached, replied_conv = defaultdict(int), defaultdict(int)
+        for cid, (has_out, has_buyer) in conv_flags.items():
+            if not has_out:
+                continue
+            owner = conv_owner.get(cid, False)
+            reached[owner] += 1
+            if has_buyer:
+                replied_conv[owner] += 1
+
+        backlog = self._now_backlog_by_owner()
+
+        # Trend — previous equal-length period reliability per owner.
+        delta = dt_to - dt_from
+        prev_obl, _, _ = self._collect_obligations(dt_from - delta, dt_from, slugs)
+        ptot, phit = defaultdict(int), defaultdict(int)
+        for o in prev_obl:
+            ptot[o['owner']] += 1
+            if o['hit']:
+                phit[o['owner']] += 1
+        prev_rel = {u: self._rate(phit[u], ptot[u]) for u in ptot}
+
+        owners = set(agg) | set(reached) | set(backlog)
         names = {
             u.id: u.name
-            for u in self.env['res.users'].sudo().browse([x for x in rm if x])}
-        sla = self._sla_seconds()
+            for u in self.env['res.users'].sudo().browse([u for u in owners if u])}
+
         rows = []
-        for uid, a in rm.items():
-            replied = a['replied'] & a['messaged']
+        for uid in owners:
+            a = agg.get(uid, {'total': 0, 'hits': 0, 'first_lat': [],
+                              'cont_total': 0, 'cont_hits': 0})
+            bl = backlog.get(uid, {'open': 0, 'overdue': 0})
+            reliability = self._rate(a['hits'], a['total'])
+            cur_rel = reliability if a['total'] else None
+            prv = prev_rel.get(uid)
             rows.append({
                 'rm_id': uid or False,
                 'rm_name': names.get(uid, 'Unassigned') if uid else 'Unassigned',
-                'conversations': a['convs'],
-                'msgs_sent': a['sent'], 'msgs_received': a['received'],
-                'leads_messaged': len(a['messaged']),
-                'replied': len(replied),
-                'reply_rate': self._rate(len(replied), len(a['messaged'])),
-                'first_response_median': self._median(a['latencies']),
-                'sla_pct': self._rate(
-                    sum(1 for x in a['latencies'] if x <= sla), len(a['latencies'])),
-                'spend': round(a['cost'], 2),
+                # scores
+                'reliability': reliability,
+                'speed_p90_secs': self._p90(a['first_lat']),
+                'follow_through': self._rate(a['cont_hits'], a['cont_total']),
+                'ghosts': a['cont_total'] - a['cont_hits'],
+                'reliability_delta': (
+                    None if (cur_rel is None or prv is None) else round(cur_rel - prv, 1)),
+                # funnel: held -> answered -> sustained (monotonic)
+                'obligations': a['total'],
+                'answered': a['hits'],
+                'sustained': a['cont_hits'],
+                # context
+                'buyer_reply_rate': self._rate(replied_conv.get(uid, 0), reached.get(uid, 0)),
+                'load': a['total'],
+                'open_now': bl['open'],
+                'overdue_now': bl['overdue'],
             })
-        rows.sort(key=lambda r: (r['reply_rate'], r['msgs_sent']), reverse=True)
-        return {'rows': rows}
+
+        # Real RMs first (by reliability, then load); Unassigned bucket last.
+        rows.sort(key=lambda r: (r['rm_id'] is not False, r['reliability'], r['load']),
+                  reverse=True)
+
+        real = [r for r in rows if r['rm_id'] and r['load']]
+        team_total = sum(a['total'] for a in agg.values())
+        team_hits = sum(a['hits'] for a in agg.values())
+        team_first_lat = [l for a in agg.values() for l in a['first_lat']]
+        team = {
+            'reliability': self._rate(team_hits, team_total),
+            'speed_p90_secs': self._p90(team_first_lat),
+            'rm_count': len(real),
+            'rms_below_target': sum(
+                1 for r in real if r['reliability'] < _RM_RELIABILITY_TARGET),
+            'target': _RM_RELIABILITY_TARGET,
+            'open_now': sum(v['open'] for v in backlog.values()),
+            'overdue_now': sum(v['overdue'] for v in backlog.values()),
+        }
+        return {
+            'rows': rows,
+            'team': team,
+            'sla_minutes': int(self._sla_seconds() / 60),
+            'date_from': dt_from.isoformat(),
+            'date_to': dt_to.isoformat(),
+        }
+
+    @api.model
+    def get_rm_operations(self, date_from=None, date_to=None, workflow_slugs=None):
+        """Team operations band for By-RM: **coverage heatmap** + **load balance**.
+
+        * ``heatmap``: per (weekday, hour) in business-tz, buyer ``arrivals`` and
+          how many were ``answered`` within SLA → exposes staffing gaps.
+        * ``load``: open/overdue obligations per *current* owner → routing balance.
+        """
+        dt_from = self._parse_date(date_from)
+        dt_to = self._parse_date(date_to) if date_to else datetime.utcnow()
+        slugs = [s for s in (workflow_slugs or []) if s]
+
+        obligations, _, _ = self._collect_obligations(dt_from, dt_to, slugs)
+
+        start_h, end_h, _grace, tz_name = self._business_config()
+        tz = pytz.timezone(tz_name)
+        grid = {}
+        for o in obligations:
+            local = pytz.utc.localize(o['opened_at']).astimezone(tz)
+            cell = grid.setdefault((local.weekday(), local.hour),
+                                   {'arrivals': 0, 'answered': 0})
+            cell['arrivals'] += 1
+            if o['hit']:
+                cell['answered'] += 1
+        heatmap = [
+            {'weekday': wd, 'hour': hr, 'arrivals': v['arrivals'], 'answered': v['answered']}
+            for (wd, hr), v in grid.items()]
+
+        backlog = self._now_backlog_by_owner()
+        names = {
+            u.id: u.name
+            for u in self.env['res.users'].sudo().browse([u for u in backlog if u])}
+        load = [
+            {'rm_id': uid or False,
+             'rm_name': names.get(uid, 'Unassigned') if uid else 'Unassigned',
+             'open_now': v['open'], 'overdue_now': v['overdue']}
+            for uid, v in backlog.items()]
+        load.sort(key=lambda r: r['open_now'], reverse=True)
+
+        return {
+            'heatmap': heatmap,
+            'load': load,
+            'business_start': int(start_h),
+            'business_end': int(end_h),
+            'sla_minutes': int(self._sla_seconds() / 60),
+            'date_from': dt_from.isoformat(),
+            'date_to': dt_to.isoformat(),
+        }
 
     @staticmethod
     def _campaign_tally(acc, status, cost, iid):

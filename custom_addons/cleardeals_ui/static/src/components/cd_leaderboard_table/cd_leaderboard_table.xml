@@ -7,9 +7,16 @@
         <thead>
           <tr>
             <t t-foreach="props.columns" t-as="col" t-key="col.key">
-              <th t-att-class="'cd-lb__th' + (col.align === 'right' || (col.type and col.type !== 'text' and col.type !== 'bar') ? ' o-r' : '') + (col.type === 'bar' ? ' cd-lb__th--bar' : '')"
+              <th t-att-class="'cd-lb__th' + (col.align === 'right' || (col.type and col.type !== 'text' and col.type !== 'bar' and col.type !== 'funnel') ? ' o-r' : '') + ((col.type === 'bar' || col.type === 'funnel') ? ' cd-lb__th--bar' : '') + (col.context ? ' cd-lb__th--ctx' : '')"
                   t-on-click="() => this.onSort(col)">
                 <span t-esc="col.label"/>
+                <CdHelpTip t-if="col.help" title="col.help.title"
+                           intro="col.help.intro or ''"
+                           sample="col.help.sample or []"
+                           sampleNote="col.help.sampleNote or ''"
+                           swatches="col.help.swatches or []"
+                           items="col.help.items or []"
+                           align="'left'"/>
                 <t t-if="state.sortKey === col.key">
                   <i t-att-class="'fa cd-lb__sort ' + (state.sortDir === 'desc' ? 'fa-caret-down' : 'fa-caret-up')" aria-hidden="true"/>
                 </t>
@@ -23,7 +30,7 @@
               <tr t-att-class="'cd-lb__row' + (props.onRowClick ? ' o-click' : '')"
                   t-on-click="() => this.onClick(row)">
                 <t t-foreach="props.columns" t-as="col" t-key="col.key">
-                  <td t-att-class="'cd-lb__td' + (col.align === 'right' || (col.type and col.type !== 'text' and col.type !== 'bar') ? ' o-r' : '')">
+                  <td t-att-class="'cd-lb__td' + (col.align === 'right' || (col.type and col.type !== 'text' and col.type !== 'bar' and col.type !== 'funnel') ? ' o-r' : '') + (col.context ? ' cd-lb__td--ctx' : '')">
 
                     <t t-if="col.type === 'bar'">
                       <div class="cd-lb__bar">
@@ -34,6 +41,46 @@
                         </div>
                         <span class="cd-lb__bar-val" t-esc="fmt(col, row)"/>
                       </div>
+                    </t>
+
+                    <t t-elif="col.type === 'funnel'">
+                      <div class="cd-lb__funnel" t-att-title="funnelTitle(col, row)">
+                        <div class="cd-lb__funnel-track">
+                          <div class="cd-lb__funnel-ans"
+                               t-attf-style="width: {{ funnelPct(col, row, 1) }}%;"/>
+                          <div class="cd-lb__funnel-sus"
+                               t-attf-style="width: {{ funnelPct(col, row, 2) }}%;"/>
+                        </div>
+                        <span class="cd-lb__funnel-nums">
+                          <span class="cd-lb__funnel-held" t-esc="row[col.parts[0]]"/>
+                          <span t-if="col.parts.length > 1" class="cd-lb__funnel-n is-ans"
+                                t-esc="row[col.parts[1]]"/>
+                          <span t-if="col.parts.length > 2" class="cd-lb__funnel-n is-sus"
+                                t-esc="row[col.parts[2]]"/>
+                        </span>
+                      </div>
+                    </t>
+
+                    <t t-elif="col.type === 'trend'">
+                      <t t-if="row[col.key] == null">
+                        <span class="cd-lb__muted">—</span>
+                      </t>
+                      <t t-else="">
+                        <span t-att-class="'cd-lb__trend ' + trendTone(col, row)">
+                          <i t-att-class="'fa ' + (row[col.key] >= 0 ? 'fa-arrow-up' : 'fa-arrow-down')"
+                             aria-hidden="true"/>
+                          <t t-esc="trendText(col, row)"/>
+                        </span>
+                      </t>
+                    </t>
+
+                    <t t-elif="col.type === 'score'">
+                      <span t-att-class="'cd-lb__score ' + scoreTone(col, row)" t-esc="fmt(col, row)"/>
+                    </t>
+
+                    <t t-elif="col.type === 'alertnum'">
+                      <span t-att-class="(row[col.key] > 0) ? 'cd-lb__alert' : 'cd-lb__muted'"
+                            t-esc="fmt(col, row)"/>
                     </t>
 
                     <t t-elif="col.type === 'toggle'">

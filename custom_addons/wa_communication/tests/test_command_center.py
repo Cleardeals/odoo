@@ -191,32 +191,30 @@ class TestCommandCenterRPCs(WaTransactionCase):
 
     # ── By RM ────────────────────────────────────────────────────────────────
 
-    def test_rm_leaderboard_attribution(self):
+    def test_rm_leaderboard_obligation_smoke(self):
+        # Obligation-based scorecard: rm1 answers within SLA (reliable), rm2 lets
+        # a buyer message rot (unreliable). Deep behaviour lives in
+        # test_rm_scorecard.py — this is a shape + sort smoke check.
         rm1 = self.make_user()
         rm2 = self.make_user()
         prop = self._prop()
         a, b = self._inq(prop), self._inq(prop)
-        # rm1 conversation: replied (credited via sender_user_id)
         c1 = self._conv(assigned=rm1.id)
-        self._msg(c1, '2026-03-10 04:30:00', direction='outbound', initiator='rm',
-                  lead=a, sender_user_id=rm1.id, status='read', cost_inr=2.0)
-        self._msg(c1, '2026-03-10 04:35:00', direction='inbound', initiator='buyer', lead=a)
-        self._msg(c1, '2026-03-10 05:00:00', direction='outbound', initiator='rm',
-                  lead=a, sender_user_id=rm1.id, status='delivered', cost_inr=1.0)
-        # rm2 conversation: messaged, no reply
+        self._msg(c1, '2026-03-10 04:30:00', direction='inbound', initiator='buyer', lead=a)
+        self._msg(c1, '2026-03-10 04:55:00', direction='outbound', initiator='rm',
+                  lead=a, sender_user_id=rm1.id, status='delivered')   # 25m hit
         c2 = self._conv(assigned=rm2.id)
-        self._msg(c2, '2026-03-11 05:00:00', direction='outbound', initiator='rm',
-                  lead=b, sender_user_id=rm2.id, status='delivered', cost_inr=1.0)
+        self._msg(c2, '2026-03-11 04:30:00', direction='inbound', initiator='buyer', lead=b)
+        # rm2 never replies → breached miss
 
-        rows = {r['rm_id']: r for r in self.Dash.get_rm_leaderboard(
-            date_from=WIN_FROM, date_to=WIN_TO)['rows']}
-        self.assertEqual(rows[rm1.id]['reply_rate'], 100.0)
-        self.assertEqual(rows[rm1.id]['spend'], 3.0)
-        self.assertEqual(rows[rm1.id]['first_response_median'], 1500.0)
-        self.assertEqual(rows[rm2.id]['reply_rate'], 0.0)
-        # rm1 (higher reply rate) sorts first
-        first = self.Dash.get_rm_leaderboard(date_from=WIN_FROM, date_to=WIN_TO)['rows'][0]
-        self.assertEqual(first['rm_id'], rm1.id)
+        board = self.Dash.get_rm_leaderboard(date_from=WIN_FROM, date_to=WIN_TO)
+        rows = {r['rm_id']: r for r in board['rows']}
+        self.assertEqual(rows[rm1.id]['reliability'], 100.0)
+        self.assertEqual(rows[rm1.id]['obligations'], 1)
+        self.assertEqual(rows[rm2.id]['reliability'], 0.0)
+        self.assertIn('team', board)
+        # rm1 (reliable) sorts above rm2; Unassigned never leads.
+        self.assertEqual(board['rows'][0]['rm_id'], rm1.id)
 
     # ── By Campaign / Template ───────────────────────────────────────────────
 

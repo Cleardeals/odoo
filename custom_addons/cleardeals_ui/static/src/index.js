@@ -43,3 +43,5 @@ export { CdChart }                   from "./components/cd_chart/cd_chart";
 export { CdKpiCard }                 from "./components/cd_kpi_card/cd_kpi_card";
 export { CdWorklistPanel }           from "./components/cd_worklist_panel/cd_worklist_panel";
 export { CdLeaderboardTable }        from "./components/cd_leaderboard_table/cd_leaderboard_table";
+export { CdHeatmap }                 from "./components/cd_heatmap/cd_heatmap";
+export { CdHelpTip }                 from "./components/cd_help_tip/cd_help_tip";

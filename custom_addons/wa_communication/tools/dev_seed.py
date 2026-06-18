@@ -498,6 +498,68 @@ def seed_showcase(env):
                  'read', 'template', 0.8, wf='devseed_welcome', tpl='welcome_v1', rm=rm)
         make_msg(conv, lead, when, 'inbound', 'buyer', 'delivered', 'text_reply', 0.0)
 
+    def _clamp(when):
+        """Keep a fabricated moment at or just before *now*."""
+        return when if when <= now else now - timedelta(minutes=random.randint(5, 60))
+
+    def _demo_lead(rm, prop, phone):
+        return env['leads.new'].with_context(automated_lead_creation=True).create({
+            'name': '[DEMO] %s %s' % (prop.property_tag, phone),
+            'source_id': source.id, 'phone': phone, 'property_base_id': prop.id,
+            'user_id': rm.id, 'current_status': 'lead', 'inquiry_type': 'primary',
+        })
+
+    # ── Multi-turn threads → exercise Follow-through / no-ghost ───────────────
+    # Half sustain the second buyer message, half ghost it (continuation miss).
+    for i in range(12):
+        rm = random.choice(rms); prop = random.choice(props); phone = next_phone()
+        lead = _demo_lead(rm, prop, phone); counts['leads'] += 1
+        conv = env['wa.conversation'].sudo().create({
+            'phone_number': '91' + phone, 'assigned_user_id': rm.id, 'lead_id': lead.id})
+        t0 = rand_when()
+        make_msg(conv, lead, t0, 'outbound', 'workflow', 'read', 'template', 0.8,
+                 wf='devseed_welcome', tpl='welcome_v1', rm=rm)
+        b1 = _clamp(t0 + timedelta(minutes=30))
+        make_msg(conv, lead, b1, 'inbound', 'buyer', 'delivered', 'text_reply', 0.0)
+        counts['replies'] += 1
+        r1 = _clamp(b1 + timedelta(minutes=random.randint(5, 40)))   # first-contact hit
+        make_msg(conv, lead, r1, 'outbound', 'rm', 'read', 'freetext', 0.35, rm=rm)
+        counts['rm_responses'] += 1
+        b2 = _clamp(r1 + timedelta(minutes=random.randint(20, 120)))
+        make_msg(conv, lead, b2, 'inbound', 'buyer', 'delivered', 'text_reply', 0.0)
+        if i % 2 == 0:                                                # sustained
+            r2 = _clamp(b2 + timedelta(minutes=random.randint(5, 45)))
+            make_msg(conv, lead, r2, 'outbound', 'rm', 'read', 'freetext', 0.3, rm=rm)
+            counts['rm_responses'] += 1
+        # else: ghosted — no second RM reply → continuation miss.
+
+    # ── Reassigned threads → exercise clock transfer on the assignment ledger ─
+    counts['reassignments'] = 0
+    if len(rms) >= 2:
+        Log = env['wa.conversation.assignment.log'].sudo()
+        for i in range(5):
+            rm1, rm2 = random.sample(rms, 2)
+            prop = random.choice(props); phone = next_phone()
+            lead = _demo_lead(rm1, prop, phone); counts['leads'] += 1
+            conv = env['wa.conversation'].sudo().create({
+                'phone_number': '91' + phone, 'assigned_user_id': rm2.id, 'lead_id': lead.id})
+            t0 = rand_when()
+            # Explicit past timeline: rm1 holds it first, then hands to rm2.
+            Log.create({'conversation_id': conv.id, 'owner_user_id': rm1.id,
+                        'effective_from': t0 - timedelta(hours=1)})
+            b1 = _clamp(t0)
+            make_msg(conv, lead, b1, 'inbound', 'buyer', 'delivered', 'text_reply', 0.0)
+            counts['replies'] += 1
+            handoff = _clamp(b1 + timedelta(minutes=20))
+            Log.create({'conversation_id': conv.id, 'owner_user_id': rm2.id,
+                        'effective_from': handoff})
+            counts['reassignments'] += 1
+            if i % 2:                                                # rm2 answers (its obligation)
+                r1 = _clamp(handoff + timedelta(minutes=random.randint(10, 90)))
+                make_msg(conv, lead, r1, 'outbound', 'rm', 'read', 'freetext', 0.32, rm=rm2)
+                counts['rm_responses'] += 1
+            # else: rm2 lets it rot → miss attributed to rm2 at breach.
+
     return {
         'created': counts,
         'workflows': [s for s, _t, _w in workflows],

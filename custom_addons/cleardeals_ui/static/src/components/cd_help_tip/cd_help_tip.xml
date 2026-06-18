@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<templates xml:space="preserve">
+
+  <t t-name="cleardeals_ui.CdHelpTip">
+    <span class="cd-help">
+      <button class="cd-help__btn" t-att-class="ui.open ? 'is-open' : ''"
+              t-on-click.stop="() => this.toggle()" aria-label="How to read this">
+        <i class="fa fa-question-circle" aria-hidden="true"/>
+      </button>
+      <t t-if="ui.open">
+        <div class="cd-help__backdrop" t-on-click="() => this.close()"/>
+        <div t-att-class="'cd-help__pop cd-help__pop--' + props.align"
+             t-on-click.stop="() => {}">
+          <div class="cd-help__title"><t t-esc="props.title"/></div>
+          <p t-if="props.intro" class="cd-help__intro"><t t-esc="props.intro"/></p>
+
+          <!-- Visual explainer: demo bar + swatch legend -->
+          <t t-if="props.sample.length">
+            <div class="cd-help__sample">
+              <t t-foreach="props.sample" t-as="s" t-key="s_index">
+                <span t-att-class="'cd-help__seg cd-help__seg--' + s.cls"
+                      t-attf-style="width:{{ s.pct }}%;"/>
+              </t>
+            </div>
+            <div t-if="props.sampleNote" class="cd-help__sample-note"><t t-esc="props.sampleNote"/></div>
+          </t>
+          <div t-if="props.swatches.length" class="cd-help__swatches">
+            <t t-foreach="props.swatches" t-as="w" t-key="w_index">
+              <div class="cd-help__sw">
+                <span t-att-class="'cd-help__chip cd-help__chip--' + w.cls"/>
+                <span class="cd-help__sw-label"><t t-esc="w.label"/></span>
+                <span t-if="w.desc" class="cd-help__sw-desc"><t t-esc="w.desc"/></span>
+              </div>
+            </t>
+          </div>
+
+          <div t-if="props.items.length" class="cd-help__items">
+            <t t-foreach="props.items" t-as="it" t-key="it.term">
+              <div class="cd-help__item">
+                <span class="cd-help__term"><t t-esc="it.term"/></span>
+                <span class="cd-help__desc"><t t-esc="it.desc"/></span>
+              </div>
+            </t>
+          </div>
+        </div>
+      </t>
+    </span>
+  </t>
+
+</templates>

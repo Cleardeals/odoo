@@ -1,0 +1,125 @@
+.cd-help {
+    position: relative;
+    display: inline-flex;
+    vertical-align: middle;
+
+    &__btn {
+        border: none;
+        background: transparent;
+        padding: 0 2px;
+        cursor: pointer;
+        color: var(--cd-muted-2);
+        font-size: 13px;
+        line-height: 1;
+        transition: color 0.1s ease;
+        &:hover, &.is-open { color: var(--cd-primary); }
+    }
+
+    // Invisible full-screen catcher so a click anywhere closes the popover.
+    &__backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 50;
+    }
+
+    &__pop {
+        position: absolute;
+        top: 22px;
+        z-index: 51;
+        width: 320px;
+        max-width: 86vw;
+        background: var(--cd-surface);
+        border: 1px solid var(--cd-border);
+        border-radius: var(--cd-radius-lg);
+        box-shadow: var(--cd-shadow-pop);
+        padding: 12px 14px;
+        text-align: left;
+        cursor: default;
+        // Reset typography inherited from host headers (e.g. uppercase <th>).
+        text-transform: none;
+        letter-spacing: normal;
+        font-weight: 400;
+        line-height: 1.45;
+        color: var(--cd-ink-2);
+        white-space: normal;
+
+        &--right { right: 0; }
+        &--left  { left: 0; }
+    }
+
+    &__title {
+        font-size: 12.5px;
+        font-weight: 700;
+        color: var(--cd-ink);
+        letter-spacing: 0.01em;
+        text-transform: none;
+        margin-bottom: 4px;
+    }
+
+    &__intro {
+        margin: 0 0 8px;
+        font-size: 12px;
+        line-height: 1.45;
+        color: var(--cd-muted);
+        font-weight: 400;
+    }
+
+    // Demo segmented bar (e.g. the service funnel) + legend.
+    &__sample {
+        display: flex;
+        height: 14px;
+        border-radius: var(--cd-radius-pill);
+        overflow: hidden;
+        background: var(--cd-surface-3);
+        margin-bottom: 6px;
+    }
+    &__seg {
+        height: 100%;
+        &--sus  { background: var(--cd-success); }
+        &--ans  { background: var(--cd-success); opacity: 0.45; }
+        &--rest { background: var(--cd-surface-3); }
+        &--good { background: var(--cd-success); }
+        &--warn { background: var(--cd-warning); }
+        &--bad  { background: var(--cd-danger); }
+    }
+    &__sample-note {
+        font-size: 11px;
+        color: var(--cd-muted-2);
+        margin-bottom: 8px;
+    }
+    &__swatches {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        margin-bottom: 9px;
+    }
+    // Swatches and items share one grid so colour-chip rows and plain rows
+    // line up: [marker 13px] · [term 104px] · [description 1fr].
+    &__sw, &__item {
+        display: grid;
+        grid-template-columns: 13px 104px 1fr;
+        column-gap: 9px;
+        align-items: baseline;
+        font-size: 11.5px;
+        line-height: 1.45;
+    }
+
+    &__chip {
+        grid-column: 1;
+        width: 11px;
+        height: 11px;
+        border-radius: 3px;
+        align-self: center;
+        &--sus  { background: var(--cd-success); }
+        &--ans  { background: var(--cd-success); opacity: 0.45; }
+        &--rest { background: var(--cd-surface-3); border: 1px solid var(--cd-border); }
+        &--good { background: var(--cd-success); }
+        &--warn { background: var(--cd-warning); }
+        &--bad  { background: var(--cd-danger); }
+    }
+
+    &__sw-label, &__term { grid-column: 2; font-weight: 700; color: var(--cd-ink-2); }
+    &__sw-desc, &__desc  { grid-column: 3; color: var(--cd-muted); font-weight: 400; }
+
+    &__items { display: flex; flex-direction: column; gap: 7px; }
+}
