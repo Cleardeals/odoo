@@ -1,6 +1,5 @@
 import random
 import time
-from datetime import date, timedelta
 
 from odoo.tests.common import TransactionCase
 
@@ -26,30 +25,35 @@ class DealCommonTestCase(TransactionCase):
     # ------------------------------------------------------
     # 1. HELPER FOR OFFER CREATION WITH AUTO-RESOLVED DEPENDENCIES
     # ------------------------------------------------------
+
     def create_offer(self, **kwargs):
         """
-        Creates an Offer. If you don't pass an owner_id or package_id, 
-        it will automatically create them for you!
+        Creates an Offer. Automatically matches fields to the real deal.offer model constraints.
         """
-        # Automatically resolve dependencies if not provided!
-        if "owner_id" not in kwargs:
-            kwargs["owner_id"] = self.create_owner().id
-
-        if "package_id" not in kwargs:
-            kwargs["package_id"] = self.create_package().id
-
+        # Unique suffix ensures no name collisions
         unique_suffix = f"{int(time.time() * 1000)}_{random.randint(100, 999)}"
 
         values = {
             "name": f"OFFER-{unique_suffix}",
-            "status": "draft",
-            "offer_date": date.today(),
-            "valid_until": date.today() + timedelta(days=7),
-            "amount": 5000.00,
+            "waive_off_type": "percentage",
+            "waive_off_value": 10.0,
+            "is_active": True,
         }
 
-        # This will merge the owner_id, package_id, and anything else you passed
         values.update(kwargs)
 
-        # REPLACE with your actual offer model name
-        return self.env["your.offer.model"].create(values)
+        return self.env["deal.offer"].create(values)
+
+    # ------------------------------------------------------
+    # 2. HELPER FOR PACKAGE
+    # ------------------------------------------------------
+
+    def create_package(self, **kwargs):
+        unique_id = f"{random.randint(1000, 9999)}"
+        values = {
+            "name": f"Premium Package {unique_id}",
+            "amount": 1000.00,
+            "is_active": True,
+        }
+        values.update(kwargs)
+        return self.env["deal.package"].create(values)

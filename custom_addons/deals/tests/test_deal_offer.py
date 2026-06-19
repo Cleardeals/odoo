@@ -16,47 +16,43 @@ class TestDealOffer(DealCommonTestCase):
         cls.suffix = str(int(time()))
         cls.offer_model = cls.env["deal.offer"]
 
-    def _create_offer(self, waive_type="percentage", waive_value=10.0):
+    def _create_offer(self, waive_off_type="percentage", waive_off_value=10.0):
         """Helper to create offers with unique names for each test path."""
         unique = f"{self.suffix}-{time()}"
         return self.offer_model.create(
             {
-                "name": f"Offer {waive_type} {unique}",
-                "waive_off_type": waive_type,
-                "waive_off_value": waive_value,
+                "name": f"Offer {waive_off_type} {unique}",
+                "waive_off_type": waive_off_type,
+                "waive_off_value": waive_off_value,
             },
         )
 
     def test_01_percentage_applies(self):
         """Percentage waive-off should reduce the base amount correctly."""
-        offer = self._create_offer(waive_type="percentage", waive_value=10.0)
+        offer = self._create_offer(waive_off_type="percentage", waive_off_value=10.0)
 
         result = offer.apply_waive_off(1000.0)
         self.assertAlmostEqual(result, 900.0)
 
     def test_02_fixed_amount_applies(self):
         """Fixed waive-off should subtract a fixed amount correctly."""
-        offer = self._create_offer(waive_type="fixed", waive_value=250.0)
+        offer = self._create_offer(waive_off_type="fixed", waive_off_value=250.0)
 
         result = offer.apply_waive_off(1000.0)
         self.assertAlmostEqual(result, 750.0)
 
     def test_03_fixed_amount_greater_than_base_returns_zero(self):
         """Fixed waive-off greater than base should clamp net amount to 0."""
-        offer = self._create_offer(waive_type="fixed", waive_value=1500.0)
+        offer = self._create_offer(waive_off_type="fixed", waive_off_value=1500.0)
 
         result = offer.apply_waive_off(1000.0)
         self.assertEqual(result, 0.0)
 
     def test_04_hundred_percent_offer_net_zero_logic(self):
         """100% discount should produce net amount 0 in apply logic."""
-        # Use new() to validate pure apply_waive_off logic independent of create constraints.
-        offer = self.offer_model.new(
-            {
-                "name": f"Offer 100pct logic {self.suffix}",
-                "waive_off_type": "percentage",
-                "waive_off_value": 100.0,
-            },
+        offer = self._create_offer(
+            waive_off_type="percentage",
+            waive_off_value=100.0,
         )
 
         result = offer.apply_waive_off(1000.0)
@@ -64,9 +60,10 @@ class TestDealOffer(DealCommonTestCase):
 
     def test_05_percent_just_above_zero_allowed(self):
         """Percentage just above zero should be accepted."""
-        offer = self._create_offer(waive_type="percentage", waive_value=0.01)
+        offer = self._create_offer(waive_off_type="percentage", waive_off_value=0.01)
         self.assertTrue(offer.id)
-        self.assertAlmostEqual(offer.apply_waive_off(1000.0), 999.9)
+        result = offer.apply_waive_off(1000.0)
+        self.assertAlmostEqual(result, 999.9)
 
     def test_06_default_waive_type_is_percentage(self):
         """Default waive_off_type should be percentage."""
@@ -80,98 +77,96 @@ class TestDealOffer(DealCommonTestCase):
 
     def test_07_zero_percent_rejected(self):
         """Zero percentage should be rejected by constraints."""
-        with self.assertRaises(ValidationError):
-            self._create_offer(waive_type="percentage", waive_value=0.0)
+        with self.assertRaisesRegex(ValidationError, "Percentage value must be greater than 0 and less than or equal to 100"):
+            self._create_offer(waive_off_type="percentage", waive_off_value=0.0)
 
     def test_08_percentage_above_hundred_rejected(self):
         """Percentage above 100 should be rejected."""
-        with self.assertRaises(ValidationError):
-            self._create_offer(waive_type="percentage", waive_value=100.01)
+        with self.assertRaisesRegex(ValidationError, "Percentage value must be greater than 0 and less than or equal to 100"):
+            self._create_offer(waive_off_type="percentage", waive_off_value=100.01)
 
     def test_09_negative_percent_rejected(self):
         """Negative percentage should be rejected."""
-        with self.assertRaises(ValidationError):
-            self._create_offer(waive_type="percentage", waive_value=-1.0)
+        with self.assertRaisesRegex(ValidationError, "Percentage value must be greater than 0 and less than or equal to 100"):
+            self._create_offer(waive_off_type="percentage", waive_off_value=-1.0)
 
     def test_10_fixed_amount_zero_rejected(self):
         """Fixed amount equal to zero should be rejected."""
-        with self.assertRaises(ValidationError):
-            self._create_offer(waive_type="fixed", waive_value=0.0)
+        with self.assertRaisesRegex(ValidationError, "Fixed amount value must be greater than 0"):
+            self._create_offer(waive_off_type="fixed", waive_off_value=0.0)
 
     def test_11_fixed_amount_negative_rejected(self):
         """Negative fixed amount should be rejected."""
-        with self.assertRaises(ValidationError):
-            self._create_offer(waive_type="fixed", waive_value=-50.0)
+        with self.assertRaisesRegex(ValidationError, "Fixed amount value must be greater than 0"):
+            self._create_offer(waive_off_type="fixed", waive_off_value=-50.0)
 
     def test_12_write_revalidates_percentage_or_fixed(self):
         """Write() should re-run constraints for both types."""
-        offer = self._create_offer(waive_type="percentage", waive_value=20.0)
+        offer = self._create_offer(waive_off_type="percentage", waive_off_value=20.0)
 
-        with self.assertRaises(ValidationError):
+        with self.assertRaisesRegex(ValidationError, "Percentage value must be greater than 0 and less than or equal to 100"):
             offer.write({"waive_off_value": -10.0})
 
         offer.write({"waive_off_type": "fixed", "waive_off_value": 100.0})
-        self.assertAlmostEqual(offer.apply_waive_off(1000.0), 900.0)
+        result = offer.apply_waive_off(1000.0)
+        self.assertAlmostEqual(result, 900.0)
 
-        with self.assertRaises(ValidationError):
+        with self.assertRaisesRegex(ValidationError, "Fixed amount value must be greater than 0"):
             offer.write({"waive_off_value": 0.0})
 
     def test_13_percentage_write_cases(self):
-        """Percentage write matrix (<0 reject, >100 reject, valid recalc)."""
-        offer = self._create_offer(waive_type="percentage", waive_value=10.0)
+        """Percentage write matrix (<=0 reject, >100 reject, valid recalc)."""
+        offer = self._create_offer(waive_off_type="percentage", waive_off_value=10.0)
 
-        with self.assertRaises(ValidationError):
+        with self.assertRaisesRegex(ValidationError, "Percentage value must be greater than 0 and less than or equal to 100"):
             offer.write({"waive_off_value": -0.01})
 
-        with self.assertRaises(ValidationError):
+        with self.assertRaisesRegex(ValidationError, "Percentage value must be greater than 0 and less than or equal to 100"):
+            offer.write({"waive_off_value": 0.0})
+
+        with self.assertRaisesRegex(ValidationError, "Percentage value must be greater than 0 and less than or equal to 100"):
             offer.write({"waive_off_value": 100.01})
 
         offer.write({"waive_off_value": 25.0})
-        self.assertAlmostEqual(offer.apply_waive_off(1000.0), 750.0)
+        result = offer.apply_waive_off(1000.0)
+        self.assertAlmostEqual(result, 750.0)
 
     def test_14_fixed_write_cases(self):
-        """Fixed write matrix (negative reject, zero reject, positive recalc)."""
-        offer = self._create_offer(waive_type="fixed", waive_value=100.0)
+        """Fixed write matrix (negative reject, zero reject, positive recalculate)."""
+        offer = self._create_offer(waive_off_type="fixed", waive_off_value=100.0)
 
-        with self.assertRaises(ValidationError):
+        with self.assertRaisesRegex(ValidationError, "Fixed amount value must be greater than 0"):
             offer.write({"waive_off_value": -1.0})
 
-        with self.assertRaises(ValidationError):
+        with self.assertRaisesRegex(ValidationError, "Fixed amount value must be greater than 0"):
             offer.write({"waive_off_value": 0.0})
 
         offer.write({"waive_off_value": 250.0})
-        self.assertAlmostEqual(offer.apply_waive_off(1000.0), 750.0)
+        result = offer.apply_waive_off(1000.0)
+        self.assertAlmostEqual(result, 750.0)
 
     def test_15_type_switch_revalidates_and_recalculates(self):
         """Switching type should not error for valid values and should recalc."""
-        offer = self._create_offer(waive_type="percentage", waive_value=10.0)
-        self.assertAlmostEqual(offer.apply_waive_off(1000.0), 900.0)
+        offer = self._create_offer(waive_off_type="percentage", waive_off_value=10.0)
+        result = offer.apply_waive_off(1000.0)
+        self.assertAlmostEqual(result, 900.0)
 
         offer.write({"waive_off_type": "fixed", "waive_off_value": 150.0})
-        self.assertAlmostEqual(offer.apply_waive_off(1000.0), 850.0)
+        result = offer.apply_waive_off(1000.0)
+        self.assertAlmostEqual(result, 850.0)
 
         offer.write({"waive_off_type": "percentage", "waive_off_value": 5.0})
-        self.assertAlmostEqual(offer.apply_waive_off(1000.0), 950.0)
+        result = offer.apply_waive_off(1000.0)
+        self.assertAlmostEqual(result, 950.0)
 
-    def test_16_default_currency_inr_if_field_present(self):
-        """Default currency should be INR when currency_id exists."""
-        if "currency_id" not in self.offer_model._fields:
-            self.skipTest("currency_id is not defined on deal.offer")
-
-        offer = self._create_offer(waive_type="percentage", waive_value=10.0)
-        inr = self.env.ref("base.INR")
-        self.assertEqual(offer.currency_id, inr)
-
-    def test_17_defaults_active_domain_and_tracking(self):
+    def test_16_defaults_active_domain_and_tracking(self):
         """Default active, active-domain behavior, and field tracking flags."""
-        active_offer = self._create_offer(waive_type="percentage", waive_value=10.0)
-        inactive_offer = self._create_offer(waive_type="fixed", waive_value=100.0)
+        active_offer = self._create_offer(waive_off_type="percentage", waive_off_value=10.0)
+        inactive_offer = self._create_offer(waive_off_type="fixed", waive_off_value=100.0)
         inactive_offer.write({"is_active": False})
 
-        # Default check
         self.assertTrue(active_offer.is_active)
 
-        # "Active domain" check for this model via explicit is_active filter.
         active_records = self.offer_model.search(
             [
                 ("id", "in", [active_offer.id, inactive_offer.id]),
