@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<odoo>
-    <data>
-        <menuitem id="menu_deal_package"
-                  name="Deal Packages"
-                  action="action_deal_package"
-                  sequence="20"/>
-    </data>
-</odoo>

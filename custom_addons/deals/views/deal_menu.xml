@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+
+        <!-- Root Menu -->
+        <menuitem
+            id="menu_deals_root"
+            name="Deals"
+            sequence="10"/>
+
+        <menuitem
+            id="menu_deal_owner"
+            name="Deal Owners"
+            parent="menu_deals_root"
+            action="action_deal_owner"
+            sequence="10"/>
+
+        <menuitem
+            id="menu_deal_offer"
+            name="Deal Offers"
+            parent="menu_deals_root"
+            action="action_deal_offer"
+            sequence="20"/>
+
+        <menuitem
+            id="menu_deal_package"
+            name="Deal Packages"
+            parent="menu_deals_root"
+            action="action_deal_package"
+            sequence="30"/>
+
+    </data>
+</odoo>
