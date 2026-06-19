@@ -1,4 +1,5 @@
-from odoo import fields, models
+from odoo import api, fields, models
+from odoo.orm.model_classes import ValidationError
 
 
 class DealPackage(models.Model):
@@ -20,4 +21,11 @@ class DealPackage(models.Model):
         string="Currency",
         default=lambda self: self.env.ref("base.INR"),
     )
-    is_active = fields.Boolean(string="Is Active?", default=True, tracking=True)
+    is_active = fields.Boolean(string="Active", default=True, tracking=True)
+
+    @api.constrains("amount")
+    def _check_amount_positive(self):
+        for record in self:
+            if record.amount < 0:
+                msg = "Amount cannot be negative."
+                raise ValidationError(msg)
