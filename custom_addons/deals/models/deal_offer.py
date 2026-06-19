@@ -28,15 +28,15 @@ class DealOffer(models.Model):
     def _check_waive_off_value(self):
         for record in self:
             if record.waive_off_type == "percentage" and not (
-                0 < record.waive_off_value < 100
+                0 < record.waive_off_value <= 100
             ):
-                msg = "Percentage value must be greater than 0 and less than 100."
+                msg = "Percentage value must be greater than 0 and less than or equal to 100"
                 raise ValidationError(
                     msg,
                 )
 
             if record.waive_off_type == "fixed" and record.waive_off_value <= 0:
-                msg = "Fixed amount value must be greater than 0."
+                msg = "Fixed amount value must be greater than 0"
                 raise ValidationError(
                     msg,
                 )
