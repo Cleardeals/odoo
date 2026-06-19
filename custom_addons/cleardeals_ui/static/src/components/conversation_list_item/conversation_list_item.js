@@ -11,8 +11,10 @@ import { relativeTime } from "../../utils/datetime";
  *   conversation {Object}   inbox row dict from wa.conversation.get_inbox
  *   selected     {Boolean}  whether this row is currently active
  *   onSelect     {Function} () => void
- *   onViewLead   {Function} (leadId) => void
- *   onAssign     {Function} (convId) => void
+ *   onViewLead   {Function} optional — (leadId) => void
+ *   onAssign     {Function} optional — (convId) => void   (reassign an owned chat)
+ *   onClaim      {Function} optional — (convId) => void   (claim an unassigned chat)
+ *   waiting      {Object}   optional — {label, tone} urgency chip for needs-reply chats
  */
 export class CdConversationListItem extends Component {
     static template = "cleardeals_ui.ConversationListItem";
@@ -22,8 +24,10 @@ export class CdConversationListItem extends Component {
         conversation: { type: Object },
         selected:     { type: Boolean },
         onSelect:     { type: Function },
-        onViewLead:   { type: Function },
-        onAssign:     { type: Function },
+        onViewLead:   { type: Function, optional: true },
+        onAssign:     { type: Function, optional: true },
+        onClaim:      { type: Function, optional: true },
+        waiting:      { type: Object, optional: true },
     };
 
     get rowClass() {
@@ -38,13 +42,27 @@ export class CdConversationListItem extends Component {
         return relativeTime(this.props.conversation.last_message_at);
     }
 
+    /** An unclaimed chat offers "Claim"; an owned one offers "Reassign". */
+    get isUnassigned() {
+        return !this.props.conversation.assigned_user_name;
+    }
+
     onClickRow() { this.props.onSelect(); }
+
     onClickLead(ev) {
         ev.stopPropagation();
-        if (this.props.conversation.lead_id) this.props.onViewLead(this.props.conversation.lead_id);
+        if (this.props.onViewLead && this.props.conversation.lead_id) {
+            this.props.onViewLead(this.props.conversation.lead_id);
+        }
     }
+
     onClickAssign(ev) {
         ev.stopPropagation();
-        this.props.onAssign(this.props.conversation.id);
+        this.props.onAssign?.(this.props.conversation.id);
+    }
+
+    onClickClaim(ev) {
+        ev.stopPropagation();
+        this.props.onClaim?.(this.props.conversation.id);
     }
 }

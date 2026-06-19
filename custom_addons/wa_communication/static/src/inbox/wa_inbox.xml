@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <templates xml:space="preserve">
     <t t-name="wa_communication.WaInbox">
-        <div class="wa-inbox">
+        <div t-att-class="'wa-inbox' + (state.activeConvId ? ' wa-inbox--chat-open' : '')">
 
             <!-- ── Top bar ─────────────────────────────────────────────────── -->
             <div class="wa-inbox__topbar">
@@ -18,274 +18,231 @@
                             <t t-esc="dr.label"/>
                         </button>
                     </t>
-                    <button class="wa-inbox__date-tab">Custom Range</button>
                 </div>
             </div>
 
-            <div class="wa-inbox__layout">
-                <!-- ── Left sidebar: filters ──────────────────────────────── -->
-                <div class="wa-inbox__filters">
-                    <div class="wa-inbox__filter-section-title">FILTERS</div>
+            <!-- ── Two-pane body: conversation list + chat ─────────────────── -->
+            <div class="wa-inbox__body">
 
-                    <!-- Conversation Status -->
-                    <div class="wa-inbox__filter-group">
-                        <div class="wa-inbox__filter-group-label">Conversation Status</div>
-                        <t t-foreach="statusOptions" t-as="s" t-key="s.key">
-                            <label class="wa-inbox__filter-row">
-                                <input type="checkbox"
-                                       t-att-checked="state.statusFilters.includes(s.key)"
-                                       t-on-change="() => this.toggleStatusFilter(s.key)"/>
-                                <span class="wa-inbox__filter-label" t-esc="s.label"/>
-                                <span class="wa-inbox__filter-count"
-                                      t-esc="state.counts.status[s.key] || 0"/>
+                <!-- ════ Pane 1: conversation list ════ -->
+                <div class="wa-inbox__list-pane">
+
+                    <div class="wa-inbox__list-controls">
+                        <div class="wa-inbox__search">
+                            <i class="fa fa-search" aria-hidden="true"/>
+                            <input type="text"
+                                   class="wa-inbox__search-input"
+                                   placeholder="Search phone / lead..."
+                                   t-on-input="onSearchInput"/>
+                        </div>
+
+                        <!-- Status segmented control with live counts -->
+                        <div class="wa-inbox__segments">
+                            <t t-foreach="statusSegments" t-as="seg" t-key="seg.key">
+                                <button
+                                    t-attf-class="wa-inbox__segment {{ state.statusFilter === seg.key ? 'wa-inbox__segment--active' : '' }}"
+                                    t-on-click="() => this.setStatus(seg.key)">
+                                    <span t-esc="seg.label"/>
+                                    <span class="wa-inbox__segment-count" t-esc="statusCounts[seg.key]"/>
+                                </button>
+                            </t>
+                        </div>
+
+                        <!-- Sort + count -->
+                        <div class="wa-inbox__list-subhead">
+                            <label class="wa-inbox__sort">
+                                <i class="fa fa-sort-amount-desc" aria-hidden="true"/>
+                                <select class="wa-inbox__sort-select"
+                                        t-on-change="(e) => this.setSort(e.target.value)">
+                                    <t t-foreach="sortOptions" t-as="so" t-key="so.key">
+                                        <option t-att-value="so.key"
+                                                t-att-selected="state.sortKey === so.key"
+                                                t-esc="so.label"/>
+                                    </t>
+                                </select>
                             </label>
+                            <span class="wa-inbox__count"><t t-esc="state.totalCount"/> chats</span>
+                        </div>
+
+                        <!-- RM filter pills -->
+                        <t t-if="state.counts.assigned_rms and state.counts.assigned_rms.length">
+                            <div class="wa-inbox__rm-filter">
+                                <t t-foreach="state.counts.assigned_rms" t-as="rm" t-key="rm.id">
+                                    <button
+                                        t-attf-class="wa-inbox__rm-pill {{ state.assignedRms.includes(rm.id) ? 'wa-inbox__rm-pill--active' : '' }}"
+                                        t-on-click="() => this.toggleRmFilter(rm.id)">
+                                        <t t-esc="rm.name"/>
+                                        <span class="wa-inbox__rm-pill-count" t-esc="rm.count"/>
+                                    </button>
+                                </t>
+                            </div>
                         </t>
                     </div>
 
-                    <!-- Assigned RM -->
-                    <t t-if="state.counts.assigned_rms and state.counts.assigned_rms.length">
-                        <div class="wa-inbox__filter-group">
-                            <div class="wa-inbox__filter-group-label">Assigned RM</div>
-                            <t t-foreach="state.counts.assigned_rms" t-as="rm" t-key="rm.id">
-                                <label class="wa-inbox__filter-row">
-                                    <input type="checkbox"
-                                           t-att-checked="state.assignedRms.includes(rm.id)"
-                                           t-on-change="() => this.toggleRmFilter(rm.id)"/>
-                                    <span class="wa-inbox__filter-label" t-esc="rm.name"/>
-                                    <span class="wa-inbox__filter-count" t-esc="rm.count"/>
-                                </label>
-                            </t>
-                        </div>
-                    </t>
-                </div>
-
-                <!-- ── Main area ──────────────────────────────────────────── -->
-                <div class="wa-inbox__main">
-
-                    <!-- Active filter chips + search bar -->
-                    <div class="wa-inbox__toolbar">
-                        <div class="wa-inbox__chips">
-                            <t t-foreach="state.statusFilters" t-as="sf" t-key="sf">
-                                <span class="wa-inbox__chip">
-                                    <t t-esc="statusLabel(sf)"/>
-                                    <button class="wa-inbox__chip-remove"
-                                            t-on-click="() => this.removeStatusChip(sf)">×</button>
-                                </span>
-                            </t>
-                        </div>
-                        <div class="wa-inbox__toolbar-right">
-                            <div class="wa-inbox__search">
-                                <i class="fa fa-search" aria-hidden="true"/>
-                                <input type="text"
-                                       class="wa-inbox__search-input"
-                                       placeholder="Search phone / lead..."
-                                       t-on-input="onSearchInput"/>
-                            </div>
-                            <span class="wa-inbox__lead-count">
-                                <t t-esc="state.totalCount"/> leads
-                            </span>
-                        </div>
-                    </div>
-
-                    <t t-if="state.activeConvId">
-                        <!-- ── Thread panel (right side overlay) ── -->
-                        <div class="wa-inbox__thread-panel">
-                            <div class="wa-inbox__thread-header">
-                                <button class="btn btn-sm btn-link wa-inbox__back-btn"
-                                        t-on-click="() => this.closeThread()">
-                                    <i class="fa fa-arrow-left" aria-hidden="true"/> Back
-                                </button>
-                                <div class="wa-inbox__thread-name">
-                                    <span t-esc="activeConversation ? (activeConversation.lead_name || activeConversation.phone) : ''"/>
-                                    <small class="text-muted" t-esc="activeConversation ? activeConversation.phone : ''"/>
-                                </div>
-                                <div class="wa-inbox__thread-badges">
-                                    <CdWindowBadge state="windowState" windowExpiresAt="windowExpiresAt"/>
-                                    <span class="wa-inbox__rm-chip" title="RM this chat is assigned to">
-                                        <i class="fa fa-user-circle-o" aria-hidden="true"/>
-                                        <t t-esc="(activeConversation and activeConversation.assigned_user_name) ? activeConversation.assigned_user_name : 'Unassigned'"/>
-                                    </span>
-                                </div>
-                                <div class="wa-inbox__thread-actions">
-                                    <button class="btn btn-sm btn-outline-primary"
-                                            t-on-click="() => this.openTemplatePicker()">
-                                        <i class="fa fa-envelope-o" aria-hidden="true"/> Template
-                                    </button>
-                                    <t t-if="activeConversation and activeConversation.lead_id">
-                                        <button class="btn btn-sm btn-outline-secondary"
-                                                t-on-click="() => this.openLead(activeConversation.lead_id)">
-                                            <i class="fa fa-user" aria-hidden="true"/> View Lead
-                                        </button>
-                                    </t>
-                                    <t t-if="isOrphanChat">
-                                        <button class="btn btn-sm btn-outline-success"
-                                                t-on-click="() => this.openCreateLead()"
-                                                title="This number isn't linked to a lead yet">
-                                            <i class="fa fa-user-plus" aria-hidden="true"/> Create lead
-                                        </button>
-                                    </t>
-                                    <t t-if="activeConversation and activeConversation.interakt_url">
-                                        <button class="btn btn-sm btn-outline-success"
-                                                t-on-click="() => this.openInInterakt(activeConversation.interakt_url)">
-                                            <i class="fa fa-external-link" aria-hidden="true"/> Interakt
-                                        </button>
-                                    </t>
-                                </div>
-                            </div>
-
-                            <!-- Inquiry-attribution bar: which property this chat is currently about. -->
-                            <CdInquirySwitcher
-                                segmentsEnabled="segmentsEnabled"
-                                activeLabel="activeSegmentLabel"
-                                activeInquiryId="activeSegmentInquiryId"
-                                inquiries="inquiries"
-                                suggestion="segmentSuggestion"
-                                onSwitch.bind="switchInquiry"
-                                onStartTopic.bind="startTopic"
-                                onAcceptSuggestion.bind="acceptSuggestion"
-                                onDismissSuggestion.bind="dismissSuggestion"/>
-
-                            <t t-if="state.sendError">
-                                <div class="alert alert-danger wa-inbox__send-error" t-esc="state.sendError"/>
-                            </t>
-
-                            <!-- Persistent handover-approval banner (assignee/manager) -->
-                            <t t-foreach="incomingRequests" t-as="req" t-key="req.id">
-                                <div class="wa-inbox__handover-banner">
-                                    <span class="wa-inbox__handover-text">
-                                        <i class="fa fa-user-plus" aria-hidden="true"/>
-                                        <b t-esc="req.requester_name"/> requested to take over this chat.
-                                        <t t-if="req.note"> — <i t-esc="req.note"/></t>
-                                    </span>
-                                    <span class="wa-inbox__handover-actions">
-                                        <button class="btn btn-sm btn-success"
-                                                t-on-click="() => this.approveRequest(req.id)">
-                                            <i class="fa fa-check" aria-hidden="true"/> Approve
-                                        </button>
-                                        <button class="btn btn-sm btn-outline-secondary"
-                                                t-on-click="() => this.declineRequest(req.id)">
-                                            <i class="fa fa-times" aria-hidden="true"/> Decline
-                                        </button>
-                                    </span>
-                                </div>
-                            </t>
-
-                            <t t-if="state.threadLoading and !state.thread">
-                                <div class="wa-inbox__loading"><i class="fa fa-spinner fa-spin"/></div>
-                            </t>
-                            <t t-else="">
-                                <CdChatThread messages="activeMessages"/>
-                            </t>
-
-                            <t t-if="!canSend">
-                                <div class="wa-inbox__claim-bar">
-                                    <t t-if="assignmentPending">
-                                        <span class="wa-inbox__claim-msg">
-                                            <i class="fa fa-spinner fa-spin" aria-hidden="true"/>
-                                            Assigning…
-                                        </span>
-                                    </t>
-                                    <t t-else="">
-                                        <span class="wa-inbox__claim-msg" t-esc="sendGateReason"/>
-                                        <t t-if="isUnassigned">
-                                            <button class="btn btn-sm btn-primary"
-                                                    t-on-click="() => this.claimChat()">
-                                                <i class="fa fa-hand-paper-o" aria-hidden="true"/> Claim chat
-                                            </button>
-                                        </t>
-                                        <t t-elif="myOpenRequest">
-                                            <span class="wa-inbox__claim-msg">
-                                                <i class="fa fa-hourglass-half" aria-hidden="true"/>
-                                                Request sent — waiting for approval.
-                                            </span>
-                                        </t>
-                                        <t t-else="">
-                                            <button class="btn btn-sm btn-outline-primary"
-                                                    t-on-click="() => this.requestAssignment()">
-                                                <i class="fa fa-user-plus" aria-hidden="true"/> Request assignment
-                                            </button>
-                                        </t>
-                                    </t>
-                                </div>
-                            </t>
-                            <CdChatComposer
-                                windowState="windowState"
-                                quickReplies="state.quickReplies"
-                                disabled="!canSend"
-                                disabledReason="sendGateReason"
-                                onSend="(body, kind, opts) => this.onSend(body, kind, opts)"/>
-                        </div>
-                    </t>
-                    <t t-else="">
-                        <!-- ── Conversation table ── -->
+                    <!-- The scrollable list -->
+                    <div class="wa-inbox__list">
                         <t t-if="state.listLoading and state.conversations.length === 0">
                             <div class="wa-inbox__loading"><i class="fa fa-spinner fa-spin"/></div>
                         </t>
                         <t t-elif="state.listError">
                             <div class="wa-inbox__error" t-esc="state.listError"/>
                         </t>
+                        <t t-elif="sortedConversations.length === 0">
+                            <div class="wa-inbox__empty">No conversations found</div>
+                        </t>
                         <t t-else="">
-                            <div class="wa-inbox__table-wrap">
-                                <table class="wa-inbox__table">
-                                    <thead>
-                                        <tr>
-                                            <th>LEAD</th>
-                                            <th>PHONE</th>
-                                            <th>LAST MESSAGE</th>
-                                            <th>LAST ACTIVITY</th>
-                                            <th>STATUS</th>
-                                            <th/>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <t t-if="state.conversations.length === 0">
-                                            <tr>
-                                                <td colspan="6" class="wa-inbox__empty">
-                                                    No conversations found
-                                                </td>
-                                            </tr>
-                                        </t>
-                                        <t t-foreach="state.conversations" t-as="conv" t-key="conv.id">
-                                            <tr class="wa-inbox__row"
-                                                t-att-class="conv.unread_count > 0 ? 'wa-inbox__row--unread' : ''">
-                                                <td class="wa-inbox__col-lead">
-                                                    <div class="wa-inbox__lead-name"
-                                                         t-esc="conv.lead_name || conv.phone"/>
-                                                    <div class="wa-inbox__lead-sub"
-                                                         t-esc="conv.lead_source || ''"/>
-                                                </td>
-                                                <td class="wa-inbox__col-phone" t-esc="conv.phone"/>
-                                                <td class="wa-inbox__col-msg">
-                                                    <span t-att-class="conv.unread_count > 0 ? 'wa-inbox__msg--unread' : ''"
-                                                          t-esc="conv.last_message"/>
-                                                    <t t-if="conv.unread_count > 0">
-                                                        <span class="wa-inbox__unread-dot"/>
-                                                    </t>
-                                                </td>
-                                                <td class="wa-inbox__col-time"
-                                                    t-esc="relativeTime(conv.last_message_at)"/>
-                                                <td class="wa-inbox__col-status">
-                                                    <span t-att-class="statusBadgeClass(conv.conv_status)"
-                                                          t-esc="statusLabel(conv.conv_status)"/>
-                                                </td>
-                                                <td class="wa-inbox__col-actions">
-                                                    <button class="btn btn-sm btn-outline-primary wa-inbox__act-btn"
-                                                            t-on-click="() => this.openThread(conv.id)">
-                                                        Reply
-                                                    </button>
-                                                    <t t-if="conv.lead_id">
-                                                        <button class="btn btn-sm btn-outline-secondary wa-inbox__act-btn"
-                                                                t-on-click="() => this.openLead(conv.lead_id)">
-                                                            View →
-                                                        </button>
-                                                    </t>
-                                                </td>
-                                            </tr>
-                                        </t>
-                                    </tbody>
-                                </table>
+                            <t t-foreach="sortedConversations" t-as="conv" t-key="conv.id">
+                                <CdConversationListItem
+                                    conversation="conv"
+                                    selected="state.activeConvId === conv.id"
+                                    onSelect="() => this.openThread(conv.id)"
+                                    onViewLead="(id) => this.openLead(id)"
+                                    onClaim="(id) => this.quickClaim(id)"
+                                    onAssign="(id) => this.quickAssign(id)"
+                                    waiting="waitingFor(conv) or undefined"/>
+                            </t>
+                        </t>
+                    </div>
+                </div>
+
+                <!-- ════ Pane 2: chat ════ -->
+                <div class="wa-inbox__chat">
+                    <t t-if="state.activeConvId">
+                        <div class="wa-inbox__thread-header">
+                            <button class="wa-inbox__back-btn"
+                                    t-on-click="() => this.closeThread()" title="Back to list">
+                                <i class="fa fa-arrow-left" aria-hidden="true"/>
+                            </button>
+                            <div class="wa-inbox__thread-name">
+                                <span t-esc="activeConversation ? (activeConversation.lead_name || activeConversation.phone) : ''"/>
+                                <small class="text-muted" t-esc="activeConversation ? activeConversation.phone : ''"/>
+                            </div>
+                            <div class="wa-inbox__thread-badges">
+                                <CdWindowBadge state="windowState" windowExpiresAt="windowExpiresAt"/>
+                                <span class="wa-inbox__rm-chip" title="RM this chat is assigned to">
+                                    <i class="fa fa-user-circle-o" aria-hidden="true"/>
+                                    <t t-esc="(activeConversation and activeConversation.assigned_user_name) ? activeConversation.assigned_user_name : 'Unassigned'"/>
+                                </span>
+                            </div>
+                            <div class="wa-inbox__thread-actions">
+                                <button class="btn btn-sm btn-outline-primary"
+                                        t-on-click="() => this.openTemplatePicker()">
+                                    <i class="fa fa-envelope-o" aria-hidden="true"/> Template
+                                </button>
+                                <t t-if="activeConversation and activeConversation.lead_id">
+                                    <button class="btn btn-sm btn-outline-secondary"
+                                            t-on-click="() => this.openLead(activeConversation.lead_id)">
+                                        <i class="fa fa-user" aria-hidden="true"/> View Lead
+                                    </button>
+                                </t>
+                                <t t-if="isOrphanChat">
+                                    <button class="btn btn-sm btn-outline-success"
+                                            t-on-click="() => this.openCreateLead()"
+                                            title="This number isn't linked to a lead yet">
+                                        <i class="fa fa-user-plus" aria-hidden="true"/> Create lead
+                                    </button>
+                                </t>
+                                <t t-if="activeConversation and activeConversation.interakt_url">
+                                    <button class="btn btn-sm btn-outline-success"
+                                            t-on-click="() => this.openInInterakt(activeConversation.interakt_url)">
+                                        <i class="fa fa-external-link" aria-hidden="true"/> Interakt
+                                    </button>
+                                </t>
+                            </div>
+                        </div>
+
+                        <!-- Inquiry-attribution bar: which property this chat is currently about. -->
+                        <CdInquirySwitcher
+                            segmentsEnabled="segmentsEnabled"
+                            activeLabel="activeSegmentLabel"
+                            activeInquiryId="activeSegmentInquiryId"
+                            inquiries="inquiries"
+                            suggestion="segmentSuggestion"
+                            onSwitch.bind="switchInquiry"
+                            onStartTopic.bind="startTopic"
+                            onAcceptSuggestion.bind="acceptSuggestion"
+                            onDismissSuggestion.bind="dismissSuggestion"/>
+
+                        <t t-if="state.sendError">
+                            <div class="alert alert-danger wa-inbox__send-error" t-esc="state.sendError"/>
+                        </t>
+
+                        <!-- Persistent handover-approval banner (assignee/manager) -->
+                        <t t-foreach="incomingRequests" t-as="req" t-key="req.id">
+                            <div class="wa-inbox__handover-banner">
+                                <span class="wa-inbox__handover-text">
+                                    <i class="fa fa-user-plus" aria-hidden="true"/>
+                                    <b t-esc="req.requester_name"/> requested to take over this chat.
+                                    <t t-if="req.note"> — <i t-esc="req.note"/></t>
+                                </span>
+                                <span class="wa-inbox__handover-actions">
+                                    <button class="btn btn-sm btn-success"
+                                            t-on-click="() => this.approveRequest(req.id)">
+                                        <i class="fa fa-check" aria-hidden="true"/> Approve
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-secondary"
+                                            t-on-click="() => this.declineRequest(req.id)">
+                                        <i class="fa fa-times" aria-hidden="true"/> Decline
+                                    </button>
+                                </span>
                             </div>
                         </t>
+
+                        <t t-if="state.threadLoading and !state.thread">
+                            <div class="wa-inbox__loading"><i class="fa fa-spinner fa-spin"/></div>
+                        </t>
+                        <t t-else="">
+                            <CdChatThread messages="activeMessages"/>
+                        </t>
+
+                        <t t-if="!canSend">
+                            <div class="wa-inbox__claim-bar">
+                                <t t-if="assignmentPending">
+                                    <span class="wa-inbox__claim-msg">
+                                        <i class="fa fa-spinner fa-spin" aria-hidden="true"/>
+                                        Assigning…
+                                    </span>
+                                </t>
+                                <t t-else="">
+                                    <span class="wa-inbox__claim-msg" t-esc="sendGateReason"/>
+                                    <t t-if="isUnassigned">
+                                        <button class="btn btn-sm btn-primary"
+                                                t-on-click="() => this.claimChat()">
+                                            <i class="fa fa-hand-paper-o" aria-hidden="true"/> Claim chat
+                                        </button>
+                                    </t>
+                                    <t t-elif="myOpenRequest">
+                                        <span class="wa-inbox__claim-msg">
+                                            <i class="fa fa-hourglass-half" aria-hidden="true"/>
+                                            Request sent — waiting for approval.
+                                        </span>
+                                    </t>
+                                    <t t-else="">
+                                        <button class="btn btn-sm btn-outline-primary"
+                                                t-on-click="() => this.requestAssignment()">
+                                            <i class="fa fa-user-plus" aria-hidden="true"/> Request assignment
+                                        </button>
+                                    </t>
+                                </t>
+                            </div>
+                        </t>
+                        <CdChatComposer
+                            windowState="windowState"
+                            quickReplies="state.quickReplies"
+                            disabled="!canSend"
+                            disabledReason="sendGateReason"
+                            onSend="(body, kind, opts) => this.onSend(body, kind, opts)"/>
+                    </t>
+
+                    <!-- Empty state when no chat is selected -->
+                    <t t-else="">
+                        <div class="wa-inbox__chat-empty">
+                            <i class="fa fa-whatsapp wa-inbox__chat-empty-icon" aria-hidden="true"/>
+                            <div class="wa-inbox__chat-empty-title">Pick a conversation</div>
+                            <div class="wa-inbox__chat-empty-sub">
+                                Select a chat on the left to read the thread and reply.
+                            </div>
+                        </div>
                     </t>
                 </div>
             </div>

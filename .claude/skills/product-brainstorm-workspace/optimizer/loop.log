@@ -1,0 +1,60 @@
+Split: 13 train, 7 test (holdout=0.4)
+
+============================================================
+Iteration 1/5
+Description: Run a rigorous, senior-Big-Tech-PM-style product brainstorm BEFORE building any feature, dashboard, metric, KPI, scorecard, leaderboard, report, or analytics view — so the team ships something that drives a decision instead of a vanity system nobody acts on. Pressure-tests two things together: WHAT to measure and HOW to represent it. Challenges vanity / mislabeled / confounded / gameable metrics, enforces fair attribution (score-vs-context, point-in-time ownership, the single-channel fallacy, survivorship), uses contrasting worked examples to expose what a choice does, and locks decisions one fork at a time via AskUserQuestion. Use this whenever the user wants to design or rethink a dashboard / KPI / leaderboard / scorecard / report / analytics screen, or says "brainstorm", "grill me", "what should we measure", "is this metric fair/useful", "how should we represent this", "plan this screen", "this feels too simple", or is otherwise about to build measurement or analytics. Trigger even if the user never says the word "brainstorm" — any "design a metric / dashboard / scorecard / report" request qualifies. Don't skip this and jump straight to building; a thirty-minute grilling here prevents a useless system later.
+============================================================
+Train: 21/39 correct, precision=100% recall=14% accuracy=54% (64.5s)
+  [FAIL] rate=0/3 expected=True: this By-Property analytics screen is too simple, it's just i
+  [FAIL] rate=0/3 expected=True: i need to design how we measure recruiter productivity. brai
+  [FAIL] rate=1/3 expected=True: how should we show SLA breaches per on-call engineer so it's
+  [FAIL] rate=0/3 expected=True: we want to drop a conversion-rate column next to each market
+  [FAIL] rate=1/3 expected=True: we've got a sales leaderboard that just ranks reps by total 
+  [FAIL] rate=1/3 expected=True: i'm about to build an agent performance dashboard for our su
+  [FAIL] rate=0/3 expected=True: planning a cohort retention report for the product team. wha
+  [PASS] rate=0/3 expected=False: what's the actual formula for a p90, and how do i compute th
+  [PASS] rate=0/3 expected=False: set up a cron job that emails the existing weekly sales repo
+  [PASS] rate=0/3 expected=False: translate all the dashboard UI labels and tooltips into Hind
+  [PASS] rate=0/3 expected=False: write me the SQL that computes reply rate per agent from the
+  [PASS] rate=0/3 expected=False: the revenue bar chart on our dashboard renders with the x-ax
+  [PASS] rate=0/3 expected=False: brainstorm some catchy names for our new analytics product, 
+Test : 11/21 correct, precision=100% recall=17% accuracy=52% (0.0s)
+  [FAIL] rate=0/3 expected=True: should team NPS sit on each support manager's individual sco
+  [FAIL] rate=1/3 expected=True: our customer health score is basically just weekly login cou
+  [FAIL] rate=1/3 expected=True: designing a new driver scorecard for our delivery app — on-t
+  [FAIL] rate=0/3 expected=True: rethinking the ops dashboard for our call centre — currently
+  [PASS] rate=0/3 expected=False: the scorecard component throws 'cannot read properties of un
+  [PASS] rate=0/3 expected=False: add a 'download CSV' button to the existing KPI dashboard so
+  [PASS] rate=0/3 expected=False: our metabase dashboard takes like 40 seconds to load now. ca
+
+Improving description...
+Proposed (27.3s): Use this skill whenever the user is about to build, design, plan, rethink, or sanity-check anything measurement-shaped — a dashboard, KPI, metric, scorecard, leaderboard, ranking, report, or analytics screen that scores people, teams, or channels. Trigger on intent, not keywords: "which KPIs belong here," "how should we measure X productivity," "rethink what's on this leaderboard," "this screen feels too simple, replan it," "any concerns before I build this dashboard," "what do we measure and how do we lay it out," "is this metric fair." The shared signal is someone deciding WHAT to measure and HOW to show it before writing queries — especially when fairness, gaming, attribution, or "does this drive a decision" is at stake. Run a rigorous senior-PM brainstorm: tear down vanity/gameable/mislabeled/confounded metrics, split scores from context, fix attribution, lock each choice before building. Skip only for pure execution with no design judgment (write this SQL, fix a chart axis, translate labels, schedule an existing report).
+
+============================================================
+Iteration 2/5
+Description: Use this skill whenever the user is about to build, design, plan, rethink, or sanity-check anything measurement-shaped — a dashboard, KPI, metric, scorecard, leaderboard, ranking, report, or analytics screen that scores people, teams, or channels. Trigger on intent, not keywords: "which KPIs belong here," "how should we measure X productivity," "rethink what's on this leaderboard," "this screen feels too simple, replan it," "any concerns before I build this dashboard," "what do we measure and how do we lay it out," "is this metric fair." The shared signal is someone deciding WHAT to measure and HOW to show it before writing queries — especially when fairness, gaming, attribution, or "does this drive a decision" is at stake. Run a rigorous senior-PM brainstorm: tear down vanity/gameable/mislabeled/confounded metrics, split scores from context, fix attribution, lock each choice before building. Skip only for pure execution with no design judgment (write this SQL, fix a chart axis, translate labels, schedule an existing report).
+============================================================
+Train: 21/39 correct, precision=100% recall=14% accuracy=54% (64.4s)
+  [FAIL] rate=0/3 expected=True: how should we show SLA breaches per on-call engineer so it's
+  [FAIL] rate=0/3 expected=True: we want to drop a conversion-rate column next to each market
+  [FAIL] rate=0/3 expected=True: i need to design how we measure recruiter productivity. brai
+  [FAIL] rate=1/3 expected=True: this By-Property analytics screen is too simple, it's just i
+  [FAIL] rate=1/3 expected=True: we've got a sales leaderboard that just ranks reps by total 
+  [FAIL] rate=0/3 expected=True: i'm about to build an agent performance dashboard for our su
+  [FAIL] rate=1/3 expected=True: planning a cohort retention report for the product team. wha
+  [PASS] rate=0/3 expected=False: set up a cron job that emails the existing weekly sales repo
+  [PASS] rate=0/3 expected=False: translate all the dashboard UI labels and tooltips into Hind
+  [PASS] rate=0/3 expected=False: what's the actual formula for a p90, and how do i compute th
+  [PASS] rate=0/3 expected=False: write me the SQL that computes reply rate per agent from the
+  [PASS] rate=0/3 expected=False: the revenue bar chart on our dashboard renders with the x-ax
+  [PASS] rate=0/3 expected=False: brainstorm some catchy names for our new analytics product, 
+Test : 11/21 correct, precision=100% recall=17% accuracy=52% (0.0s)
+  [FAIL] rate=0/3 expected=True: should team NPS sit on each support manager's individual sco
+  [FAIL] rate=0/3 expected=True: our customer health score is basically just weekly login cou
+  [FAIL] rate=0/3 expected=True: designing a new driver scorecard for our delivery app — on-t
+  [PASS] rate=0/3 expected=False: add a 'download CSV' button to the existing KPI dashboard so
+  [PASS] rate=2/3 expected=True: rethinking the ops dashboard for our call centre — currently
+  [PASS] rate=0/3 expected=False: the scorecard component throws 'cannot read properties of un
+  [PASS] rate=0/3 expected=False: our metabase dashboard takes like 40 seconds to load now. ca
+
+Improving description...

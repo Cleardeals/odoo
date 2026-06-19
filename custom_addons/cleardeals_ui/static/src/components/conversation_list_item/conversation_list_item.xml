@@ -15,23 +15,40 @@
                     state="props.conversation.window_state"
                     windowExpiresAt="props.conversation.window_expires_at"/>
 
+                <t t-if="props.waiting">
+                    <span t-att-class="'cd-conv-item__waiting cd-conv-item__waiting--' + props.waiting.tone"
+                          title="Buyer waiting for a reply">
+                        <i class="fa fa-clock-o" aria-hidden="true"/>
+                        <t t-esc="props.waiting.label"/>
+                    </span>
+                </t>
+
                 <t t-if="props.conversation.unread_count > 0">
                     <span class="cd-conv-item__badge" t-esc="props.conversation.unread_count"/>
                 </t>
 
                 <div class="cd-conv-item__actions">
-                    <t t-if="props.conversation.lead_id">
+                    <t t-if="props.onViewLead and props.conversation.lead_id">
                         <button class="btn btn-xs cd-conv-item__action-btn"
                                 title="View Lead"
                                 t-on-click="onClickLead">
                             <i class="fa fa-user" aria-hidden="true"/>
                         </button>
                     </t>
-                    <button class="btn btn-xs cd-conv-item__action-btn"
-                            title="Reassign"
-                            t-on-click="onClickAssign">
-                        <i class="fa fa-exchange" aria-hidden="true"/>
-                    </button>
+                    <t t-if="isUnassigned and props.onClaim">
+                        <button class="btn btn-xs cd-conv-item__action-btn cd-conv-item__action-btn--claim"
+                                title="Claim this chat"
+                                t-on-click="onClickClaim">
+                            <i class="fa fa-hand-paper-o" aria-hidden="true"/> Claim
+                        </button>
+                    </t>
+                    <t t-elif="props.onAssign">
+                        <button class="btn btn-xs cd-conv-item__action-btn"
+                                title="Request reassignment"
+                                t-on-click="onClickAssign">
+                            <i class="fa fa-exchange" aria-hidden="true"/>
+                        </button>
+                    </t>
                 </div>
             </div>
 

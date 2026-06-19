@@ -75,6 +75,31 @@
         background: none;
         border: none;
         &:hover { color: #495057; background: #e9ecef; border-radius: 4px; }
+
+        &--claim {
+            color: #7c3aed;
+            font-weight: 600;
+            font-size: 11px;
+            .fa { margin-right: 2px; }
+            &:hover { color: #5b21b6; background: #ede7f6; }
+        }
+    }
+
+    // Urgency chip — how long a buyer has been waiting (needs-reply chats).
+    &__waiting {
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        font-size: 11px;
+        font-weight: 600;
+        padding: 1px 7px;
+        border-radius: 10px;
+        font-variant-numeric: tabular-nums;
+        .fa { font-size: 10px; }
+
+        &--ok   { background: #f1f5f9; color: #64748b; }
+        &--warn { background: #fef3c7; color: #b45309; }
+        &--bad  { background: #fee2e2; color: #dc2626; }
     }
 
     &__rm {
