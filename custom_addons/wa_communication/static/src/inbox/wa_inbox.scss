@@ -1,12 +1,11 @@
-$filter-w: 180px;
+$list-w: 360px;
 $topbar-h: 52px;
 
 .wa-inbox {
     display: flex;
     flex-direction: column;
     // Fill the client-action container (NOT 100vh, which overflows past the
-    // top navbar and pushes the composer below the fold — issue: reply screen
-    // had no visible send bar).
+    // top navbar and pushes the composer below the fold).
     height: 100%;
     min-height: 0;
     background: #fff;
@@ -57,122 +56,30 @@ $topbar-h: 52px;
         &--active { background: #7c3aed; color: #fff; font-weight: 600; }
     }
 
-    // ── Layout ────────────────────────────────────────────────────────────────
-    &__layout {
+    // ── Two-pane body ──────────────────────────────────────────────────────────
+    &__body {
         display: flex;
         flex: 1;
         overflow: hidden;
+        min-height: 0;
     }
 
-    // ── Filters sidebar ───────────────────────────────────────────────────────
-    &__filters {
-        width: $filter-w;
-        min-width: $filter-w;
+    // ════ Pane 1: conversation list ════
+    &__list-pane {
+        width: $list-w;
+        min-width: 320px;
+        max-width: 40%;
         border-right: 1px solid #dee2e6;
-        padding: 16px 12px;
-        overflow-y: auto;
-        background: #fafafa;
-        flex-shrink: 0;
-    }
-
-    &__filter-section-title {
-        font-size: 10px;
-        font-weight: 700;
-        letter-spacing: 0.08em;
-        color: #aaa;
-        margin-bottom: 12px;
-    }
-
-    &__filter-group {
-        margin-bottom: 20px;
-    }
-
-    &__filter-group-label {
-        font-size: 12px;
-        font-weight: 600;
-        color: #495057;
-        margin-bottom: 6px;
-    }
-
-    &__filter-row {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        cursor: pointer;
-        padding: 3px 0;
-        font-size: 13px;
-        color: #343a40;
-        &:hover { color: #7c3aed; }
-        input { cursor: pointer; accent-color: #7c3aed; }
-    }
-
-    &__filter-label { flex: 1; }
-
-    &__filter-count {
-        font-size: 11px;
-        color: #888;
-        background: #e9ecef;
-        border-radius: 10px;
-        padding: 0 6px;
-        min-width: 20px;
-        text-align: center;
-    }
-
-    // ── Main area ─────────────────────────────────────────────────────────────
-    &__main {
-        flex: 1;
         display: flex;
         flex-direction: column;
-        overflow: hidden;
-        min-width: 0;
-    }
-
-    // Toolbar (chips + search)
-    &__toolbar {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        padding: 8px 16px;
-        border-bottom: 1px solid #f0f0f0;
+        min-height: 0;
         background: #fff;
+    }
+
+    &__list-controls {
+        padding: 10px 12px;
+        border-bottom: 1px solid #f0f0f0;
         flex-shrink: 0;
-        flex-wrap: wrap;
-    }
-
-    &__chips {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-        flex: 1;
-    }
-
-    &__chip {
-        display: inline-flex;
-        align-items: center;
-        gap: 4px;
-        background: #ede9fe;
-        color: #5b21b6;
-        border-radius: 12px;
-        padding: 2px 8px;
-        font-size: 12px;
-    }
-
-    &__chip-remove {
-        border: none;
-        background: none;
-        color: #7c3aed;
-        cursor: pointer;
-        padding: 0;
-        font-size: 14px;
-        line-height: 1;
-        &:hover { color: #dc2626; }
-    }
-
-    &__toolbar-right {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        margin-left: auto;
     }
 
     &__search {
@@ -181,8 +88,9 @@ $topbar-h: 52px;
         gap: 6px;
         border: 1px solid #dee2e6;
         border-radius: 20px;
-        padding: 4px 12px;
+        padding: 5px 12px;
         background: #fff;
+        margin-bottom: 8px;
         .fa { color: #aaa; font-size: 12px; }
     }
 
@@ -190,89 +98,131 @@ $topbar-h: 52px;
         border: none;
         outline: none;
         font-size: 13px;
-        width: 180px;
+        flex: 1;
+        min-width: 0;
         background: transparent;
     }
 
-    &__lead-count {
-        font-size: 13px;
-        color: #6c757d;
-        white-space: nowrap;
+    // Status segmented control
+    &__segments {
+        display: flex;
+        background: #f1f3f5;
+        border-radius: 8px;
+        padding: 3px;
+        gap: 2px;
+        margin-bottom: 8px;
     }
 
-    // Table
-    &__table-wrap {
+    &__segment {
+        flex: 1;
+        border: none;
+        background: transparent;
+        border-radius: 6px;
+        padding: 5px 4px;
+        font-size: 12px;
+        font-weight: 600;
+        color: #6c757d;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 5px;
+        white-space: nowrap;
+        transition: background 0.1s, color 0.1s;
+        &:hover { color: #343a40; }
+        &--active { background: #fff; color: #7c3aed; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08); }
+    }
+
+    &__segment-count {
+        font-size: 10px;
+        background: rgba(0, 0, 0, 0.06);
+        border-radius: 8px;
+        padding: 0 5px;
+        min-width: 16px;
+        text-align: center;
+        font-variant-numeric: tabular-nums;
+    }
+    &__segment--active &__segment-count { background: #ede7f6; color: #7c3aed; }
+
+    &__list-subhead {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 6px;
+    }
+
+    &__sort {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 12px;
+        color: #6c757d;
+        .fa { font-size: 11px; }
+    }
+
+    &__sort-select {
+        border: none;
+        background: transparent;
+        font-size: 12px;
+        color: #343a40;
+        font-weight: 600;
+        cursor: pointer;
+        outline: none;
+    }
+
+    &__count { font-size: 12px; color: #888; }
+
+    &__rm-filter {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+    }
+
+    &__rm-pill {
+        border: 1px solid #dee2e6;
+        background: #fff;
+        border-radius: 12px;
+        padding: 2px 9px;
+        font-size: 11.5px;
+        color: #495057;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        &:hover { border-color: #7c3aed; color: #7c3aed; }
+        &--active { background: #ede7f6; border-color: #7c3aed; color: #5b21b6; font-weight: 600; }
+    }
+    &__rm-pill-count { font-size: 10px; opacity: 0.7; }
+
+    &__list {
         flex: 1;
         overflow-y: auto;
+        min-height: 0;
     }
 
-    &__table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 13px;
-
-        thead tr {
-            border-bottom: 2px solid #dee2e6;
-        }
-
-        th {
-            padding: 10px 14px;
-            text-align: left;
-            font-size: 11px;
-            font-weight: 600;
-            letter-spacing: 0.06em;
-            color: #888;
-            white-space: nowrap;
-        }
-
-        tbody tr {
-            border-bottom: 1px solid #f0f0f0;
-            &:hover { background: #fafafa; }
-        }
-
-        td {
-            padding: 12px 14px;
-            vertical-align: middle;
-        }
-    }
-
-    &__row--unread td { background: #fffbf0; }
-
-    &__col-lead {}
-    &__lead-name { font-weight: 600; color: #1a1a1a; }
-    &__lead-sub  { font-size: 11px; color: #888; margin-top: 1px; }
-
-    &__col-phone { color: #495057; white-space: nowrap; }
-
-    &__col-msg {
-        max-width: 280px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        color: #495057;
-    }
-
-    &__msg--unread { font-weight: 600; color: #1a1a1a; }
-
-    &__unread-dot {
-        display: inline-block;
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        background: #7c3aed;
-        margin-left: 4px;
-        vertical-align: middle;
-    }
-
-    &__col-time { color: #888; white-space: nowrap; font-size: 12px; }
-
-    &__col-actions {
+    // ════ Pane 2: chat ════
+    &__chat {
+        flex: 1;
         display: flex;
-        gap: 6px;
-        white-space: nowrap;
+        flex-direction: column;
+        min-width: 0;
+        overflow: hidden;
+        background: #fff;
     }
 
-    &__act-btn { font-size: 12px; padding: 3px 10px; }
+    &__chat-empty {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        padding: 40px;
+        color: #9aa5b1;
+    }
+    &__chat-empty-icon { font-size: 54px; color: #cdeede; margin-bottom: 14px; }
+    &__chat-empty-title { font-size: 16px; font-weight: 700; color: #6c757d; }
+    &__chat-empty-sub { font-size: 13px; color: #9aa5b1; margin-top: 4px; max-width: 260px; }
 
     &__loading, &__empty, &__error {
         display: flex;
@@ -281,33 +231,11 @@ $topbar-h: 52px;
         padding: 40px;
         color: #aaa;
         font-size: 14px;
+        text-align: center;
     }
-
-    &__empty { padding: 40px; text-align: center; }
     &__error { color: #e74c3c; }
 
-    // Status badges
-    .cd-inbox-status-badge {
-        display: inline-block;
-        border-radius: 10px;
-        padding: 2px 10px;
-        font-size: 11px;
-        font-weight: 600;
-        &.cd-status-badge--red    { background: #fee2e2; color: #b91c1c; }
-        &.cd-status-badge--green  { background: #dcfce7; color: #15803d; }
-        &.cd-status-badge--grey   { background: #f3f4f6; color: #6b7280; }
-        &.cd-status-badge--orange { background: #ffedd5; color: #c2410c; }
-    }
-
-    // ── Thread panel ──────────────────────────────────────────────────────────
-    &__thread-panel {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        overflow: hidden;
-        min-height: 0;
-    }
-
+    // ── Thread header ──────────────────────────────────────────────────────────
     &__thread-header {
         display: flex;
         align-items: center;
@@ -319,12 +247,15 @@ $topbar-h: 52px;
         flex-wrap: wrap;
     }
 
+    // Back button — only meaningful on narrow (single-pane) screens.
     &__back-btn {
+        display: none;
+        border: none;
+        background: none;
         color: #7c3aed;
-        font-size: 13px;
-        padding: 0;
-        text-decoration: none;
-        &:hover { text-decoration: underline; }
+        font-size: 16px;
+        cursor: pointer;
+        padding: 4px 8px;
     }
 
     &__thread-name {
@@ -365,6 +296,17 @@ $topbar-h: 52px;
     }
 }
 
+// Responsive: collapse to a single pane on narrow screens.
+@media (max-width: 820px) {
+    .wa-inbox__list-pane { width: 100%; min-width: 0; max-width: none; }
+    .wa-inbox__chat { display: none; }
+    .wa-inbox--chat-open {
+        .wa-inbox__list-pane { display: none; }
+        .wa-inbox__chat { display: flex; }
+        .wa-inbox__back-btn { display: inline-flex; }
+    }
+}
+
 // Ownership / claim action bar (shown when the RM can't send)
 .wa-inbox__claim-bar {
     display: flex;
@@ -400,7 +342,7 @@ $topbar-h: 52px;
     }
 }
 
-// The inquiry-attribution bar + switcher + suggestion now live in the reusable
+// The inquiry-attribution bar + switcher + suggestion live in the reusable
 // CdInquirySwitcher component (cleardeals_ui) — see inquiry_switcher.scss.
 
 // Create-lead-from-chat modal (orphan / phone-only conversations)
@@ -481,9 +423,7 @@ $topbar-h: 52px;
     &[readonly] { background: #f6f6f8; color: #888; }
 }
 
-// Odoo's native AutoComplete widget for the property picker — span the modal
-// width and match the other fields' input styling. The dropdown (scrolling,
-// keyboard nav, highlight) is provided by the core component.
+// Odoo's native AutoComplete widget for the property picker.
 .wa-inbox__cl-autocomplete {
     display: block;
     width: 100%;

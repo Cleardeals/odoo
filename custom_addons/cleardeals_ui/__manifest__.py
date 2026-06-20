@@ -1,6 +1,6 @@
 {
     'name': 'Cleardeals UI',
-    'version': '1.0.5',
+    'version': '1.0.6',
     'summary': 'Central OWL component library for all Cleardeals custom addons.',
     'description': """
 Central OWL component library for Cleardeals.
