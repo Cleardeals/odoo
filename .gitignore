@@ -77,3 +77,5 @@ docker-compose.override.yml
 letsencrypt/
 
 hrms_addons/
+hrms_addons/
+.claude/skills/product-brainstorm-workspace/
