@@ -2,20 +2,53 @@
 <odoo noupdate="0">
 
     <!--
-        WhatsApp manager group.
+        WhatsApp roles
+        ==============
+        Two roles, shown as a single-select in the user form (one category):
 
-        The module already grants every internal user (base.group_user)
-        read/write on the wa.* models, so base.group_user IS the "WA user"
-        baseline. We only need to distinguish a MANAGER who can:
-          * send on ANY conversation (bypass the assignee gate),
-          * force-reassign chats without the approval handshake,
-          * create / edit SHARED quick replies.
+          * RM (group_wa_rm) — a Relationship Manager. Works the Inbox and their
+            personal quick replies. Sees ONLY the conversations assigned to them.
+            Auto-granted to every internal user (base.group_user implies it) so
+            the upgrade never strips WhatsApp access from anyone; an admin can
+            promote specific users to Manager in Settings.
+
+          * Manager (group_wa_manager) — implies RM, plus may:
+            send on ANY conversation (bypass the assignee gate), force-reassign
+            chats without the approval handshake, manage SHARED quick replies,
+            and see the team-wide Dashboard + Message Log. Sees ALL conversations.
+
+        The Inbox/Dashboard screens are OWL client actions whose serializers run
+        as sudo(), so record rules do not constrain them — RM scoping is enforced
+        in the get_inbox/get_thread methods (see wa_conversation_serializers.py).
     -->
+
+    <record id="group_wa_rm" model="res.groups">
+        <field name="name">WhatsApp RM</field>
+        <field name="comment">
+            Relationship Manager: works the Inbox and personal quick replies.
+            Sees only conversations assigned to them.
+        </field>
+    </record>
 
     <record id="group_wa_manager" model="res.groups">
         <field name="name">WhatsApp Manager</field>
-        <field name="implied_ids" eval="[(4, ref('base.group_user'))]"/>
+        <field name="implied_ids" eval="[(4, ref('group_wa_rm'))]"/>
         <field name="user_ids" eval="[(4, ref('base.user_admin'))]"/>
+        <field name="comment">
+            WhatsApp Manager: sees and acts on every conversation, manages shared
+            quick replies, and views the team Dashboard and Message Log.
+        </field>
+    </record>
+
+    <!--
+        Auto-grant the RM role to every internal user. This keeps the change
+        non-breaking (everyone who had WhatsApp access via base.group_user keeps
+        the Inbox) while still giving us a real, distinct group to gate menus and
+        scope data with. To restrict WhatsApp to specific users later, remove
+        this implication and assign group_wa_rm explicitly.
+    -->
+    <record id="base.group_user" model="res.groups">
+        <field name="implied_ids" eval="[(4, ref('group_wa_rm'))]"/>
     </record>
 
 </odoo>

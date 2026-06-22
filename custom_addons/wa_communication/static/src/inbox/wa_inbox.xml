@@ -3,21 +3,31 @@
     <t t-name="wa_communication.WaInbox">
         <div t-att-class="'wa-inbox' + (state.activeConvId ? ' wa-inbox--chat-open' : '')">
 
-            <!-- ── Top bar ─────────────────────────────────────────────────── -->
+            <!-- ── Top bar: title + global search + actions ────────────────── -->
             <div class="wa-inbox__topbar">
                 <div class="wa-inbox__topbar-left">
                     <span class="wa-inbox__title">
                         <i class="fa fa-whatsapp" aria-hidden="true"/> Conversation Inbox
                     </span>
                 </div>
-                <div class="wa-inbox__date-tabs">
-                    <t t-foreach="dateRanges" t-as="dr" t-key="dr.key">
-                        <button
-                            t-attf-class="wa-inbox__date-tab {{ state.dateRange === dr.key ? 'wa-inbox__date-tab--active' : '' }}"
-                            t-on-click="() => this.setDateRange(dr.key)">
-                            <t t-esc="dr.label"/>
-                        </button>
-                    </t>
+                <div class="wa-inbox__search wa-inbox__search--top">
+                    <i class="fa fa-search" aria-hidden="true"/>
+                    <input type="text"
+                           class="wa-inbox__search-input"
+                           placeholder="Search phone or lead name…"
+                           t-att-value="state.filters.search"
+                           t-on-input="onSearchInput"/>
+                </div>
+                <div class="wa-inbox__topbar-actions">
+                    <button class="wa-inbox__icon-btn" title="Mark all visible as read"
+                            t-att-disabled="unreadTotal === 0"
+                            t-on-click="() => this.markAllRead()">
+                        <i class="fa fa-check-circle-o" aria-hidden="true"/> Mark all read
+                    </button>
+                    <button class="wa-inbox__icon-btn" title="Refresh"
+                            t-on-click="() => this._loadInbox()">
+                        <i class="fa fa-refresh" aria-hidden="true"/>
+                    </button>
                 </div>
             </div>
 
@@ -28,25 +38,91 @@
                 <div class="wa-inbox__list-pane">
 
                     <div class="wa-inbox__list-controls">
-                        <div class="wa-inbox__search">
-                            <i class="fa fa-search" aria-hidden="true"/>
-                            <input type="text"
-                                   class="wa-inbox__search-input"
-                                   placeholder="Search phone / lead..."
-                                   t-on-input="onSearchInput"/>
+                        <!-- Ownership tabs (primary axis) with live counts.
+                             Managers only — an RM sees just their own chats. -->
+                        <t t-if="state.isManager">
+                            <div class="wa-inbox__segments">
+                                <t t-foreach="ownershipTabs" t-as="tab" t-key="tab.key">
+                                    <button
+                                        t-attf-class="wa-inbox__segment {{ state.filters.ownership === tab.key ? 'wa-inbox__segment--active' : '' }}"
+                                        t-on-click="() => this.setOwnership(tab.key)">
+                                        <span t-esc="tab.label"/>
+                                        <span class="wa-inbox__segment-count"
+                                              t-esc="state.counts.ownership[tab.key] || 0"/>
+                                    </button>
+                                </t>
+                            </div>
+                        </t>
+
+                        <!-- Quick filters: the two genuinely actionable signals -->
+                        <div class="wa-inbox__chips">
+                            <button t-attf-class="wa-inbox__chip {{ state.filters.needs_reply ? 'wa-inbox__chip--active' : '' }}"
+                                    t-on-click="() => this.toggleNeedsReply()">
+                                <i class="fa fa-reply" aria-hidden="true"/> Needs reply
+                                <span class="wa-inbox__chip-count" t-esc="state.counts.needs_reply || 0"/>
+                            </button>
+                            <button t-attf-class="wa-inbox__chip {{ state.filters.window === 'closing_soon' ? 'wa-inbox__chip--active wa-inbox__chip--warn' : '' }}"
+                                    t-on-click="() => this.toggleClosingSoon()">
+                                <i class="fa fa-hourglass-half" aria-hidden="true"/> Closing soon
+                                <span class="wa-inbox__chip-count" t-esc="state.counts.closing_soon || 0"/>
+                            </button>
+                            <button t-attf-class="wa-inbox__chip wa-inbox__chip--more {{ hasActiveRefinements ? 'wa-inbox__chip--active' : '' }}"
+                                    t-on-click="() => this.toggleFilters()">
+                                <i class="fa fa-sliders" aria-hidden="true"/> Filters
+                                <t t-if="hasActiveRefinements"><span class="wa-inbox__chip-dot"/></t>
+                            </button>
                         </div>
 
-                        <!-- Status segmented control with live counts -->
-                        <div class="wa-inbox__segments">
-                            <t t-foreach="statusSegments" t-as="seg" t-key="seg.key">
-                                <button
-                                    t-attf-class="wa-inbox__segment {{ state.statusFilter === seg.key ? 'wa-inbox__segment--active' : '' }}"
-                                    t-on-click="() => this.setStatus(seg.key)">
-                                    <span t-esc="seg.label"/>
-                                    <span class="wa-inbox__segment-count" t-esc="statusCounts[seg.key]"/>
-                                </button>
-                            </t>
-                        </div>
+                        <!-- Filters popover: window / RM / date refinements -->
+                        <t t-if="state.showFilters">
+                            <div class="wa-inbox__filters-pop">
+                                <div class="wa-inbox__filters-row">
+                                    <label class="wa-inbox__filters-label">24h window</label>
+                                    <select class="wa-inbox__filters-select"
+                                            t-on-change="(e) => this.setWindow(e.target.value)">
+                                        <t t-foreach="windowOptions" t-as="wo" t-key="wo.key">
+                                            <option t-att-value="wo.key"
+                                                    t-att-selected="state.filters.window === wo.key"
+                                                    t-esc="wo.label"/>
+                                        </t>
+                                    </select>
+                                </div>
+                                <div class="wa-inbox__filters-row">
+                                    <label class="wa-inbox__filters-label">Date</label>
+                                    <select class="wa-inbox__filters-select"
+                                            t-on-change="(e) => this.setDateRange(e.target.value)">
+                                        <t t-foreach="dateRanges" t-as="dr" t-key="dr.key">
+                                            <option t-att-value="dr.key"
+                                                    t-att-selected="state.filters.date_range === dr.key"
+                                                    t-esc="dr.label"/>
+                                        </t>
+                                    </select>
+                                </div>
+                                <t t-if="state.isManager and state.counts.rms and state.counts.rms.length">
+                                    <div class="wa-inbox__filters-row wa-inbox__filters-row--col">
+                                        <label class="wa-inbox__filters-label">Assigned RM</label>
+                                        <div class="wa-inbox__rm-filter">
+                                            <t t-foreach="state.counts.rms" t-as="rm" t-key="rm.id">
+                                                <button
+                                                    t-attf-class="wa-inbox__rm-pill {{ state.filters.assigned_rm_ids.includes(rm.id) ? 'wa-inbox__rm-pill--active' : '' }}"
+                                                    t-on-click="() => this.toggleRmFilter(rm.id)">
+                                                    <t t-esc="rm.name"/>
+                                                    <span class="wa-inbox__rm-pill-count" t-esc="rm.count"/>
+                                                </button>
+                                            </t>
+                                        </div>
+                                    </div>
+                                </t>
+                                <div class="wa-inbox__filters-foot">
+                                    <button class="wa-inbox__filters-reset"
+                                            t-on-click="() => this.resetFilters()">
+                                        <i class="fa fa-times" aria-hidden="true"/> Reset
+                                    </button>
+                                    <button class="btn btn-sm btn-primary"
+                                            t-on-click="() => this.toggleFilters()">Done</button>
+                                </div>
+                            </div>
+                        </t>
 
                         <!-- Sort + count -->
                         <div class="wa-inbox__list-subhead">
@@ -56,27 +132,15 @@
                                         t-on-change="(e) => this.setSort(e.target.value)">
                                     <t t-foreach="sortOptions" t-as="so" t-key="so.key">
                                         <option t-att-value="so.key"
-                                                t-att-selected="state.sortKey === so.key"
+                                                t-att-selected="state.filters.sort === so.key"
                                                 t-esc="so.label"/>
                                     </t>
                                 </select>
                             </label>
-                            <span class="wa-inbox__count"><t t-esc="state.totalCount"/> chats</span>
+                            <span class="wa-inbox__count">
+                                <t t-esc="state.total"/> chats<t t-if="unreadTotal"> · <t t-esc="unreadTotal"/> unread</t>
+                            </span>
                         </div>
-
-                        <!-- RM filter pills -->
-                        <t t-if="state.counts.assigned_rms and state.counts.assigned_rms.length">
-                            <div class="wa-inbox__rm-filter">
-                                <t t-foreach="state.counts.assigned_rms" t-as="rm" t-key="rm.id">
-                                    <button
-                                        t-attf-class="wa-inbox__rm-pill {{ state.assignedRms.includes(rm.id) ? 'wa-inbox__rm-pill--active' : '' }}"
-                                        t-on-click="() => this.toggleRmFilter(rm.id)">
-                                        <t t-esc="rm.name"/>
-                                        <span class="wa-inbox__rm-pill-count" t-esc="rm.count"/>
-                                    </button>
-                                </t>
-                            </div>
-                        </t>
                     </div>
 
                     <!-- The scrollable list -->
@@ -87,11 +151,32 @@
                         <t t-elif="state.listError">
                             <div class="wa-inbox__error" t-esc="state.listError"/>
                         </t>
-                        <t t-elif="sortedConversations.length === 0">
-                            <div class="wa-inbox__empty">No conversations found</div>
+                        <t t-elif="state.conversations.length === 0">
+                            <!-- Contextual empty states -->
+                            <t t-if="hasActiveRefinements">
+                                <div class="wa-inbox__empty">
+                                    <i class="fa fa-search wa-inbox__empty-icon" aria-hidden="true"/>
+                                    <div class="wa-inbox__empty-title">No conversations match these filters</div>
+                                    <button class="btn btn-sm btn-outline-primary mt-2"
+                                            t-on-click="() => this.resetFilters()">Reset filters</button>
+                                </div>
+                            </t>
+                            <t t-elif="state.filters.needs_reply">
+                                <div class="wa-inbox__empty">
+                                    <i class="fa fa-check-circle wa-inbox__empty-icon wa-inbox__empty-icon--ok" aria-hidden="true"/>
+                                    <div class="wa-inbox__empty-title">You're all caught up</div>
+                                    <div class="wa-inbox__empty-sub">No chats need a reply right now.</div>
+                                </div>
+                            </t>
+                            <t t-else="">
+                                <div class="wa-inbox__empty">
+                                    <i class="fa fa-comments-o wa-inbox__empty-icon" aria-hidden="true"/>
+                                    <div class="wa-inbox__empty-title">No conversations here yet</div>
+                                </div>
+                            </t>
                         </t>
                         <t t-else="">
-                            <t t-foreach="sortedConversations" t-as="conv" t-key="conv.id">
+                            <t t-foreach="state.conversations" t-as="conv" t-key="conv.id">
                                 <CdConversationListItem
                                     conversation="conv"
                                     selected="state.activeConvId === conv.id"
@@ -100,6 +185,14 @@
                                     onClaim="(id) => this.quickClaim(id)"
                                     onAssign="(id) => this.quickAssign(id)"
                                     waiting="waitingFor(conv) or undefined"/>
+                            </t>
+                            <t t-if="hasMore">
+                                <button class="wa-inbox__load-more"
+                                        t-att-disabled="state.loadingMore"
+                                        t-on-click="() => this.loadMore()">
+                                    <t t-if="state.loadingMore"><i class="fa fa-spinner fa-spin"/> Loading…</t>
+                                    <t t-else="">Load more · <t t-esc="state.total"/> total</t>
+                                </button>
                             </t>
                         </t>
                     </div>

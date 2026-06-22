@@ -332,8 +332,7 @@ All on `wa.conversation`:
 
 | Method | Returns | Used by |
 |---|---|---|
-| `get_inbox(filters=None)` | list of inbox rows (incl. `can_send`, `is_manager`, `assignment_pending`, window, assignee) | Inbox |
-| `get_inbox_counts()` | dict of filter counts | Inbox tabs |
+| `get_inbox(filters=None)` | `{rows, total, counts, is_manager}` — rows + real total + facet counts, all from one shared domain so the list and badges always agree. Filters: `ownership`, `needs_reply`, `window` (open/closing_soon/closed), `assigned_rm_ids`, `date_range`/`date_from`/`date_to`, `search`, `sort`, `limit`, `offset`. | Inbox |
 | `get_thread(conversation_id)` | full thread dict (messages + gating flags) | Inbox / lead tab |
 | `send_message(…)` | created `wa.message` | Composer |
 | `fetch_templates(template_name=None)` | normalised template list | Template picker |
@@ -350,13 +349,29 @@ so the composer can lock/unlock itself correctly.
 
 ## 12. Security model
 
-- **`base.group_user` is the WA-user baseline** — every internal user gets
-  read/write/create on the `wa.*` models (see `ir.model.access.csv`).
-- **`group_wa_manager` ("WhatsApp Manager")** adds the privileges the gate checks:
-  send on **any** chat, **force-reassign** without the handshake, and manage
-  **shared** quick replies. It implies `base.group_user`.
+Two roles (`security/wa_security.xml`):
+
+- **`group_wa_rm` ("WhatsApp RM")** — the RM baseline. Auto-granted to every
+  internal user (`base.group_user` implies it), so the role exists without manual
+  assignment. An RM works the **Inbox** and their **personal** quick replies, and
+  **sees only the conversations assigned to them**.
+- **`group_wa_manager` ("WhatsApp Manager")** — implies `group_wa_rm` and adds:
+  send on **any** chat, **force-reassign** without the handshake, manage **shared**
+  quick replies, and access the team **Dashboard** and **Message Log**. Sees
+  **all** conversations.
+
+**Where scoping is enforced:** the Inbox/Dashboard are OWL client actions whose
+serializers run as `sudo()`, so record rules don't constrain them. RM-vs-Manager
+visibility is enforced in the methods themselves — `get_inbox` always restricts a
+non-manager to `assigned_user_id = uid` (`_owa_inbox_unrestricted`), and
+`get_thread` blocks non-owners (`_owa_can_view_thread`, except a manager, the
+assignee, or a user with an open handover request). Menus gate the rest:
+Dashboard + Messaging are `group_wa_manager`-only; Inbox is `group_wa_rm`.
+
 - **Record rules:** quick replies (own + shared visibility, own-only write);
   reassignment requests scoped appropriately.
+- `base.group_user` still holds ORM access on the `wa.*` models (so the lead-form
+  WhatsApp tab keeps working); per-user visibility is the method-layer scoping above.
 - Append-only models (`wa.message`, `wa.event.log`) grant no unlink to users.
 
 ---

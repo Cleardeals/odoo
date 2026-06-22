@@ -13,26 +13,32 @@ import { CdInquirySwitcher } from "@cleardeals_ui/index";
 import { CdConversationListItem } from "@cleardeals_ui/index";
 import { relativeTime } from "@cleardeals_ui/utils/datetime";
 
+const PAGE_SIZE = 50;
+
+// Primary axis — who owns the chat. The default is role-aware (see setup()).
+const OWNERSHIP_TABS = [
+    { key: "mine",       label: "Mine" },
+    { key: "unassigned", label: "Unassigned" },
+    { key: "all",        label: "All" },
+];
+
+// Date is an optional refinement, never a hard gate. "Anytime" is the default so
+// a customer waiting since days ago is never hidden from the work queue.
 const DATE_RANGES = [
+    { key: "anytime",    label: "Anytime" },
     { key: "today",      label: "Today" },
     { key: "yesterday",  label: "Yesterday" },
-    { key: "last_7d",    label: "Last 7d" },
-    { key: "last_30d",   label: "Last 30d" },
-    { key: "this_month", label: "This Month" },
+    { key: "last_7d",    label: "Last 7 days" },
+    { key: "last_30d",   label: "Last 30 days" },
+    { key: "this_month", label: "This month" },
 ];
 
-// Single-select status segmented control ("" = All).
-const STATUS_SEGMENTS = [
-    { key: "",            label: "All" },
-    { key: "needs_reply", label: "Needs reply" },
-    { key: "active",      label: "Active" },
-    { key: "completed",   label: "Done" },
-];
-
-const STATUS_OPTIONS = [
-    { key: "needs_reply", label: "Needs Reply" },
-    { key: "active",      label: "Active" },
-    { key: "completed",   label: "Completed" },
+// Objective 24h-window state (gates what can be sent) — not invented lifecycle.
+const WINDOW_OPTIONS = [
+    { key: "all",          label: "Any window" },
+    { key: "open",         label: "Window open" },
+    { key: "closing_soon", label: "Closing soon" },
+    { key: "closed",       label: "Window closed" },
 ];
 
 const SORT_OPTIONS = [
@@ -41,12 +47,8 @@ const SORT_OPTIONS = [
     { key: "unread",  label: "Unread first" },
 ];
 
-const STATUS_COLORS = {
-    needs_reply: "cd-status-badge--red",
-    active:      "cd-status-badge--green",
-    completed:   "cd-status-badge--grey",
-    blocked:     "cd-status-badge--orange",
-};
+// SLA band (from the server row) → list-item chip tone.
+const SLA_TONE = { ok: "ok", warn: "warn", breach: "bad" };
 
 export class WaInbox extends Component {
     static template   = "wa_communication.WaInbox";
@@ -61,21 +63,28 @@ export class WaInbox extends Component {
         this.cdNotif    = useService("cd_notification");
 
         this.state = useState({
-            // Filters
-            statusFilter:   "",    // single status key ("" = All)
-            assignedRms:    [],    // array of active RM ids
-            dateRange:      "today",
-            searchText:     "",
-            sortKey:        "waiting",  // list ordering: waiting | recent | unread
+            // Filters — mirror the backend get_inbox contract exactly.
+            filters: {
+                ownership:       "mine",     // role-aware default set on mount
+                needs_reply:     true,       // default queue = chats awaiting a reply
+                window:          "all",      // open | closing_soon | closed | all
+                assigned_rm_ids: [],         // explicit RM multi-select
+                date_range:      "anytime",
+                date_from:       null,
+                date_to:         null,
+                search:          "",
+                sort:            "waiting",
+            },
+            showFilters: false,              // Filters popover open?
+            isManager:   false,
 
             // List
             conversations:  [],
-            totalCount:     0,
+            total:          0,
+            counts:         { ownership: {}, needs_reply: 0, closing_soon: 0, rms: [] },
             listLoading:    true,
+            loadingMore:    false,
             listError:      null,
-
-            // Sidebar counts (loaded once)
-            counts:         { status: {}, assigned_rms: [] },
 
             // Thread panel (right side)
             activeConvId:   null,
@@ -106,9 +115,7 @@ export class WaInbox extends Component {
 
         this._searchDebounce = null;
 
-        // Odoo's native AutoComplete source for the Create-lead property picker:
-        // a single async source backed by wa.conversation.search_properties. The
-        // component handles the dropdown, scrolling, keyboard nav and highlight.
+        // Native AutoComplete source for the Create-lead property picker.
         this.propertySources = [{
             options: async (request) => {
                 const rows = await this.orm.call(
@@ -121,9 +128,15 @@ export class WaInbox extends Component {
             },
         }];
 
-        onMounted(() => {
-            this._loadCounts();
-            this._loadConversations();
+        onMounted(async () => {
+            // Role-aware default: managers triage the whole team queue, RMs land on
+            // their own open chats. Pick the default BEFORE the first load.
+            try {
+                this.state.isManager = await user.hasGroup("wa_communication.group_wa_manager");
+            } catch (_) { /* default to RM view */ }
+            if (this.state.isManager) this.state.filters.ownership = "all";
+
+            this._loadInbox();
             this._loadQuickReplies();
             this._subscribeBus();
         });
@@ -138,16 +151,14 @@ export class WaInbox extends Component {
     _subscribeBus() {
         this.busService.addChannel("wa_message_log");
         this.busService.subscribe("wa_message_update", () => {
-            this._loadConversations();
+            this._loadInbox();
             if (this.state.activeConvId) this._loadThread(this.state.activeConvId);
         });
         const uid = user.userId || null;
         if (uid) {
-            // Refresh the list/thread when a central notification arrives (the
-            // generic center handles showing it; we just react to keep data fresh).
             this.busService.addChannel(`cleardeals_notification_${uid}`);
             this.busService.subscribe("cd_notification", () => {
-                this._loadConversations();
+                this._loadInbox();
                 if (this.state.activeConvId) this._loadThread(this.state.activeConvId);
             });
         }
@@ -155,11 +166,63 @@ export class WaInbox extends Component {
 
     // ── Data loading ─────────────────────────────────────────────────────────
 
-    async _loadCounts() {
+    _buildFilters(offset = 0) {
+        const f = this.state.filters;
+        return {
+            ownership:       f.ownership,
+            needs_reply:     f.needs_reply || undefined,
+            window:          f.window !== "all" ? f.window : undefined,
+            assigned_rm_ids: f.assigned_rm_ids.length ? f.assigned_rm_ids : undefined,
+            date_range:      f.date_range !== "anytime" ? f.date_range : undefined,
+            date_from:       f.date_from || undefined,
+            date_to:         f.date_to || undefined,
+            search:          f.search || undefined,
+            sort:            f.sort,
+            limit:           PAGE_SIZE,
+            offset,
+        };
+    }
+
+    /** Load the first page. Rows, total and all counts arrive together, so the
+     *  list and the badges can never disagree. */
+    async _loadInbox() {
+        this.state.listLoading = true;
         try {
-            const counts = await this.orm.call("wa.conversation", "get_inbox_counts", [], {});
-            this.state.counts = counts;
-        } catch (_) {}
+            const data = await this.orm.call("wa.conversation", "get_inbox", [], {
+                filters: this._buildFilters(0),
+            });
+            this.state.conversations = data.rows || [];
+            this.state.total  = data.total || 0;
+            this.state.counts = data.counts || this.state.counts;
+            this.state.listError = null;
+        } catch (e) {
+            this.state.listError = String(e);
+        } finally {
+            this.state.listLoading = false;
+        }
+    }
+
+    /** Append the next page (server-side pagination keeps "longest waiting" honest
+     *  across the whole population, not just the first page). */
+    async loadMore() {
+        if (this.state.loadingMore) return;
+        this.state.loadingMore = true;
+        try {
+            const data = await this.orm.call("wa.conversation", "get_inbox", [], {
+                filters: this._buildFilters(this.state.conversations.length),
+            });
+            this.state.conversations = this.state.conversations.concat(data.rows || []);
+            this.state.total  = data.total || this.state.total;
+            this.state.counts = data.counts || this.state.counts;
+        } catch (e) {
+            this.notification.add(String(e), { type: "danger" });
+        } finally {
+            this.state.loadingMore = false;
+        }
+    }
+
+    get hasMore() {
+        return this.state.conversations.length < this.state.total;
     }
 
     async _loadQuickReplies() {
@@ -169,36 +232,12 @@ export class WaInbox extends Component {
         } catch (_) {}
     }
 
-    async _loadConversations() {
-        this.state.listLoading = true;
-        try {
-            const rows = await this.orm.call("wa.conversation", "get_inbox", [], {
-                filters: {
-                    status:       this.state.statusFilter || undefined,
-                    date_range:   this.state.dateRange || undefined,
-                    assigned_rm:  this.state.assignedRms[0] || undefined,
-                    search:       this.state.searchText || undefined,
-                    limit:        100,
-                },
-            });
-            this.state.conversations = rows;
-            this.state.totalCount = rows.length;
-            this.state.listError = null;
-        } catch (e) {
-            this.state.listError = String(e);
-        } finally {
-            this.state.listLoading = false;
-        }
-    }
-
     async _loadThread(convId) {
         this.state.threadLoading = true;
         try {
             const data = await this.orm.call("wa.conversation", "get_thread", [[convId]], {});
             this.state.thread = data;
             this.state.activeConvId = convId;
-            // Suppress popups for THIS chat while it's open on screen (the user
-            // sees updates live here); everywhere else still pops.
             this.cdNotif.setActiveSuppressKey(data?.conversation?.phone || null);
         } catch (e) {
             console.error("WaInbox._loadThread", e);
@@ -208,64 +247,129 @@ export class WaInbox extends Component {
         try {
             await this.orm.call("wa.conversation", "mark_as_read", [[convId]], {});
             const conv = this.state.conversations.find(c => c.id === convId);
-            if (conv) conv.unread_count = 0;
+            if (conv && conv.unread_count > 0) {
+                conv.unread_count = 0;
+                conv.needs_reply = false;
+                // Keep the badge honest without yanking the row out from under the
+                // user: drop the local needs-reply tally.
+                if (this.state.counts.needs_reply > 0) this.state.counts.needs_reply -= 1;
+            }
         } catch (_) {}
     }
 
-    // ── Filter actions ────────────────────────────────────────────────────────
+    // ── Filter actions (every change reloads page 1) ───────────────────────────
 
-    /** Single-select status segmented control ("" = All). */
-    setStatus(key) {
-        if (this.state.statusFilter === key) return;
-        this.state.statusFilter = key;
-        this._loadConversations();
+    setOwnership(key) {
+        if (this.state.filters.ownership === key) return;
+        this.state.filters.ownership = key;
+        this._loadInbox();
     }
 
-    /** List ordering — client-side, no reload. */
-    setSort(key) {
-        this.state.sortKey = key;
+    toggleNeedsReply() {
+        this.state.filters.needs_reply = !this.state.filters.needs_reply;
+        this._loadInbox();
+    }
+
+    /** "Closing soon" quick chip shares the window filter so the two never fight. */
+    toggleClosingSoon() {
+        this.state.filters.window =
+            this.state.filters.window === "closing_soon" ? "all" : "closing_soon";
+        this._loadInbox();
+    }
+
+    setWindow(key) {
+        this.state.filters.window = key;
+        this._loadInbox();
     }
 
     toggleRmFilter(id) {
-        const idx = this.state.assignedRms.indexOf(id);
-        if (idx >= 0) this.state.assignedRms.splice(idx, 1);
-        else this.state.assignedRms.push(id);
-        this._loadConversations();
+        const ids = this.state.filters.assigned_rm_ids;
+        const idx = ids.indexOf(id);
+        if (idx >= 0) ids.splice(idx, 1);
+        else ids.push(id);
+        this._loadInbox();
     }
 
     setDateRange(key) {
-        this.state.dateRange = key;
-        this._loadConversations();
+        this.state.filters.date_range = key;
+        if (key !== "custom") { this.state.filters.date_from = null; this.state.filters.date_to = null; }
+        this._loadInbox();
+    }
+
+    setSort(key) {
+        this.state.filters.sort = key;
+        this._loadInbox();
     }
 
     onSearchInput(ev) {
-        this.state.searchText = ev.target.value;
+        this.state.filters.search = ev.target.value;
         clearTimeout(this._searchDebounce);
-        this._searchDebounce = setTimeout(() => this._loadConversations(), 350);
+        this._searchDebounce = setTimeout(() => this._loadInbox(), 350);
     }
 
-    // ── Quick actions from the list (no need to open the chat) ─────────────────
+    toggleFilters() {
+        this.state.showFilters = !this.state.showFilters;
+    }
 
-    /** Claim an unassigned chat straight from its list row. */
+    /** Restore the role-aware default and clear every refinement. */
+    resetFilters() {
+        this.state.filters.ownership       = this.state.isManager ? "all" : "mine";
+        this.state.filters.needs_reply     = true;
+        this.state.filters.window          = "all";
+        this.state.filters.assigned_rm_ids = [];
+        this.state.filters.date_range      = "anytime";
+        this.state.filters.date_from       = null;
+        this.state.filters.date_to         = null;
+        this.state.filters.sort            = "waiting";
+        this.state.showFilters = false;
+        this._loadInbox();
+    }
+
+    /** True when any filter departs from the role-aware default (drives the dot
+     *  on the Filters button and the "no matches" empty state). */
+    get hasActiveRefinements() {
+        const f = this.state.filters;
+        return f.window !== "all"
+            || f.assigned_rm_ids.length > 0
+            || f.date_range !== "anytime"
+            || !!f.search;
+    }
+
+    /** Mark every loaded, unread chat as read. */
+    async markAllRead() {
+        const ids = this.state.conversations.filter(c => c.unread_count > 0).map(c => c.id);
+        if (!ids.length) return;
+        try {
+            await this.orm.call("wa.conversation", "mark_as_read", [ids], {});
+            this._loadInbox();
+        } catch (e) {
+            this.notification.add(String(e), { type: "danger" });
+        }
+    }
+
+    get unreadTotal() {
+        return this.state.conversations.reduce((n, c) => n + (c.unread_count || 0), 0);
+    }
+
+    // ── Quick actions from the list ────────────────────────────────────────────
+
     async quickClaim(convId) {
         try {
             await this.orm.call("wa.conversation", "action_claim", [[convId]], {});
             this.notification.add("Chat claimed.", { type: "success" });
-            await this._loadConversations();
-            await this._loadCounts();
+            await this._loadInbox();
             if (this.state.activeConvId === convId) await this._loadThread(convId);
         } catch (e) {
             this.notification.add(e.data?.message || "Could not claim the chat.", { type: "danger" });
         }
     }
 
-    /** Request reassignment of an owned chat from its list row. */
     async quickAssign(convId) {
         try {
             await this.orm.call("wa.conversation", "request_assignment", [[convId]], {});
             this.notification.add("Assignment requested — you'll be notified on approval.",
                 { type: "success" });
-            await this._loadConversations();
+            await this._loadInbox();
         } catch (e) {
             this.notification.add(e.data?.message || "Could not request assignment.", { type: "danger" });
         }
@@ -357,70 +461,26 @@ export class WaInbox extends Component {
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    statusLabel(key) {
-        return STATUS_OPTIONS.find(s => s.key === key)?.label || key;
-    }
-
-    statusBadgeClass(key) {
-        return `cd-inbox-status-badge ${STATUS_COLORS[key] || ""}`;
-    }
-
     relativeTime(isoStr) {
         return relativeTime(isoStr);
     }
 
-    get statusOptions()  { return STATUS_OPTIONS; }
-    get statusSegments() { return STATUS_SEGMENTS; }
-    get sortOptions()    { return SORT_OPTIONS; }
-    get dateRanges()     { return DATE_RANGES; }
+    get ownershipTabs() { return OWNERSHIP_TABS; }
+    get dateRanges()    { return DATE_RANGES; }
+    get windowOptions() { return WINDOW_OPTIONS; }
+    get sortOptions()   { return SORT_OPTIONS; }
 
-    /** Per-segment live counts for the status control. "All" = the loaded total. */
-    get statusCounts() {
-        const s = this.state.counts.status || {};
-        return {
-            "":           this.state.totalCount,
-            needs_reply:  s.needs_reply || 0,
-            active:       s.active || 0,
-            completed:    s.completed || 0,
-        };
+    sortLabel(key) {
+        return SORT_OPTIONS.find(s => s.key === key)?.label || key;
     }
 
-    /** Conversations ordered by the active sort key (client-side). */
-    get sortedConversations() {
-        const rows = [...this.state.conversations];
-        const ts = (c) => this._epoch(c.last_message_at);
-        if (this.state.sortKey === "recent") {
-            return rows.sort((a, b) => ts(b) - ts(a));
-        }
-        if (this.state.sortKey === "unread") {
-            return rows.sort((a, b) =>
-                (b.unread_count || 0) - (a.unread_count || 0) || ts(b) - ts(a));
-        }
-        // "waiting" (default): needs-reply first, longest-waiting (oldest) on top;
-        // everyone else after, most-recent first.
-        return rows.sort((a, b) => {
-            const aw = a.conv_status === "needs_reply";
-            const bw = b.conv_status === "needs_reply";
-            if (aw !== bw) return aw ? -1 : 1;
-            return aw ? ts(a) - ts(b) : ts(b) - ts(a);
-        });
-    }
-
-    /** Urgency chip for a needs-reply row: {label, tone} or null. */
+    /** Urgency chip for a needs-reply row, built from the server-computed SLA. */
     waitingFor(conv) {
-        if (conv.conv_status !== "needs_reply" || !conv.last_message_at) return null;
-        const mins = Math.max(0, Math.round((Date.now() - this._epoch(conv.last_message_at)) / 60000));
-        const tone = mins >= 240 ? "bad" : mins >= 60 ? "warn" : "ok";
-        return { label: this._fmtDuration(mins), tone };
-    }
-
-    /** Parse a backend (naive-UTC) datetime string to epoch millis. */
-    _epoch(iso) {
-        if (!iso) return 0;
-        let s = iso.includes("T") ? iso : iso.replace(" ", "T");
-        if (!/[zZ]|[+-]\d\d:?\d\d$/.test(s)) s += "Z";
-        const t = Date.parse(s);
-        return Number.isNaN(t) ? 0 : t;
+        if (!conv.needs_reply || conv.waiting_minutes == null) return null;
+        return {
+            label: this._fmtDuration(conv.waiting_minutes),
+            tone:  SLA_TONE[conv.sla_band] || "ok",
+        };
     }
 
     /** Compact duration: "12m", "2h 14m", "1d 3h". */
@@ -456,7 +516,7 @@ export class WaInbox extends Component {
         return this.activeConversation?.window_expires_at || null;
     }
 
-    // Assignment gating (populated by get_thread in Feature 3; default open).
+    // Assignment gating (populated by get_thread; default open).
     get canSend() {
         const c = this.activeConversation;
         return !c || c.can_send !== false;
@@ -533,7 +593,6 @@ export class WaInbox extends Component {
 
     // ── Inquiry segments ("Discussing: <property>") ────────────────────────────
 
-    /** Feature flag — the whole segment bar only renders when this is on. */
     get segmentsEnabled() {
         return !!this.activeConversation?.segments_enabled;
     }
@@ -542,22 +601,18 @@ export class WaInbox extends Component {
         return this.activeConversation?.active_segment?.label || "Unassigned";
     }
 
-    /** Inquiries (one per property) on this phone, for the switcher dropdown. */
     get inquiries() {
         return this.activeConversation?.inquiries || [];
     }
 
-    /** The inquiry id the active segment currently points at. */
     get activeSegmentInquiryId() {
         return this.activeConversation?.active_segment?.inquiry_id || null;
     }
 
-    /** Switch the active context to an existing inquiry (CdInquirySwitcher onSwitch). */
     switchInquiry(inquiryId) {
         return this._startSegment({ inquiry_id: inquiryId });
     }
 
-    /** Open a label-only segment for a topic whose inquiry doesn't exist yet. */
     startTopic(label) {
         return this._startSegment({ label });
     }
@@ -570,14 +625,12 @@ export class WaInbox extends Component {
                 conversation_id: convId, ...kw,
             });
             await this._loadThread(convId);
-            await this._loadConversations();
+            await this._loadInbox();
         } catch (e) {
             this.notification.add(e.data?.message || String(e), { type: "danger" });
         }
     }
 
-    /** Suggest switching the active context when the lead's latest reply is about
-     *  a different inquiry than the banner shows. Returns {segment_id, label} or null. */
     get segmentSuggestion() {
         const conv = this.activeConversation;
         if (!conv?.segments_enabled) return null;
@@ -600,7 +653,7 @@ export class WaInbox extends Component {
                 conversation_id: convId, segment_id: segmentId });
             this.state.dismissedSegmentId = null;
             await this._loadThread(convId);
-            await this._loadConversations();
+            await this._loadInbox();
         } catch (e) {
             this.notification.add(e.data?.message || String(e), { type: "danger" });
         }
@@ -612,13 +665,11 @@ export class WaInbox extends Component {
 
     // ── Create lead from chat (orphan / phone-only conversations) ──────────────
 
-    /** The active conversation has no linked lead → offer to create one. */
     get isOrphanChat() {
         const c = this.activeConversation;
         return !!c && !c.lead_id;
     }
 
-    /** Best-guess display name from the most recent inbound message. */
     get lastInboundName() {
         const msgs = this.activeMessages;
         for (let i = msgs.length - 1; i >= 0; i--) {
@@ -646,13 +697,11 @@ export class WaInbox extends Component {
         this.state.createLeadName = ev.target.value;
     }
 
-    /** AutoComplete typed input: track text + invalidate any prior selection. */
     onPropertyInput({ inputValue }) {
         this.state.propertyQuery = inputValue;
         this.state.selectedProperty = null;
     }
 
-    /** AutoComplete option chosen. */
     pickProperty(p) {
         this.state.selectedProperty = p;
         this.state.propertyQuery = p.name;
@@ -678,7 +727,7 @@ export class WaInbox extends Component {
             this.state.showCreateLead = false;
             this.notification.add("Lead created and linked to this chat.", { type: "success" });
             await this._loadThread(convId);
-            await this._loadConversations();
+            await this._loadInbox();
             if (leadId) this.openLead(leadId);
         } catch (e) {
             this.state.createLeadError = e.data?.message || String(e);

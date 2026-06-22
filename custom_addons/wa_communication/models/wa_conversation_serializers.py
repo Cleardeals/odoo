@@ -16,114 +16,304 @@ _logger = logging.getLogger(__name__)
 class WaConversation(models.Model):
     _inherit = 'wa.conversation'
 
-    def _inbox_conv_status(self, conv, window_open):
-        """Derive a display status for the inbox table."""
-        if conv.unread_count > 0:
-            return 'needs_reply'
-        if window_open:
-            return 'active'
-        return 'completed'
+    # ── Inbox configuration (SLA + window thresholds) ──────────────────────────
 
-    @api.model
-    def get_inbox(self, filters: dict | None = None) -> list[dict]:
-        """Return conversation list for the WhatsApp Inbox client action."""
-        filters = filters or {}
-        limit = min(int(filters.get('limit', 100)), 200)
-        offset = int(filters.get('offset', 0))
-        now = datetime.utcnow()
+    # ir.config_parameter keys with their built-in defaults (minutes / hours).
+    _INBOX_SLA_WARN_KEY = 'wa_communication.sla_warn_minutes'
+    _INBOX_SLA_BREACH_KEY = 'wa_communication.sla_breach_minutes'
+    _INBOX_CLOSING_SOON_KEY = 'wa_communication.window_closing_soon_hours'
 
+    def _owa_inbox_config(self) -> dict:
+        """Resolve the inbox SLA / window thresholds (configurable, with defaults)."""
+        get = self.env['ir.config_parameter'].sudo().get_param
+
+        def _num(key, default):
+            try:
+                return float(get(key, default))
+            except (TypeError, ValueError):
+                return float(default)
+
+        return {
+            'sla_warn': _num(self._INBOX_SLA_WARN_KEY, 60),       # minutes
+            'sla_breach': _num(self._INBOX_SLA_BREACH_KEY, 240),   # minutes
+            'closing_soon_h': _num(self._INBOX_CLOSING_SOON_KEY, 4),  # hours
+        }
+
+    # ── Filter → ORM domain (single source of truth for list AND counts) ───────
+
+    def _owa_inbox_domain(self, filters: dict, now, cfg: dict, exclude=()) -> list:
+        """Build the inbox search domain from ``filters``, skipping any axis in
+        ``exclude``.  Sharing this between the list query and every facet count is
+        what keeps the badges and the list provably consistent — they can never be
+        computed from different populations again.
+        """
+        exclude = set(exclude)
         domain = []
-        if filters.get('assigned_rm'):
-            domain.append(('assigned_user_id', '=', int(filters['assigned_rm'])))
-        if filters.get('search'):
+
+        # Free-text search: lead name or phone.
+        if 'search' not in exclude and filters.get('search'):
             s = filters['search']
             domain += ['|', ('lead_id.name', 'ilike', s), ('phone_number', 'ilike', s)]
 
-        # Status filter
-        status_f = filters.get('status')
-        if status_f == 'needs_reply':
+        # Lead source (optional — the field may be absent on some installs).
+        if 'source' not in exclude and filters.get('source'):
+            src = filters['source']
+            src_ids = src if isinstance(src, (list, tuple)) else [src]
+            if 'source_id' in self.env['leads.new']._fields:
+                domain.append(('lead_id.source_id', 'in', [int(i) for i in src_ids]))
+
+        # Date range on last_message_at ("anytime" / missing → no constraint).
+        if 'date' not in exclude:
+            domain += self._owa_inbox_date_domain(filters, now)
+
+        # Ownership axis (mine / unassigned / others / all).
+        if 'ownership' not in exclude:
+            uid = self.env.uid
+            ownership = filters.get('ownership') or 'all'
+            if ownership == 'mine':
+                domain.append(('assigned_user_id', '=', uid))
+            elif ownership == 'unassigned':
+                domain.append(('assigned_user_id', '=', False))
+            elif ownership == 'others':
+                domain += [('assigned_user_id', '!=', False),
+                           ('assigned_user_id', '!=', uid)]
+
+        # Explicit RM multi-select (independent of the ownership tab).
+        if 'rm' not in exclude and filters.get('assigned_rm_ids'):
+            ids = [int(i) for i in filters['assigned_rm_ids']]
+            if ids:
+                domain.append(('assigned_user_id', 'in', ids))
+
+        # Needs-reply quick filter.
+        if 'needs_reply' not in exclude and filters.get('needs_reply'):
             domain.append(('unread_count', '>', 0))
-        elif status_f == 'active':
-            domain += [('unread_count', '=', 0), ('window_expires_at', '>', now)]
-        elif status_f == 'completed':
-            domain += [('unread_count', '=', 0), '|', ('window_expires_at', '=', False), ('window_expires_at', '<=', now)]
 
-        # Date range filter on last_message_at
-        date_range = filters.get('date_range')
+        # 24h window state.
+        if 'window' not in exclude:
+            domain += self._owa_inbox_window_domain(filters.get('window'), now, cfg)
+
+        # RM scoping — ALWAYS applied (never excluded by a facet): a non-manager
+        # only ever sees conversations assigned to them. The serializers run as
+        # sudo(), so this is the real access boundary for the Inbox, not a record
+        # rule. Managers (and privileged/system contexts) are unrestricted.
+        if not self._owa_inbox_unrestricted():
+            domain.append(('assigned_user_id', '=', self.env.uid))
+
+        return domain
+
+    def _owa_inbox_unrestricted(self) -> bool:
+        """True when the caller sees every conversation: a WhatsApp manager, or a
+        privileged/system context (superuser, crons, automated jobs). A normal RM
+        RPC call has ``env.su`` False and is scoped to their own chats."""
+        return bool(self.env.su) or self.env.user.has_group(
+            'wa_communication.group_wa_manager')
+
+    def _owa_can_view_thread(self, conv) -> bool:
+        """Whether the current user may open ``conv``'s thread.
+
+        Managers / privileged contexts and the assignee always may.  A non-owner
+        RM may also open a chat they have an OPEN handover request on, so the
+        "request sent — waiting for approval" state still renders for them.
+        """
+        if self._owa_inbox_unrestricted():
+            return True
+        if conv.assigned_user_id.id == self.env.uid:
+            return True
+        return bool(self.env['wa.reassignment.request'].sudo().search_count([
+            ('conversation_id', '=', conv.id),
+            ('requester_id', '=', self.env.uid),
+            ('state', 'in', ('pending', 'confirming')),
+        ]))
+
+    def _owa_inbox_date_domain(self, filters: dict, now) -> list:
+        """Date-range constraint on ``last_message_at`` (empty for anytime)."""
+        date_range = filters.get('date_range') or 'anytime'
+        if date_range == 'anytime':
+            return []
+        if date_range == 'custom':
+            out = []
+            if filters.get('date_from'):
+                out.append(('last_message_at', '>=', filters['date_from']))
+            if filters.get('date_to'):
+                out.append(('last_message_at', '<=', filters['date_to']))
+            return out
+        midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
         if date_range == 'today':
-            today = now.replace(hour=0, minute=0, second=0, microsecond=0)
-            domain.append(('last_message_at', '>=', today))
-        elif date_range == 'yesterday':
-            today = now.replace(hour=0, minute=0, second=0, microsecond=0)
-            yesterday = today - timedelta(days=1)
-            domain += [('last_message_at', '>=', yesterday), ('last_message_at', '<', today)]
-        elif date_range == 'last_7d':
-            domain.append(('last_message_at', '>=', now - timedelta(days=7)))
-        elif date_range == 'last_30d':
-            domain.append(('last_message_at', '>=', now - timedelta(days=30)))
-        elif date_range == 'this_month':
-            month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-            domain.append(('last_message_at', '>=', month_start))
+            return [('last_message_at', '>=', midnight)]
+        if date_range == 'yesterday':
+            return [('last_message_at', '>=', midnight - timedelta(days=1)),
+                    ('last_message_at', '<', midnight)]
+        if date_range == 'last_7d':
+            return [('last_message_at', '>=', now - timedelta(days=7))]
+        if date_range == 'last_30d':
+            return [('last_message_at', '>=', now - timedelta(days=30))]
+        if date_range == 'this_month':
+            return [('last_message_at', '>=', midnight.replace(day=1))]
+        return []
 
-        convs = self.env['wa.conversation'].sudo().search(
-            domain, order='last_message_at desc', limit=limit, offset=offset
-        )
+    def _owa_inbox_window_domain(self, window, now, cfg: dict) -> list:
+        """Domain for the objective 24h-window state (open/closing_soon/closed)."""
+        if not window or window == 'all':
+            return []
+        if window == 'open':
+            return [('window_expires_at', '>', now)]
+        if window == 'closing_soon':
+            soon = now + timedelta(hours=cfg['closing_soon_h'])
+            return [('window_expires_at', '>', now), ('window_expires_at', '<=', soon)]
+        if window == 'closed':
+            return ['|', ('window_expires_at', '=', False),
+                    ('window_expires_at', '<=', now)]
+        return []
 
-        rows = []
-        for conv in convs:
-            window_open = bool(conv.window_expires_at and conv.window_expires_at > now)
-            lead = conv.lead_id
-            # Try to get portal source from lead (field may not exist on all installations)
-            portal_source = ''
-            if lead:
-                portal_source = getattr(lead, 'portal_source', '') or getattr(lead, 'source_id', '') or ''
-                if hasattr(portal_source, 'name'):
-                    portal_source = portal_source.name
-            # Last active workflow slug from messages
-            last_wf_msg = conv.message_ids.filtered(lambda m: m.workflow_slug).sorted('occurred_at', reverse=True)[:1]
-            workflow_name = last_wf_msg.workflow_slug if last_wf_msg else ''
-            rows.append({
-                'id': conv.id,
-                'lead_id': lead.id if lead else None,
-                'lead_name': lead.name if lead else None,
-                'lead_source': portal_source,
-                'phone': conv.phone_number,
-                'last_message': conv.last_message_preview or '',
-                'last_message_at': conv.last_message_at.isoformat() if conv.last_message_at else None,
-                'unread_count': conv.unread_count,
-                'conv_status': self._inbox_conv_status(conv, window_open),
-                'window_state': 'open' if window_open else 'closed',
-                'window_expires_at': conv.window_expires_at.isoformat() if conv.window_expires_at else None,
-                'assigned_user_id': conv.assigned_user_id.id if conv.assigned_user_id else None,
-                'assigned_user_name': conv.assigned_user_id.name if conv.assigned_user_id else None,
-                'can_send': conv._can_send(),
-                'assignment_pending': conv.assignment_pending,
-                'workflow_name': workflow_name,
-                'interakt_url': conv.interakt_inbox_url,
-            })
-        return rows
+    # ── Per-row derived signals ────────────────────────────────────────────────
+
+    def _owa_waiting_since(self, conv):
+        """When the customer started waiting for a reply: the first inbound message
+        newer than the latest non-system outbound (or the earliest inbound if we've
+        never replied).  Returns ``None`` when nothing is awaiting a reply — more
+        accurate than ``last_message_at`` when the customer sent several messages."""
+        msgs = conv.message_ids.sorted('occurred_at')
+        last_out = None
+        for m in reversed(msgs):
+            if m.direction == 'outbound' and m.kind != 'system' and m.occurred_at:
+                last_out = m.occurred_at
+                break
+        for m in msgs:
+            if (m.direction == 'inbound' and m.occurred_at
+                    and (not last_out or m.occurred_at > last_out)):
+                return m.occurred_at
+        return None
+
+    def _owa_window_state(self, conv, now, cfg: dict) -> str:
+        """Display window state: closed / closing_soon / open."""
+        exp = conv.window_expires_at
+        if not exp or exp <= now:
+            return 'closed'
+        if exp <= now + timedelta(hours=cfg['closing_soon_h']):
+            return 'closing_soon'
+        return 'open'
+
+    _INBOX_SORTS = {
+        'recent':  'last_message_at desc, id desc',
+        'unread':  'unread_count desc, last_message_at desc, id desc',
+        'waiting': 'unread_count desc, last_message_at asc, id desc',
+    }
 
     @api.model
-    def get_inbox_counts(self) -> dict:
-        """Return facet counts for the inbox sidebar filters."""
-        now = datetime.utcnow()
-        all_convs = self.env['wa.conversation'].sudo().search([])
-        status_counts = {'needs_reply': 0, 'active': 0, 'completed': 0}
-        for conv in all_convs:
-            window_open = bool(conv.window_expires_at and conv.window_expires_at > now)
-            status_counts[self._inbox_conv_status(conv, window_open)] += 1
+    def get_inbox(self, filters: dict | None = None) -> dict:
+        """Return the WhatsApp Inbox payload: ``{rows, total, counts, is_manager}``.
 
-        # Assigned RM counts
-        rm_counts = {}
-        for conv in all_convs:
-            if conv.assigned_user_id:
-                uid = conv.assigned_user_id.id
-                rm_counts.setdefault(uid, {'id': uid, 'name': conv.assigned_user_id.name, 'count': 0})
-                rm_counts[uid]['count'] += 1
+        The list rows, the total, and every facet count are derived from one shared
+        base domain (see :meth:`_owa_inbox_domain`), so the badges always agree with
+        the list.  Sorting and pagination are done server-side so "longest waiting"
+        is honest across the whole population, not just the first page.
+        """
+        filters = filters or {}
+        cfg = self._owa_inbox_config()
+        now = datetime.utcnow()
+        limit = min(int(filters.get('limit', 50)), 200)
+        offset = int(filters.get('offset', 0))
+        order = self._INBOX_SORTS.get(filters.get('sort'), self._INBOX_SORTS['waiting'])
+        Conv = self.env['wa.conversation'].sudo()
+        uid = self.env.uid
+
+        base = self._owa_inbox_domain(filters, now, cfg)
+        total = Conv.search_count(base)
+        convs = Conv.search(base, order=order, limit=limit, offset=offset)
+
+        rows = [self._owa_inbox_row(conv, now, cfg, uid) for conv in convs]
 
         return {
-            'status': status_counts,
-            'assigned_rms': list(rm_counts.values()),
+            'rows': rows,
+            'total': total,
+            'counts': self._owa_inbox_counts(filters, now, cfg),
+            'is_manager': self.env.user.has_group('wa_communication.group_wa_manager'),
+        }
+
+    def _owa_inbox_row(self, conv, now, cfg: dict, uid: int) -> dict:
+        """Serialize one conversation for the inbox list."""
+        lead = conv.lead_id
+        portal_source = ''
+        if lead:
+            portal_source = getattr(lead, 'portal_source', '') or getattr(lead, 'source_id', '') or ''
+            if hasattr(portal_source, 'name'):
+                portal_source = portal_source.name
+        last_wf_msg = conv.message_ids.filtered(
+            lambda m: m.workflow_slug).sorted('occurred_at', reverse=True)[:1]
+
+        waiting_minutes, sla_band = None, None
+        if conv.unread_count > 0:
+            since = self._owa_waiting_since(conv)
+            if since:
+                waiting_minutes = max(0, int((now - since).total_seconds() // 60))
+                sla_band = ('breach' if waiting_minutes >= cfg['sla_breach']
+                            else 'warn' if waiting_minutes >= cfg['sla_warn'] else 'ok')
+
+        return {
+            'id': conv.id,
+            'lead_id': lead.id if lead else None,
+            'lead_name': lead.name if lead else None,
+            'lead_source': portal_source,
+            'phone': conv.phone_number,
+            'last_message': conv.last_message_preview or '',
+            'last_message_at': conv.last_message_at.isoformat() if conv.last_message_at else None,
+            'unread_count': conv.unread_count,
+            'needs_reply': conv.unread_count > 0,
+            'waiting_minutes': waiting_minutes,
+            'sla_band': sla_band,
+            'window_state': self._owa_window_state(conv, now, cfg),
+            'window_expires_at': conv.window_expires_at.isoformat() if conv.window_expires_at else None,
+            'assigned_user_id': conv.assigned_user_id.id if conv.assigned_user_id else None,
+            'assigned_user_name': conv.assigned_user_id.name if conv.assigned_user_id else None,
+            'is_mine': bool(conv.assigned_user_id) and conv.assigned_user_id.id == uid,
+            'can_send': conv._can_send(),
+            'assignment_pending': conv.assignment_pending,
+            'workflow_name': last_wf_msg.workflow_slug if last_wf_msg else '',
+            'interakt_url': conv.interakt_inbox_url,
+        }
+
+    def _owa_inbox_counts(self, filters: dict, now, cfg: dict) -> dict:
+        """Facet counts — each computed over the base domain MINUS its own axis, so
+        every badge says exactly how many rows you'd get if you clicked it."""
+        Conv = self.env['wa.conversation'].sudo()
+        uid = self.env.uid
+
+        # Ownership tabs: vary ownership, honour the active quick filters.
+        own_base = self._owa_inbox_domain(filters, now, cfg, exclude=('ownership', 'rm'))
+        ownership = {
+            'mine':       Conv.search_count(own_base + [('assigned_user_id', '=', uid)]),
+            'unassigned': Conv.search_count(own_base + [('assigned_user_id', '=', False)]),
+            'others':     Conv.search_count(own_base + [('assigned_user_id', '!=', False),
+                                                        ('assigned_user_id', '!=', uid)]),
+            'all':        Conv.search_count(own_base),
+        }
+
+        # Quick chips: count within the current ownership/date/search scope,
+        # independent of which quick filter is currently toggled.
+        quick_base = self._owa_inbox_domain(filters, now, cfg, exclude=('needs_reply', 'window'))
+        needs_reply = Conv.search_count(quick_base + [('unread_count', '>', 0)])
+        closing_soon = Conv.search_count(
+            quick_base + self._owa_inbox_window_domain('closing_soon', now, cfg))
+
+        # RM facet: who owns chats in the current quick-filter scope.
+        # Odoo 19 ``_read_group`` returns a list of ``(*groupby, *aggregates)``
+        # tuples — here ``(user_record, count)``.
+        rm_base = self._owa_inbox_domain(filters, now, cfg, exclude=('ownership', 'rm'))
+        rm_groups = Conv._read_group(
+            rm_base + [('assigned_user_id', '!=', False)],
+            groupby=['assigned_user_id'], aggregates=['__count'])
+        rms = [{
+            'id': rm.id,
+            'name': rm.name,
+            'count': count,
+        } for rm, count in rm_groups]
+        rms.sort(key=lambda r: (-r['count'], r['name']))
+
+        return {
+            'ownership': ownership,
+            'needs_reply': needs_reply,
+            'closing_soon': closing_soon,
+            'rms': rms,
         }
 
     @api.model
@@ -236,6 +426,11 @@ class WaConversation(models.Model):
         """
         conv = self.env['wa.conversation'].sudo().browse(conversation_id)
         if not conv.exists():
+            return {'error': 'Conversation not found'}
+        # RM scoping: a non-manager may only open a conversation they own — plus
+        # one they have an open handover request on (so the requester's wait-state
+        # UI still works). The serializer is sudo, so guard explicitly.
+        if not self._owa_can_view_thread(conv):
             return {'error': 'Conversation not found'}
         now = datetime.utcnow()
         window_open = bool(conv.window_expires_at and conv.window_expires_at > now)

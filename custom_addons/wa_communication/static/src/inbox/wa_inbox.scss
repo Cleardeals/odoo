@@ -15,7 +15,7 @@ $topbar-h: 52px;
     &__topbar {
         display: flex;
         align-items: center;
-        justify-content: space-between;
+        gap: 16px;
         padding: 0 20px;
         height: $topbar-h;
         border-bottom: 1px solid #dee2e6;
@@ -23,7 +23,7 @@ $topbar-h: 52px;
         flex-shrink: 0;
     }
 
-    &__topbar-left { display: flex; align-items: center; gap: 10px; }
+    &__topbar-left { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
 
     &__title {
         font-size: 18px;
@@ -35,25 +35,33 @@ $topbar-h: 52px;
         .fa-whatsapp { color: #25d366; font-size: 20px; }
     }
 
-    &__date-tabs {
-        display: flex;
-        gap: 0;
-        border: 1px solid #dee2e6;
-        border-radius: 6px;
-        overflow: hidden;
+    &__search--top {
+        flex: 1;
+        max-width: 420px;
+        margin-bottom: 0;
     }
 
-    &__date-tab {
-        border: none;
+    &__topbar-actions {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-left: auto;
+        flex-shrink: 0;
+    }
+
+    &__icon-btn {
+        border: 1px solid #dee2e6;
         background: #fff;
-        padding: 5px 12px;
+        border-radius: 6px;
+        padding: 5px 10px;
         font-size: 12px;
         color: #495057;
         cursor: pointer;
-        border-right: 1px solid #dee2e6;
-        &:last-child { border-right: none; }
-        &:hover { background: #f5f5f5; }
-        &--active { background: #7c3aed; color: #fff; font-weight: 600; }
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        &:hover:not(:disabled) { background: #f5f5f5; border-color: #7c3aed; color: #7c3aed; }
+        &:disabled { opacity: 0.5; cursor: default; }
     }
 
     // ── Two-pane body ──────────────────────────────────────────────────────────
@@ -80,6 +88,7 @@ $topbar-h: 52px;
         padding: 10px 12px;
         border-bottom: 1px solid #f0f0f0;
         flex-shrink: 0;
+        position: relative;   // anchors the Filters popover
     }
 
     &__search {
@@ -194,11 +203,144 @@ $topbar-h: 52px;
     }
     &__rm-pill-count { font-size: 10px; opacity: 0.7; }
 
+    // Quick-filter chips (Needs reply / Closing soon / Filters)
+    &__chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-bottom: 8px;
+    }
+
+    &__chip {
+        border: 1px solid #dee2e6;
+        background: #fff;
+        border-radius: 14px;
+        padding: 3px 10px;
+        font-size: 12px;
+        font-weight: 600;
+        color: #495057;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        position: relative;
+        .fa { font-size: 11px; }
+        &:hover { border-color: #7c3aed; color: #7c3aed; }
+        &--active { background: #ede7f6; border-color: #7c3aed; color: #5b21b6; }
+        &--warn.wa-inbox__chip--active {
+            background: #fff4e5; border-color: #f59e0b; color: #b45309;
+        }
+        &--more { margin-left: auto; }
+    }
+
+    &__chip-count {
+        font-size: 10px;
+        background: rgba(0, 0, 0, 0.06);
+        border-radius: 8px;
+        padding: 0 5px;
+        min-width: 16px;
+        text-align: center;
+        font-variant-numeric: tabular-nums;
+    }
+    &__chip--active &__chip-count { background: rgba(124, 58, 237, 0.16); color: #5b21b6; }
+
+    &__chip-dot {
+        width: 6px; height: 6px;
+        border-radius: 50%;
+        background: #7c3aed;
+    }
+
+    // Filters popover
+    &__filters-pop {
+        position: absolute;
+        top: 100%;
+        right: 12px;
+        z-index: 30;
+        margin-top: -2px;
+        width: 280px;
+        background: #fff;
+        border: 1px solid #dee2e6;
+        border-radius: 10px;
+        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.16);
+        padding: 12px;
+    }
+
+    &__filters-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 10px;
+        &--col { flex-direction: column; align-items: stretch; }
+    }
+
+    &__filters-label {
+        font-size: 12px;
+        font-weight: 600;
+        color: #6c757d;
+        width: 80px;
+        flex-shrink: 0;
+        margin-bottom: 0;
+    }
+
+    &__filters-select {
+        flex: 1;
+        border: 1px solid #d5d5dd;
+        border-radius: 6px;
+        padding: 5px 8px;
+        font-size: 12px;
+        outline: none;
+        &:focus { border-color: #7c3aed; }
+    }
+
+    &__filters-foot {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border-top: 1px solid #f0f0f0;
+        padding-top: 10px;
+        margin-top: 2px;
+    }
+
+    &__filters-reset {
+        border: none;
+        background: none;
+        color: #6c757d;
+        font-size: 12px;
+        cursor: pointer;
+        &:hover { color: #e74c3c; }
+    }
+
     &__list {
         flex: 1;
         overflow-y: auto;
         min-height: 0;
     }
+
+    &__load-more {
+        display: block;
+        width: calc(100% - 24px);
+        margin: 8px 12px 12px;
+        padding: 8px;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        background: #fff;
+        font-size: 12px;
+        font-weight: 600;
+        color: #7c3aed;
+        cursor: pointer;
+        &:hover:not(:disabled) { background: #f6f3ff; }
+        &:disabled { opacity: 0.6; cursor: default; }
+    }
+
+    // Empty-state enrichments (icon + title + sub)
+    &__empty {
+        flex-direction: column;
+        gap: 4px;
+    }
+    &__empty-icon { font-size: 38px; color: #cdd3da; margin-bottom: 8px; }
+    &__empty-icon--ok { color: #34d399; }
+    &__empty-title { font-size: 14px; font-weight: 700; color: #6c757d; }
+    &__empty-sub { font-size: 12px; color: #9aa5b1; }
 
     // ════ Pane 2: chat ════
     &__chat {

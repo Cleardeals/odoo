@@ -265,12 +265,12 @@ class TestAssignment(TransactionCase):
             self.conv.id)['conversation']['incoming_requests']
         self.assertEqual(b_inc, [])
 
-        # A bystander RM sees nothing actionable.
+        # A bystander RM (not the owner, no open request) can't open the chat at
+        # all under strict RM scoping — the thread is access-denied for them.
         other = new_test_user(self.env, login=f'asg_by_{int(time.time())}',
                               groups='base.group_user')
-        o_inc = self.Conv.with_user(other).get_thread(
-            self.conv.id)['conversation']['incoming_requests']
-        self.assertEqual(o_inc, [])
+        self.assertEqual(self.Conv.with_user(other).get_thread(self.conv.id),
+                         {'error': 'Conversation not found'})
 
     def test_unassigned_self_claim(self):
         conv = self.Conv.create({'phone_number': '919800000002'})

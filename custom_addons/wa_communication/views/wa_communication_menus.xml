@@ -1,35 +1,40 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
 
-    <!-- Top-level WhatsApp menu -->
+    <!-- Top-level WhatsApp menu — visible to every WhatsApp user (RM + Manager) -->
     <menuitem id="menu_wa_communication_root"
               name="WhatsApp"
+              groups="group_wa_rm"
               sequence="90"/>
 
-    <!-- Dashboard -->
+    <!-- Dashboard — managers only -->
     <menuitem id="menu_wa_dashboard"
               name="Dashboard"
               parent="menu_wa_communication_root"
               action="action_wa_dashboard"
+              groups="group_wa_manager"
               sequence="5"/>
 
-    <!-- Inbox -->
+    <!-- Inbox — RMs and managers -->
     <menuitem id="menu_wa_inbox"
               name="Inbox"
               parent="menu_wa_communication_root"
               action="action_wa_inbox"
+              groups="group_wa_rm"
               sequence="7"/>
 
-    <!-- Messaging sub-menu -->
+    <!-- Messaging sub-menu — managers only -->
     <menuitem id="menu_wa_communication_messaging"
               name="Messaging"
               parent="menu_wa_communication_root"
+              groups="group_wa_manager"
               sequence="10"/>
 
     <menuitem id="menu_wa_message_log"
               name="Message Log"
               parent="menu_wa_communication_messaging"
               action="action_wa_message_log"
+              groups="group_wa_manager"
               sequence="10"/>
 
 </odoo>

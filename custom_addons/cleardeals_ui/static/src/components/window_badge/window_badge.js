@@ -7,7 +7,7 @@ import { parseServerDateTime } from "../../utils/datetime";
  * CdWindowBadge — shows the 24h WhatsApp free-text window state.
  *
  * Props:
- *   state          {String}  "open" | "closed"
+ *   state          {String}  "open" | "closing_soon" | "closed"
  *   windowExpiresAt {String} ISO-8601 UTC timestamp (optional — shows countdown when open)
  */
 export class CdWindowBadge extends Component {
@@ -18,8 +18,9 @@ export class CdWindowBadge extends Component {
         windowExpiresAt: { type: String, optional: true },
     };
 
+    /** "closing_soon" is still an open window — only "closed" is locked. */
     get isOpen() {
-        return this.props.state === "open";
+        return this.props.state !== "closed";
     }
 
     get label() {
