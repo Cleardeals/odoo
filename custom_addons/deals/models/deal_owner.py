@@ -17,4 +17,4 @@ class DealOwner(models.Model):
     phone = fields.Char(string="Phone", required=True, tracking=True)
     email = fields.Char(string="Email")
     occupation = fields.Char(string="Occupation")
-    is_builder = fields.Boolean(string="Is Builder?", default=False, tracking=True)
+    is_builder = fields.Boolean(string="Builder", default=False, tracking=True)
