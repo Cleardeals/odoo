@@ -11,7 +11,7 @@
                     <field name="phone"/>
                     <field name="email"/>
                     <field name="occupation"/>
-                    <field name="is_builder"/>
+                    <field name="is_builder" widget="boolean_toggle"/>
                 </list>
             </field>
         </record>
