@@ -27,5 +27,4 @@ class DealPackage(models.Model):
     def _check_amount_positive(self):
         for record in self:
             if record.amount < 0:
-                msg = "Amount cannot be negative."
-                raise ValidationError(msg)
+                raise ValidationError("Amount cannot be negative")
