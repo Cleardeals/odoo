@@ -18,7 +18,9 @@ class DealOffer(models.Model):
         default="percentage",
     )
     waive_off_value = fields.Float(
-        string="Waive Off Value", required=True, tracking=True,
+        string="Waive Off Value",
+        required=True,
+        tracking=True,
     )
     is_active = fields.Boolean(string="Active", default=True, index=True, tracking=True)
 
@@ -30,15 +32,13 @@ class DealOffer(models.Model):
             if record.waive_off_type == "percentage" and not (
                 0 < record.waive_off_value <= 100
             ):
-                msg = "Percentage value must be greater than 0 and less than or equal to 100"
                 raise ValidationError(
-                    msg,
+                    "Percentage value must be greater than 0 and less than or equal to 100",
                 )
 
             if record.waive_off_type == "fixed" and record.waive_off_value <= 0:
-                msg = "Fixed amount value must be greater than 0"
                 raise ValidationError(
-                    msg,
+                    "Fixed amount value must be greater than 0",
                 )
 
     # Helper method to calculate the reduced amount based on the waive off type and value
