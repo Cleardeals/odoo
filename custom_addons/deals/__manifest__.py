@@ -16,4 +16,5 @@
         # 3. Menu Views
         "views/deal_menu.xml",
     ],
+    "license": "LGPL-3",
 }
