@@ -16,21 +16,26 @@ class DealCommonTestCase(TransactionCase):
         super().setUpClass()
         cls.timestamp = str(int(time.time()))
 
-        cls.sales_manager = cls.env["res.users"].create({
-            "name": "Sales Manager",
-            "login": f"sales_mgr_{cls.timestamp}",
-            "email": f"sales_mgr_{cls.timestamp}@test.com",
+        cls.deal_manager = cls.env["res.users"].create({
+            "name": "Deal Manager",
+            "login": f"deal_mgr_{cls.timestamp}",
+            "email": f"deal_mgr_{cls.timestamp}@test.com",
+        })
+
+        cls.data_entry_operator = cls.env["res.users"].create({
+            "name": "Data Entry Operator",
+            "login": f"deo_{cls.timestamp}",
+            "email": f"deo_{cls.timestamp}@test.com",
         })
 
     # ------------------------------------------------------
-    # 1. HELPER FOR OFFER CREATION WITH AUTO-RESOLVED DEPENDENCIES
+    # 1. HELPER FOR OFFER
     # ------------------------------------------------------
 
     def create_offer(self, **kwargs):
         """
         Creates an Offer. Automatically matches fields to the real deal.offer model constraints.
         """
-        # Unique suffix ensures no name collisions
         unique_suffix = f"{int(time.time() * 1000)}_{random.randint(100, 999)}"
 
         values = {
@@ -41,7 +46,6 @@ class DealCommonTestCase(TransactionCase):
         }
 
         values.update(kwargs)
-
         return self.env["deal.offer"].create(values)
 
     # ------------------------------------------------------
@@ -57,3 +61,19 @@ class DealCommonTestCase(TransactionCase):
         }
         values.update(kwargs)
         return self.env["deal.package"].create(values)
+
+    # ------------------------------------------------------
+    # 3. HELPER FOR OWNER
+    # ------------------------------------------------------
+
+    def create_owner(self, **kwargs):
+        unique_id = f"{random.randint(1000, 9999)}"
+        values = {
+            "name": f"Owner {unique_id}",
+            "phone": f"555-010{unique_id[-4:]}",
+            "email": f"owner{unique_id}@test.com",
+            "occupation": "Engineer",
+            "is_builder": False,
+        }
+        values.update(kwargs)
+        return self.env["deal.owner"].create(values)
