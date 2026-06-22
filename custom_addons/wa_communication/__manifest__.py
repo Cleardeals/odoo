@@ -1,6 +1,6 @@
 {
     'name': 'WhatsApp Communication',
-    'version': '1.2.1',
+    'version': '1.2.2',
     'summary': 'WA messaging layer: push receiver, conversation threads, outbound publishing.',
     'description': """
 WhatsApp ↔ Odoo communication layer built on GCP Pub/Sub transport.
@@ -64,6 +64,10 @@ Client action at WhatsApp → Dashboard providing:
             'wa_communication/static/src/**/*.js',
             'wa_communication/static/src/**/*.xml',
             'wa_communication/static/src/**/*.scss',
+        ],
+        # Hoot (OWL) unit tests — run in a browser at /odoo/web/tests.
+        'web.assets_unit_tests': [
+            'wa_communication/static/tests/**/*.test.js',
         ],
     },
     'external_dependencies': {

@@ -324,3 +324,223 @@ class TestThreadSerializers(WaTransactionCase):
         other = self.make_user()
         theirs = self.make_conversation(assigned_user_id=other.id)
         self.assertIn('conversation', self.Conv.with_user(mgr).get_thread(theirs.id))
+
+    def test_get_thread_rm_with_open_request_can_view(self):
+        """A non-owner RM with an OPEN handover request may still open the thread
+        (so their 'waiting for approval' state renders)."""
+        rm = self.make_user()
+        other = self.make_user()
+        conv = self.make_conversation(assigned_user_id=other.id)
+        self.env['wa.reassignment.request'].sudo().create({
+            'conversation_id': conv.id, 'requester_id': rm.id, 'state': 'pending'})
+        self.assertIn('conversation', self.Conv.with_user(rm).get_thread(conv.id))
+
+    def test_get_thread_rm_with_resolved_request_blocked(self):
+        """A resolved (declined) request does NOT grant viewing access."""
+        rm = self.make_user()
+        other = self.make_user()
+        conv = self.make_conversation(assigned_user_id=other.id)
+        self.env['wa.reassignment.request'].sudo().create({
+            'conversation_id': conv.id, 'requester_id': rm.id, 'state': 'declined'})
+        self.assertEqual(self.Conv.with_user(rm).get_thread(conv.id),
+                         {'error': 'Conversation not found'})
+
+    # ── get_inbox: date-range filters ─────────────────────────────────────────
+
+    def _ids_for(self, filters):
+        return {r['id'] for r in self.Conv.get_inbox(dict(ownership='all', **filters))['rows']}
+
+    def test_inbox_date_range_today_yesterday_last7(self):
+        now = datetime.utcnow()
+        midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        today = self.make_conversation()
+        today.sudo().write({'last_message_at': now})
+        yest = self.make_conversation()
+        yest.sudo().write({'last_message_at': midnight - timedelta(hours=2)})
+        old = self.make_conversation()
+        old.sudo().write({'last_message_at': now - timedelta(days=40)})
+
+        t = self._ids_for({'date_range': 'today'})
+        self.assertIn(today.id, t)
+        self.assertNotIn(yest.id, t)
+        self.assertNotIn(old.id, t)
+
+        y = self._ids_for({'date_range': 'yesterday'})
+        self.assertIn(yest.id, y)
+        self.assertNotIn(today.id, y)
+        self.assertNotIn(old.id, y)
+
+        seven = self._ids_for({'date_range': 'last_7d'})
+        self.assertIn(today.id, seven)
+        self.assertIn(yest.id, seven)
+        self.assertNotIn(old.id, seven)
+
+    def test_inbox_date_range_this_month(self):
+        now = datetime.utcnow()
+        recent = self.make_conversation()
+        recent.sudo().write({'last_message_at': now})
+        old = self.make_conversation()
+        old.sudo().write({'last_message_at': now - timedelta(days=40)})
+        month = self._ids_for({'date_range': 'this_month'})
+        self.assertIn(recent.id, month)
+        self.assertNotIn(old.id, month)
+
+    def test_inbox_date_custom_range(self):
+        now = datetime.utcnow()
+        inside = self.make_conversation()
+        inside.sudo().write({'last_message_at': now - timedelta(days=3)})
+        outside = self.make_conversation()
+        outside.sudo().write({'last_message_at': now - timedelta(days=10)})
+        ids = self._ids_for({'date_range': 'custom',
+                             'date_from': now - timedelta(days=5),
+                             'date_to': now})
+        self.assertIn(inside.id, ids)
+        self.assertNotIn(outside.id, ids)
+
+    # ── get_inbox: SLA bands + waiting clock ──────────────────────────────────
+
+    def test_inbox_sla_bands_ok_and_warn(self):
+        now = datetime.utcnow()
+        ok = self.make_conversation()
+        ok.sudo().write({'unread_count': 1, 'last_message_at': now})
+        self.make_message(ok, occurred_at=now - timedelta(minutes=20))
+        warn = self.make_conversation()
+        warn.sudo().write({'unread_count': 1, 'last_message_at': now})
+        self.make_message(warn, occurred_at=now - timedelta(minutes=120))
+        rows = {r['id']: r for r in self.Conv.get_inbox({'ownership': 'all'})['rows']}
+        self.assertEqual(rows[ok.id]['sla_band'], 'ok')          # <60m
+        self.assertEqual(rows[warn.id]['sla_band'], 'warn')      # 60–240m
+
+    def test_inbox_waiting_none_when_already_answered(self):
+        """unread_count can lag reality — if our last reply is newer than the last
+        inbound, nothing is awaiting a reply and waiting_minutes is None."""
+        now = datetime.utcnow()
+        conv = self.make_conversation()
+        conv.sudo().write({'unread_count': 1, 'last_message_at': now})
+        self.make_message(conv, direction='inbound', occurred_at=now - timedelta(hours=2))
+        self.make_message(conv, direction='outbound', initiator='rm',
+                          kind='freetext', occurred_at=now - timedelta(hours=1))
+        row = next(r for r in self.Conv.get_inbox({'ownership': 'all'})['rows']
+                   if r['id'] == conv.id)
+        self.assertIsNone(row['waiting_minutes'])
+        self.assertIsNone(row['sla_band'])
+
+    def test_inbox_waiting_uses_oldest_unanswered_inbound(self):
+        now = datetime.utcnow()
+        conv = self.make_conversation()
+        conv.sudo().write({'unread_count': 2, 'last_message_at': now})
+        self.make_message(conv, direction='outbound', initiator='rm',
+                          kind='freetext', occurred_at=now - timedelta(hours=5))
+        self.make_message(conv, direction='inbound', occurred_at=now - timedelta(hours=3))
+        self.make_message(conv, direction='inbound', occurred_at=now - timedelta(hours=1))
+        row = next(r for r in self.Conv.get_inbox({'ownership': 'all'})['rows']
+                   if r['id'] == conv.id)
+        # Waiting since the FIRST unanswered inbound (~180m), not the latest (~60m).
+        self.assertGreaterEqual(row['waiting_minutes'], 175)
+        self.assertLess(row['waiting_minutes'], 200)
+        self.assertEqual(row['sla_band'], 'warn')
+
+    def test_inbox_waiting_ignores_system_messages(self):
+        """A system event is not a reply — it must not stop the waiting clock."""
+        now = datetime.utcnow()
+        conv = self.make_conversation()
+        conv.sudo().write({'unread_count': 1, 'last_message_at': now})
+        self.make_message(conv, direction='outbound', initiator='rm',
+                          kind='freetext', occurred_at=now - timedelta(hours=3))
+        self.make_message(conv, direction='inbound', occurred_at=now - timedelta(hours=2))
+        self.make_message(conv, direction='outbound', initiator='system',
+                          kind='system', occurred_at=now - timedelta(hours=1))
+        row = next(r for r in self.Conv.get_inbox({'ownership': 'all'})['rows']
+                   if r['id'] == conv.id)
+        self.assertGreaterEqual(row['waiting_minutes'], 115)    # still ~120m
+        self.assertEqual(row['sla_band'], 'warn')
+
+    # ── get_inbox: sort variants ──────────────────────────────────────────────
+
+    def test_inbox_sort_unread_first(self):
+        now = datetime.utcnow()
+        many = self.make_conversation()
+        many.sudo().write({'unread_count': 5, 'last_message_at': now - timedelta(hours=1)})
+        few = self.make_conversation()
+        few.sudo().write({'unread_count': 1, 'last_message_at': now})
+        rows = self.Conv.get_inbox({'ownership': 'all', 'sort': 'unread'})['rows']
+        order = [r['id'] for r in rows if r['id'] in (many.id, few.id)]
+        self.assertEqual(order, [many.id, few.id])   # higher unread first
+
+    # ── get_inbox: facet-count behaviour ──────────────────────────────────────
+
+    def test_inbox_counts_rms_facet(self):
+        a = self.make_user()
+        b = self.make_user()
+        for _ in range(2):
+            self.make_conversation(assigned_user_id=a.id).sudo().write(
+                {'last_message_at': datetime.utcnow()})
+        self.make_conversation(assigned_user_id=b.id).sudo().write(
+            {'last_message_at': datetime.utcnow()})
+        self.make_conversation(assigned_user_id=False).sudo().write(
+            {'last_message_at': datetime.utcnow()})
+        rms = self.Conv.get_inbox({'ownership': 'all'})['counts']['rms']
+        by_id = {r['id']: r for r in rms}
+        self.assertEqual(by_id[a.id]['count'], 2)
+        self.assertEqual(by_id[b.id]['count'], 1)
+        self.assertEqual(by_id[a.id]['name'], a.name)
+        order = [r['id'] for r in rms if r['id'] in (a.id, b.id)]
+        self.assertEqual(order, [a.id, b.id])        # sorted by count desc
+
+    def test_inbox_counts_closing_soon_consistent(self):
+        now = datetime.utcnow()
+        soon = self.make_conversation()
+        soon.sudo().write({'window_expires_at': now + timedelta(hours=2),
+                           'last_message_at': now})
+        self.make_conversation().sudo().write(
+            {'window_expires_at': now + timedelta(hours=10), 'last_message_at': now})
+        data = self.Conv.get_inbox({'ownership': 'all'})
+        soon_total = self.Conv.get_inbox(
+            {'ownership': 'all', 'window': 'closing_soon'})['total']
+        self.assertEqual(data['counts']['closing_soon'], soon_total)
+        self.assertGreaterEqual(data['counts']['closing_soon'], 1)
+
+    def test_inbox_counts_respect_active_filters(self):
+        """Facet counts honour the current date + needs_reply scope (the exclude
+        logic) — clicking a facet yields exactly its count."""
+        now = datetime.utcnow()
+        nr_today = self.make_conversation()
+        nr_today.sudo().write({'unread_count': 1, 'last_message_at': now})
+        answered_today = self.make_conversation()
+        answered_today.sudo().write({'unread_count': 0, 'last_message_at': now})
+        nr_old = self.make_conversation()
+        nr_old.sudo().write({'unread_count': 1, 'last_message_at': now - timedelta(days=40)})
+
+        data = self.Conv.get_inbox(
+            {'ownership': 'all', 'date_range': 'today', 'needs_reply': True})
+        self.assertEqual(data['counts']['needs_reply'], data['total'])
+        self.assertEqual(data['counts']['ownership']['all'], data['total'])
+        ids = {r['id'] for r in data['rows']}
+        self.assertIn(nr_today.id, ids)
+        self.assertNotIn(answered_today.id, ids)     # excluded by needs_reply
+        self.assertNotIn(nr_old.id, ids)             # excluded by today
+
+    def test_inbox_counts_scoped_for_rm(self):
+        """An RM's facet counts are restricted to their own chats, like the list."""
+        rm = self.make_user()
+        other = self.make_user()
+        self.make_conversation(assigned_user_id=rm.id).sudo().write(
+            {'unread_count': 1, 'last_message_at': datetime.utcnow()})
+        for _ in range(3):
+            self.make_conversation(assigned_user_id=other.id).sudo().write(
+                {'unread_count': 1, 'last_message_at': datetime.utcnow()})
+        data = self.Conv.with_user(rm).get_inbox(
+            {'ownership': 'all', 'needs_reply': True})
+        self.assertEqual(data['total'], 1)
+        self.assertEqual(data['counts']['needs_reply'], 1)
+        self.assertEqual(data['counts']['ownership']['all'], 1)
+        self.assertFalse([r for r in data['counts']['rms'] if r['id'] == other.id])
+
+    # ── get_inbox: search by lead name ────────────────────────────────────────
+
+    def test_inbox_search_matches_lead_name(self):
+        lead = self.make_lead(name='Zenobia Quicktest', phone='9123400077')
+        conv = self.make_conversation(lead_id=lead.id)
+        conv.sudo().write({'last_message_at': datetime.utcnow()})
+        ids = self._ids_for({'search': 'Zenobia'})
+        self.assertIn(conv.id, ids)

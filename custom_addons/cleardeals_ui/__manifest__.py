@@ -1,6 +1,6 @@
 {
     'name': 'Cleardeals UI',
-    'version': '1.0.7',
+    'version': '1.0.8',
     'summary': 'Central OWL component library for all Cleardeals custom addons.',
     'description': """
 Central OWL component library for Cleardeals.
@@ -44,6 +44,10 @@ Adding a new component
             'cleardeals_ui/static/src/**/*.js',
             'cleardeals_ui/static/src/**/*.xml',
             'cleardeals_ui/static/src/**/*.scss',
+        ],
+        # Hoot (OWL) unit tests — run in a browser at /odoo/web/tests.
+        'web.assets_unit_tests': [
+            'cleardeals_ui/static/tests/**/*.test.js',
         ],
     },
     'installable': True,
