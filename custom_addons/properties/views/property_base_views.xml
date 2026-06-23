@@ -227,6 +227,22 @@
                                         </control>
                                     </list>
                                 </field>
+
+                                <separator string="SQUARE YARDS"/>
+                                <field name="portal_listing_squareyards_ids"
+                                       context="{'default_portal_name': 'SquareYards'}"
+                                       add-label="Add a portal ID"
+                                       nolabel="1">
+                                    <list editable="bottom" string="Square Yards Listings" class="table table-sm table-bordered">
+                                        <field name="portal_name" readonly="1" force_save="1" width="20%"/>
+                                        <field name="portal_listing_id" string="Portal Listing ID" width="30%"/>
+                                        <field name="listing_label" width="40%" placeholder="Example: GBH75X0K | B-505, Green Heights | 19684263"/>
+                                        <field name="active" string="Active" width="10%"/>
+                                        <control>
+                                            <create string="Add a portal ID"/>
+                                        </control>
+                                    </list>
+                                </field>
                             </group>
                         </page>
 
