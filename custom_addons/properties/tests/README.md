@@ -2,7 +2,7 @@
 
 > **Module**: `properties` (Odoo 19.0)
 > **Author**: Cleardeals Tech
-> **Total Tests**: 186 across 11 test files and 16 test classes
+> **Total Tests**: 287 across 15 test files and 20 test classes
 > **Framework**: Odoo `TransactionCase` (each test runs in a rolled-back transaction)
 
 ---
@@ -20,10 +20,14 @@
    - [test_property_api_update.py](#45-test_property_api_updatepy--25-tests)
    - [test_property_api_delete.py](#46-test_property_api_deletepy--20-tests)
    - [test_property_base_computed.py](#47-test_property_base_computedpy--42-tests)
-   - [test_property_base_crud.py](#48-test_property_base_crudpy--21-tests)
+   - [test_property_base_crud.py](#48-test_property_base_crudpy--23-tests)
    - [test_property_base_dates.py](#49-test_property_base_datespy--15-tests)
    - [test_property_base_write.py](#410-test_property_base_writepy--12-tests)
    - [test_property_base_cron.py](#411-test_property_base_cronpy--11-tests)
+   - [test_property_base_misc.py](#412-test_property_base_miscpy--6-tests)
+   - [test_property_portal_listing.py](#413-test_property_portal_listingpy--9-tests)
+   - [test_property_security.py](#414-test_property_securitypy--8-tests)
+   - [test_property_sync_helpers.py](#415-test_property_sync_helperspy--18-tests)
 5. [Test Coverage Summary](#5-test-coverage-summary)
 6. [Design Decisions](#6-design-decisions)
 
@@ -35,7 +39,10 @@ The `properties` module test suite provides comprehensive coverage for the `prop
 
 | Layer | Prefix | What it tests |
 |---|---|---|
-| **Model layer** | `test_property_base_*` | ORM operations, computed fields, write overrides, cron jobs |
+| **Model layer** | `test_property_base_*` | ORM operations, computed fields, write overrides, cron jobs, `display_name`, `name_search`, manual sync |
+| **Portal listings** | `test_property_portal_listing` | `property.portal.listing` chatter side-effects, label auto-build, context defaults, cascade delete |
+| **Sync helpers** | `test_property_sync_helpers` | Pure parsing/normalisation functions in `property_sync.py` (phone, bedroom, date, pricing, record mapping) |
+| **Security** | `test_property_security` | RM/Manager record rules and ACLs on `property.base` and `property.portal.listing` |
 | **API layer** | `test_property_api_*` | HTTP controller logic, authentication, serialisation, error handling |
 
 All API tests call controller methods **directly** without spinning up a real HTTP server, using `unittest.mock.patch` to substitute the live `odoo.http.request` object with a controlled `MagicMock`. This gives fast, deterministic tests while exercising the full controller code path.
@@ -571,18 +578,20 @@ Format: `"N BHK"` for N > 0; `""` for N ≤ 0.
 
 ---
 
-### 4.8 `test_property_base_crud.py` — 21 Tests
+### 4.8 `test_property_base_crud.py` — 23 Tests
 
 **Class**: `TestPropertyBaseCRUD`
 **Subject**: Core ORM operations on `property.base`
 
-#### Creation (6 tests)
+#### Creation (8 tests)
 
 | # | Test Name | Description |
 |---|---|---|
 | 01 | `test_01_create_with_minimum_fields` | Record created with only `name` gets a database id |
 | 02 | `test_02_create_with_all_api_sourced_fields` | All API-sourced fields (PROP-2.1) are stored verbatim |
 | 03 | `test_03_create_with_manager_editable_fields` | `property_tag` and relation-based portal listings (PROP-2.3/2.4) are stored correctly |
+| 03b | `test_03b_create_squareyards_portal_listing` | **Square Yards** (5th portal) listing stores correctly and surfaces via the dedicated `portal_listing_squareyards_ids` One2many without leaking into other portals |
+| 03c | `test_03c_squareyards_listing_unique_constraint` | `UNIQUE(portal_name, portal_listing_id)` is enforced for the Square Yards portal just like the existing four |
 | 04 | `test_04_create_assigns_rm_user` | Many2one `rm_user_id` is correctly linked |
 | 05 | `test_05_default_is_active_true` | Default value for `is_active` is `True` |
 | 06 | `test_06_default_inventory_migrated_false` | Default value for `inventory_migrated` is `False` |
@@ -775,6 +784,115 @@ The cron marks properties inactive when their `service_expiry_date < today`. Tes
 
 ---
 
+### 4.12 `test_property_base_misc.py` — 6 Tests
+
+**Class**: `TestPropertyBaseMisc`
+**Subject**: `property.base` behaviours with no prior direct coverage — `display_name`, the `name_search` override, and the `action_manual_sync` button.
+
+| # | Test Name | Description |
+|---|---|---|
+| 01 | `test_display_name_includes_tag` | `display_name` renders as `"<name> [<property_tag>]"` when a tag is present |
+| 02 | `test_display_name_without_tag` | `display_name` is just the name when `property_tag` is falsy |
+| 03 | `test_name_search_for_lead_matches_location` | With the `search_all_properties_for_lead` context flag, a property is found by its `location` (record rule bypassed via sudo) |
+| 04 | `test_name_search_for_lead_matches_tag` | Same context flag finds a property by its `property_tag` |
+| 05 | `test_manual_sync_success_notification` | `action_manual_sync` returns a non-sticky `success` `display_notification` when the underlying cron succeeds (cron mocked) |
+| 06 | `test_manual_sync_failure_notification` | `action_manual_sync` returns a sticky `danger` notification when the cron raises |
+
+> **Mocking note**: the sync wrapper is tested by patching `_cron_sync_from_api` on the **registry class** (`type(self.env["property.base"])`), not the Python class, because Odoo resolves methods through its model registry.
+
+---
+
+### 4.13 `test_property_portal_listing.py` — 9 Tests
+
+**Class**: `TestPropertyPortalListing`
+**Subject**: Side-effects and helpers on `property.portal.listing` — chatter audit notes, label auto-build, context defaults, and cascade delete.
+
+| # | Test Name | Description |
+|---|---|---|
+| 01 | `test_01_create_autobuilds_label_from_prop_portal_listing` | Omitted `listing_label` is auto-built as `"<prop_id> | <portal> | <listing_id>"` |
+| 02 | `test_02_create_keeps_supplied_label` | An explicitly supplied `listing_label` is not overwritten |
+| 03 | `test_03_build_default_label_skips_missing_parts` | `_build_default_listing_label` joins only the non-empty components |
+| 04 | `test_04_default_portal_name_from_context` | `portal_name` falls back to the `default_portal_name` context key (e.g. `SquareYards`) |
+| 05 | `test_05_create_posts_added_chatter` | Creating a listing posts a "Portal listing added" note on the property |
+| 06 | `test_06_write_field_change_posts_updated_chatter` | Editing the listing ID posts a "Portal listing updated" note showing `old → new` |
+| 07 | `test_07_reassignment_posts_moved_out_and_in` | Moving a listing to another property posts "moved out" on the old and "moved in" on the new property |
+| 08 | `test_08_unlink_posts_removed_chatter` | Deleting a listing posts a "Portal listing removed" note before deletion |
+| 09 | `test_09_deleting_property_cascades_listings` | `ondelete="cascade"` removes a property's portal listings when the property is deleted |
+
+---
+
+### 4.14 `test_property_security.py` — 8 Tests
+
+**Class**: `TestPropertySecurity`
+**Subject**: Record-rule and ACL enforcement on `property.base` and `property.portal.listing`.
+
+**Fixtures** (created in `setUpClass`): an RM-only user (`group_property_rm`), a Manager user (`group_property_manager`), one property owned by the RM, one owned by another RM.
+
+| # | Test Name | Description |
+|---|---|---|
+| 01 | `test_01_rm_sees_only_own_properties` | A `search` as the RM returns only properties where `rm_user_id` is the RM |
+| 02 | `test_02_rm_cannot_read_other_property` | Reading another RM's property raises `AccessError` |
+| 03 | `test_03_rm_cannot_write_even_own_property` | RMs are read-only: writing even their own property raises `AccessError` |
+| 04 | `test_04_rm_cannot_create_property` | RMs cannot create properties (ACL `create=0`) |
+| 05 | `test_05_rm_cannot_unlink_property` | RMs cannot delete properties (ACL `unlink=0`) |
+| 06 | `test_06_manager_sees_all_properties` | A Manager sees both RMs' properties (manager rule ORs to `1=1`) |
+| 07 | `test_07_manager_can_write_any_property` | A Manager can write a property they do not own |
+| 08 | `test_08_rm_sees_only_own_property_listings` | The portal-listing record rule scopes RMs to listings on their own properties (via `property_base_id.rm_user_id`) |
+
+> **Odoo 19 note**: user-group assignment uses the renamed `group_ids` field on `res.users` (formerly `groups_id`).
+
+---
+
+### 4.15 `test_property_sync_helpers.py` — 18 Tests
+
+**Class**: `TestPropertySyncHelpers`
+**Subject**: The pure parsing/normalisation helpers in `property_sync.py`, tested in isolation (no DB state) so a parsing regression is caught independently of the sync cron.
+
+#### `_normalize_owner_phone` (6 tests)
+
+| # | Test Name | Description |
+|---|---|---|
+| 01 | `test_phone_10_digit_passthrough` | A clean 10-digit number passes through unchanged |
+| 02 | `test_phone_strips_formatting` | `+91 98765-43210` → `9876543210` |
+| 03 | `test_phone_11_digit_leading_zero` | `0XXXXXXXXXX` drops the leading `0` |
+| 04 | `test_phone_12_digit_country_code` | `91XXXXXXXXXX` drops the `91` country code |
+| 05 | `test_phone_empty_returns_empty` | `""` / `None` → `""` |
+| 06 | `test_phone_unrecognised_preserved_raw` | An unexpected length is returned as-is so data is never lost |
+
+#### `_parse_bedroom_count` (4 tests)
+
+| # | Test Name | Description |
+|---|---|---|
+| 07 | `test_bedroom_with_suffix` | `"3 BHK"` → `3` |
+| 08 | `test_bedroom_no_space` | `"2BHK"` → `2` |
+| 09 | `test_bedroom_none_and_empty` | `None` / `""` → `0` |
+| 10 | `test_bedroom_non_numeric` | `"Studio"` → `0` |
+
+#### `_parse_reg_date` (3 tests)
+
+| # | Test Name | Description |
+|---|---|---|
+| 11 | `test_reg_date_iso_datetime` | `"2026-03-02T00:00:00.000Z"` → `"2026-03-02"` |
+| 12 | `test_reg_date_already_clean` | `"2026-03-02"` passes through unchanged |
+| 13 | `test_reg_date_empty_returns_false` | `None` / `""` → `False` (field left empty) |
+
+#### `_parse_pricing` / `_parse_pricing_unit` (3 tests)
+
+| # | Test Name | Description |
+|---|---|---|
+| 14 | `test_pricing_for_sale_uses_sell_block` | `for_sell=True` reads `sell_pricing.offer_price` / `offer_price_unit` |
+| 15 | `test_pricing_for_rent_uses_rent_block` | `for_sell=False` reads `rent_pricing.rent_price` / `rent_price_unit` |
+| 16 | `test_pricing_missing_blocks_return_zero` | Missing pricing blocks → `0.0` / `""` |
+
+#### `_map_api_record` (2 tests)
+
+| # | Test Name | Description |
+|---|---|---|
+| 17 | `test_map_api_record_full_item` | A full API item maps to the correct vals dict; verifies the mapper **never emits manager-editable fields** (`property_tag`, `service_expiry_date`, portal IDs, …) |
+| 18 | `test_map_api_record_missing_nested_objects` | Absent nested `state` / `city` / `details` / pricing objects fall back to empty strings / `0` |
+
+---
+
 ## 5. Test Coverage Summary
 
 | File | Class(es) | Tests | Areas Covered |
@@ -786,11 +904,15 @@ The cron marks properties inactive when their `service_expiry_date < today`. Tes
 | `test_property_api_update.py` | `TestPropertyApiUpdate` | 25 | Partial updates, auto-sync `is_active`, identifier routing |
 | `test_property_api_delete.py` | `TestPropertyApiDelete` | 20 | Hard delete, idempotency, response body |
 | `test_property_base_computed.py` | `TestBuildPropertyLink`, `TestComputePropertyLink`, `TestComputeBhk`, `TestComputeDisplayFields`, `TestComputeGmapsEmbedHtml` | 42 | All computed fields |
-| `test_property_base_crud.py` | `TestPropertyBaseCRUD` | 21 | ORM CRUD, constraints, search |
+| `test_property_base_crud.py` | `TestPropertyBaseCRUD` | 23 | ORM CRUD, constraints, search, **Square Yards portal** |
 | `test_property_base_dates.py` | `TestPropertyBaseDates` | 15 | Date storage, display formatting (`DD/MM/YYYY`) |
 | `test_property_base_write.py` | `TestPropertyBaseWrite` | 12 | `write()` override, `is_active` auto-sync |
 | `test_property_base_cron.py` | `TestPropertyBaseCron` | 11 | Scheduled action, boundary logic, resilience |
-| **Total** | **16 classes** | **186** | |
+| `test_property_base_misc.py` | `TestPropertyBaseMisc` | 6 | `display_name`, `name_search` override, manual sync action |
+| `test_property_portal_listing.py` | `TestPropertyPortalListing` | 9 | Portal-listing chatter, label build, context default, cascade delete |
+| `test_property_security.py` | `TestPropertySecurity` | 8 | RM/Manager record rules & ACLs |
+| `test_property_sync_helpers.py` | `TestPropertySyncHelpers` | 18 | Pure sync parsing/normalisation helpers |
+| **Total** | **20 classes** | **287** | |
 
 ---
 
@@ -826,3 +948,12 @@ This is tested both at the controller level (integration) and at the `_resolve_i
 
 ### API Key Security
 `validate_api_key()` uses `hmac.compare_digest` for constant-time string comparison, preventing timing-based side-channel attacks. The test suite verifies rejection of keys differing by a single character (`test_07`) as a proxy check for this behaviour.
+
+### Pure-Function Unit Tests for Sync Helpers
+The parsing/normalisation helpers in `property_sync.py` (`_normalize_owner_phone`, `_parse_bedroom_count`, `_parse_reg_date`, `_parse_pricing`, `_map_api_record`) are imported and tested **directly** as plain functions in `test_property_sync_helpers.py`. They were previously only exercised end-to-end via the sync cron; testing them in isolation pins their edge-case behaviour and means a parsing regression is caught immediately, independently of network/cron mocking. `_map_api_record` additionally asserts the mapper never produces manager-editable fields — protecting the invariant that the API cron can never clobber portal IDs or expiry dates.
+
+### Security Testing with Group Fixtures
+`test_property_security.py` creates real users assigned to `group_property_rm` and `group_property_manager` (via the Odoo 19 `group_ids` field) and exercises the record rules and ACLs through `with_user()`. Read scoping is asserted via `search()` (rules filter silently), while write/create/unlink denial is asserted via `assertRaises(AccessError)`. This is the only layer that proves an RM cannot see another RM's data at the ORM level — a correctness-critical guarantee that the rest of the suite (which runs as the superuser) cannot catch.
+
+### Chatter Side-Effect Assertions
+`property.portal.listing` posts audit notes to the parent property's chatter on create/write/unlink. `test_property_portal_listing.py` asserts these by inspecting `property.message_ids.mapped("body")` for the expected note text, ensuring manager-visible history is never silently dropped.
