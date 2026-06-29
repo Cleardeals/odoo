@@ -82,6 +82,9 @@ _PORTAL_NAME_MAP = {
     "magicbricks": "MagicBricks",
     "magicbricks.com": "MagicBricks",
     "olx": "OLX",
+    "squareyards": "SquareYards",
+    "square yards": "SquareYards",
+    "square_yards": "SquareYards",
 }
 
 
@@ -144,7 +147,7 @@ def _sanitise_portal_listings(portal_listings):
     Expected shape:
       [
         {
-          "portal_name": "99acres|Housing.com|MagicBricks|OLX",
+          "portal_name": "99acres|Housing.com|MagicBricks|OLX|SquareYards",
           "portal_listing_id": "...",
           "listing_label": "..." (optional),
           "active": true|false (optional, default true),
@@ -288,7 +291,7 @@ class PropertyApiController(http.Controller):
         prop_id     str     Exact short-code match.
         form_no     str     Exact form number match.
         owner_phone str     Exact owner phone match.
-        portal_name str     Portal source filter (99acres / Housing.com / MagicBricks / OLX).
+        portal_name str     Portal source filter (99acres / Housing.com / MagicBricks / OLX / SquareYards).
         portal_listing_id str Exact portal listing ID via property.portal.listing relation.
         search      str     ilike match against property name.
         """
