@@ -135,6 +135,73 @@ class TestPropertyBaseCRUD(PropertyBaseTestCase):
         self.assertEqual(by_portal["MagicBricks"], "MB-003")
         self.assertEqual(by_portal["OLX"], "OLX-004")
 
+    def test_03b_create_squareyards_portal_listing(self):
+        """Square Yards (5th portal) listings store and surface via the
+        dedicated filtered One2many, without leaking into other portals."""
+        prop = self.make_property(
+            property_tag="SY-PROP",
+            portal_listing_ids=[
+                (
+                    0,
+                    0,
+                    {
+                        "portal_name": "SquareYards",
+                        "portal_listing_id": "SY-123456",
+                        "listing_label": "Square Yards | SY-123456",
+                        "active": True,
+                    },
+                ),
+                (
+                    0,
+                    0,
+                    {
+                        "portal_name": "99acres",
+                        "portal_listing_id": "99AC-900",
+                        "active": True,
+                    },
+                ),
+            ],
+        )
+
+        # Stored against the canonical portal value.
+        sy_listings = prop.portal_listing_ids.filtered(
+            lambda r: r.portal_name == "SquareYards"
+        )
+        self.assertEqual(len(sy_listings), 1)
+        self.assertEqual(sy_listings.portal_listing_id, "SY-123456")
+
+        # Dedicated One2many returns only the Square Yards row.
+        self.assertEqual(len(prop.portal_listing_squareyards_ids), 1)
+        self.assertEqual(
+            prop.portal_listing_squareyards_ids.portal_listing_id, "SY-123456"
+        )
+        # And it does not leak into another portal's filtered field.
+        self.assertFalse(
+            prop.portal_listing_squareyards_ids
+            & prop.portal_listing_99acres_ids
+        )
+
+    def test_03c_squareyards_listing_unique_constraint(self):
+        """UNIQUE(portal_name, portal_listing_id) is enforced for the new
+        portal just like the existing four."""
+        shared_id = f"SY-DUP-{self.suffix}"
+        self.env["property.portal.listing"].create(
+            {
+                "property_base_id": self.make_property().id,
+                "portal_name": "SquareYards",
+                "portal_listing_id": shared_id,
+            }
+        )
+
+        with mute_logger("odoo.sql_db"), self.assertRaises(psycopg2.IntegrityError):
+            self.env["property.portal.listing"].create(
+                {
+                    "property_base_id": self.make_property().id,
+                    "portal_name": "SquareYards",
+                    "portal_listing_id": shared_id,
+                }
+            )
+
     def test_04_create_assigns_rm_user(self):
         """Many2one rm_user_id should be correctly linked."""
         prop = self.make_property(rm_user_id=self.rm_user2.id)

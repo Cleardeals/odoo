@@ -1,6 +1,6 @@
 {
     "name": "Properties",
-    "version": "19.0.1.3.0",
+    "version": "19.0.1.4.0",
     "summary": "Central property inventory synced from the Cleardeals website API.",
     "description": """
         Standalone property module that serves as the single source of truth for
