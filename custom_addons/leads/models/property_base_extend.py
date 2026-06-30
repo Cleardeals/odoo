@@ -15,14 +15,6 @@ _logger = logging.getLogger(__name__)
 # Owner  : Cleardeals Tech
 # ---------------------------------------------------------------------------
 
-# Portal field → portal_name value used in leads.new
-PORTAL_FIELD_MAP = {
-    "magicbricks_id": "MagicBricks",
-    "ninety_nine_acres_id": "99acres",
-    "housing_id": "Housing.com",
-    "olx_id": "OLX",
-}
-
 
 def _relink_and_reassign(lead, property_rec, rm_user, portal_name, portal_id):
     """Link one unlinked lead to ``property_rec`` and reassign it to ``rm_user``,
@@ -63,16 +55,17 @@ def _relink_and_reassign(lead, property_rec, rm_user, portal_name, portal_id):
 
 class PropertyBaseLeadRelink(models.Model):
     """
-    Extends property.base (defined in the 'properties' module) to automatically
-    relink and reassign leads.new records when a portal ID field is updated.
+    Extends property.base (defined in the 'properties' module) to restrict the
+    Properties-module list view to an RM's own records, while still allowing
+    cross-record reads on lead forms.
 
-    Scenario: A lead arrives with a portal_property_id that doesn't match any
-    property yet (property_base_id stays False, lead goes to default RM). Later,
-    someone adds/corrects that portal ID on the property. This write override
-    detects the change and:
-      1. Finds all unlinked leads.new with that portal_name + portal_property_id.
-      2. Links property_base_id to this property.
-      3. Reassigns user_id to the property's RM (if set).
+    Lead relinking/reassignment when a portal ID becomes known is handled
+    exclusively by ``PropertyPortalListingLeadRelink`` below (the canonical
+    property.portal.listing trigger).  The legacy per-portal Char columns on
+    property.base (ninety_nine_acres_id / housing_id / magicbricks_id / olx_id)
+    are no longer part of the matching pipeline, so the old write() override
+    that watched them has been removed — it was redundant with the listing
+    trigger and the columns are invisible in the UI.
 
     Cross-RM read access
     --------------------
@@ -118,51 +111,6 @@ class PropertyBaseLeadRelink(models.Model):
             domain, offset=offset, limit=limit, order=order,
             active_test=active_test, bypass_access=bypass_access,
         )
-
-    def write(self, vals):
-        # Collect which portal fields are being updated and their new values
-        changed_portals = {
-            field: vals[field] for field in PORTAL_FIELD_MAP if vals.get(field)
-        }
-
-        result = super().write(vals)
-
-        if not changed_portals:
-            return result
-
-        for property_rec in self:
-            for field, new_portal_id in changed_portals.items():
-                portal_name = PORTAL_FIELD_MAP[field]
-
-                # Find unlinked leads that match this portal + portal_property_id
-                unlinked_leads = self.env["leads.new"].search(
-                    [
-                        ("portal_name", "=", portal_name),
-                        ("portal_property_id", "=", new_portal_id),
-                        ("property_base_id", "=", False),
-                    ]
-                )
-
-                if not unlinked_leads:
-                    continue
-
-                _logger.info(
-                    "property.base %s: portal field '%s' set to '%s' — "
-                    "relinking %d unlinked lead(s) and reassigning RM.",
-                    property_rec.property_tag or property_rec.id,
-                    field,
-                    new_portal_id,
-                    len(unlinked_leads),
-                )
-
-                rm_user = property_rec.rm_user_id or self.env.ref("base.user_admin")
-
-                for lead in unlinked_leads:
-                    _relink_and_reassign(
-                        lead, property_rec, rm_user, portal_name, new_portal_id
-                    )
-
-        return result
 
 
 def _relink_leads_for_listing(env, property_rec, portal_name, portal_listing_id):

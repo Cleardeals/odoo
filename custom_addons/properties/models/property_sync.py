@@ -43,8 +43,8 @@ PAGE_SIZE = 100
 
 # Fields that the API cron is allowed to write.
 # NEVER include manager-editable fields (service_expiry_date, welcome_call_date,
-# property_tag, portal IDs) here — those are owned by the migration cron and
-# the manager UI only.
+# property_tag) here — those are owned by the migration cron and the manager
+# UI only.
 API_WRITABLE_FIELDS = {
     "uuid",
     "prop_id",
@@ -71,10 +71,6 @@ API_WRITABLE_FIELDS = {
 # The API cron must never touch these.
 MIGRATION_FIELDS = {
     "property_tag",
-    "ninety_nine_acres_id",
-    "housing_id",
-    "magicbricks_id",
-    "olx_id",
     "service_expiry_date",
     "welcome_call_date",
 }
@@ -484,10 +480,6 @@ class PropertyBaseSync(models.Model):
                     "id",
                     "form_no",
                     "property_tag",
-                    "ninety_nine_acres_id",
-                    "housing_id",
-                    "magicbricks_id",
-                    "olx_id",
                     "service_expiry_date",
                     "welcome_call_date",
                     "is_active",
@@ -534,10 +526,6 @@ class PropertyBaseSync(models.Model):
             migration_vals = {"inventory_migrated": True}
             field_map = {
                 "property_tag": "property_tag",
-                "ninety_nine_acres_id": "ninety_nine_acres_id",
-                "housing_id": "housing_id",
-                "magicbricks_id": "magicbricks_id",
-                "olx_id": "olx_id",
                 "service_expiry_date": "service_expiry_date",
                 "welcome_call_date": "welcome_call_date",
                 "is_active": "is_active",
@@ -580,8 +568,7 @@ class PropertyBaseSync(models.Model):
 
         Matching key: form_no  (BQ Form_Number == website API form_no).
 
-        Fills: property_tag, portal IDs (99acres / Housing / Magicbricks / OLX),
-               service_expiry_date, welcome_call_date, is_active.
+        Fills: property_tag, service_expiry_date, welcome_call_date, is_active.
 
         Only writes a field when BQ provides a non-empty value; service_expiry_date
         is only overwritten if property.base does not already have one.
@@ -679,10 +666,6 @@ class PropertyBaseSync(models.Model):
             SELECT
                 Form_Number                                         AS form_no,
                 Tag                                                 AS property_tag,
-                `99acres_ID`                                        AS ninety_nine_acres_id,
-                SPLIT(CAST(Housing_ID    AS STRING), '.')[OFFSET(0)] AS housing_id,
-                SPLIT(CAST(Magicbricks_ID AS STRING), '.')[OFFSET(0)] AS magicbricks_id,
-                SPLIT(CAST(OLX_ID        AS STRING), '.')[OFFSET(0)] AS olx_id,
                 Service_Expiry_Date                                 AS service_expiry_date_raw,
                 COALESCE(
                     SAFE.PARSE_DATE('%d/%m/%Y', Service_Expiry_Date),
@@ -764,14 +747,6 @@ class PropertyBaseSync(models.Model):
 
             if row.property_tag:
                 vals["property_tag"] = row.property_tag
-            if row.ninety_nine_acres_id:
-                vals["ninety_nine_acres_id"] = str(row.ninety_nine_acres_id)
-            if row.housing_id and row.housing_id not in ("None", "nan"):
-                vals["housing_id"] = row.housing_id
-            if row.magicbricks_id and row.magicbricks_id not in ("None", "nan"):
-                vals["magicbricks_id"] = row.magicbricks_id
-            if row.olx_id and row.olx_id not in ("None", "nan"):
-                vals["olx_id"] = row.olx_id
             if welcome_call_date:
                 vals["welcome_call_date"] = welcome_call_date
             # Only overwrite service_expiry_date if not already set on the record
