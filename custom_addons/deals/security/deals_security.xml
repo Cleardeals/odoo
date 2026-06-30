@@ -1,11 +1,11 @@
 <odoo>
-    <!-- Deal Manager -->
-    <record id="group_deal_manager" model="res.groups">
-        <field name="name">Deal Manager</field>
-    </record>
-
-    <!-- Data Entry Operator -->
     <record id="group_data_entry_operator" model="res.groups">
         <field name="name">Data Entry Operator</field>
+        <field name="implied_ids" eval="[(4, ref('base.group_user'))]" />
+    </record>
+
+    <record id="group_deal_manager" model="res.groups">
+        <field name="name">Deal Manager</field>
+        <field name="implied_ids" eval="[(4, ref('deals.group_data_entry_operator'))]" />
     </record>
 </odoo>
