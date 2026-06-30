@@ -24,8 +24,6 @@ class DealOffer(models.Model):
     )
     is_active = fields.Boolean(string="Active", default=True, index=True, tracking=True)
 
-    # Constraints to ensure valid waive off values based on the selected type
-
     @api.constrains("waive_off_type", "waive_off_value")
     def _check_waive_off_value(self):
         for record in self:
@@ -40,8 +38,6 @@ class DealOffer(models.Model):
                 raise ValidationError(
                     "Fixed amount value must be greater than 0",
                 )
-
-    # Helper method to calculate the reduced amount based on the waive off type and value
 
     def apply_waive_off(self, base_amount):
         self.ensure_one()
