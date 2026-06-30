@@ -10,11 +10,6 @@ from .test_deal_common import DealCommonTestCase
 class TestDealOffer(DealCommonTestCase):
     """Tests for deal.offer behavior (offer table)."""
 
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-        cls.offer_model = cls.env["deal.offer"]
-
     def test_01_percentage_applies(self):
         """Percentage waive-off should reduce the base amount correctly."""
         offer = self.create_offer(waive_off_type="percentage", waive_off_value=10.0)
@@ -65,54 +60,81 @@ class TestDealOffer(DealCommonTestCase):
 
     def test_07_zero_percent_rejected(self):
         """Zero percentage should be rejected by constraints."""
-        with self.assertRaisesRegex(ValidationError, "Percentage value must be greater than 0 and less than or equal to 100"):
+        with self.assertRaisesRegex(
+            ValidationError,
+            "Percentage value must be greater than 0 and less than or equal to 100",
+        ):
             self.create_offer(waive_off_type="percentage", waive_off_value=0.0)
 
     def test_08_percentage_above_hundred_rejected(self):
         """Percentage above 100 should be rejected."""
-        with self.assertRaisesRegex(ValidationError, "Percentage value must be greater than 0 and less than or equal to 100"):
+        with self.assertRaisesRegex(
+            ValidationError,
+            "Percentage value must be greater than 0 and less than or equal to 100",
+        ):
             self.create_offer(waive_off_type="percentage", waive_off_value=100.01)
 
     def test_09_negative_percent_rejected(self):
         """Negative percentage should be rejected."""
-        with self.assertRaisesRegex(ValidationError, "Percentage value must be greater than 0 and less than or equal to 100"):
+        with self.assertRaisesRegex(
+            ValidationError,
+            "Percentage value must be greater than 0 and less than or equal to 100",
+        ):
             self.create_offer(waive_off_type="percentage", waive_off_value=-1.0)
 
     def test_10_fixed_amount_zero_rejected(self):
         """Fixed amount equal to zero should be rejected."""
-        with self.assertRaisesRegex(ValidationError, "Fixed amount value must be greater than 0"):
+        with self.assertRaisesRegex(
+            ValidationError, "Fixed amount value must be greater than 0"
+        ):
             self.create_offer(waive_off_type="fixed", waive_off_value=0.0)
 
     def test_11_fixed_amount_negative_rejected(self):
         """Negative fixed amount should be rejected."""
-        with self.assertRaisesRegex(ValidationError, "Fixed amount value must be greater than 0"):
+        with self.assertRaisesRegex(
+            ValidationError, "Fixed amount value must be greater than 0"
+        ):
             self.create_offer(waive_off_type="fixed", waive_off_value=-50.0)
 
     def test_12_write_revalidates_percentage_or_fixed(self):
         """Write() should re-run constraints for both types."""
         offer = self.create_offer(waive_off_type="percentage", waive_off_value=20.0)
 
-        with self.assertRaisesRegex(ValidationError, "Percentage value must be greater than 0 and less than or equal to 100"):
+        with self.assertRaisesRegex(
+            ValidationError,
+            "Percentage value must be greater than 0 and less than or equal to 100",
+        ):
             offer.write({"waive_off_value": -10.0})
 
         offer.write({"waive_off_type": "fixed", "waive_off_value": 100.0})
         result = offer.apply_waive_off(1000.0)
         self.assertAlmostEqual(result, 900.0)
 
-        with self.assertRaisesRegex(ValidationError, "Fixed amount value must be greater than 0"):
+        with self.assertRaisesRegex(
+            ValidationError, "Fixed amount value must be greater than 0"
+        ):
             offer.write({"waive_off_value": 0.0})
 
     def test_13_percentage_write_cases(self):
         """Percentage write matrix (<=0 reject, >100 reject, valid recalc)."""
         offer = self.create_offer(waive_off_type="percentage", waive_off_value=10.0)
 
-        with self.assertRaisesRegex(ValidationError, "Percentage value must be greater than 0 and less than or equal to 100"):
+        with self.assertRaisesRegex(
+            ValidationError,
+            "Percentage value must be greater than 0 and less than or equal to 100",
+        ):
             offer.write({"waive_off_value": -0.01})
 
-        with self.assertRaisesRegex(ValidationError, "Percentage value must be greater than 0 and less than or equal to 100"):
+        with self.assertRaisesRegex(
+            ValidationError,
+            "Percentage value must be greater than 0 and less than or equal to 100",
+        ):
             offer.write({"waive_off_value": 0.0})
 
-        with self.assertRaisesRegex(ValidationError, "Percentage value must be greater than 0 and less than or equal to 100"):
+        with self.assertRaisesRegex(
+            ValidationError,
+            "Percentage value must be greater than 0 and less than or equal to 100",
+        ):
             offer.write({"waive_off_value": 100.01})
 
         offer.write({"waive_off_value": 25.0})
@@ -123,10 +145,14 @@ class TestDealOffer(DealCommonTestCase):
         """Fixed write matrix (negative reject, zero reject, positive recalculate)."""
         offer = self.create_offer(waive_off_type="fixed", waive_off_value=100.0)
 
-        with self.assertRaisesRegex(ValidationError, "Fixed amount value must be greater than 0"):
+        with self.assertRaisesRegex(
+            ValidationError, "Fixed amount value must be greater than 0"
+        ):
             offer.write({"waive_off_value": -1.0})
 
-        with self.assertRaisesRegex(ValidationError, "Fixed amount value must be greater than 0"):
+        with self.assertRaisesRegex(
+            ValidationError, "Fixed amount value must be greater than 0"
+        ):
             offer.write({"waive_off_value": 0.0})
 
         offer.write({"waive_off_value": 250.0})
@@ -149,13 +175,17 @@ class TestDealOffer(DealCommonTestCase):
 
     def test_16_defaults_active_domain_and_tracking(self):
         """Default active, active-domain behavior, and field tracking flags."""
-        active_offer = self.create_offer(waive_off_type="percentage", waive_off_value=10.0)
-        inactive_offer = self.create_offer(waive_off_type="fixed", waive_off_value=100.0)
-        inactive_offer.write({"is_active": False})
+        active_offer = self.create_offer(
+            waive_off_type="percentage", waive_off_value=10.0
+        )
+        inactive_offer = self.create_offer(
+            waive_off_type="fixed", waive_off_value=100.0, is_active=False
+        )
 
         self.assertTrue(active_offer.is_active)
 
-        active_records = self.offer_model.search(
+        offer_model = self.env["deal.offer"]
+        active_records = offer_model.search(
             [
                 ("id", "in", [active_offer.id, inactive_offer.id]),
                 ("is_active", "=", True),
@@ -164,8 +194,7 @@ class TestDealOffer(DealCommonTestCase):
         self.assertIn(active_offer, active_records)
         self.assertNotIn(inactive_offer, active_records)
 
-        # Tracking check across all expected fields.
-        self.assertTrue(bool(self.offer_model._fields["name"].tracking))
-        self.assertTrue(bool(self.offer_model._fields["waive_off_type"].tracking))
-        self.assertTrue(bool(self.offer_model._fields["waive_off_value"].tracking))
-        self.assertTrue(bool(self.offer_model._fields["is_active"].tracking))
+        self.assertTrue(bool(offer_model._fields["name"].tracking))
+        self.assertTrue(bool(offer_model._fields["waive_off_type"].tracking))
+        self.assertTrue(bool(offer_model._fields["waive_off_value"].tracking))
+        self.assertTrue(bool(offer_model._fields["is_active"].tracking))
