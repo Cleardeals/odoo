@@ -1,5 +1,5 @@
 from odoo import api, fields, models
-from odoo.orm.model_classes import ValidationError
+from odoo.exceptions import ValidationError
 
 
 class DealPackage(models.Model):
