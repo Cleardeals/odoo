@@ -9,17 +9,12 @@ from .test_deal_common import DealCommonTestCase
 class TestDealOwner(DealCommonTestCase):
     """Tests for deal.owner behavior (owner table)."""
 
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-        cls.owner_model = cls.env["deal.owner"]
-
     def test_01_create_and_read_owner(self):
         """Create and read the entity of owner table."""
-        owner = self.create_owner(name="Test Owner", phone="1234567890")
+        owner = self.create_owner(name="Test Owner", phone="9876543210")
 
         self.assertEqual(owner.name, "Test Owner")
-        self.assertEqual(owner.phone, "1234567890")
+        self.assertEqual(owner.phone, "9876543210")
 
     def test_02_isbuilder_default_false(self):
         """is_builder default is false."""
@@ -31,7 +26,7 @@ class TestDealOwner(DealCommonTestCase):
         with mute_logger("odoo.sql_db"), self.assertRaises(IntegrityError):
             self.env["deal.owner"].create(
                 {
-                    "phone": "1234567890",
+                    "phone": "9876543210",
                     # Name is missing
                 },
             )
@@ -48,14 +43,21 @@ class TestDealOwner(DealCommonTestCase):
 
     def test_05_tracking_true_for_all_changes(self):
         """Tracking true for all changes."""
-        self.assertTrue(bool(self.owner_model._fields["name"].tracking))
-        self.assertTrue(bool(self.owner_model._fields["phone"].tracking))
-        self.assertTrue(bool(self.owner_model._fields["is_builder"].tracking))
+        owner_model = self.env["deal.owner"]
+        self.assertTrue(bool(owner_model._fields["name"].tracking))
+        self.assertTrue(bool(owner_model._fields["phone"].tracking))
+        self.assertTrue(bool(owner_model._fields["is_builder"].tracking))
 
     def test_06_phone_is_unique(self):
         """Phone is unique, so creating two owners with the same phone should raise an error."""
-        self.create_owner(name="Owner One", phone="1112223333")
+        self.create_owner(name="Owner One", phone="9867321456")
         with mute_logger("odoo.sql_db"), self.assertRaises(IntegrityError):
-            self.create_owner(name="Owner Two", phone="1112223333")
+            self.create_owner(name="Owner Two", phone="9867321456")
 
-    # def test_06_owner_id_linked_to_deal_table(self):
+    def test_07_cannot_delete_owner_linked_to_deal(self):
+        """Cannot delete an owner if it is linked to a deal."""
+        owner = self.create_owner(name="Owner To Delete", phone="9876543211")
+        deal = self.create_deal(owner_id=owner)
+
+        with mute_logger("odoo.sql_db"), self.assertRaises(IntegrityError):
+            owner.unlink()
