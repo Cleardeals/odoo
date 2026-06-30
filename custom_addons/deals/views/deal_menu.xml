@@ -6,28 +6,42 @@
         <menuitem
             id="menu_deals_root"
             name="Deals"
-            sequence="10"/>
+            sequence="10" />
+
+        <menuitem
+            id="menu_deal"
+            name="Deals"
+            parent="menu_deals_root"
+            action="action_deal"
+            sequence="10" />
 
         <menuitem
             id="menu_deal_owner"
             name="Deal Owners"
             parent="menu_deals_root"
             action="action_deal_owner"
-            sequence="10"/>
+            sequence="20" />
 
         <menuitem
             id="menu_deal_offer"
             name="Deal Offers"
             parent="menu_deals_root"
             action="action_deal_offer"
-            sequence="20"/>
+            sequence="30" />
 
         <menuitem
             id="menu_deal_package"
             name="Deal Packages"
             parent="menu_deals_root"
             action="action_deal_package"
-            sequence="30"/>
+            sequence="40" />
+
+        <menuitem
+            id="menu_deal_transaction"
+            name="Deal Transactions"
+            parent="menu_deals_root"
+            action="action_deal_transaction"
+            sequence="50" />
 
     </data>
 </odoo>
