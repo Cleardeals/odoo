@@ -8,3 +8,10 @@ access_deal_package_deo,deal.package deo,model_deal_package,deals.group_data_ent
 
 access_deal_offer_manager,deal.offer manager,model_deal_offer,deals.group_deal_manager,1,1,1,1
 access_deal_offer_deo,deal.offer deo,model_deal_offer,deals.group_data_entry_operator,1,1,1,0
+
+access_deal_manager,deal manager,model_deal,deals.group_deal_manager,1,1,1,1
+access_deal_deo,deal deo,model_deal,deals.group_data_entry_operator,1,1,1,0
+
+access_deal_transaction_manager,deal transaction manager,model_deal_transaction,deals.group_deal_manager,1,1,1,1
+access_deal_transaction_deo,deal transaction deo,model_deal_transaction,deals.group_data_entry_operator,1,1,1,0
+
