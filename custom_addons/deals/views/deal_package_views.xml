@@ -7,9 +7,9 @@
             <field name="model">deal.package</field>
             <field name="arch" type="xml">
                 <list string="Deal Packages">
-                    <field name="name"/>
-                    <field name="amount"/>
-                    <field name="currency_id" column_invisible="True"/>
+                    <field name="name" />
+                    <field name="amount" />
+                    <field name="currency_id" column_invisible="True" />
                 </list>
             </field>
         </record>
@@ -21,13 +21,13 @@
                 <form string="Deal Package">
                     <sheet>
                         <group>
-                            <field name="name"/>
-                            <field name="amount"/>
-                            <field name="currency_id" invisible="1"/>
-                            <field name="is_active"/>
+                            <field name="name" />
+                            <field name="amount" />
+                            <field name="currency_id" invisible="1" />
+                            <field name="is_active" />
                         </group>
                     </sheet>
-                    <chatter/>
+                    <chatter />
                 </form>
             </field>
         </record>
@@ -37,25 +37,27 @@
             <field name="model">deal.package</field>
             <field name="arch" type="xml">
                 <search string="Search Deal Packages">
-                    <field name="name" string="Package Name"/>
-                    <filter name="filter_active" string="Active" domain="[('is_active', '=', True)]"/>
-                    <filter name="filter_archived" string="Archived" domain="[('is_active', '=', False)]"/>
+                    <field name="name" string="Package Name" />
+                    <filter name="filter_active" string="Active" domain="[('is_active', '=', True)]" />
+                    <filter name="filter_archived" string="Archived"
+                        domain="[('is_active', '=', False)]" />
                 </search>
             </field>
-        </record>         
+        </record>
 
         <record id="action_deal_package" model="ir.actions.act_window">
             <field name="name">Deal Packages</field>
             <field name="res_model">deal.package</field>
             <field name="view_mode">list,form</field>
-            <field name="search_view_id" ref="view_deal_package_search"/>
+            <field name="search_view_id" ref="view_deal_package_search" />
             <field name="context">{'search_default_filter_active': 1}</field>
             <field name="help" type="html">
                 <p class="o_view_nocontent_smiling_face">
                     No deal packages found.
                 </p>
                 <p>
-                    Create packages with amount and currency so they can be used consistently across deal records.
+                    Create packages with amount and currency so they can be used consistently across
+                    deal records.
                 </p>
             </field>
         </record>
