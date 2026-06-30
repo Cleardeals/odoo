@@ -7,11 +7,11 @@
             <field name="model">deal.owner</field>
             <field name="arch" type="xml">
                 <list string="Deal Owners">
-                    <field name="name"/>
-                    <field name="phone"/>
-                    <field name="email"/>
-                    <field name="occupation"/>
-                    <field name="is_builder" widget="boolean_toggle"/>
+                    <field name="name" />
+                    <field name="phone" />
+                    <field name="email" />
+                    <field name="occupation" />
+                    <field name="is_builder" widget="boolean_toggle" />
                 </list>
             </field>
         </record>
@@ -23,14 +23,14 @@
                 <form string="Deal Owner">
                     <sheet>
                         <group>
-                            <field name="name"/>
-                            <field name="phone"/>
-                            <field name="email"/>
-                            <field name="occupation"/>
-                            <field name="is_builder"/>
+                            <field name="name" />
+                            <field name="phone" />
+                            <field name="email" />
+                            <field name="occupation" />
+                            <field name="is_builder" />
                         </group>
                     </sheet>
-                    <chatter/>
+                    <chatter />
                 </form>
             </field>
         </record>
@@ -40,10 +40,12 @@
             <field name="model">deal.owner</field>
             <field name="arch" type="xml">
                 <search string="Search Deal Owners">
-                    <field name="name" string="Owner Name"/>
-                    <field name="phone"/>
-                    <filter name="filter_is_builder" string="Is Builder" domain="[('is_builder', '=', True)]"/>
-                    <filter name="group_by_occupation" string="Occupation" context="{'group_by': 'occupation'}"/>
+                    <field name="name" string="Owner Name" />
+                    <field name="phone" />
+                    <filter name="filter_is_builder" string="Is Builder"
+                        domain="[('is_builder', '=', True)]" />
+                    <filter name="group_by_occupation" string="Occupation"
+                        context="{'group_by': 'occupation'}" />
                 </search>
             </field>
         </record>
@@ -52,13 +54,14 @@
             <field name="name">Deal Owners</field>
             <field name="res_model">deal.owner</field>
             <field name="view_mode">list,form</field>
-            <field name="search_view_id" ref="view_deal_owner_search"/>
+            <field name="search_view_id" ref="view_deal_owner_search" />
             <field name="help" type="html">
                 <p class="o_view_nocontent_smiling_face">
                     No deal owners found.
                 </p>
                 <p>
-                    Use this screen to manage owners, phone numbers, emails, occupations, and builder classification in one place.
+                    Use this screen to manage owners, phone numbers, emails, occupations, and
+                    builder classification in one place.
                 </p>
             </field>
         </record>
