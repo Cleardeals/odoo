@@ -85,8 +85,14 @@ in both; everything else is optional.
 All fields not explicitly consumed are stored verbatim by Cleardeals for reference,
 so sending extra/unknown fields is safe (they are ignored, never rejected).
 
-> **Note on "Unique PID":** if your side also has a separate unique property
-> identifier, it is **not** required. Cleardeals matches on `propertyId` only.
+> **Note — which ID to send.** Your upload API lets a partner store their own
+> property identifier (a "Unique PID", e.g. the Cleardeals website's ID) against
+> a listing. Cleardeals currently onboards its Square Yards listings **manually**,
+> so **no Cleardeals Unique PID is stored** against them — the only identifier
+> that exists is **Square Yards' own listing ID**. Send that Square Yards listing
+> ID in `propertyId`; that is the value Cleardeals registers and matches on. Do
+> **not** send a Unique PID. (If Cleardeals moves to API-based uploads later and a
+> Unique PID is stored, we will revisit this guidance.)
 
 ---
 
