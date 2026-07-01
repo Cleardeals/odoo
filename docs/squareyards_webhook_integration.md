@@ -31,10 +31,9 @@ Cleardeals CRM: create lead → match property by propertyId → assign RM
 |---|---|
 | **Method** | `POST` |
 | **Production URL** | `https://<PROD_HOST>/api/v1/squareyards_webhook` |
-| **Staging URL** | `https://<STAGING_HOST>/api/v1/squareyards_webhook` |
 | **Content-Type** | `application/json` |
 
-> The exact `PROD_HOST` / `STAGING_HOST` values are shared with you separately
+> The exact `PROD_HOST` values are shared with you separately
 > by the Cleardeals team along with your API key.
 
 ---
@@ -183,10 +182,10 @@ Failed to push lead: Missing required fields.
 
 ## 9. Contacts & change log
 
-**Cleardeals technical contact:** _<name / email / phone to be filled in by Cleardeals>_
+**Cleardeals technical contact:** _Nirat Patel / tech@cleardeals.in_
 
 **Change log**
 
 | Date | Version | Change |
 |---|---|---|
-| _<YYYY-MM-DD>_ | 1.0 | Initial integration guide. |
+| _2026-07-01_ | 1.0 | Initial integration guide. |
