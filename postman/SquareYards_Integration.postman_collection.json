@@ -1,0 +1,496 @@
+{
+  "info": {
+    "name": "SquareYards Lead Webhook - Integration & Edge Cases",
+    "_postman_id": "5a1c0de5-0000-4000-8000-000000000001",
+    "description": "Edge-case test suite for the Cleardeals inbound Square Yards lead webhook (POST /api/v1/squareyards_webhook).\n\nSETUP\n1. Import SquareYards.postman_environment.json and select it.\n2. Set `squareyards_api_key` to the value of the Odoo system parameter `squareyards.webhook.api.key`.\n3. Register a property in Odoo with a SquareYards portal listing whose ID equals `valid_property_id`, so the matched-property request assigns the property's RM.\n4. Leave `unmatched_property_id` as an ID that is NOT registered as a SquareYards listing.\n\nRUNNING\nRun the whole collection with the Collection Runner (top to bottom). The requests are ordered so the duplicate-detection test resends the exact lead created by the happy-path request. Each run generates fresh phone numbers, so it is safe to run repeatedly.\n\nCONTRACT NOTE\nOnly `mobile` and `propertyId` are required. `name` is optional (WhatsApp-button leads carry none) and falls back to \"SquareYards Lead\". `propertyId` is Square Yards' internal listing id and is the single property-match key.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "01 Auth - missing apikey -> 401",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('401 Unauthorized when apikey header is absent', function () {",
+              "    pm.response.to.have.status(401);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Auth Missing\",\n  \"mobile\": \"9800000001\",\n  \"propertyId\": \"{{valid_property_id}}\",\n  \"source\": \"SquareYards\"\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/squareyards_webhook",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "squareyards_webhook"]
+        }
+      }
+    },
+    {
+      "name": "02 Auth - wrong apikey -> 401",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('401 Unauthorized when apikey is wrong', function () {",
+              "    pm.response.to.have.status(401);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "apikey", "value": "definitely-not-the-real-key" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Auth Wrong\",\n  \"mobile\": \"9800000002\",\n  \"propertyId\": \"{{valid_property_id}}\",\n  \"source\": \"SquareYards\"\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/squareyards_webhook",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "squareyards_webhook"]
+        }
+      }
+    },
+    {
+      "name": "03 Auth - X-API-KEY fallback header -> 200",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.variables.set('tmp_phone', '9' + Math.floor(100000000 + Math.random() * 899999999));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200 OK when the key is sent via X-API-KEY fallback', function () {",
+              "    pm.response.to.have.status(200);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "X-API-KEY", "value": "{{squareyards_api_key}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Fallback Header\",\n  \"mobile\": \"{{tmp_phone}}\",\n  \"propertyId\": \"{{valid_property_id}}\",\n  \"source\": \"SquareYards\"\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/squareyards_webhook",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "squareyards_webhook"]
+        }
+      }
+    },
+    {
+      "name": "04 Happy path - matched property -> 200",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// Fresh phone per run; reused by the duplicate test (request 05).",
+              "pm.collectionVariables.set('sy_phone', '9' + Math.floor(100000000 + Math.random() * 899999999));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200 OK - lead accepted', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "pm.test('Body confirms the lead was punched in', function () {",
+              "    pm.expect(pm.response.text()).to.include('Success');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "apikey", "value": "{{squareyards_api_key}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Sy User\",\n  \"mobile\": \"{{sy_phone}}\",\n  \"email\": \"sy.user@example.com\",\n  \"source\": \"SquareYards\",\n  \"availArea\": 100,\n  \"totalPrice\": 50000,\n  \"listingType\": \"rent\",\n  \"cityName\": \"Gurgaon\",\n  \"sublocalityName\": \"Sector 55\",\n  \"projectName\": \"DLF\",\n  \"propertyTypeName\": \"Apartment\",\n  \"unitType\": \"3bhk\",\n  \"propertyId\": \"{{valid_property_id}}\"\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/squareyards_webhook",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "squareyards_webhook"]
+        }
+      }
+    },
+    {
+      "name": "05 Duplicate - resend of request 04 -> 200 (deduped)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200 OK - duplicate is acknowledged, not an error', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "// The webhook returns 200 for a de-duplicated lead. Verify in Odoo that",
+              "// no SECOND leads.new was created for {{sy_phone}} + {{valid_property_id}}."
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "apikey", "value": "{{squareyards_api_key}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Sy User\",\n  \"mobile\": \"{{sy_phone}}\",\n  \"email\": \"sy.user@example.com\",\n  \"source\": \"SquareYards\",\n  \"propertyId\": \"{{valid_property_id}}\"\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/squareyards_webhook",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "squareyards_webhook"]
+        }
+      }
+    },
+    {
+      "name": "06 WhatsApp flow - mobile + propertyId only -> 200",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.variables.set('tmp_phone', '9' + Math.floor(100000000 + Math.random() * 899999999));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200 OK - nameless WhatsApp lead is accepted', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "// In Odoo the lead name falls back to \"SquareYards Lead\"."
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "apikey", "value": "{{squareyards_api_key}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"mobile\": \"{{tmp_phone}}\",\n  \"propertyId\": \"{{valid_property_id}}\",\n  \"source\": \"SquareYards\"\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/squareyards_webhook",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "squareyards_webhook"]
+        }
+      }
+    },
+    {
+      "name": "07 Unmatched property -> 200 (fallback RM)",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.variables.set('tmp_phone', '9' + Math.floor(100000000 + Math.random() * 899999999));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200 OK - unmatched lead is still accepted', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "// In Odoo this lead has no property_base_id and is routed to the",
+              "// SquareYards source fallback RM (Purvi Desai by default)."
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "apikey", "value": "{{squareyards_api_key}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Unmatched Lead\",\n  \"mobile\": \"{{tmp_phone}}\",\n  \"propertyId\": \"{{unmatched_property_id}}\",\n  \"source\": \"SquareYards\"\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/squareyards_webhook",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "squareyards_webhook"]
+        }
+      }
+    },
+    {
+      "name": "08 Phone normalization - +91 prefixed -> 200",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.variables.set('tmp_phone10', '9' + Math.floor(100000000 + Math.random() * 899999999));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200 OK - +91 prefixed number is accepted', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "// In Odoo the stored phone is normalized to the 10-digit form."
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "apikey", "value": "{{squareyards_api_key}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Country Code\",\n  \"mobile\": \"+91 {{tmp_phone10}}\",\n  \"propertyId\": \"{{valid_property_id}}\",\n  \"source\": \"SquareYards\"\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/squareyards_webhook",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "squareyards_webhook"]
+        }
+      }
+    },
+    {
+      "name": "09 Extra / unknown fields -> 200 (stored in raw_data)",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.variables.set('tmp_phone', '9' + Math.floor(100000000 + Math.random() * 899999999));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200 OK - unknown fields are ignored, not rejected', function () {",
+              "    pm.response.to.have.status(200);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "apikey", "value": "{{squareyards_api_key}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Extra Fields\",\n  \"mobile\": \"{{tmp_phone}}\",\n  \"propertyId\": \"{{valid_property_id}}\",\n  \"source\": \"SquareYards\",\n  \"someFutureField\": \"anything\",\n  \"nested\": { \"a\": 1, \"b\": [1, 2, 3] }\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/squareyards_webhook",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "squareyards_webhook"]
+        }
+      }
+    },
+    {
+      "name": "10 Validation - missing mobile -> 400",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('400 Bad Request when mobile is missing', function () {",
+              "    pm.response.to.have.status(400);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "apikey", "value": "{{squareyards_api_key}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"No Phone\",\n  \"propertyId\": \"{{valid_property_id}}\",\n  \"source\": \"SquareYards\"\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/squareyards_webhook",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "squareyards_webhook"]
+        }
+      }
+    },
+    {
+      "name": "11 Validation - missing propertyId -> 400",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('400 Bad Request when propertyId is missing', function () {",
+              "    pm.response.to.have.status(400);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "apikey", "value": "{{squareyards_api_key}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"No Property\",\n  \"mobile\": \"9800000011\",\n  \"source\": \"SquareYards\"\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/squareyards_webhook",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "squareyards_webhook"]
+        }
+      }
+    },
+    {
+      "name": "12 Validation - malformed JSON -> 400",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('400 Bad Request on malformed JSON body', function () {",
+              "    pm.response.to.have.status(400);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "apikey", "value": "{{squareyards_api_key}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{ this is not valid json ",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/squareyards_webhook",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "squareyards_webhook"]
+        }
+      }
+    },
+    {
+      "name": "13 Method not allowed - GET -> 405",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('405 Method Not Allowed for GET', function () {",
+              "    pm.response.to.have.status(405);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "apikey", "value": "{{squareyards_api_key}}" }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/squareyards_webhook",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "squareyards_webhook"]
+        }
+      }
+    }
+  ]
+}
