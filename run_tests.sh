@@ -21,8 +21,10 @@
 #   LOG_LEVEL    — odoo log level (default: test)
 #
 # Any port you set explicitly is honoured as-is; only unset ports are
-# auto-selected. This matters because the test container uses host networking,
-# so Odoo would otherwise fight a running dev instance for 8069/8072.
+# auto-selected. The containers run on a private bridge network, so the Odoo
+# HTTP/gevent ports live inside the container and cannot clash with a running
+# dev stack; only DB_PORT is published to the host (for optional inspection),
+# so it is the one that benefits from free-port selection.
 
 set -euo pipefail
 
@@ -59,6 +61,11 @@ DB_PASSWORD="odoo"
 DB_NAME="odoo_test_db"
 IMAGE_NAME="my-odoo-image"
 CONTAINER_NAME="odoo_test_postgres"
+# User-defined bridge network so the Odoo container can reach Postgres by
+# container name. Bridge is the default Docker driver and works the same on
+# Linux, macOS and Windows/WSL2 — unlike `--network host`, which is a Linux-only
+# feature (opt-in beta, off by default, on Docker Desktop for Mac/Windows).
+NETWORK_NAME="odoo_test_net"
 LOG_LEVEL="${LOG_LEVEL:-test}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -94,9 +101,12 @@ cleanup() {
     if [[ "${KEEP_DB:-0}" == "1" ]]; then
         warn "KEEP_DB=1 — leaving Postgres container '${CONTAINER_NAME}' running."
         warn "Stop it manually with: docker rm -f ${CONTAINER_NAME}"
+        warn "(Network '${NETWORK_NAME}' is also left in place; remove with: docker network rm ${NETWORK_NAME})"
     else
         log "Stopping and removing Postgres container…"
         docker rm -f "${CONTAINER_NAME}" 2>/dev/null || true
+        # Remove the network only after its attached container is gone.
+        docker network rm "${NETWORK_NAME}" 2>/dev/null || true
     fi
 }
 trap cleanup EXIT
@@ -121,8 +131,14 @@ log "Starting Postgres container on port ${DB_PORT}…"
 # Remove any stale container with the same name
 docker rm -f "${CONTAINER_NAME}" 2>/dev/null || true
 
+# Ensure the user-defined bridge network exists (idempotent).
+docker network create "${NETWORK_NAME}" > /dev/null 2>&1 || true
+
+# Postgres joins the bridge network (so Odoo can reach it by container name)
+# and still publishes to the host port for optional manual inspection.
 docker run -d \
     --name "${CONTAINER_NAME}" \
+    --network "${NETWORK_NAME}" \
     -e POSTGRES_USER="${DB_USER}" \
     -e POSTGRES_PASSWORD="${DB_PASSWORD}" \
     -e POSTGRES_DB="${DB_NAME}" \
@@ -149,16 +165,16 @@ log "Ports — Postgres: ${DB_PORT}, HTTP: ${HTTP_PORT}, gevent: ${GEVENT_PORT}"
 echo ""
 
 docker run --rm \
-    --network host \
+    --network "${NETWORK_NAME}" \
     -v "${SCRIPT_DIR}/custom_addons:/mnt/extra-addons" \
-    -e HOST=localhost \
-    -e PORT="${DB_PORT}" \
+    -e HOST="${CONTAINER_NAME}" \
+    -e PORT=5432 \
     -e USER="${DB_USER}" \
     -e PASSWORD="${DB_PASSWORD}" \
     "${IMAGE_NAME}" \
     odoo -d "${DB_NAME}" \
-        --db_host=localhost \
-        --db_port="${DB_PORT}" \
+        --db_host="${CONTAINER_NAME}" \
+        --db_port=5432 \
         --db_user="${DB_USER}" \
         --db_password="${DB_PASSWORD}" \
         --http-port="${HTTP_PORT}" \

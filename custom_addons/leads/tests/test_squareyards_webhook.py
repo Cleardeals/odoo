@@ -307,3 +307,83 @@ class TestSquareYardsWebhook(HttpCase):
         self._post({"mobile": phone_b, "propertyId": self.listing_id}, key=self.api_key)
         self.assertTrue(self._lead_for(phone_a))
         self.assertTrue(self._lead_for(phone_b))
+
+    # ------------------------------------------------------------------ #
+    # Malformed mobile numbers                                            #
+    #                                                                      #
+    # `mobile` is only checked for presence (required_fields), never for  #
+    # shape — any non-empty value passes validation and reaches           #
+    # `_standardize_phone`, which never rejects, only logs a warning and  #
+    # passes malformed input through as digits-only. These tests confirm  #
+    # the production endpoint behaves the same way the unit tests in      #
+    # test_portal_lead_phone.py pin down at the model layer.               #
+    # ------------------------------------------------------------------ #
+
+    def test_20_malformed_short_mobile_still_returns_200_and_creates_lead(self):
+        """A 5-digit mobile is accepted, not rejected with 400."""
+        mobile = "9" + self.suffix[-4:]
+        resp = self._post({"mobile": mobile, "propertyId": self.listing_id}, key=self.api_key)
+        self.assertEqual(resp.status_code, 200)
+        lead = self._lead_for(mobile)
+        self.assertTrue(lead, "Malformed short mobile is stored as-is, lead is still created")
+
+    def test_21_malformed_long_mobile_still_returns_200_and_creates_lead(self):
+        """A 15-digit mobile is accepted and stored whole, not truncated."""
+        mobile = "9" + self.suffix + "9999"
+        resp = self._post({"mobile": mobile, "propertyId": self.listing_id}, key=self.api_key)
+        self.assertEqual(resp.status_code, 200)
+        lead = self._lead_for(mobile)
+        self.assertTrue(lead)
+        self.assertEqual(lead.phone, mobile)
+
+    def test_22_letters_in_mobile_are_stripped_to_digits(self):
+        """Letters are stripped by `_standardize_phone`; the remaining digits are stored."""
+        digits = self.suffix[-4:]
+        mobile = f"abc{digits}xyz"
+        resp = self._post({"mobile": mobile, "propertyId": self.listing_id}, key=self.api_key)
+        self.assertEqual(resp.status_code, 200)
+        lead = self._lead_for(digits)
+        self.assertTrue(lead, "Digits-only remainder of a letters+digits mobile must be stored")
+
+    def test_23_landline_style_mobile_stored_as_is(self):
+        """An 11-digit, zero-prefixed landline-style number is stored whole, not massaged."""
+        mobile = "0" + self.suffix
+        resp = self._post({"mobile": mobile, "propertyId": self.listing_id}, key=self.api_key)
+        self.assertEqual(resp.status_code, 200)
+        lead = self._lead_for(mobile)
+        self.assertTrue(lead)
+
+    def test_24_symbol_only_mobile_bypasses_dedup(self):
+        """
+        KNOWN GAP: a symbol-only mobile passes the webhook's not-empty check,
+        then strips to an empty phone. Since dedup can't be computed on an
+        empty phone, `create_lead_if_not_duplicate` creates the lead anyway
+        on every push — two identical pushes create two leads, not one.
+        """
+        payload = {"mobile": "----", "propertyId": f"SYM-{self.suffix}"}
+        first = self._post(payload, key=self.api_key)
+        second = self._post(payload, key=self.api_key)
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(
+            self.env["leads.new"].sudo().search_count([
+                ("phone", "=", ""),
+                ("portal_property_id", "=", f"SYM-{self.suffix}"),
+            ]),
+            2,
+            "Symbol-only mobile cannot be deduped; both pushes must create separate leads",
+        )
+
+    def test_25_malformed_nonempty_mobile_duplicate_still_deduped(self):
+        """A garbage-but-non-empty mobile still dedupes against itself, end to end."""
+        mobile = "8" + self.suffix[-4:]
+        payload = {"mobile": mobile, "propertyId": self.listing_id}
+        first = self._post(payload, key=self.api_key)
+        second = self._post(payload, key=self.api_key)
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 200, "Duplicate is acknowledged, not an error")
+        self.assertEqual(
+            self.env["leads.new"].sudo().search_count([("phone", "=", mobile)]),
+            1,
+            "Second identical malformed-mobile push must not create a second lead",
+        )
