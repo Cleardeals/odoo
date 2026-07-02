@@ -129,3 +129,36 @@ class TestRelinkBde(PortalLeadTestCase):
         self._add_listing(prop, pid)
         self.assertEqual(lead.property_base_id, prop)
         self.assertEqual(lead.user_id, self.test_rm_b)
+
+    def test_relink_multiple_unlinked_leads_in_one_listing_create(self):
+        """Creating one listing relinks EVERY matching unlinked lead and reassigns
+        them all to the property's RM.
+
+        This pins the batch behaviour of the canonical property.portal.listing
+        trigger — the path the system relies on after the redundant legacy-column
+        trigger on property.base is removed.
+        """
+        pid = f"RLNKM{self.suffix[-5:]}"
+        leads = self.env["leads.new"]
+        for i in range(3):
+            leads |= (
+                self.env["leads.new"]
+                .with_context(automated_lead_creation=True)
+                .create(
+                    {
+                        "name": f"Relink Multi {i}",
+                        "phone": f"973{i}{self.suffix[-6:]}",
+                        "source_id": self.source_magicbricks.id,
+                        "portal_property_id": pid,
+                        "user_id": self.test_rm_a.id,
+                        "state": "assigned",
+                    }
+                )
+            )
+
+        prop = self._property_with_rm(self.test_rm_b, f"RLNK-M-{self.suffix}")
+        self._add_listing(prop, pid)  # single create, must relink all three
+
+        for lead in leads:
+            self.assertEqual(lead.property_base_id, prop)
+            self.assertEqual(lead.user_id, self.test_rm_b)

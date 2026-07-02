@@ -1,0 +1,12 @@
+# Keep LF line endings on the shell scripts that drive local testing and that
+# are baked into the Docker image, on every platform. Without this, a Windows
+# checkout with the common `core.autocrlf=true` default rewrites them to CRLF,
+# which breaks the `#!/usr/bin/env bash` shebang (run_tests.sh) and makes the
+# container fail to start (a CRLF ENTRYPOINT script is not executable inside
+# the Linux image).
+#
+# Scoped to the two files this matters for. Upstream Odoo shell scripts and the
+# Dockerfile are intentionally left to git's default handling so nothing else
+# is renormalized.
+/run_tests.sh   text eol=lf
+/entrypoint.sh  text eol=lf

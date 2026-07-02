@@ -266,26 +266,6 @@ class PropertyBase(models.Model):
         help="Short display tag used in the lead-suggestor pipeline.  "
         "Migrated from property.inventory; editable by managers.",
     )
-    ninety_nine_acres_id = fields.Char(
-        string="99acres ID",
-        index=True,
-        help="Property listing ID on 99acres portal.",
-    )
-    housing_id = fields.Char(
-        string="Housing.com ID",
-        index=True,
-        help="Property listing ID on Housing.com portal.",
-    )
-    magicbricks_id = fields.Char(
-        string="Magicbricks ID",
-        index=True,
-        help="Property listing ID on Magicbricks portal.",
-    )
-    olx_id = fields.Char(
-        string="OLX ID",
-        index=True,
-        help="Property listing ID on OLX portal.",
-    )
     service_expiry_date = fields.Date(
         string="Service Expiry Date",
         index=True,

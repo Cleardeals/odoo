@@ -87,10 +87,6 @@
                                 <field name="property_link"/>
                                 <!-- Future implementation: uncomment this -->
                                 <field name="link_360_dgt"/>
-                                <field name="id_99acres"/>
-                                <field name="id_housing"/>
-                                <field name="id_magicbricks"/>
-                                <field name="id_olx"/>
                                 <field name="instagram_reel"/>
                             </group>
                         </page>

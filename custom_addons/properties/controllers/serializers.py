@@ -134,12 +134,6 @@ def serialize_property(record) -> dict:
                 ),
             ),
         ),
-        "legacy_portal_ids": {
-            "ninety_nine_acres_id": _char(record.ninety_nine_acres_id),
-            "housing_id": _char(record.housing_id),
-            "magicbricks_id": _char(record.magicbricks_id),
-            "olx_id": _char(record.olx_id),
-        },
         # ------------------------------------------------------------------
         # Dates (Manager-editable)
         # ------------------------------------------------------------------
