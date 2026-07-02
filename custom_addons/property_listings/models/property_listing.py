@@ -152,10 +152,6 @@ class PropertyListing(models.Model):
     property_sold_date = fields.Date(string="Property Sold Date")
     reason_for_unsold = fields.Text(string="Reason For Unsold")
     instagram_reel = fields.Boolean(string="Instagram Reel Made?")
-    id_99acres = fields.Char(string="99acres ID")
-    id_housing = fields.Char(string="Housing.com ID")
-    id_magicbricks = fields.Char(string="Magicbricks ID")
-    id_olx = fields.Char(string="OLX ID")
 
     @api.onchange("property_register_date", "service_validity")
     def _compute_expiry_date(self):
