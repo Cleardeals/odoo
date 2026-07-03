@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+        <record id="view_deal_transaction_list" model="ir.ui.view">
+            <field name="name">deal.transaction.list</field>
+            <field name="model">deal.transaction</field>
+            <field name="arch" type="xml">
+                <list string="Deal Transactions" create="True" edit="False" delete="False">
+                    <field name="transaction_id" />
+                    <field name="deal_id" />
+                    <field name="transaction_type" />
+                    <field name="gross_amount" />
+                    <field name="net_amount" />
+                    <field name="payment_channel" />
+                    <field name="transaction_time" />
+                    <field name="currency_id" column_invisible="True" />
+                </list>
+            </field>
+        </record>
+
+        <record id="view_deal_transaction_form" model="ir.ui.view">
+            <field name="name">deal.transaction.form</field>
+            <field name="model">deal.transaction</field>
+            <field name="arch" type="xml">
+                <form string="Deal Transaction">
+                    <sheet>
+                        <group>
+                            <field name="deal_id" />
+                            <field name="deal_status" readonly="1" />
+                        </group>
+                        <group string="Payment Information">
+                            <field name="transaction_type" />
+                            <field name="gross_amount" />
+                            <field name="net_amount" readonly="1" />
+                            <field name="payment_channel" />
+                            <field name="transaction_time" />
+                            <field name="currency_id" invisible="1" />
+                        </group>
+                    </sheet>
+                    <chatter />
+                </form>
+            </field>
+        </record>
+
+        <record id="view_deal_transaction_search" model="ir.ui.view">
+            <field name="name">deal.transaction.search</field>
+            <field name="model">deal.transaction</field>
+            <field name="arch" type="xml">
+                <search string="Deal Transactions">
+                    <field name="deal_id" />
+                    <field name="transaction_id" />
+                    <field name="transaction_type" />
+                    <filter name="filter_registration" string="Registration"
+                        domain="[('transaction_type','=','registration')]" />
+                    <filter name="filter_sold" string="Sold"
+                        domain="[('transaction_type','=','sold')]" />
+                    <filter name="filter_refund" string="Refund"
+                        domain="[('transaction_type','=','refund')]" />
+
+                    <separator />
+
+                    <filter name="filter_transaction_date" string="Transaction Date"
+                        date="transaction_time" />
+                    <filter name="groupby_transaction_type" string="Transaction Type"
+                        context="{'group_by':'transaction_type'}" />
+                    <filter name="groupby_payment_channel" string="Payment Channel"
+                        context="{'group_by':'payment_channel'}" />
+                    <filter name="groupby_transaction_time" string="Transaction Time"
+                        context="{'group_by':'transaction_time'}" />
+                </search>
+            </field>
+        </record>
+
+        <record id="action_deal_transaction" model="ir.actions.act_window">
+            <field name="name">Deal Transactions</field>
+            <field name="res_model">deal.transaction</field>
+            <field name="view_mode">list,form</field>
+        </record>
+
+    </data>
+</odoo>
