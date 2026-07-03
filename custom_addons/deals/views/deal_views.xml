@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <data>
+        
+        <record id="view_deal_form" model="ir.ui.view">
+            <field name="name">deal.form</field>
+            <field name="model">deal</field>
+            <field name="arch" type="xml">
+                <form string="Deal">
+                    <header>
+                        <button name="action_renew_deal" type="object" string="Renew Deal"
+                            class="btn-primary"
+                            invisible="deal_status not in ['live', 'closed']" />
+
+                        <button name="action_mark_service_expired" type="object"
+                            string="Mark Service Expired"
+                            class="btn-secondary"
+                            invisible="deal_status in ['registration', 'closed', 'renewed']" />
+
+                        <field name="deal_status" widget="statusbar"
+                            statusbar_visible="registration,live,sold,closed,renewed" />
+                    </header>
+                    <sheet>
+                        <div class="oe_title">
+                            <h1>
+                                <field name="deal_id" readonly="1" />
+                            </h1>
+                        </div>
+                        <group name="deal_info" string="Deal Information">
+                            <field name="property_id" />
+                            <field name="owner_id" />
+                            <field name="deal_type" />
+                            <field name="bde_id" />
+                            <field name="deal_status"/>
+                        </group>
+                        <group name="offer_package" string="Offer &amp; Package Details">
+                            <field name="package_id" />
+                            <field name="package_amount" readonly="1" />
+                            <field name="is_offer" />
+                            <field name="offer_id" invisible="not is_offer" required="is_offer" />
+                            <field name="gross_amount" />
+                            <field name="currency_id" invisible="1" />
+                        </group>
+                        <group name="deal_status_info" string="Deal Status Information">
+                            <field name="is_full_payment" />
+                            <field name="registration_date" />
+                            <field name="closed_reason"
+                                invisible="deal_status != 'closed'"
+                                required="deal_status == 'closed'" />
+                            <field name="closed_at" readonly="1" />
+                        </group>
+                    </sheet>
+                    <chatter />
+                </form>
+            </field>
+        </record>
+
+        <record id="view_deal_list" model="ir.ui.view">
+            <field name="name">deal.list</field>
+            <field name="model">deal</field>
+            <field name="arch" type="xml">
+                <list string="Deals">
+                    <field name="deal_id" />
+                    <field name="property_id" />
+                    <field name="package_id" />
+                    <field name="gross_amount" />
+                    <field name="deal_type" />
+                    <field name="deal_status" />
+                    <field name="registration_date" />
+                    <field name="currency_id" column_invisible="True" />
+                </list>
+            </field>
+        </record>
+
+        <record id="view_deal_search" model="ir.ui.view">
+            <field name="name">deal.search</field>
+            <field name="model">deal</field>
+            <field name="arch" type="xml">
+                <search string="Search Deals">
+
+                    <field name="deal_id" />
+                    <field name="property_id" />
+                    <field name="owner_id" />
+
+                    <filter name="with_offer" string="With Offer" domain="[('is_offer', '=', True)]" />
+                    <filter name="active_deals" string="Active Deals"
+                        domain="[('deal_status', 'in', ['registration', 'live'])]" />
+                    <separator />
+                    <filter name="deal_type_renewal" string="Renewal"
+                        domain="[('deal_type', '=', 'renewal')]" />
+                    <filter name="deal_type_ops_sale_lead" string="Ops Sale Lead"
+                        domain="[('deal_type', '=', 'ops_sale_lead')]" />
+                    <filter name="deal_type_regular" string="Regular"
+                        domain="[('deal_type', '=', 'regular')]" />
+                    <separator />
+                    <filter name="deal_status_registration" string="Registration"
+                        domain="[('deal_status', '=', 'registration')]" />
+                    <filter name="deal_status_live" string="Live"
+                        domain="[('deal_status', '=', 'live')]" />
+                    <filter name="deal_status_sold" string="Sold"
+                        domain="[('deal_status', '=', 'sold')]" />
+                    <filter name="deal_status_closed" string="Closed"
+                        domain="[('deal_status', '=', 'closed')]" />
+                    <filter name="deal_status_renewed" string="Renewed"
+                        domain="[('deal_status', '=', 'renewed')]" />
+                    <filter name="full_payment" string="Full Payment"
+                        domain="[('is_full_payment', '=', True)]" />
+                    <separator />
+
+                    <filter name="filter_registration_date" string="Registration Date"
+                        date="registration_date" />
+                    <filter name="filter_closed_date" string="Closed Date" date="closed_at" />
+
+                    <separator />
+
+                    <filter name="groupby_deal_status" string="Deal Status"
+                        context="{'group_by': 'deal_status'}" />
+                    <filter name="groupby_deal_type" string="Deal Type"
+                        context="{'group_by': 'deal_type'}" />
+                    <filter name="groupby_registration_date" string="Registration Date"
+                        context="{'group_by': 'registration_date'}" />
+                    <filter name="groupby_bde_id" string="BDE" context="{'group_by': 'bde_id'}" />
+                    <filter name="groupby_offer_id" string="Offer"
+                        context="{'group_by': 'offer_id'}" />
+                    <filter name="groupby_package_id" string="Package"
+                        context="{'group_by': 'package_id'}" />    
+                </search>
+            </field>
+        </record>
+
+        <record id="action_deal" model="ir.actions.act_window">
+            <field name="name">Deals</field>
+            <field name="res_model">deal</field>
+            <field name="view_mode">list,form</field>
+            <field name="search_view_id" ref="view_deal_search" />
+            <field name="context">{'search_default_active_deals': 1}</field>
+            <field name="help" type="html">
+                <p class="o_view_nocontent_smiling_face">
+                    No deals found.
+                </p>
+            </field>
+        </record>
+
+    </data>
+</odoo>
