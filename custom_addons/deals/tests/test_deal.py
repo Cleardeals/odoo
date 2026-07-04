@@ -186,7 +186,7 @@ class TestDeal(DealCommonTestCase):
         """Existing live deal on property → new registration deal rejected."""
         deal1 = self.create_deal()
         deal1.write({"deal_status": "live"})
-        with self.assertRaisesRegex(ValidationError, "Existing live deal on property → new registration deal rejected"):
+        with self.assertRaisesRegex(ValidationError, "Only one active deal can be associated with a property at a time"):
             self.create_deal(property_id=deal1.property_id)
 
     def test_22_sold_deal_allows_new_registration_same_property(self):
@@ -231,7 +231,7 @@ class TestDeal(DealCommonTestCase):
         """full_payment=True, registration(5000) < gross(10000) → live rejected."""
         deal = self.create_deal(gross_amount=10000.0, is_full_payment=True)
         self.create_transaction(deal, "registration", gross_amount=5000.0)
-        with self.assertRaisesRegex(ValidationError, "Full payment deals must have a registration transaction equal to the gross amount"):
+        with self.assertRaisesRegex(ValidationError, "Deal status cannot be changed to Live or Sold because full payment has already been received"):
             deal.write({"deal_status": "live"})
 
     def test_28_full_payment_registration_equals_gross_live_allowed(self):
@@ -254,7 +254,7 @@ class TestDeal(DealCommonTestCase):
         self.create_transaction(deal, "registration", gross_amount=10000.0)
         deal.write({"deal_status": "live"})
         deal.write({"deal_status": "sold"})
-        with self.assertRaisesRegex(ValidationError, "Sold transactions are not allowed for deals that are in sold status"):
+        with self.assertRaisesRegex(ValidationError, "Sold transactions are not allowed when full payment is selected for the deal"):
             self.create_transaction(deal, "sold", gross_amount=1000.0)
 
     def test_31_non_closed_status_has_null_closed_fields(self):
