@@ -32,7 +32,7 @@ class TestDealTransaction(DealCommonTestCase):
     def test_04_refund_positive_rejected_negative_accepted(self):
         """Refund: positive gross rejected, negative accepted."""
         deal = self._add_registration_and_close()
-        with self.assertRaisesRegex(ValidationError, "Refund transactions cannot have positive gross amounts"):
+        with self.assertRaisesRegex(ValidationError, "Gross amount for refund transactions must be negative"):
             self.create_transaction(deal, "refund", gross_amount=1000.0)
         test_transaction = self.create_transaction(deal, "refund", gross_amount=-1000.0)
         self.assertTrue(test_transaction.id)
@@ -40,7 +40,7 @@ class TestDealTransaction(DealCommonTestCase):
     def test_05_registration_positive_accepted_negative_rejected(self):
         """Registration: positive accepted, negative rejected."""
         deal = self._deal_in_status("registration", gross_amount=10000.0)
-        with self.assertRaisesRegex(ValidationError, "Registration transactions cannot have negative gross amounts"):
+        with self.assertRaisesRegex(ValidationError, "Gross amount for registration and sold transactions must be positive"):
             self.create_transaction(deal, "registration", gross_amount=-1000.0)
         test_transaction = self.create_transaction(deal, "registration", gross_amount=1000.0)
         self.assertTrue(test_transaction.id)
@@ -48,7 +48,7 @@ class TestDealTransaction(DealCommonTestCase):
     def test_06_sold_positive_accepted_negative_rejected(self):
         """Sold: positive accepted, negative rejected."""
         deal = self._deal_in_status("sold", gross_amount=10000.0)
-        with self.assertRaisesRegex(ValidationError, "Sold transactions cannot have negative gross amounts"):
+        with self.assertRaisesRegex(ValidationError, "Gross amount for registration and sold transactions must be positive"):
             self.create_transaction(deal, "sold", gross_amount=-1000.0)
         test_transaction = self.create_transaction(deal, "sold", gross_amount=1000.0)
         self.assertTrue(test_transaction.id)
@@ -82,37 +82,37 @@ class TestDealTransaction(DealCommonTestCase):
     def test_10_registration_status_rejects_sold_type(self):
         """deal_status=registration → sold transaction rejected."""
         deal = self._deal_in_status("registration", gross_amount=10000.0)
-        with self.assertRaisesRegex(ValidationError, "Sold transactions are not allowed for deals that are in registration status"):
+        with self.assertRaisesRegex(ValidationError, "Sold transactions can only be created when the deal is in sold status"):
             self.create_transaction(deal, "sold", gross_amount=1000.0)
 
     def test_11_registration_status_rejects_refund_type(self):
         """deal_status=registration → refund transaction rejected."""
         deal = self._deal_in_status("registration", gross_amount=10000.0)
-        with self.assertRaisesRegex(ValidationError, "Refund transactions are not allowed for deals that are in registration status"):
+        with self.assertRaisesRegex(ValidationError, "Refund amount cannot exceed the total amount received from registration and sold transactions"):
             self.create_transaction(deal, "refund", gross_amount=-1000.0)
 
     def test_12_live_status_rejects_registration_type(self):
         """deal_status=live → registration rejected."""
         deal = self._deal_in_status("live", gross_amount=10000.0)
-        with self.assertRaisesRegex(ValidationError, "Registration transactions are not allowed for deals that are in live status"):
+        with self.assertRaisesRegex(ValidationError, "Transactions are not allowed when deal status is Live or Renewed"):
             self.create_transaction(deal, "registration", gross_amount=1000.0)
 
     def test_13_live_status_rejects_sold_type(self):
         """deal_status=live → sold rejected."""
         deal = self._deal_in_status("live", gross_amount=10000.0)
-        with self.assertRaisesRegex(ValidationError, "Sold transactions are not allowed for deals that are in live status"):
+        with self.assertRaisesRegex(ValidationError, "Transactions are not allowed when deal status is Live or Renewed"):
             self.create_transaction(deal, "sold", gross_amount=1000.0)
 
     def test_14_live_status_rejects_refund_type(self):
         """deal_status=live → refund rejected."""
         deal = self._deal_in_status("live", gross_amount=10000.0)
-        with self.assertRaisesRegex(ValidationError, "Refund transactions are not allowed for deals that are in live status"):
+        with self.assertRaisesRegex(ValidationError, "Refund amount cannot exceed the total amount received from registration and sold transactions"):
             self.create_transaction(deal, "refund", gross_amount=-1000.0)
 
     def test_15_sold_status_rejects_registration_type(self):
         """deal_status=sold → registration rejected."""
         deal = self._deal_in_status("sold", gross_amount=10000.0)
-        with self.assertRaisesRegex(ValidationError, "Registration transactions are not allowed for deals that are in sold status"):
+        with self.assertRaisesRegex(ValidationError, "Registration transactions can only be created when the deal is in registration status"):
             self.create_transaction(deal, "registration", gross_amount=1000.0)
 
     def test_16_sold_status_accepts_sold_type(self):
@@ -124,55 +124,55 @@ class TestDealTransaction(DealCommonTestCase):
     def test_17_sold_status_rejects_refund_type(self):
         """deal_status=sold → refund rejected."""
         deal = self._deal_in_status("sold", gross_amount=10000.0)
-        with self.assertRaisesRegex(ValidationError, "Refund transactions are not allowed for deals that are in sold status"):
+        with self.assertRaisesRegex(ValidationError, "Refund amount cannot exceed the total amount received from registration and sold transactions"):
             self.create_transaction(deal, "refund", gross_amount=-1000.0)
 
     def test_18_renewed_status_rejects_registration_type(self):
         """deal_status=renewed → registration rejected."""
         deal = self._deal_in_status("renewed", gross_amount=10000.0)
-        with self.assertRaisesRegex(ValidationError, "Registration transactions are not allowed for deals that are in renewed status"):
+        with self.assertRaisesRegex(ValidationError, "Transactions are not allowed when deal status is Live or Renewed"):
             self.create_transaction(deal, "registration", gross_amount=1000.0)
 
     def test_19_renewed_status_rejects_sold_type(self):
         """deal_status=renewed → sold rejected."""
         deal = self._deal_in_status("renewed", gross_amount=10000.0)
-        with self.assertRaisesRegex(ValidationError, "Sold transactions are not allowed for deals that are in renewed status"):
+        with self.assertRaisesRegex(ValidationError, "Transactions are not allowed when deal status is Live or Renewed"):
             self.create_transaction(deal, "sold", gross_amount=1000.0)
 
     def test_20_renewed_status_rejects_refund_type(self):
         """deal_status=renewed → refund rejected."""
         deal = self._deal_in_status("renewed", gross_amount=10000.0)
-        with self.assertRaisesRegex(ValidationError, "Refund transactions are not allowed for deals that are in renewed status"):
+        with self.assertRaisesRegex(ValidationError, "Refund amount cannot exceed the total amount received from registration and sold transactions"):
             self.create_transaction(deal, "refund", gross_amount=-1000.0)
 
     def test_21_closed_deal_cancelled_rejects_registration(self):
         """closed+deal_cancelled → registration rejected."""
         deal = self._deal_in_status("closed", closed_reason="deal_cancelled")
-        with self.assertRaisesRegex(ValidationError, "Registration transactions are not allowed for deals that are closed due to deal cancellation"):
+        with self.assertRaisesRegex(ValidationError, "Registration transactions can only be created when the deal is in registration status"):
             self.create_transaction(deal, "registration", gross_amount=1000.0)
 
     def test_22_closed_package_expired_rejects_registration(self):
         """closed+package_expired → registration rejected."""
         deal = self._deal_in_status("closed", closed_reason="package_expired")
-        with self.assertRaisesRegex(ValidationError, "Registration transactions are not allowed for deals that are closed due to package expiration"):
+        with self.assertRaisesRegex(ValidationError, "Registration transactions can only be created when the deal is in registration status"):
             self.create_transaction(deal, "registration", gross_amount=1000.0)
 
     def test_23_closed_deal_cancelled_rejects_sold(self):
         """closed+deal_cancelled → sold rejected."""
         deal = self._deal_in_status("closed", closed_reason="deal_cancelled")
-        with self.assertRaisesRegex(ValidationError, "Sold transactions are not allowed for deals that are closed due to deal cancellation"):
+        with self.assertRaisesRegex(ValidationError, "Sold transactions can only be created when the deal is in sold status"):
             self.create_transaction(deal, "sold", gross_amount=1000.0)
 
     def test_24_closed_package_expired_rejects_sold(self):
         """closed+package_expired → sold rejected."""
         deal = self._deal_in_status("closed", closed_reason="package_expired")
-        with self.assertRaisesRegex(ValidationError, "Sold transactions are not allowed for deals that are closed due to package expiration"):
+        with self.assertRaisesRegex(ValidationError, "Sold transactions can only be created when the deal is in sold status"):
             self.create_transaction(deal, "sold", gross_amount=1000.0)
 
     def test_25_closed_package_expired_rejects_refund(self):
         """closed+package_expired → refund rejected."""
         deal = self._deal_in_status("closed", closed_reason="package_expired")
-        with self.assertRaisesRegex(ValidationError, "Refund transactions are not allowed for deals that are closed due to package expiration"):
+        with self.assertRaisesRegex(ValidationError, "Refund amount cannot exceed the total amount received from registration and sold transactions"):
             self.create_transaction(deal, "refund", gross_amount=-1000.0)
 
     def test_26_closed_deal_cancelled_accepts_refund(self):
@@ -205,7 +205,7 @@ class TestDealTransaction(DealCommonTestCase):
         self.create_transaction(deal, "registration", gross_amount=5000.0)
         deal.write({"deal_status": "live"})
         deal.write({"deal_status": "sold"})
-        with self.assertRaisesRegex(ValidationError, "Total amount received from registration and sold transactions cannot exceed the gross amount of the deal"):
+        with self.assertRaisesRegex(ValidationError, "Total amount of registration and sold transactions cannot exceed the gross amount of the deal"):
             self.create_transaction(deal, "sold", gross_amount=6000.0)
 
     def test_30_full_payment_rejects_sold_transaction(self):
@@ -217,27 +217,27 @@ class TestDealTransaction(DealCommonTestCase):
     def test_31_not_full_payment_single_registration_exceeds_gross_rejected(self):
         """not full_payment: registration(11000) > gross(10000) → rejected."""
         deal = self.create_deal(gross_amount=10000.0)
-        with self.assertRaisesRegex(ValidationError, "Refund amount cannot exceed the total amount received from registration"):
+        with self.assertRaisesRegex(ValidationError, "Total amount of registration and sold transactions cannot exceed the gross amount of the deal"):
             self.create_transaction(deal, "registration", gross_amount=11000.0)
 
     def test_32_full_payment_single_registration_exceeds_gross_rejected(self):
         """full_payment: registration(11000) > gross(10000) → rejected."""
         deal = self.create_deal(gross_amount=10000.0, is_full_payment=True)
-        with self.assertRaisesRegex(ValidationError, "Refund amount cannot exceed the total amount received from registration"):
+        with self.assertRaisesRegex(ValidationError, "Total registration amount cannot exceed the gross amount of the deal when full payment is selected"):
             self.create_transaction(deal, "registration", gross_amount=11000.0)
 
     def test_33_not_full_payment_total_registration_exceeds_gross_rejected(self):
         """not full_payment: reg(6000)+reg(5000)=11000 > gross(10000) → rejected."""
         deal = self.create_deal(gross_amount=10000.0)
         self.create_transaction(deal, "registration", gross_amount=6000.0)
-        with self.assertRaisesRegex(ValidationError, "Refund amount cannot exceed the total amount received from registration"):
+        with self.assertRaisesRegex(ValidationError, "Total amount of registration and sold transactions cannot exceed the gross amount of the deal"):
             self.create_transaction(deal, "registration", gross_amount=5000.0)
 
     def test_34_full_payment_total_registration_exceeds_gross_rejected(self):
         """full_payment: reg(6000)+reg(5000)=11000 > gross(10000) → rejected."""
         deal = self.create_deal(gross_amount=10000.0, is_full_payment=True)
         self.create_transaction(deal, "registration", gross_amount=6000.0)
-        with self.assertRaisesRegex(ValidationError, "Refund amount cannot exceed the total amount received from registration"):
+        with self.assertRaisesRegex(ValidationError, "Total registration amount cannot exceed the gross amount of the deal when full payment is selected"):
             self.create_transaction(deal, "registration", gross_amount=5000.0)
 
     def test_35_two_partial_refunds_within_received_accepted(self):
@@ -286,28 +286,28 @@ class TestDealTransaction(DealCommonTestCase):
         """Changing type registration→sold is rejected."""
         deal = self.create_deal(gross_amount=10000.0)
         test_transaction = self.create_transaction(deal, "registration", gross_amount=1000.0)
-        with self.assertRaisesRegex(ValidationError, "Cannot change transaction type from registration to sold"):
+        with self.assertRaisesRegex(ValidationError, "Transactions cannot be modified"):
             test_transaction.write({"transaction_type": "sold"})
 
     def test_42_cannot_change_type_sold_to_registration(self):
         """Changing type sold→registration is rejected."""
         deal = self._deal_in_status("sold", gross_amount=10000.0)
         test_transaction = self.create_transaction(deal, "sold", gross_amount=1000.0)
-        with self.assertRaisesRegex(ValidationError, "Cannot change transaction type from sold to registration"):
+        with self.assertRaisesRegex(ValidationError, "Transactions cannot be modified"):
             test_transaction.write({"transaction_type": "registration"})
 
     def test_43_cannot_change_type_refund_to_sold(self):
         """Changing type refund→sold is rejected."""
         deal = self._add_registration_and_close()
         test_transaction = self.create_transaction(deal, "refund", gross_amount=-1000.0)
-        with self.assertRaisesRegex(ValidationError, "Cannot change transaction type from refund to sold"):
+        with self.assertRaisesRegex(ValidationError, "Transactions cannot be modified"):
             test_transaction.write({"transaction_type": "sold"})
 
     def test_44_cannot_change_payment_channel(self):
         """Changing payment_channel on existing transaction is rejected."""
         deal = self.create_deal(gross_amount=10000.0)
         test_transaction = self.create_transaction(deal, "registration", gross_amount=1000.0)
-        with self.assertRaisesRegex(ValidationError, "Cannot change payment channel"):
+        with self.assertRaisesRegex(ValidationError, "Transactions cannot be modified"):
             test_transaction.write({"payment_channel": "cash"})
 
     def test_45_cannot_delete_transaction(self):
@@ -321,5 +321,5 @@ class TestDealTransaction(DealCommonTestCase):
         """Deleting a deal with linked transactions is rejected (ondelete restrict)."""
         deal = self.create_deal(gross_amount=10000.0)
         self.create_transaction(deal, "registration", gross_amount=1000.0)
-        with mute_logger("odoo.sql_db"), self.assertRaisesRegex(Exception, "Cannot delete deal with linked transactions"):
+        with mute_logger("odoo.sql_db"), self.assertRaisesRegex(Exception, "update or delete on table \"deal\" violates RESTRICT setting of foreign key constraint \"deal_transaction_deal_id_fkey\" on table \"deal_transaction\""):
             deal.unlink()
