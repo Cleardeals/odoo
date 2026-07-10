@@ -20,6 +20,7 @@
 #   KEEP=1 ./prod_migration_check.sh          # leave the local DB up for inspection
 #
 # Config (override via env):
+#   GCP_ZONE GCP_INSTANCE GCP_PROJECT         # where prod runs
 #   PROD_DB_CONTAINER PROD_DB_NAME PROD_DB_USER
 #   IMAGE_NAME                                # local Odoo image (built by run_tests.sh)
 #   REUSE_DUMP=/path/to.dump                  # skip the SSH snapshot, reuse a dump
