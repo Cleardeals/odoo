@@ -49,14 +49,32 @@ class WaConversation(models.Model):
         }
         handler = _ODOO_WA_HANDLERS.get(event_type)
         # Log every OdooWaEvent to the webhook log BEFORE dispatching so that
-        # even failed or unknown events leave an audit trail.
+        # even failed or unknown events leave an audit trail.  trace_id is filled
+        # automatically from the request context; resolve the domain links from
+        # the event's wa_message_id / phone so the audit row is navigable.
         try:
+            message = self.env['wa.message'].browse()
+            conversation = self.env['wa.conversation'].browse()
+            wa_message_id = event.get('wa_message_id')
+            phone = event.get('phone')
+            if wa_message_id:
+                message = self.env['wa.message'].sudo().search(
+                    [('wa_message_id', '=', wa_message_id)], limit=1
+                )
+            if phone:
+                conversation = self.env['wa.conversation'].sudo().search(
+                    [('phone_number', '=', phone)], limit=1
+                )
+            lead = message.lead_id if message else conversation.lead_id
             self.env['wa.event.log'].sudo()._log(
                 event_type=f'odoo_wa_{event_type}' if event_type else 'odoo_wa_unknown',
                 direction='inbound',
                 pubsub_message_id=pubsub_message_id,
                 payload=event,
                 status='processed',
+                message_id=message.id,
+                conversation_id=conversation.id,
+                lead_id=lead.id if lead else False,
             )
         except Exception:
             pass  # never let audit logging break event processing

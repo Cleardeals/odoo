@@ -6,6 +6,8 @@ import logging
 from odoo import api, fields, models
 from odoo.exceptions import AccessError
 
+from odoo.addons.wa_communication.utils.trace import get_trace_id
+
 _logger = logging.getLogger(__name__)
 
 
@@ -32,7 +34,24 @@ class WaEventLog(models.Model):
     )
     topic = fields.Char('Pub/Sub Topic', readonly=True)
     pubsub_message_id = fields.Char('Pub/Sub Message ID', index=True, readonly=True)
+    # End-to-end correlation id minted by the WA platform at ingress and carried
+    # on the Pub/Sub message attributes.  Same id appears in every platform
+    # service log — filter on it to reconstruct a message's full journey.
+    trace_id = fields.Char('Trace ID', index=True, readonly=True)
     payload = fields.Text('Payload (JSON)', readonly=True)
+    # Best-effort links to the domain records this event concerns, resolved from
+    # the event's wa_message_id / phone.  ``set null`` so the audit row survives
+    # if the linked record is later removed.
+    message_id = fields.Many2one(
+        'wa.message', string='WA Message', index=True, readonly=True, ondelete='set null'
+    )
+    conversation_id = fields.Many2one(
+        'wa.conversation', string='Conversation', index=True, readonly=True,
+        ondelete='set null',
+    )
+    lead_id = fields.Many2one(
+        'leads.new', string='Lead', index=True, readonly=True, ondelete='set null'
+    )
     status = fields.Selection(
         [('processed', 'Processed'), ('failed', 'Failed')],
         required=True,
@@ -66,6 +85,10 @@ class WaEventLog(models.Model):
         topic: str = '',
         status: str = 'processed',
         error_message: str = '',
+        trace_id: str = '',
+        message_id: int | bool = False,
+        conversation_id: int | bool = False,
+        lead_id: int | bool = False,
     ) -> 'WaEventLog':
         """Create a single event log entry.  Never raises — logging must not
         crash its caller.
@@ -77,16 +100,28 @@ class WaEventLog(models.Model):
         :param topic:             Pub/Sub topic name (outbound events).
         :param status:            ``'processed'`` (default) or ``'failed'``.
         :param error_message:     Human-readable error if status is ``'failed'``.
+        :param trace_id:          Platform end-to-end correlation id.  Defaults to
+                                  the id bound for the current push request.
+        :param message_id:        Optional ``wa.message`` id this event concerns.
+        :param conversation_id:   Optional ``wa.conversation`` id.
+        :param lead_id:           Optional ``leads.new`` id.
         :return: The newly created ``wa.event.log`` record, or an empty
                  recordset if creation itself failed.
         """
+        # Auto-fill the correlation id from the request-scoped context so every
+        # existing _log call site becomes trace-linked without code changes.
+        trace_id = trace_id or get_trace_id() or ''
         try:
             return self.create({
                 'event_type': event_type,
                 'direction': direction,
                 'topic': topic or False,
                 'pubsub_message_id': pubsub_message_id or False,
+                'trace_id': trace_id or False,
                 'payload': json.dumps(payload) if payload is not None else False,
+                'message_id': message_id or False,
+                'conversation_id': conversation_id or False,
+                'lead_id': lead_id or False,
                 'status': status,
                 'error_message': error_message or False,
             })

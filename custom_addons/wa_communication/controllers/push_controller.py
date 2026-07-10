@@ -48,8 +48,16 @@ from odoo.addons.cleardeals_pubsub.controllers.push_utils import (
     InvalidPushTokenError,
     verify_push_token,
 )
+from odoo.addons.wa_communication.utils.trace import (
+    install_trace_filter,
+    trace_context,
+)
 
 _logger = logging.getLogger(__name__)
+
+# Make every log line emitted while handling a /wa/pubsub/push request carry the
+# platform-supplied [trace=<id>] prefix. Idempotent; a no-op outside such requests.
+install_trace_filter()
 
 _AUDIENCE_KEY = 'wa_communication.inbound_push_audience'
 _SA_EMAIL_KEY = 'wa_communication.inbound_push_sa_email'
@@ -126,11 +134,16 @@ class WaPubSubPushController(http.Controller):
 
         # ----------------------------------------------------------------
         # 3. Dispatch to the conversation router
+        #
+        # Bind the platform's trace_id (carried in the Pub/Sub attributes) for the
+        # whole dispatch so every _logger line below is correlated, and the
+        # wa.event.log row records the same id.
         # ----------------------------------------------------------------
         try:
-            request.env['wa.conversation'].sudo()._process_push_event(
-                payload, attributes, pubsub_message_id
-            )
+            with trace_context(attributes.get('trace_id')):
+                request.env['wa.conversation'].sudo()._process_push_event(
+                    payload, attributes, pubsub_message_id
+                )
         except psycopg2.OperationalError as exc:
             # Concurrency conflict (two workers updating the same wa.message row,
             # e.g. delivered + read receipts for one message).  Re-raise so Odoo's
