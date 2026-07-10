@@ -356,6 +356,241 @@ class TestInboundEvents(WaTransactionCase):
                          "button click + companion text = ONE inbound bubble")
         self.assertEqual(inbound.quoted_message_id, tpl)
 
+    def test_lead_replied_companion_dedup_is_order_independent(self):
+        """Companion dedup must hold when the TEXT arrives before the CLICK.
+
+        Interakt does not guarantee ordering — the message_received companion can
+        reach Odoo before its button click.  Either ordering must still yield ONE
+        bubble: whichever half lands first is recorded, the second (its
+        complementary kind) is dropped.
+        """
+        conv = self.make_conversation()
+        tpl = self.Msg.sudo().create({
+            'conversation_id': conv.id,
+            'direction': 'outbound',
+            'initiator': 'workflow',
+            'kind': 'template',
+            'template_name': 'site_visit',
+            'wa_message_id': 'wamid.tplX',
+            'status': 'delivered',
+            'occurred_at': '2026-03-01 07:00:00',
+        })
+        # 1) Companion TEXT arrives FIRST (its own id, references the template).
+        self._process({
+            'event_type': 'lead_replied',
+            'phone': conv.phone_number,
+            'wa_message_id': 'wamid.companion-first',
+            'source_message_id': 'wamid.tplX',
+            'message_text': 'Schedule Visit',   # no button_reply_id → text_reply
+            'occurred_at': '2026-03-01T08:00:00Z',
+        }, msg_id='text-first')
+        # 2) Button CLICK arrives SECOND (id collides with the template).
+        self._process({
+            'event_type': 'lead_replied',
+            'phone': conv.phone_number,
+            'wa_message_id': 'wamid.tplX',
+            'button_reply_id': 'Schedule Visit',
+            'message_text': 'Schedule Visit',
+            'occurred_at': '2026-03-01T08:00:01Z',
+        }, msg_id='click-second')
+
+        inbound = self.Msg.sudo().search([
+            ('conversation_id', '=', conv.id),
+            ('direction', '=', 'inbound'),
+        ])
+        self.assertEqual(len(inbound), 1,
+                         "text-first then click = ONE bubble (order-independent)")
+        self.assertEqual(inbound.quoted_message_id, tpl)
+
+    def test_lead_replied_repeated_identical_swipe_reply_is_not_dropped(self):
+        """Regression: two genuine swipe-replies with the SAME body to the SAME
+        quoted message must BOTH be recorded — they are not a button companion.
+
+        A real quick-reply companion is one button_reply (the click) + one
+        text_reply (the message_received): complementary kinds.  Two genuine
+        swipe text-replies are BOTH text_reply.  The companion dedup used to key
+        only on (quoted source, body), so it could not tell them apart and
+        silently dropped the second identical swipe-reply — a real buyer message
+        that never reached Odoo.  Reported live: replying "Hi" to an old message
+        you had already replied "Hi" to was rejected.
+        """
+        conv = self.make_conversation()
+        old = self.Msg.sudo().create({
+            'conversation_id': conv.id,
+            'direction': 'outbound',
+            'initiator': 'rm',
+            'kind': 'freetext',
+            'body': 'Are you still interested?',
+            'wa_message_id': 'wamid.old',
+            'status': 'delivered',
+            'occurred_at': '2026-03-01 07:00:00',
+        })
+        for i, mid in enumerate(('r1', 'r2'), start=1):
+            self._process({
+                'event_type': 'lead_replied',
+                'phone': conv.phone_number,
+                'wa_message_id': 'wamid.%s' % mid,   # each reply has its OWN real id
+                'source_message_id': 'wamid.old',    # swipe-reply quotes the old msg
+                'message_text': 'Hi',
+                # NO button_reply_id → genuine text swipe-reply (kind=text_reply)
+                'occurred_at': '2026-03-01T08:0%d:00Z' % i,
+            }, msg_id='swipe-%s' % mid)
+
+        inbound = self.Msg.sudo().search([
+            ('conversation_id', '=', conv.id),
+            ('direction', '=', 'inbound'),
+        ])
+        self.assertEqual(
+            len(inbound), 2,
+            "both identical swipe-replies must be recorded — a repeated buyer "
+            "message must never be silently dropped",
+        )
+        self.assertTrue(all(m.kind == 'text_reply' for m in inbound))
+        self.assertTrue(all(m.quoted_message_id == old for m in inbound))
+
+    def test_lead_replied_multiple_buttons_all_tapped_interleaved(self):
+        """Lead taps 3 different quick-reply buttons on one template.
+
+        That is 6 webhooks — a button_reply click + a text_reply companion for
+        each of A/B/C — delivered in an arbitrary, interleaved order.  Dedup is
+        scoped by body, so the three buttons never cross-collapse, and each
+        (click, companion) pair collapses regardless of order → exactly THREE
+        bubbles, one per button the lead actually pressed.
+        """
+        conv = self.make_conversation()
+        self.Msg.sudo().create({
+            'conversation_id': conv.id,
+            'direction': 'outbound',
+            'initiator': 'workflow',
+            'kind': 'template',
+            'template_name': 'multi_cta',
+            'wa_message_id': 'wamid.multi',
+            'status': 'delivered',
+            'occurred_at': '2026-03-01 07:00:00',
+        })
+
+        def click(label):
+            return {
+                'event_type': 'lead_replied', 'phone': conv.phone_number,
+                'wa_message_id': 'wamid.multi', 'button_reply_id': label,
+                'message_text': label, 'occurred_at': '2026-03-01T08:00:00Z',
+            }
+
+        def companion(label, mid):
+            return {
+                'event_type': 'lead_replied', 'phone': conv.phone_number,
+                'wa_message_id': 'wamid.companion-%s' % mid,
+                'source_message_id': 'wamid.multi', 'message_text': label,
+                'occurred_at': '2026-03-01T08:00:01Z',
+            }
+
+        # Deliberately interleaved / out-of-order across the three buttons.
+        sequence = [
+            (companion('B', 'cb'), 'cb'), (click('A'), 'ka'), (click('C'), 'kc'),
+            (companion('A', 'ca'), 'ca'), (companion('C', 'cc'), 'cc'), (click('B'), 'kb'),
+        ]
+        for event, mid in sequence:
+            self._process(event, msg_id='multi-%s' % mid)
+
+        inbound = self.Msg.sudo().search([
+            ('conversation_id', '=', conv.id),
+            ('direction', '=', 'inbound'),
+        ])
+        self.assertEqual(len(inbound), 3,
+                         "three distinct buttons tapped = three bubbles")
+        self.assertEqual(
+            sorted(inbound.mapped('body')), ['A', 'B', 'C'],
+            "one bubble per distinct button label",
+        )
+
+    def test_lead_replied_button_tap_and_distinct_swipe_both_recorded(self):
+        """A button tap and a genuine swipe-reply (different body) to the same
+        template are two separate messages — both must show."""
+        conv = self.make_conversation()
+        self.Msg.sudo().create({
+            'conversation_id': conv.id,
+            'direction': 'outbound',
+            'initiator': 'workflow',
+            'kind': 'template',
+            'template_name': 'site_visit',
+            'wa_message_id': 'wamid.tplBS',
+            'status': 'delivered',
+            'occurred_at': '2026-03-01 07:00:00',
+        })
+        # Button tap.
+        self._process({
+            'event_type': 'lead_replied', 'phone': conv.phone_number,
+            'wa_message_id': 'wamid.tplBS', 'button_reply_id': 'Schedule Visit',
+            'message_text': 'Schedule Visit', 'occurred_at': '2026-03-01T08:00:00Z',
+        }, msg_id='bt-tap')
+        # Genuine swipe-reply with a DIFFERENT body, quoting the same template.
+        self._process({
+            'event_type': 'lead_replied', 'phone': conv.phone_number,
+            'wa_message_id': 'wamid.swipe-distinct',
+            'source_message_id': 'wamid.tplBS',
+            'message_text': 'Actually can we do next week?',
+            'occurred_at': '2026-03-01T08:01:00Z',
+        }, msg_id='bt-swipe')
+
+        inbound = self.Msg.sudo().search([
+            ('conversation_id', '=', conv.id),
+            ('direction', '=', 'inbound'),
+        ])
+        self.assertEqual(len(inbound), 2,
+                         "button tap + distinct swipe-reply = two bubbles")
+
+    def test_lead_replied_same_button_double_tap_is_single_bubble(self):
+        """Tapping the SAME button twice collapses to one bubble.
+
+        This is the existing synthetic-id double-tap guard ({template}:r:{label});
+        documented here so the behaviour is explicit and locked.
+        """
+        conv = self.make_conversation()
+        self.Msg.sudo().create({
+            'conversation_id': conv.id,
+            'direction': 'outbound',
+            'initiator': 'workflow',
+            'kind': 'template',
+            'template_name': 'site_visit',
+            'wa_message_id': 'wamid.tplDT',
+            'status': 'delivered',
+            'occurred_at': '2026-03-01 07:00:00',
+        })
+        for i in (1, 2):
+            self._process({
+                'event_type': 'lead_replied', 'phone': conv.phone_number,
+                'wa_message_id': 'wamid.tplDT', 'button_reply_id': 'Yes',
+                'message_text': 'Yes', 'occurred_at': '2026-03-01T08:00:00Z',
+            }, msg_id='dt-%d' % i)
+
+        inbound = self.Msg.sudo().search([
+            ('conversation_id', '=', conv.id),
+            ('direction', '=', 'inbound'),
+        ])
+        self.assertEqual(len(inbound), 1,
+                         "same button tapped twice = one bubble (double-tap guard)")
+
+    def test_lead_replied_repeated_freetext_without_quote_not_dropped(self):
+        """Two identical plain replies with NO quoted source must both show.
+
+        The companion dedup only applies to replies that quote a source, so plain
+        repeated free-text ("ok", "ok") is never suppressed.
+        """
+        conv = self.make_conversation()
+        for i, mid in enumerate(('f1', 'f2'), start=1):
+            self._process({
+                'event_type': 'lead_replied', 'phone': conv.phone_number,
+                'wa_message_id': 'wamid.%s' % mid, 'message_text': 'ok',
+                'occurred_at': '2026-03-01T08:0%d:00Z' % i,
+            }, msg_id='ft-%s' % mid)
+
+        inbound = self.Msg.sudo().search([
+            ('conversation_id', '=', conv.id),
+            ('direction', '=', 'inbound'),
+        ])
+        self.assertEqual(len(inbound), 2,
+                         "repeated non-quoted free-text must both be recorded")
+
     def test_lead_replied_distinct_buttons_are_not_deduped(self):
         """Two DIFFERENT taps on the same template stay as two separate replies."""
         conv = self.make_conversation()

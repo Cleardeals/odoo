@@ -39,19 +39,6 @@ class WaEventLog(models.Model):
     # service log — filter on it to reconstruct a message's full journey.
     trace_id = fields.Char('Trace ID', index=True, readonly=True)
     payload = fields.Text('Payload (JSON)', readonly=True)
-    # Best-effort links to the domain records this event concerns, resolved from
-    # the event's wa_message_id / phone.  ``set null`` so the audit row survives
-    # if the linked record is later removed.
-    message_id = fields.Many2one(
-        'wa.message', string='WA Message', index=True, readonly=True, ondelete='set null'
-    )
-    conversation_id = fields.Many2one(
-        'wa.conversation', string='Conversation', index=True, readonly=True,
-        ondelete='set null',
-    )
-    lead_id = fields.Many2one(
-        'leads.new', string='Lead', index=True, readonly=True, ondelete='set null'
-    )
     status = fields.Selection(
         [('processed', 'Processed'), ('failed', 'Failed')],
         required=True,
@@ -86,9 +73,6 @@ class WaEventLog(models.Model):
         status: str = 'processed',
         error_message: str = '',
         trace_id: str = '',
-        message_id: int | bool = False,
-        conversation_id: int | bool = False,
-        lead_id: int | bool = False,
     ) -> 'WaEventLog':
         """Create a single event log entry.  Never raises — logging must not
         crash its caller.
@@ -102,9 +86,6 @@ class WaEventLog(models.Model):
         :param error_message:     Human-readable error if status is ``'failed'``.
         :param trace_id:          Platform end-to-end correlation id.  Defaults to
                                   the id bound for the current push request.
-        :param message_id:        Optional ``wa.message`` id this event concerns.
-        :param conversation_id:   Optional ``wa.conversation`` id.
-        :param lead_id:           Optional ``leads.new`` id.
         :return: The newly created ``wa.event.log`` record, or an empty
                  recordset if creation itself failed.
         """
@@ -119,9 +100,6 @@ class WaEventLog(models.Model):
                 'pubsub_message_id': pubsub_message_id or False,
                 'trace_id': trace_id or False,
                 'payload': json.dumps(payload) if payload is not None else False,
-                'message_id': message_id or False,
-                'conversation_id': conversation_id or False,
-                'lead_id': lead_id or False,
                 'status': status,
                 'error_message': error_message or False,
             })

@@ -7,6 +7,8 @@ import logging
 
 from datetime import timedelta
 
+import psycopg2
+
 from odoo import api, fields, models
 from .wa_conversation import (
     _INTERAKT_KIND_TO_ODOO,
@@ -49,32 +51,24 @@ class WaConversation(models.Model):
         }
         handler = _ODOO_WA_HANDLERS.get(event_type)
         # Log every OdooWaEvent to the webhook log BEFORE dispatching so that
-        # even failed or unknown events leave an audit trail.  trace_id is filled
-        # automatically from the request context; resolve the domain links from
-        # the event's wa_message_id / phone so the audit row is navigable.
+        # even failed or unknown events leave an audit trail.  ``trace_id`` is
+        # filled automatically from the request context.
+        #
+        # IMPORTANT — do NOT set the conversation_id / message_id / lead_id FK
+        # links here.  Populating a FK on this pre-dispatch INSERT makes Postgres
+        # take a FOR KEY SHARE lock on the referenced wa_conversation row; the
+        # handler below then upgrades it to FOR UPDATE (see the lock-first comment
+        # in _handle_odoo_lead_replied), so two concurrent deliveries for the same
+        # conversation each hold KEY SHARE and deadlock on the mutual upgrade.
+        # The payload JSON already carries wa_message_id / phone / enrollment_id
+        # for correlation, so the links add no query power worth a deadlock.
         try:
-            message = self.env['wa.message'].browse()
-            conversation = self.env['wa.conversation'].browse()
-            wa_message_id = event.get('wa_message_id')
-            phone = event.get('phone')
-            if wa_message_id:
-                message = self.env['wa.message'].sudo().search(
-                    [('wa_message_id', '=', wa_message_id)], limit=1
-                )
-            if phone:
-                conversation = self.env['wa.conversation'].sudo().search(
-                    [('phone_number', '=', phone)], limit=1
-                )
-            lead = message.lead_id if message else conversation.lead_id
             self.env['wa.event.log'].sudo()._log(
                 event_type=f'odoo_wa_{event_type}' if event_type else 'odoo_wa_unknown',
                 direction='inbound',
                 pubsub_message_id=pubsub_message_id,
                 payload=event,
                 status='processed',
-                message_id=message.id,
-                conversation_id=conversation.id,
-                lead_id=lead.id if lead else False,
             )
         except Exception:
             pass  # never let audit logging break event processing
@@ -449,8 +443,9 @@ class WaConversation(models.Model):
                 )[:140] or False
                 quoted_sender = quoted_sender or quoted_src.sender_name or 'You'
 
-        # Skip the button-tap "companion" text duplicate (same quoted source + body).
-        if self._owa_is_companion_duplicate(conv, quoted_src, body):
+        # Skip the button-tap "companion" duplicate — an existing reply with the
+        # same (quoted source, body) but the COMPLEMENTARY kind (button vs text).
+        if self._owa_is_companion_duplicate(conv, quoted_src, body, kind):
             return
 
         inbound_seg = self._owa_attribute_inbound_segment(conv, quoted_src, lead)
@@ -531,37 +526,59 @@ class WaConversation(models.Model):
                 return store_wa_message_id, collision_src, True
         return store_wa_message_id, collision_src, False
 
-    def _owa_is_companion_duplicate(self, conv, quoted_src, body) -> bool:
-        """True when an inbound reply quoting *quoted_src* with the same body
-        already exists — the button-tap "companion" text duplicate.
+    def _owa_is_companion_duplicate(self, conv, quoted_src, body, kind) -> bool:
+        """True when *this* inbound reply is the button-tap "companion" of an
+        already-recorded reply — and must be dropped as a duplicate bubble.
 
         A quick-reply tap emits TWO inbound events from Interakt: the button
-        CLICK (whose id is the template's outbound id) and a companion
-        ``message_received`` TEXT (its own id) carrying the same message_context.
-        The platform is meant to click-shadow the companion so only ONE reaches
-        us, but that shadow is time-windowed (~4s) and can miss — on a redelivery
-        or an out-of-order batch BOTH events arrive and, because the companion
-        carries a different wa_message_id, the id-based dedup doesn't catch it →
-        two identical bubbles.  Both events resolve to the SAME quoted source with
-        the SAME body, so treat an existing inbound with the same (quoted source,
-        body) as the same tap and skip.  Scoped to replies that quote a source so
-        genuine repeated free-text ("ok", "ok") is never suppressed.  Runs under
-        the conversation's FOR UPDATE lock (held by the caller), so two concurrent
-        deliveries are serialized and the second sees the first.
+        CLICK (whose id is the template's outbound id → ``kind='button_reply'``)
+        and a companion ``message_received`` TEXT (its own id, same
+        message_context → ``kind='text_reply'``).  The platform's click-shadow is
+        meant to collapse them but is time-windowed (~4s) and can miss on a
+        redelivery / out-of-order batch, so BOTH reach us with different
+        wa_message_ids → the id-based dedup can't catch it → two identical
+        bubbles.
+
+        The two halves of a real pair share the same (quoted source, body) but
+        are of **complementary kinds** — exactly one button_reply and one
+        text_reply.  That is the reliable, time- AND order-independent signature
+        of a companion: drop the incoming reply only when an existing inbound
+        with the same (quoted source, body) but the *opposite* kind is present.
+        Whichever half arrives first is recorded; the second finds its complement
+        and is dropped — so it holds regardless of which Interakt delivers first.
+
+        Because the match is scoped by *body*, distinct buttons on one template
+        (different labels) never cross-collapse: tapping A, B and C yields three
+        bubbles no matter how their six webhooks interleave.  And because it
+        requires the *opposite* kind, two messages of the SAME kind are never a
+        pair — two genuine swipe text-replies ("Hi", "Hi") to the same message
+        are both text_reply and both shown.  (The previous version keyed on
+        (quoted source, body) alone, so a repeated identical swipe-reply — a real
+        buyer message — was silently dropped.)  Runs under the conversation's
+        FOR UPDATE lock (held by the caller), so concurrent deliveries serialize.
         """
         if not quoted_src:
+            return False
+        # The kind that, if already present for the same (quoted source, body),
+        # makes THIS reply the second half of a companion pair.
+        companion_kind = {
+            'button_reply': 'text_reply',
+            'text_reply': 'button_reply',
+        }.get(kind)
+        if not companion_kind:
             return False
         twin = self.env['wa.message'].sudo().search([
             ('conversation_id', '=', conv.id),
             ('direction', '=', 'inbound'),
             ('quoted_message_id', '=', quoted_src.id),
             ('body', '=', body),
+            ('kind', '=', companion_kind),
         ], limit=1)
         if twin:
             _logger.info(
                 "wa_push: lead_replied companion duplicate skipped "
-                "(conv=%s quoted=%s body=%r existing=%s)",
-                conv.id, quoted_src.id, body[:40], twin.id,
+                "(conv=%s quoted=%s body=%r kind=%s existing=%s existing_kind=%s)",
+                conv.id, quoted_src.id, body[:40], kind, twin.id, companion_kind,
             )
             return True
         return False
