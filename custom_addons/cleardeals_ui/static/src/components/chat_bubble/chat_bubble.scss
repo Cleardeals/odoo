@@ -129,6 +129,32 @@ $max-bubble-width:   72%;
         display: block;
         cursor: pointer;
         object-fit: cover;
+
+        // Stickers are small, transparent WebP — no crop, no card chrome.
+        &--sticker {
+            max-width: 140px;
+            max-height: 140px;
+            object-fit: contain;
+            background: transparent;
+        }
+    }
+
+    // Location / contact chip — a compact labelled row so these bubbles are
+    // never empty even when the body carries no text.
+    &__special {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 4px 2px;
+        font-size: 13px;
+    }
+
+    &__special-icon { opacity: 0.7; }
+    &__special-label { font-weight: 500; }
+    &__special-link {
+        margin-left: auto;
+        font-size: 12px;
+        text-decoration: underline;
     }
 
     &__video-wrap {

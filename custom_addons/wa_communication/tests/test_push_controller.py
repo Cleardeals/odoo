@@ -7,6 +7,7 @@ out so no external network calls are made.
 
 import base64
 import json
+import os
 from unittest.mock import MagicMock, patch
 
 from odoo.tests import HttpCase, tagged
@@ -132,16 +133,24 @@ class TestWaPushController(HttpCase):
     # ------------------------------------------------------------------
 
     def test_missing_auth_header_returns_401(self):
-        resp = self.url_open(
-            '/wa/pubsub/push',
-            data=_make_envelope({'object': 'test'}),
-            headers={'Content-Type': 'application/json'},
-        )
+        # These tests exercise the REAL OIDC auth path.  The controller bypasses
+        # auth when PUBSUB_EMULATOR_HOST is set (local emulator mode), which is
+        # true inside the dev container — remove it for the duration so the
+        # 401 path is actually reached regardless of where the suite runs.
+        with patch.dict(os.environ):
+            os.environ.pop('PUBSUB_EMULATOR_HOST', None)
+            resp = self.url_open(
+                '/wa/pubsub/push',
+                data=_make_envelope({'object': 'test'}),
+                headers={'Content-Type': 'application/json'},
+            )
         self.assertEqual(resp.status_code, 401)
 
     def test_oidc_failure_returns_401(self):
         from odoo.addons.cleardeals_pubsub.controllers.push_utils import InvalidPushTokenError
-        with patch(_VERIFY_PATCH, side_effect=InvalidPushTokenError('bad token')):
+        with patch.dict(os.environ), \
+                patch(_VERIFY_PATCH, side_effect=InvalidPushTokenError('bad token')):
+            os.environ.pop('PUBSUB_EMULATOR_HOST', None)
             resp = self._post_push({'object': 'test'})
         self.assertEqual(resp.status_code, 401)
 

@@ -44,12 +44,44 @@ export class CdChatBubble extends Component {
 
     get isMedia() {
         const kind = this.props.message.kind;
-        return ["image", "video", "document", "audio"].includes(kind);
+        // Stickers are WebP images delivered with a media_url — render like images.
+        return ["image", "video", "document", "audio", "sticker"].includes(kind);
+    }
+
+    get isImageLike() {
+        const kind = this.props.message.kind;
+        return kind === "image" || kind === "sticker";
     }
 
     get mediaIcon() {
-        const icons = { image: "fa-image", video: "fa-video-camera", document: "fa-file", audio: "fa-music" };
+        const icons = {
+            image: "fa-image", video: "fa-video-camera", document: "fa-file",
+            audio: "fa-music", sticker: "fa-smile-o",
+        };
         return icons[this.props.message.kind] || "fa-paperclip";
+    }
+
+    /**
+     * Non-media rich inbound kinds that carry no media_url and whose body may be
+     * empty (location pin, contact card).  Returns {icon, label} so the bubble
+     * always shows a readable chip instead of an invisible empty bubble.
+     * list_reply carries the picked option in body, so it renders as text.
+     */
+    get specialKind() {
+        const kind = this.props.message.kind;
+        const map = {
+            location: { icon: "fa-map-marker", label: "Location" },
+            contact:  { icon: "fa-address-card-o", label: "Contact" },
+        };
+        return map[kind] || null;
+    }
+
+    /** A Google Maps link when a location bubble carries "lat,long" in its body. */
+    get locationMapsUrl() {
+        if (this.props.message.kind !== "location") return null;
+        const body = (this.props.message.body || "").trim();
+        const m = body.match(/^\s*(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)\s*$/);
+        return m ? `https://www.google.com/maps?q=${m[1]},${m[2]}` : null;
     }
 
     get timeLabel() {

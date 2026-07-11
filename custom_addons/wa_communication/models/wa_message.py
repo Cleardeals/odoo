@@ -142,6 +142,10 @@ class WaMessage(models.Model):
             ('audio',        'Audio'),           # media: audio / voice note
             ('button_reply', 'Button Reply'),    # inbound: buyer tapped a button
             ('text_reply',   'Text Reply'),      # inbound: buyer typed text
+            ('list_reply',   'List Reply'),      # inbound: buyer picked a list option
+            ('location',     'Location'),        # inbound: shared location pin
+            ('contact',      'Contact'),         # inbound: shared contact card
+            ('sticker',      'Sticker'),         # inbound: sticker (WebP image)
             ('system',       'System Event'),    # enrollment / assignment pill
             ('unknown',      'Unknown'),         # unrecognised WA message type
         ],

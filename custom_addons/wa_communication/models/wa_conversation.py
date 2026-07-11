@@ -97,6 +97,15 @@ _INTERAKT_KIND_TO_ODOO = {
     'Audio':    'audio',
     'Text':     'text_reply',
     'Button':   'button_reply',
+    # Rich inbound types — mapped to real kinds so they never render as an
+    # empty text bubble.  Aliases cover Interakt naming variations.
+    'Location':  'location',
+    'Sticker':   'sticker',
+    'Contact':   'contact',
+    'Contacts':  'contact',
+    'List':      'list_reply',
+    'ListReply': 'list_reply',
+    'InteractiveListReply': 'list_reply',
 }
 
 # Mapping from WA status webhook strings to wa.message.status Selection values.

@@ -203,6 +203,83 @@ class TestInboundEvents(WaTransactionCase):
         self.assertEqual(msg.status, 'delivered',
                          "status must stay 'delivered' — never downgrade to sent")
 
+    # ── out-of-order receipts BEFORE message_sent (workflow sends) ─────────────
+
+    def test_workflow_delivered_before_sent_creates_row_and_keeps_cost(self):
+        """A workflow send's delivered receipt that beats message_sent must NOT
+        be dropped — a row is created carrying delivered + cost, and the later
+        message_sent enriches it in place (no duplicate, no downgrade)."""
+        conv = self.make_conversation()
+        before = self.Msg.sudo().search_count([('conversation_id', '=', conv.id)])
+        # delivered arrives first (only workflow context: enrollment_id/step_id)
+        self._process({
+            'event_type': 'message_delivered',
+            'phone': conv.phone_number,
+            'wa_message_id': 'wamid.ooo1',
+            'enrollment_id': 'enr-ooo1',
+            'step_id': 'step-1',
+            'cost_inr': 0.72,
+            'occurred_at': '2026-01-02T11:00:00Z',
+        })
+        created = self.Msg.sudo().search([('wa_message_id', '=', 'wamid.ooo1')])
+        self.assertEqual(len(created), 1, "delivered must create the row")
+        self.assertEqual(created.status, 'delivered')
+        self.assertEqual(created.cost_inr, 0.72)
+        self.assertEqual(created.direction, 'outbound')
+        # now the delayed message_sent arrives — must enrich, not duplicate
+        self._process({
+            'event_type': 'message_sent',
+            'phone': conv.phone_number,
+            'wa_message_id': 'wamid.ooo1',
+            'enrollment_id': 'enr-ooo1',
+            'step_id': 'step-1',
+            'workflow_slug': 'welcome_flow',
+            'template_name': 'welcome',
+            'occurred_at': '2026-01-02T10:00:00Z',
+        })
+        rows = self.Msg.sudo().search([('wa_message_id', '=', 'wamid.ooo1')])
+        self.assertEqual(len(rows), 1, "message_sent must enrich, not duplicate")
+        self.assertEqual(rows.status, 'delivered',
+                         "status must not downgrade to sent")
+        self.assertEqual(rows.workflow_slug, 'welcome_flow',
+                         "sent enriches the stub with workflow context")
+        self.assertEqual(
+            self.Msg.sudo().search_count([('conversation_id', '=', conv.id)]),
+            before + 1, "exactly one row for the whole sent/delivered pair")
+
+    def test_workflow_read_before_sent_creates_row_with_seen_at(self):
+        conv = self.make_conversation()
+        self._process({
+            'event_type': 'message_read',
+            'phone': conv.phone_number,
+            'wa_message_id': 'wamid.ooo2',
+            'enrollment_id': 'enr-ooo2',
+            'occurred_at': '2026-01-02T12:00:00Z',
+        })
+        created = self.Msg.sudo().search([('wa_message_id', '=', 'wamid.ooo2')])
+        self.assertEqual(len(created), 1)
+        self.assertEqual(created.status, 'read')
+        self.assertTrue(created.seen_at)
+
+    def test_delivered_before_sent_without_workflow_context_is_not_stubbed(self):
+        """An RM-manual send owns a queued row keyed by request_id that a
+        delivered receipt (keyed by wa_message_id only) cannot match yet.  We
+        must NOT create a stub for it — that would duplicate the RM message.
+        With no enrollment/step context, the receipt is dropped (logged), not
+        materialised into a phantom row."""
+        conv = self.make_conversation()
+        before = self.Msg.sudo().search_count([('conversation_id', '=', conv.id)])
+        self._process({
+            'event_type': 'message_delivered',
+            'phone': conv.phone_number,
+            'wa_message_id': 'wamid.rm-ooo',
+            'cost_inr': 0.65,
+            'occurred_at': '2026-01-02T11:00:00Z',
+        })
+        self.assertEqual(
+            self.Msg.sudo().search_count([('conversation_id', '=', conv.id)]),
+            before, "no phantom row for an RM send without workflow context")
+
     # ── lead_replied ──────────────────────────────────────────────────────────
 
     def test_lead_replied_creates_inbound_and_increments_unread(self):
@@ -620,6 +697,27 @@ class TestInboundEvents(WaTransactionCase):
         self.assertEqual(len(inbound), 2,
                          "different button labels must each be recorded")
 
+    def test_lead_replied_reopens_expired_window(self):
+        """An inbound reply on a conversation whose 24h window has already closed
+        must reopen it — otherwise the RM couldn't free-text back."""
+        past = datetime(2026, 1, 1, 0, 0, 0)
+        conv = self.make_conversation(window_expires_at=past)
+        conv.invalidate_recordset()
+        self.assertFalse(
+            conv.window_expires_at and conv.window_expires_at > datetime.utcnow(),
+            "precondition: window is closed")
+        self._process({
+            'event_type': 'lead_replied',
+            'phone': conv.phone_number,
+            'wa_message_id': 'wamid.reopen',
+            'message_text': 'still there?',
+            'occurred_at': '2026-06-01T08:00:00Z',
+        })
+        conv.invalidate_recordset()
+        expected = datetime(2026, 6, 1, 8, 0, 0) + timedelta(hours=24)
+        self.assertEqual(conv.window_expires_at, expected,
+                         "reply must reopen the 24h window from the reply time")
+
     def test_lead_replied_uses_platform_window_expiry_when_supplied(self):
         conv = self.make_conversation()
         self._process({
@@ -632,3 +730,125 @@ class TestInboundEvents(WaTransactionCase):
         })
         conv.invalidate_recordset()
         self.assertEqual(conv.window_expires_at, datetime(2026, 3, 5, 0, 0, 0))
+
+    def test_lead_replied_stop_message_lands_as_inbound_bubble(self):
+        """A STOP/opt-out is still a lead message — it must show in the chat.
+
+        The platform records the opt-out itself but forwards the message as a
+        normal lead_replied; nothing in Odoo may filter or special-case it.
+        """
+        conv = self.make_conversation()
+        start_unread = conv.unread_count
+        self._process({
+            'event_type': 'lead_replied',
+            'phone': conv.phone_number,
+            'wa_message_id': 'wamid.stop1',
+            'message_text': 'STOP',
+            'message_kind': 'Text',
+            'occurred_at': '2026-03-01T08:00:00Z',
+        })
+        conv.invalidate_recordset()
+        stop_msg = self.Msg.sudo().search([('wa_message_id', '=', 'wamid.stop1')])
+        self.assertEqual(len(stop_msg), 1, "STOP message must land in the inbox")
+        self.assertEqual(stop_msg.direction, 'inbound')
+        self.assertEqual(stop_msg.body, 'STOP')
+        self.assertEqual(conv.unread_count, start_unread + 1,
+                         "RM must be alerted to the opt-out")
+
+    # ── Rich inbound kinds (location / sticker / contact / list) ──────────────
+
+    def _reply_kind(self, conv, wa_id, interakt_kind, **extra):
+        """Fire a lead_replied with a given Interakt content type; return the row."""
+        event = {
+            'event_type': 'lead_replied',
+            'phone': conv.phone_number,
+            'wa_message_id': wa_id,
+            'message_kind': interakt_kind,
+            'occurred_at': '2026-03-01T08:00:00Z',
+        }
+        event.update(extra)
+        self._process(event, wa_id)
+        return self.Msg.sudo().search([('wa_message_id', '=', wa_id)])
+
+    def test_lead_replied_location_maps_to_location_kind(self):
+        conv = self.make_conversation()
+        msg = self._reply_kind(conv, 'wamid.loc', 'Location',
+                               message_text='23.0225,72.5714')
+        self.assertEqual(len(msg), 1)
+        self.assertEqual(msg.kind, 'location')
+        self.assertEqual(msg.direction, 'inbound')
+
+    def test_lead_replied_sticker_maps_to_sticker_kind_with_media(self):
+        conv = self.make_conversation()
+        msg = self._reply_kind(conv, 'wamid.stk', 'Sticker',
+                               media_url='https://cdn.interakt.ai/x/sticker.webp')
+        self.assertEqual(msg.kind, 'sticker')
+        self.assertEqual(msg.media_url, 'https://cdn.interakt.ai/x/sticker.webp')
+
+    def test_lead_replied_contact_maps_to_contact_kind(self):
+        conv = self.make_conversation()
+        msg = self._reply_kind(conv, 'wamid.ct', 'Contact',
+                               message_text='Ramesh +919812345678')
+        self.assertEqual(msg.kind, 'contact')
+        self.assertEqual(msg.body, 'Ramesh +919812345678')
+
+    def test_lead_replied_list_reply_maps_to_list_reply_kind(self):
+        conv = self.make_conversation()
+        msg = self._reply_kind(conv, 'wamid.lst', 'ListReply',
+                               message_text='2 BHK')
+        self.assertEqual(msg.kind, 'list_reply')
+        self.assertEqual(msg.body, '2 BHK')
+
+    def test_lead_replied_unmapped_kind_stored_as_unknown_not_text(self):
+        """A brand-new Interakt content type must land as 'unknown', never be
+        silently mislabelled as a text reply — so it's visible and greppable."""
+        conv = self.make_conversation()
+        msg = self._reply_kind(conv, 'wamid.new', 'HologramMessage',
+                               message_text='<binary>')
+        self.assertEqual(len(msg), 1, "unmapped kind must still land in the inbox")
+        self.assertEqual(msg.kind, 'unknown')
+
+    def test_lead_replied_no_message_kind_falls_back_to_text_or_button(self):
+        """Legacy events with no message_kind keep the button/text heuristic."""
+        conv = self.make_conversation()
+        text_msg = self._reply_kind(conv, 'wamid.legacy_txt', '',
+                                    message_text='hello')
+        self.assertEqual(text_msg.kind, 'text_reply')
+        btn_msg = self._reply_kind(conv, 'wamid.legacy_btn', '',
+                                   message_text='Yes', button_reply_id='btn_yes')
+        self.assertEqual(btn_msg.kind, 'button_reply')
+
+    # ── Inbound media landing ─────────────────────────────────────────────────
+
+    def test_lead_replied_image_lands_with_media_fields(self):
+        conv = self.make_conversation()
+        msg = self._reply_kind(
+            conv, 'wamid.img', 'Image',
+            media_url='https://cdn.interakt.ai/a/photo.jpeg',
+            media_filename='photo.jpeg',
+        )
+        self.assertEqual(msg.kind, 'image')
+        self.assertEqual(msg.media_url, 'https://cdn.interakt.ai/a/photo.jpeg')
+        self.assertEqual(msg.media_filename, 'photo.jpeg')
+
+    def test_lead_replied_document_lands_with_filename(self):
+        conv = self.make_conversation()
+        msg = self._reply_kind(
+            conv, 'wamid.doc', 'Document',
+            media_url='https://cdn.interakt.ai/x/deed.pdf',
+            media_filename='deed.pdf',
+        )
+        self.assertEqual(msg.kind, 'document')
+        self.assertEqual(msg.media_filename, 'deed.pdf')
+
+    def test_lead_replied_uncaptioned_media_none_caption_scrubbed(self):
+        """Interakt's literal "None" caption on uncaptioned media must not leak
+        into the bubble body."""
+        conv = self.make_conversation()
+        msg = self._reply_kind(
+            conv, 'wamid.img2', 'Image',
+            message_text='None',
+            media_url='https://cdn.interakt.ai/a/p.jpeg',
+        )
+        self.assertEqual(msg.kind, 'image')
+        self.assertEqual(msg.body, '')

@@ -199,6 +199,79 @@ class WaConversation(models.Model):
             vals['template_buttons'] = buttons
         return vals
 
+    def _owa_create_outbound_stub(self, event: dict, *, status: str,
+                                  extra_vals: dict | None = None):
+        """Create a fresh outbound ``wa.message`` for a status event whose row
+        does not exist yet (workflow-initiated send, or a status webhook that
+        arrived before ``message_sent``).
+
+        Locks the conversation row FOR UPDATE *before* the FK insert so two
+        concurrent status events for the same conversation cannot deadlock on a
+        FOR-KEY-SHARE → FOR-UPDATE upgrade (see the lead_replied handler).
+
+        The row is created with the given ``status`` so no receipt/cost is lost
+        when events are processed out of order; a later ``message_sent`` finds it
+        by ``wa_message_id`` and enriches it (``_max_status`` prevents downgrade).
+        """
+        phone         = event.get('phone', '')
+        wa_message_id = event.get('wa_message_id') or ''
+        request_id    = event.get('request_id') or ''
+        actor_id      = event.get('actor_id')
+        actor_type    = event.get('actor_type', '')
+        workflow_slug = event.get('workflow_slug') or False
+        template_name = event.get('template_name') or False
+        step_id       = event.get('step_id') or False
+        enrollment_id = event.get('enrollment_id') or False
+        occurred_at   = _parse_iso_dt(event.get('occurred_at', ''))
+        initiator     = 'workflow' if workflow_slug or enrollment_id or step_id else 'rm'
+        # ``kind`` is immutable once written, and a delivered/read stub can't be
+        # re-typed later — infer 'template' from any rendered template content the
+        # status event carries, so an out-of-order template send isn't frozen as
+        # 'freetext'.
+        is_template   = bool(
+            template_name or event.get('rendered_body') or event.get('template_buttons')
+        )
+        kind          = 'template' if is_template else 'freetext'
+
+        conv = self._owa_get_conversation(phone)
+        # Lock-first: mirror the lead_replied deadlock guard.
+        self.env.cr.execute(
+            'SELECT id FROM wa_conversation WHERE id = %s FOR UPDATE', (conv.id,)
+        )
+        conv.invalidate_recordset()
+        lead = self._owa_resolve_lead(actor_id, actor_type, phone)
+        seg  = conv._owa_ensure_segment(inquiry=lead, started_by='auto_suggested')
+        create_vals = {
+            'conversation_id':   conv.id,
+            'wa_message_id':     wa_message_id or False,
+            'request_id':        request_id or False,
+            'direction':         'outbound',
+            'initiator':         initiator,
+            'kind':              kind,
+            'template_name':     template_name,
+            'workflow_slug':     workflow_slug,
+            'step_id':           step_id,
+            'enrollment_id':     enrollment_id,
+            'lead_id':           lead.id if lead else False,
+            'segment_id':        seg.id if seg else False,
+            'platform_actor_id': actor_id or 0,
+            'status':            status,
+            'status_updated_at': fields.Datetime.now(),
+            'occurred_at':       occurred_at,
+        }
+        if event.get('rendered_body'):
+            create_vals['template_body'] = event['rendered_body']
+        if event.get('rendered_header'):
+            create_vals['template_header'] = event['rendered_header']
+        if event.get('template_footer'):
+            create_vals['template_footer'] = event['template_footer']
+        if event.get('template_buttons'):
+            create_vals['template_buttons'] = event['template_buttons']
+        create_vals.update(extra_vals or {})
+        msg = self.env['wa.message'].sudo().create(create_vals)
+        conv.sudo().write({'last_message_at': occurred_at})
+        return msg
+
     def _handle_odoo_message_sent(self, event: dict, pubsub_message_id: str) -> None:
         """Handle message_sent — outbound message accepted by Interakt.
 
@@ -206,19 +279,10 @@ class WaConversation(models.Model):
         :meth:`send_message` when the RM initiated the send), update it.
         Otherwise create a new record (workflow-initiated send).
         """
-        phone          = event.get('phone', '')
         wa_message_id  = event.get('wa_message_id') or ''
         request_id     = event.get('request_id') or ''
-        actor_id       = event.get('actor_id')
-        actor_type     = event.get('actor_type', '')
-        rm_odoo_id     = event.get('rm_odoo_id')
-        workflow_slug  = event.get('workflow_slug') or False
-        template_name  = event.get('template_name') or False
         step_id        = event.get('step_id') or False
         enrollment_id  = event.get('enrollment_id') or False
-        occurred_at    = _parse_iso_dt(event.get('occurred_at', ''))
-        initiator      = 'workflow' if workflow_slug else 'rm'
-        kind           = 'template' if template_name else 'freetext'
 
         msg = self._owa_find_message(
             wa_message_id=wa_message_id,
@@ -227,7 +291,7 @@ class WaConversation(models.Model):
             step_id=step_id,
         )
         if msg:
-            # RM-initiated send: update the queued record created by send_message()
+            # RM-initiated send: update the queued record created by send_message().
             # Never move status backwards — a redelivered message_sent must not
             # downgrade a row already marked delivered/read.
             vals = {
@@ -235,44 +299,28 @@ class WaConversation(models.Model):
                 'status':          _max_status(msg.status, 'sent'),
                 'status_updated_at': fields.Datetime.now(),
             }
+            # Backfill workflow context onto a row that was created ahead of this
+            # event (an out-of-order delivered/read stub, which carries the
+            # enrollment/step but not the slug/template).  Only fill blanks, and
+            # only from values the event actually supplies — for RM sends the
+            # event has no workflow_slug, so these stay empty.
+            workflow_slug = event.get('workflow_slug')
+            template_name = event.get('template_name')
+            if workflow_slug and not msg.workflow_slug:
+                vals['workflow_slug'] = workflow_slug
+                vals['initiator'] = 'workflow'
+            if template_name and not msg.template_name:
+                # ``kind`` is immutable; the stub already inferred 'template' from
+                # the delivered event's rendered content, so only the name is
+                # backfilled here.
+                vals['template_name'] = template_name
             vals.update(self._owa_template_content_vals(event, msg))
             msg.write(vals)
         else:
-            # Workflow-initiated send: Odoo never created a wa.message for this
-            conv  = self._owa_get_conversation(phone)
-            lead  = self._owa_resolve_lead(actor_id, actor_type, phone)
-            # Deterministic attribution: a workflow send carries the true inquiry
-            # as actor_id (→ lead), so open/activate that inquiry's segment.
-            seg = conv._owa_ensure_segment(inquiry=lead, started_by='auto_suggested')
-            create_vals = {
-                'conversation_id':  conv.id,
-                'wa_message_id':    wa_message_id or False,
-                'request_id':       request_id or False,
-                'direction':        'outbound',
-                'initiator':        initiator,
-                'kind':             kind,
-                'template_name':    template_name,
-                'workflow_slug':    workflow_slug,
-                'step_id':          step_id,
-                'enrollment_id':    enrollment_id,
-                'lead_id':          lead.id if lead else False,
-                'segment_id':       seg.id if seg else False,
-                'platform_actor_id': actor_id or 0,
-                'status':           'sent',
-                'status_updated_at': fields.Datetime.now(),
-                'occurred_at':      occurred_at,
-            }
-            # Rendered template content (header/body/footer/buttons), if present.
-            if event.get('rendered_body'):
-                create_vals['template_body'] = event['rendered_body']
-            if event.get('rendered_header'):
-                create_vals['template_header'] = event['rendered_header']
-            if event.get('template_footer'):
-                create_vals['template_footer'] = event['template_footer']
-            if event.get('template_buttons'):
-                create_vals['template_buttons'] = event['template_buttons']
-            self.env['wa.message'].sudo().create(create_vals)
-            conv.sudo().write({'last_message_at': occurred_at})
+            # Workflow-initiated send: Odoo never created a wa.message for this.
+            # (A workflow send carries the true inquiry as actor_id → lead, so the
+            # stub helper opens/activates that inquiry's segment.)
+            self._owa_create_outbound_stub(event, status='sent')
 
     def _handle_odoo_message_delivered(
         self, event: dict, pubsub_message_id: str
@@ -302,11 +350,23 @@ class WaConversation(models.Model):
             }
             vals.update(self._owa_template_content_vals(event, msg))
             msg.write(vals)
+        elif enrollment_id or step_id:
+            # Out-of-order: the delivered receipt beat message_sent for a
+            # WORKFLOW send (which has no request_id-keyed queued row).  Create
+            # the row now carrying delivered+cost so nothing is lost; a later
+            # message_sent finds it by wa_message_id and only enriches it.
+            # RM-manual sends are deliberately excluded (they own a queued row
+            # keyed by request_id that this event cannot match → would duplicate).
+            self._owa_create_outbound_stub(
+                event, status='delivered',
+                extra_vals={'cost_inr': cost_inr, 'delivered_at': occurred_at},
+            )
         else:
-            _logger.debug(
-                "wa_push: message_delivered — no wa.message found for "
-                "wa_message_id=%r request_id=%r enrollment_id=%r step_id=%r",
-                wa_message_id, request_id, enrollment_id, step_id,
+            _logger.warning(
+                "wa_push: message_delivered — no wa.message found and no "
+                "enrollment/step to safely create one; receipt dropped "
+                "(wa_message_id=%r request_id=%r)",
+                wa_message_id, request_id,
             )
 
     def _handle_odoo_message_read(self, event: dict, pubsub_message_id: str) -> None:
@@ -333,11 +393,18 @@ class WaConversation(models.Model):
             }
             vals.update(self._owa_template_content_vals(event, msg))
             msg.write(vals)
+        elif enrollment_id or step_id:
+            # Out-of-order read receipt for a workflow send — see the delivered
+            # handler for why RM-manual sends are excluded.
+            self._owa_create_outbound_stub(
+                event, status='read', extra_vals={'seen_at': occurred_at},
+            )
         else:
-            _logger.debug(
-                "wa_push: message_read — no wa.message found for "
-                "wa_message_id=%r request_id=%r enrollment_id=%r step_id=%r",
-                wa_message_id, request_id, enrollment_id, step_id,
+            _logger.warning(
+                "wa_push: message_read — no wa.message found and no "
+                "enrollment/step to safely create one; receipt dropped "
+                "(wa_message_id=%r request_id=%r)",
+                wa_message_id, request_id,
             )
 
     def _handle_odoo_message_failed(self, event: dict, pubsub_message_id: str) -> None:
@@ -389,12 +456,22 @@ class WaConversation(models.Model):
         # Media fields forwarded from the WA platform
         media_url       = event.get('media_url') or False
         media_filename  = event.get('media_filename') or False
-        # Map Interakt message_content_type → Odoo kind; fall back to button/text logic
+        # Map Interakt message_content_type → Odoo kind.  A known type maps to
+        # its real kind; an UNRECOGNISED type (new Interakt content type) is
+        # stored as 'unknown' — never mislabelled as a text reply.  Only when
+        # the platform sent no message_kind at all (older events) do we fall
+        # back to the button/text heuristic.
         interakt_kind   = event.get('message_kind') or ''
-        kind = (
-            _INTERAKT_KIND_TO_ODOO.get(interakt_kind)
-            or ('button_reply' if button_reply_id else 'text_reply')
-        )
+        if interakt_kind:
+            kind = _INTERAKT_KIND_TO_ODOO.get(interakt_kind, 'unknown')
+            if kind == 'unknown':
+                _logger.warning(
+                    "wa_push: lead_replied — unmapped Interakt message_content_type=%r "
+                    "stored as kind='unknown' (phone=%s wa_message_id=%s)",
+                    interakt_kind, phone, wa_message_id,
+                )
+        else:
+            kind = 'button_reply' if button_reply_id else 'text_reply'
 
         # Deduplicate by wa_message_id, with the button/CTA-collision twist.
         store_wa_message_id, quoted_src_from_collision, is_duplicate = (

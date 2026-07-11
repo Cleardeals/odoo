@@ -68,10 +68,11 @@
                     <div class="cd-chat-bubble__media">
                         <t t-if="props.message.media_url">
 
-                            <!-- Image -->
-                            <t t-if="props.message.kind === 'image'">
+                            <!-- Image / Sticker -->
+                            <t t-if="isImageLike">
                                 <img t-att-src="props.message.media_url"
-                                     class="cd-chat-bubble__img" alt="Image"
+                                     t-attf-class="cd-chat-bubble__img {{ props.message.kind === 'sticker' ? 'cd-chat-bubble__img--sticker' : '' }}"
+                                     alt="Image"
                                      t-on-click="(ev) => this.onMediaClick(ev)"/>
                             </t>
 
@@ -117,6 +118,21 @@
                                 <i t-attf-class="fa {{ mediaIcon }}" aria-hidden="true"/>
                                 <span t-esc="props.message.kind"/>
                             </span>
+                        </t>
+                    </div>
+                </t>
+
+                <!-- Rich non-media kinds (location pin, contact card) — always a
+                     readable chip so the bubble is never empty/invisible. -->
+                <t t-if="specialKind">
+                    <div class="cd-chat-bubble__special">
+                        <i t-attf-class="fa {{ specialKind.icon }} cd-chat-bubble__special-icon" aria-hidden="true"/>
+                        <span class="cd-chat-bubble__special-label" t-esc="specialKind.label"/>
+                        <t t-if="locationMapsUrl">
+                            <a class="cd-chat-bubble__special-link"
+                               t-att-href="locationMapsUrl" target="_blank" rel="noopener">
+                                Open in Maps
+                            </a>
                         </t>
                     </div>
                 </t>
