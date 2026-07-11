@@ -72,3 +72,41 @@ class TestQuickReply(TransactionCase):
         shared.with_user(self.manager).write({'body': 'v2'})
         self.assertEqual(shared.body, 'v2')
         shared.with_user(self.manager).unlink()
+
+    # ── List quick replies ────────────────────────────────────────────────────
+
+    def test_defaults_to_text_kind(self):
+        r = self.QR.with_user(self.rm_a).create({'title': 'T', 'body': 'hi'})
+        self.assertEqual(r.kind, 'text')
+        self.assertIsNone(r._parsed_list_payload())
+
+    def test_list_quick_reply_parses_payload(self):
+        import json
+        payload = {'button': 'View options', 'sections': [
+            {'title': 'Homes', 'rows': [{'id': 'r1', 'title': '2 BHK'}]}]}
+        r = self.QR.with_user(self.rm_a).create({
+            'title': 'Home types', 'body': 'Pick one', 'kind': 'list',
+            'list_payload': json.dumps(payload),
+        })
+        parsed = r._parsed_list_payload()
+        self.assertEqual(parsed['button'], 'View options')
+        self.assertEqual(parsed['sections'][0]['rows'][0]['title'], '2 BHK')
+
+    def test_get_for_composer_carries_kind_and_list_payload(self):
+        import json
+        self.QR.with_user(self.rm_a).create({
+            'title': 'LQR', 'body': 'body', 'kind': 'list',
+            'list_payload': json.dumps({'button': 'Go', 'sections': [
+                {'title': 'S', 'rows': [{'id': 'r1', 'title': 'A'}]}]}),
+        })
+        row = next(r for r in self.QR.with_user(self.rm_a).get_for_composer()
+                   if r['title'] == 'LQR')
+        self.assertEqual(row['kind'], 'list')
+        self.assertEqual(row['list_payload']['button'], 'Go')
+
+    def test_malformed_list_payload_returns_none(self):
+        r = self.QR.with_user(self.rm_a).create({
+            'title': 'bad', 'body': 'b', 'kind': 'list',
+            'list_payload': 'not json{',
+        })
+        self.assertIsNone(r._parsed_list_payload())

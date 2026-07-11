@@ -3,6 +3,7 @@
 Part of the ``wa.conversation`` model — see wa_conversation.py for the base
 definition (fields, constraints, inbound push dispatcher).
 """
+import json
 import logging
 import uuid
 
@@ -16,7 +17,7 @@ _logger = logging.getLogger(__name__)
 class WaConversation(models.Model):
     _inherit = 'wa.conversation'
 
-    _WINDOWED_KINDS = frozenset({'freetext', 'image', 'video', 'document', 'audio'})
+    _WINDOWED_KINDS = frozenset({'freetext', 'image', 'video', 'document', 'audio', 'list'})
 
     def send_message(
         self,
@@ -155,6 +156,140 @@ class WaConversation(models.Model):
             status='processed',
         )
         return wa_msg
+
+    def send_list_message(
+        self,
+        body: str,
+        button_text: str,
+        sections: list,
+        request_id: str = '',
+    ) -> 'models.Model':
+        """Send an interactive WhatsApp LIST message (RM manual send).
+
+        ``sections`` is ``[{"title", "rows": [{"id","title","description"}]}]``.
+        Validated like any non-template send: requires ownership + an open 24h
+        window (interactive lists are not templates).  Stores the list structure
+        on the wa.message as ``list_payload`` so the bubble can render it, and
+        publishes an OdooWaRequest with kind='list'.
+
+        :raises UserError: no phone, closed window, or an empty/oversized list.
+        """
+        self.ensure_one()
+        if not self.phone_number:
+            raise UserError("Cannot send — this conversation has no phone number.")
+        self._assert_can_send()
+
+        # Validate the list shape up front so the RM gets a clear error instead of
+        # a silent platform-side drop.  Mirrors the platform's Interakt limits.
+        clean_sections = self._owa_normalize_list_sections(sections)
+        if not clean_sections:
+            raise UserError("Add at least one list item (with a title) before sending.")
+        n_rows = sum(len(s['rows']) for s in clean_sections)
+        if n_rows > 10:
+            raise UserError("A WhatsApp list can have at most 10 items in total.")
+
+        # List messages need an open 24h window (they are not templates).
+        self._compute_window_state()
+        if self.window_state == 'closed':
+            raise UserError(
+                "The 24-hour WhatsApp window is closed for this contact. "
+                "You can only send template messages until the customer replies."
+            )
+
+        effective_request_id = request_id or str(uuid.uuid4())
+        button_text = (button_text or 'Menu').strip()
+
+        send_seg = False
+        if self._owa_segments_enabled():
+            send_seg = self.active_segment_id or self._owa_ensure_segment(
+                inquiry=self.lead_id or None, started_by='rm')
+
+        list_payload = {'button': button_text, 'sections': clean_sections}
+        wa_msg = self.env['wa.message'].create({
+            'conversation_id': self.id,
+            'direction': 'outbound',
+            'initiator': 'rm',
+            'kind': 'list',
+            'body': body or '',
+            'list_payload': json.dumps(list_payload),
+            'request_id': effective_request_id,
+            'lead_id': self.lead_id.id if self.lead_id else False,
+            'segment_id': send_seg.id if send_seg else False,
+            'sender_name': self.env.user.name,
+            'status': 'queued',
+            'occurred_at': fields.Datetime.now(),
+        })
+
+        topic = self.env['ir.config_parameter'].sudo().get_param(
+            _TOPIC_WA_REQUESTS, 'cd-prod-odoo-wa-requests'
+        )
+        request_data = {
+            'request_type': 'send',
+            'request_id': effective_request_id,
+            'phone': self.phone_number,
+            'kind': 'list',
+            'message_text': body or None,
+            'list_button_text': button_text,
+            'list_sections': clean_sections,
+            'rm_odoo_id': self.env.uid,
+            'rm_name': self.env.user.name if self.env.user else None,
+        }
+
+        def _publish():
+            self.env['cleardeals.pubsub'].publish_async(topic, request_data)
+
+        self.env.cr.postcommit.add(_publish)
+
+        self.env['wa.event.log'].sudo()._log(
+            event_type='wa_message_outbound',
+            direction='outbound',
+            topic=topic,
+            payload={
+                'phone': self.phone_number,
+                'kind': 'list',
+                'message_text': (body or '')[:100],
+                'request_id': effective_request_id,
+                'wa_message_id': wa_msg.id,
+                'list_rows': n_rows,
+            },
+            status='processed',
+        )
+        return wa_msg
+
+    @staticmethod
+    def _owa_normalize_list_sections(sections: list) -> list:
+        """Drop empty rows/sections and coerce to the wire shape.
+
+        Keeps only rows with a non-blank title; auto-fills a row id when absent
+        (the id is echoed back as the buyer's reply, so it must be present).
+        """
+        out = []
+        counter = 0
+        for idx, section in enumerate(sections or []):
+            if not isinstance(section, dict):
+                continue
+            rows = []
+            for row in section.get('rows', []) or []:
+                if not isinstance(row, dict):
+                    continue
+                title = (row.get('title') or '').strip()
+                if not title:
+                    continue
+                counter += 1
+                clean = {
+                    'id': (row.get('id') or '').strip() or f'row_{counter}',
+                    'title': title,
+                }
+                desc = (row.get('description') or '').strip()
+                if desc:
+                    clean['description'] = desc
+                rows.append(clean)
+            if rows:
+                out.append({
+                    'title': (section.get('title') or f'Section {idx + 1}').strip(),
+                    'rows': rows,
+                })
+        return out
 
     def mark_as_read(self) -> None:
         """Reset the unread counter for this conversation."""

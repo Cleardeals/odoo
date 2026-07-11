@@ -140,6 +140,7 @@ class WaMessage(models.Model):
             ('document',     'Document'),        # media: PDF / Office file
             ('video',        'Video'),           # media: MP4 / 3GP
             ('audio',        'Audio'),           # media: audio / voice note
+            ('list',         'List Message'),     # outbound: RM sent an interactive list
             ('button_reply', 'Button Reply'),    # inbound: buyer tapped a button
             ('text_reply',   'Text Reply'),      # inbound: buyer typed text
             ('list_reply',   'List Reply'),      # inbound: buyer picked a list option
@@ -318,6 +319,17 @@ class WaMessage(models.Model):
     media_filename = fields.Char(
         'Media Filename',
         help="Filename derived from the media URL path (e.g. 'photo.jpeg', 'doc.pdf').",
+    )
+
+    # ------------------------------------------------------------------
+    # Interactive list message (kind='list')
+    # ------------------------------------------------------------------
+
+    list_payload = fields.Text(
+        'List Payload (JSON)',
+        readonly=True,
+        help="For kind='list': JSON {'button': <menu button label>, "
+             "'sections': [{'title', 'rows': [{'id','title','description'}]}]}.",
     )
 
     # ------------------------------------------------------------------

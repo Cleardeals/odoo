@@ -445,6 +445,7 @@ class WaConversation(models.Model):
                 'body': msg.body or msg.template_body or '',
                 'media_url': msg.media_url or None,
                 'media_filename': msg.media_filename or None,
+                'list_payload': self._owa_parse_list_payload(msg),
                 'status': msg.status,
                 'occurred_at': msg.occurred_at.isoformat() if msg.occurred_at else None,
                 'sender_name': msg.sender_name or (
@@ -631,3 +632,16 @@ class WaConversation(models.Model):
         except Exception:
             pass
         return []
+
+    def _owa_parse_list_payload(self, msg):
+        """Return the parsed ``{'button', 'sections'}`` dict for a list message,
+        or ``None`` when the message isn't a list / has no payload."""
+        if msg.kind != 'list' or not msg.list_payload:
+            return None
+        try:
+            data = json.loads(msg.list_payload)
+        except (ValueError, TypeError):
+            return None
+        if isinstance(data, dict) and data.get('sections'):
+            return data
+        return None

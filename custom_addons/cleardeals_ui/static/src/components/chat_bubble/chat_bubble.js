@@ -30,6 +30,11 @@ export class CdChatBubble extends Component {
 
     setup() {
         this.info = useState({ open: false });
+        this.listUi = useState({ expanded: false });
+    }
+
+    toggleList() {
+        this.listUi.expanded = !this.listUi.expanded;
     }
 
     get isInbound() {
@@ -76,9 +81,14 @@ export class CdChatBubble extends Component {
         return map[kind] || null;
     }
 
-    /** A Google Maps link when a location bubble carries "lat,long" in its body. */
+    /**
+     * Maps link for a location bubble.  Odoo stores the resolved Google Maps
+     * URL (from the shared url or lat/long) in media_url; fall back to parsing
+     * a bare "lat,long" body for older rows.
+     */
     get locationMapsUrl() {
         if (this.props.message.kind !== "location") return null;
+        if (this.props.message.media_url) return this.props.message.media_url;
         const body = (this.props.message.body || "").trim();
         const m = body.match(/^\s*(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)\s*$/);
         return m ? `https://www.google.com/maps?q=${m[1]},${m[2]}` : null;
@@ -95,6 +105,12 @@ export class CdChatBubble extends Component {
     get templateButtons() {
         const b = this.props.message.template_buttons;
         return Array.isArray(b) ? b : [];
+    }
+
+    /** Parsed {button, sections} for an outbound interactive list, or null. */
+    get listPayload() {
+        const p = this.props.message.list_payload;
+        return p && Array.isArray(p.sections) && p.sections.length ? p : null;
     }
 
     // ── WhatsApp formatted HTML (OWL-safe via markup()) ──────────────────────

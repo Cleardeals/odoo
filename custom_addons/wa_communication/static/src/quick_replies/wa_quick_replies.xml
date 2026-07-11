@@ -70,21 +70,94 @@
                                    t-att-value="state.editing.shortcut"
                                    t-on-input="(ev) => { this.state.editing.shortcut = ev.target.value; }"/>
 
-                            <label class="wa-qr__label">Message</label>
-                            <div class="wa-qr__fmt-bar">
-                                <button class="wa-qr__fmt-btn" type="button" title="Bold (*text*)"
-                                        t-on-click="() => this.applyFormat('*')"><b>B</b></button>
-                                <button class="wa-qr__fmt-btn" type="button" title="Italic (_text_)"
-                                        t-on-click="() => this.applyFormat('_')"><i>I</i></button>
-                                <button class="wa-qr__fmt-btn" type="button" title="Strikethrough (~text~)"
-                                        t-on-click="() => this.applyFormat('~')"><s>S</s></button>
-                                <button class="wa-qr__fmt-btn" type="button" title="Monospace (```text```)"
-                                        t-on-click="() => this.applyFormat('```')"><code>&lt;/&gt;</code></button>
+                            <label class="wa-qr__label">Type</label>
+                            <div class="wa-qr__kind-toggle">
+                                <button type="button"
+                                        t-att-class="'wa-qr__kind-opt' + (state.editing.kind === 'text' ? ' wa-qr__kind-opt--active' : '')"
+                                        t-on-click="() => this.setEditorKind('text')">
+                                    <i class="fa fa-align-left" aria-hidden="true"/> Text
+                                </button>
+                                <button type="button"
+                                        t-att-class="'wa-qr__kind-opt' + (state.editing.kind === 'list' ? ' wa-qr__kind-opt--active' : '')"
+                                        t-on-click="() => this.setEditorKind('list')">
+                                    <i class="fa fa-list-ul" aria-hidden="true"/> List message
+                                </button>
                             </div>
-                            <textarea class="wa-qr__textarea" rows="5" t-ref="editorBody"
-                                      placeholder="Type the canned message…  *bold*  _italic_  ~strike~"
+
+                            <label class="wa-qr__label">
+                                <t t-esc="state.editing.kind === 'list' ? 'List body text' : 'Message'"/>
+                            </label>
+                            <t t-if="state.editing.kind === 'text'">
+                                <div class="wa-qr__fmt-bar">
+                                    <button class="wa-qr__fmt-btn" type="button" title="Bold (*text*)"
+                                            t-on-click="() => this.applyFormat('*')"><b>B</b></button>
+                                    <button class="wa-qr__fmt-btn" type="button" title="Italic (_text_)"
+                                            t-on-click="() => this.applyFormat('_')"><i>I</i></button>
+                                    <button class="wa-qr__fmt-btn" type="button" title="Strikethrough (~text~)"
+                                            t-on-click="() => this.applyFormat('~')"><s>S</s></button>
+                                    <button class="wa-qr__fmt-btn" type="button" title="Monospace (```text```)"
+                                            t-on-click="() => this.applyFormat('```')"><code>&lt;/&gt;</code></button>
+                                </div>
+                            </t>
+                            <textarea class="wa-qr__textarea" t-att-rows="state.editing.kind === 'list' ? 2 : 5" t-ref="editorBody"
+                                      placeholder="Type the message…"
                                       t-att-value="state.editing.body"
                                       t-on-input="(ev) => { this.state.editing.body = ev.target.value; }"/>
+
+                            <!-- List builder (kind='list') — reuses composer .cd-list-builder styles -->
+                            <t t-if="state.editing.kind === 'list'">
+                                <label class="wa-qr__label">List button label</label>
+                                <input type="text" class="wa-qr__input" placeholder="e.g. View options"
+                                       t-att-value="state.editing.list.button"
+                                       t-on-input="(ev) => { this.state.editing.list.button = ev.target.value; }"/>
+
+                                <label class="wa-qr__label">Sections &amp; items (<t t-esc="listRowCount"/>/10)</label>
+                                <t t-foreach="state.editing.list.sections" t-as="sec" t-key="sec_index">
+                                    <div class="cd-list-builder__section">
+                                        <div class="cd-list-builder__section-head">
+                                            <input type="text" class="cd-list-builder__input cd-list-builder__section-title"
+                                                   placeholder="Section title (optional)"
+                                                   t-att-value="sec.title"
+                                                   t-on-input="(ev) => { sec.title = ev.target.value; }"/>
+                                            <button class="cd-list-builder__icon-btn"
+                                                    t-if="state.editing.list.sections.length > 1"
+                                                    title="Remove section"
+                                                    t-on-click="() => this.removeSection(sec_index)">
+                                                <i class="fa fa-trash" aria-hidden="true"/>
+                                            </button>
+                                        </div>
+                                        <t t-foreach="sec.rows" t-as="row" t-key="row_index">
+                                            <div class="cd-list-builder__row">
+                                                <span class="cd-list-builder__row-num" t-esc="row_index + 1"/>
+                                                <div class="cd-list-builder__row-fields">
+                                                    <input type="text" class="cd-list-builder__input"
+                                                           placeholder="Item title (required)"
+                                                           t-att-value="row.title"
+                                                           t-on-input="(ev) => { row.title = ev.target.value; }"/>
+                                                    <input type="text" class="cd-list-builder__input"
+                                                           placeholder="Description (optional)"
+                                                           t-att-value="row.description"
+                                                           t-on-input="(ev) => { row.description = ev.target.value; }"/>
+                                                </div>
+                                                <button class="cd-list-builder__icon-btn"
+                                                        t-if="sec.rows.length > 1"
+                                                        title="Remove item"
+                                                        t-on-click="() => this.removeRow(sec_index, row_index)">
+                                                    <i class="fa fa-times" aria-hidden="true"/>
+                                                </button>
+                                            </div>
+                                        </t>
+                                        <button class="cd-list-builder__add-link"
+                                                t-on-click="() => this.addRow(sec_index)">
+                                            <i class="fa fa-plus" aria-hidden="true"/> Add item
+                                        </button>
+                                    </div>
+                                </t>
+                                <button class="cd-list-builder__add-link cd-list-builder__add-section"
+                                        t-on-click="() => this.addSection()">
+                                    <i class="fa fa-plus" aria-hidden="true"/> Add section
+                                </button>
+                            </t>
 
                             <t t-if="state.isManager">
                                 <label class="wa-qr__check">
@@ -113,6 +186,11 @@
     <t t-name="wa_communication.WaQuickReplyCard">
         <div class="wa-qr__card">
             <div class="wa-qr__card-head">
+                <t t-if="r.kind === 'list'">
+                    <span class="wa-qr__card-list-badge" title="Interactive list message">
+                        <i class="fa fa-list-ul" aria-hidden="true"/>
+                    </span>
+                </t>
                 <span class="wa-qr__card-title" t-esc="r.title"/>
                 <t t-if="r.shortcut">
                     <span class="wa-qr__card-shortcut" t-esc="r.shortcut"/>

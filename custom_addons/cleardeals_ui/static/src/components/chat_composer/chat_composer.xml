@@ -114,7 +114,7 @@
                                 initialQuery="state.body"
                                 query="state.body"
                                 typeahead="qrTypeahead"
-                                onSelect="(body) => this.insertQuickReply(body)"
+                                onSelect="(reply) => this.insertQuickReply(reply)"
                                 onClose="() => this.closeQuickReplies()"/>
                         </t>
                     </div>
@@ -133,6 +133,11 @@
                             title="Attach document(s)"
                             t-on-click="() => this.selectAttach('document')">
                         <i class="fa fa-paperclip" aria-hidden="true"/>
+                    </button>
+                    <button class="btn cd-chat-composer__attach-btn"
+                            title="Send interactive list"
+                            t-on-click="() => this.openListBuilder()">
+                        <i class="fa fa-list-ul" aria-hidden="true"/>
                     </button>
                 </t>
 
@@ -179,6 +184,119 @@
                     <i class="fa fa-send" aria-hidden="true"/>
                 </button>
             </div>
+
+            <!-- Interactive list builder modal -->
+            <t t-if="state.listBuilder">
+                <div class="cd-list-builder__backdrop" t-on-click="() => this.closeListBuilder()">
+                    <div class="cd-list-builder" t-on-click.stop="() => {}">
+                        <div class="cd-list-builder__head">
+                            <span class="cd-list-builder__title">
+                                <i class="fa fa-list-ul" aria-hidden="true"/> Interactive list message
+                            </span>
+                            <button class="cd-list-builder__close"
+                                    t-on-click="() => this.closeListBuilder()" title="Close">
+                                <i class="fa fa-times" aria-hidden="true"/>
+                            </button>
+                        </div>
+
+                        <div class="cd-list-builder__body">
+                            <!-- Live WhatsApp preview of the collapsed bubble -->
+                            <div class="cd-list-builder__preview">
+                                <div class="cd-list-builder__preview-label">Preview</div>
+                                <div class="cd-list-builder__preview-bubble">
+                                    <div class="cd-list-builder__preview-text"
+                                         t-esc="state.listBuilder.body.trim() || 'Message body…'"/>
+                                    <div class="cd-list-builder__preview-btn">
+                                        <i class="fa fa-list-ul" aria-hidden="true"/>
+                                        <span t-esc="state.listBuilder.button.trim() || 'Button'"/>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <label class="cd-list-builder__label">Message body</label>
+                            <textarea class="cd-list-builder__input" rows="2"
+                                      placeholder="e.g. Check out our top collections below!"
+                                      t-att-value="state.listBuilder.body"
+                                      t-on-input="(ev) => { state.listBuilder.body = ev.target.value; }"/>
+
+                            <label class="cd-list-builder__label">List button label</label>
+                            <input type="text" class="cd-list-builder__input"
+                                   placeholder="e.g. View options"
+                                   t-att-value="state.listBuilder.button"
+                                   t-on-input="(ev) => { state.listBuilder.button = ev.target.value; }"/>
+
+                            <label class="cd-list-builder__label">Sections &amp; items</label>
+
+                            <t t-foreach="state.listBuilder.sections" t-as="sec" t-key="sec_index">
+                                <div class="cd-list-builder__section">
+                                    <div class="cd-list-builder__section-head">
+                                        <input type="text" class="cd-list-builder__input cd-list-builder__section-title"
+                                               placeholder="Section title (optional)"
+                                               t-att-value="sec.title"
+                                               t-on-input="(ev) => { sec.title = ev.target.value; }"/>
+                                        <button class="cd-list-builder__icon-btn"
+                                                t-if="state.listBuilder.sections.length > 1"
+                                                title="Remove section"
+                                                t-on-click="() => this.removeListSection(sec_index)">
+                                            <i class="fa fa-trash" aria-hidden="true"/>
+                                        </button>
+                                    </div>
+
+                                    <t t-foreach="sec.rows" t-as="row" t-key="row_index">
+                                        <div class="cd-list-builder__row">
+                                            <span class="cd-list-builder__row-num" t-esc="row_index + 1"/>
+                                            <div class="cd-list-builder__row-fields">
+                                                <input type="text" class="cd-list-builder__input"
+                                                       placeholder="Item title (required)"
+                                                       t-att-value="row.title"
+                                                       t-on-input="(ev) => { row.title = ev.target.value; }"/>
+                                                <input type="text" class="cd-list-builder__input"
+                                                       placeholder="Description (optional)"
+                                                       t-att-value="row.description"
+                                                       t-on-input="(ev) => { row.description = ev.target.value; }"/>
+                                            </div>
+                                            <button class="cd-list-builder__icon-btn"
+                                                    t-if="sec.rows.length > 1"
+                                                    title="Remove item"
+                                                    t-on-click="() => this.removeListRow(sec_index, row_index)">
+                                                <i class="fa fa-times" aria-hidden="true"/>
+                                            </button>
+                                        </div>
+                                    </t>
+
+                                    <button class="cd-list-builder__add-link"
+                                            t-on-click="() => this.addListRow(sec_index)">
+                                        <i class="fa fa-plus" aria-hidden="true"/> Add item
+                                    </button>
+                                </div>
+                            </t>
+
+                            <button class="cd-list-builder__add-link cd-list-builder__add-section"
+                                    t-on-click="() => this.addListSection()">
+                                <i class="fa fa-plus" aria-hidden="true"/> Add section
+                            </button>
+
+                            <t t-if="state.listBuilder.error">
+                                <div class="cd-list-builder__error" t-esc="state.listBuilder.error"/>
+                            </t>
+                        </div>
+
+                        <div class="cd-list-builder__foot">
+                            <span class="cd-list-builder__count">
+                                <t t-esc="listRowCount"/> / 10 items
+                            </span>
+                            <div class="cd-list-builder__foot-actions">
+                                <button class="btn btn-sm btn-secondary"
+                                        t-on-click="() => this.closeListBuilder()">Cancel</button>
+                                <button class="btn btn-sm btn-primary"
+                                        t-on-click="() => this.sendList()">
+                                    <i class="fa fa-send" aria-hidden="true"/> Send list
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </t>
         </div>
     </t>
 </templates>

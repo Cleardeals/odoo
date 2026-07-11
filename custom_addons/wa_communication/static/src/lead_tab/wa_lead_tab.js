@@ -135,11 +135,19 @@ export class WaLeadTab extends Component {
         if (!convId) return;
         this.state.sendError = null;
         try {
-            await this.orm.call("wa.conversation", "send_message", [[convId]], {
-                body, kind,
-                media_url:      opts.media_url      || "",
-                media_filename: opts.media_filename || "",
-            });
+            if (kind === "list") {
+                await this.orm.call("wa.conversation", "send_list_message", [[convId]], {
+                    body,
+                    button_text: opts.list_button_text || "",
+                    sections:    opts.list_sections || [],
+                });
+            } else {
+                await this.orm.call("wa.conversation", "send_message", [[convId]], {
+                    body, kind,
+                    media_url:      opts.media_url      || "",
+                    media_filename: opts.media_filename || "",
+                });
+            }
             await this._loadThread(convId);
         } catch (e) {
             this.state.sendError = e.data?.message || String(e);

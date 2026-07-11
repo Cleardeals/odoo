@@ -3,6 +3,7 @@
 Part of the ``wa.conversation`` model — see wa_conversation.py for the base
 definition (fields, constraints, inbound push dispatcher).
 """
+import json
 import logging
 
 from datetime import timedelta
@@ -18,6 +19,82 @@ from .wa_conversation import (
 )
 
 _logger = logging.getLogger(__name__)
+
+
+def _parse_special_inbound(raw_body):
+    """Detect a shared LOCATION or CONTACT payload from an inbound message body.
+
+    Interakt delivers these as a JSON blob in the message text (a location is a
+    dict with ``latitude``/``longitude``; a contact is a list of vCards), so we
+    detect by SHAPE rather than trusting the content-type string.  Returns a
+    ``(kind, clean_body, maps_url)`` tuple, or ``None`` when the body is ordinary
+    text — so a normal reply that merely looks like JSON is never misclassified.
+
+    * location → clean_body = "Name\\nAddress"; maps_url = the shared url or a
+      Google Maps link built from lat/long.
+    * contact  → clean_body = "Name · +phone" (one line per contact); maps_url = ''.
+    """
+    if not raw_body:
+        return None
+    stripped = raw_body.strip()
+    if not stripped or stripped[0] not in '{[':
+        return None
+    try:
+        data = json.loads(stripped)
+    except (ValueError, TypeError):
+        return None
+
+    # ── List reply: {"type":"list_reply","list_reply":{"id","title","description"}} ──
+    # A buyer tapped a row in an interactive list we sent.  WhatsApp shows just
+    # the picked row's title as the reply bubble — so store that, not the JSON.
+    if isinstance(data, dict) and data.get('type') == 'list_reply':
+        lr = data.get('list_reply') or {}
+        title = (lr.get('title') or '').strip()
+        if title:
+            return 'list_reply', title, ''
+
+    # ── Location: {"latitude": .., "longitude": .., "name": .., "address": ..} ──
+    if isinstance(data, dict) and 'latitude' in data and 'longitude' in data:
+        name = (data.get('name') or '').strip()
+        address = (data.get('address') or '').strip()
+        lat, lng = data.get('latitude'), data.get('longitude')
+        clean = '\n'.join(p for p in (name, address) if p) or 'Shared location'
+        url = (data.get('url') or '').strip()
+        if not url and lat is not None and lng is not None:
+            url = f'https://www.google.com/maps?q={lat},{lng}'
+        return 'location', clean, url
+
+    # ── Contact: [{"name": {..}, "phones": [{"phone": ..}], "vcard": ..}, ..] ──
+    if isinstance(data, list) and data and isinstance(data[0], dict) and (
+        'vcard' in data[0] or 'phones' in data[0] or 'name' in data[0]
+    ):
+        lines = []
+        for card in data:
+            if not isinstance(card, dict):
+                continue
+            nm = card.get('name')
+            if isinstance(nm, dict):
+                display = (
+                    nm.get('formattedName') or nm.get('formatted_name')
+                    or ' '.join(
+                        str(nm.get(k, '')).strip()
+                        for k in ('firstName', 'middleName', 'lastName')
+                        if nm.get(k)
+                    )
+                ).strip()
+            else:
+                display = str(nm or '').strip()
+            phones = card.get('phones') or []
+            phone = ''
+            if isinstance(phones, list) and phones and isinstance(phones[0], dict):
+                phone = (phones[0].get('phone') or '').strip()
+            line = ' · '.join(p for p in (display, phone) if p)
+            if line:
+                lines.append(line)
+        if lines:
+            return 'contact', '\n'.join(lines), ''
+
+    return None
 
 class WaConversation(models.Model):
     _inherit = 'wa.conversation'
@@ -501,6 +578,14 @@ class WaConversation(models.Model):
 
         # For media messages, caption may arrive as literal "None" from Interakt.
         body = message_text if message_text != 'None' else ''
+        # Location / contact payloads arrive as a JSON blob in the body — detect
+        # by shape and replace the blob with human-readable text (and, for a
+        # location, a Maps link stored in media_url) so the bubble isn't raw JSON.
+        special = _parse_special_inbound(body)
+        if special:
+            kind, body, special_url = special
+            if special_url and not media_url:
+                media_url = special_url
         # Resolve the quoted/swipe context so the bubble can show what the buyer
         # replied to (WhatsApp-style), matched to the referenced template.
         quoted_body, quoted_sender, quoted_src = self._owa_resolve_quoted_context(

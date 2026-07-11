@@ -10,6 +10,8 @@ Static text only — selecting a reply inserts ``body`` verbatim into the compos
 for the RM to edit before sending. No placeholder substitution.
 """
 
+import json
+
 from odoo import api, fields, models
 
 
@@ -22,6 +24,19 @@ class WaQuickReply(models.Model):
         'Title',
         required=True,
         help="Short label shown in the quick-reply picker.",
+    )
+    kind = fields.Selection(
+        [('text', 'Text'), ('list', 'List Message')],
+        string='Type',
+        required=True,
+        default='text',
+        help="'text' inserts the body into the composer; 'list' sends an "
+             "interactive WhatsApp list message built from list_payload.",
+    )
+    list_payload = fields.Text(
+        'List Payload (JSON)',
+        help="For kind='list': JSON {'button', 'sections':[{'title','rows':"
+             "[{'id','title','description'}]}]}. 'body' holds the list body text.",
     )
     shortcut = fields.Char(
         'Shortcut',
@@ -77,8 +92,21 @@ class WaQuickReply(models.Model):
             'title': r.title,
             'shortcut': r.shortcut or '',
             'body': r.body or '',
+            'kind': r.kind,
+            'list_payload': r._parsed_list_payload(),
             'is_shared': r.is_shared,
         } for r in replies]
+
+    def _parsed_list_payload(self):
+        """Return the list_payload as a dict, or None for non-list replies."""
+        self.ensure_one()
+        if self.kind != 'list' or not self.list_payload:
+            return None
+        try:
+            data = json.loads(self.list_payload)
+        except (ValueError, TypeError):
+            return None
+        return data if isinstance(data, dict) and data.get('sections') else None
 
     @api.model
     def get_manager_list(self):
@@ -101,6 +129,8 @@ class WaQuickReply(models.Model):
                 'title': r.title,
                 'shortcut': r.shortcut or '',
                 'body': r.body or '',
+                'kind': r.kind,
+                'list_payload': r._parsed_list_payload(),
                 'is_shared': r.is_shared,
                 'active': r.active,
                 'owned': r.user_id.id == self.env.uid,

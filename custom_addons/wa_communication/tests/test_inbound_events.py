@@ -770,13 +770,39 @@ class TestInboundEvents(WaTransactionCase):
         self._process(event, wa_id)
         return self.Msg.sudo().search([('wa_message_id', '=', wa_id)])
 
-    def test_lead_replied_location_maps_to_location_kind(self):
+    def test_lead_replied_location_json_blob_becomes_readable_with_maps_link(self):
+        """A shared location arrives as a JSON blob — it must be parsed into a
+        readable name/address body + a Maps link (stored in media_url), never
+        shown as raw JSON."""
         conv = self.make_conversation()
-        msg = self._reply_kind(conv, 'wamid.loc', 'Location',
-                               message_text='23.0225,72.5714')
-        self.assertEqual(len(msg), 1)
+        blob = (
+            '{"address": "402, Aditya Plaza Complex, Satellite, Ahmedabad", '
+            '"latitude": 23.02196268, "longitude": 72.52544203, '
+            '"name": "Vishwa ENT Hospital", "url": "https://maps.example/x"}'
+        )
+        msg = self._reply_kind(conv, 'wamid.loc', 'Location', message_text=blob)
         self.assertEqual(msg.kind, 'location')
-        self.assertEqual(msg.direction, 'inbound')
+        self.assertNotIn('{', msg.body, "raw JSON must not leak into the body")
+        self.assertIn('Vishwa ENT Hospital', msg.body)
+        self.assertIn('Aditya Plaza', msg.body)
+        self.assertEqual(msg.media_url, 'https://maps.example/x')
+
+    def test_lead_replied_location_without_url_builds_google_maps_link(self):
+        conv = self.make_conversation()
+        blob = '{"latitude": 23.0225, "longitude": 72.5714, "name": "Pin"}'
+        msg = self._reply_kind(conv, 'wamid.loc2', 'Location', message_text=blob)
+        self.assertEqual(msg.kind, 'location')
+        self.assertEqual(msg.media_url,
+                         'https://www.google.com/maps?q=23.0225,72.5714')
+
+    def test_lead_replied_location_detected_by_shape_even_when_typed_text(self):
+        """Robustness: even if Interakt tags the location as plain Text, the
+        JSON shape (latitude+longitude) reclassifies it to a location bubble."""
+        conv = self.make_conversation()
+        blob = '{"latitude": 19.07, "longitude": 72.87, "address": "Mumbai"}'
+        msg = self._reply_kind(conv, 'wamid.loc3', 'Text', message_text=blob)
+        self.assertEqual(msg.kind, 'location')
+        self.assertIn('Mumbai', msg.body)
 
     def test_lead_replied_sticker_maps_to_sticker_kind_with_media(self):
         conv = self.make_conversation()
@@ -785,12 +811,29 @@ class TestInboundEvents(WaTransactionCase):
         self.assertEqual(msg.kind, 'sticker')
         self.assertEqual(msg.media_url, 'https://cdn.interakt.ai/x/sticker.webp')
 
-    def test_lead_replied_contact_maps_to_contact_kind(self):
+    def test_lead_replied_contact_vcard_blob_becomes_name_and_phone(self):
+        """A shared contact arrives as a vCard JSON list — parse to 'Name · phone'."""
         conv = self.make_conversation()
-        msg = self._reply_kind(conv, 'wamid.ct', 'Contact',
-                               message_text='Ramesh +919812345678')
+        blob = (
+            '[{"name": {"firstName": "Dhaval", "middleName": "Sir", '
+            '"lastName": "CD", "formattedName": "Dhaval Sir CD"}, '
+            '"phones": [{"phone": "+91 84017 32226", "type": "MOBILE"}], '
+            '"vcard": "BEGIN:VCARD...", "origin": "other"}]'
+        )
+        msg = self._reply_kind(conv, 'wamid.ct', 'Contact', message_text=blob)
         self.assertEqual(msg.kind, 'contact')
-        self.assertEqual(msg.body, 'Ramesh +919812345678')
+        self.assertNotIn('vcard', msg.body.lower(),
+                         "raw vcard must not leak into the body")
+        self.assertIn('Dhaval Sir CD', msg.body)
+        self.assertIn('+91 84017 32226', msg.body)
+
+    def test_lead_replied_plain_json_text_is_not_misclassified(self):
+        """A normal reply that merely looks like JSON but lacks location/contact
+        shape stays a text_reply (no false positive)."""
+        conv = self.make_conversation()
+        msg = self._reply_kind(conv, 'wamid.js', 'Text',
+                               message_text='{"foo": "bar"}')
+        self.assertEqual(msg.kind, 'text_reply')
 
     def test_lead_replied_list_reply_maps_to_list_reply_kind(self):
         conv = self.make_conversation()
@@ -798,6 +841,17 @@ class TestInboundEvents(WaTransactionCase):
                                message_text='2 BHK')
         self.assertEqual(msg.kind, 'list_reply')
         self.assertEqual(msg.body, '2 BHK')
+
+    def test_lead_replied_list_reply_json_blob_becomes_selected_title(self):
+        """A list selection arrives as a JSON blob — store only the picked row's
+        title (what WhatsApp shows), never the raw JSON."""
+        conv = self.make_conversation()
+        blob = ('{"type": "list_reply", "list_reply": '
+                '{"id": "row_1", "title": "Property A", "description": "3bhk"}}')
+        msg = self._reply_kind(conv, 'wamid.lr', 'Text', message_text=blob)
+        self.assertEqual(msg.kind, 'list_reply')
+        self.assertEqual(msg.body, 'Property A')
+        self.assertNotIn('{', msg.body)
 
     def test_lead_replied_unmapped_kind_stored_as_unknown_not_text(self):
         """A brand-new Interakt content type must land as 'unknown', never be

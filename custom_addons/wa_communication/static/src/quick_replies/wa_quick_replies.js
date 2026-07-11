@@ -50,17 +50,56 @@ export class WaQuickReplies extends Component {
 
     // ── Editor ──────────────────────────────────────────────────────────────
 
+    _emptyList() {
+        return { button: "", sections: [{ title: "", rows: [{ title: "", description: "" }] }] };
+    }
+
     newReply() {
-        this.state.editing = { title: "", shortcut: "", body: "", is_shared: false };
+        this.state.editing = {
+            title: "", shortcut: "", body: "", is_shared: false,
+            kind: "text", list: this._emptyList(),
+        };
     }
 
     editReply(r) {
         // Only owned personal or (manager) shared are editable.
         if (!r.owned && !(r.is_shared && this.state.isManager)) return;
+        // Rehydrate the list builder from the saved payload (deep-copied so edits
+        // don't mutate the loaded list until saved).
+        let list = this._emptyList();
+        if (r.kind === "list" && r.list_payload) {
+            const lp = r.list_payload;
+            list = {
+                button: lp.button || "",
+                sections: (lp.sections || []).map(s => ({
+                    title: s.title || "",
+                    rows: (s.rows || []).map(row => ({
+                        title: row.title || "", description: row.description || "",
+                    })),
+                })),
+            };
+            if (!list.sections.length) list = this._emptyList();
+        }
         this.state.editing = {
             id: r.id, title: r.title, shortcut: r.shortcut,
             body: r.body, is_shared: r.is_shared,
+            kind: r.kind || "text", list,
         };
+    }
+
+    setEditorKind(kind) {
+        if (this.state.editing) this.state.editing.kind = kind;
+    }
+
+    // ── List builder (mirrors the composer) ─────────────────────────────────────
+    addSection()      { this.state.editing.list.sections.push({ title: "", rows: [{ title: "", description: "" }] }); }
+    removeSection(i)   { const s = this.state.editing.list.sections; if (s.length > 1) s.splice(i, 1); }
+    addRow(si)         { this.state.editing.list.sections[si].rows.push({ title: "", description: "" }); }
+    removeRow(si, ri)  { const r = this.state.editing.list.sections[si].rows; if (r.length > 1) r.splice(ri, 1); }
+    get listRowCount() {
+        if (!this.state.editing || this.state.editing.kind !== "list") return 0;
+        return this.state.editing.list.sections.reduce(
+            (n, s) => n + s.rows.filter(r => r.title.trim()).length, 0);
     }
 
     cancelEdit() { this.state.editing = null; }
@@ -83,12 +122,39 @@ export class WaQuickReplies extends Component {
             this.notification.add("Title and message are required", { type: "warning" });
             return;
         }
-        this.state.saving = true;
         const vals = {
             title:    e.title.trim(),
             shortcut: e.shortcut.trim(),
             body:     e.body,
+            kind:     e.kind || "text",
+            list_payload: false,
         };
+        // For a list reply, validate + serialize the builder into list_payload.
+        if (e.kind === "list") {
+            const sections = e.list.sections
+                .map(s => ({
+                    title: s.title.trim(),
+                    rows: s.rows
+                        .filter(r => r.title.trim())
+                        .map(r => ({ title: r.title.trim(), description: r.description.trim() })),
+                }))
+                .filter(s => s.rows.length);
+            const total = sections.reduce((n, s) => n + s.rows.length, 0);
+            if (!e.list.button.trim()) {
+                this.notification.add("Add a button label for the list", { type: "warning" });
+                return;
+            }
+            if (!total) {
+                this.notification.add("Add at least one list item with a title", { type: "warning" });
+                return;
+            }
+            if (total > 10) {
+                this.notification.add("A list can have at most 10 items", { type: "warning" });
+                return;
+            }
+            vals.list_payload = JSON.stringify({ button: e.list.button.trim(), sections });
+        }
+        this.state.saving = true;
         // Managers may set scope explicitly: shared ⇒ no owner, personal ⇒ self.
         // Plain users can only make personal replies (record rules enforce it).
         if (this.state.isManager) {

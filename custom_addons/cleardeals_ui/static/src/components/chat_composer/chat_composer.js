@@ -35,6 +35,7 @@ export class CdChatComposer extends Component {
             sharedCaption: "",
             uploadError:   null,
             showQuickReplies: false,
+            listBuilder:   null,  // null | {body, button, sections:[{title,rows:[{title,description}]}], error}
         });
         this.fmtPopup = useState({ visible: false, x: 0, y: 0 });
         this._nextFileId = 0;
@@ -184,13 +185,24 @@ export class CdChatComposer extends Component {
 
     closeQuickReplies() { this.state.showQuickReplies = false; }
 
-    insertQuickReply(body) {
-        // Insert verbatim; if the box only holds a "/shortcut" query, replace it.
+    insertQuickReply(reply) {
+        this.state.showQuickReplies = false;
+        // A list quick reply sends the saved interactive list directly.
+        if (reply.kind === "list" && reply.list_payload) {
+            const lp = reply.list_payload;
+            this.props.onSend(reply.body || "", "list", {
+                list_button_text: lp.button,
+                list_sections:    lp.sections,
+            });
+            return;
+        }
+        // Text reply: insert verbatim; if the box only holds a "/shortcut"
+        // query, replace it.
+        const body = reply.body || "";
         const cur = this.state.body || "";
         this.state.body = (cur.trim().startsWith("/") || !cur.trim())
             ? body
             : (cur + (cur.endsWith(" ") ? "" : " ") + body);
-        this.state.showQuickReplies = false;
     }
 
     sendText() {
@@ -198,6 +210,73 @@ export class CdChatComposer extends Component {
         if (!body || !this.canSendFreeText) return;
         this.props.onSend(body, "freetext", {});
         this.state.body = "";
+    }
+
+    // ── Interactive list builder ────────────────────────────────────────────────
+
+    get canSendList() { return !this.isClosed && !this.props.disabled; }
+
+    openListBuilder() {
+        if (!this.canSendList) return;
+        this.state.listBuilder = {
+            body:     "",
+            button:   "",
+            sections: [{ title: "", rows: [{ title: "", description: "" }] }],
+            error:    "",
+        };
+    }
+
+    closeListBuilder() { this.state.listBuilder = null; }
+
+    addListSection() {
+        this.state.listBuilder.sections.push(
+            { title: "", rows: [{ title: "", description: "" }] });
+    }
+
+    removeListSection(sIdx) {
+        const secs = this.state.listBuilder.sections;
+        if (secs.length > 1) secs.splice(sIdx, 1);
+    }
+
+    addListRow(sIdx) {
+        this.state.listBuilder.sections[sIdx].rows.push({ title: "", description: "" });
+    }
+
+    removeListRow(sIdx, rIdx) {
+        const rows = this.state.listBuilder.sections[sIdx].rows;
+        if (rows.length > 1) rows.splice(rIdx, 1);
+    }
+
+    get listRowCount() {
+        if (!this.state.listBuilder) return 0;
+        return this.state.listBuilder.sections.reduce(
+            (n, s) => n + s.rows.filter(r => r.title.trim()).length, 0);
+    }
+
+    sendList() {
+        const lb = this.state.listBuilder;
+        if (!lb || !this.canSendList) return;
+        const body = lb.body.trim();
+        const button = lb.button.trim();
+        // Keep only titled rows / non-empty sections.
+        const sections = lb.sections
+            .map(s => ({
+                title: s.title.trim(),
+                rows: s.rows
+                    .filter(r => r.title.trim())
+                    .map(r => ({ title: r.title.trim(), description: r.description.trim() })),
+            }))
+            .filter(s => s.rows.length);
+        const total = sections.reduce((n, s) => n + s.rows.length, 0);
+        if (!body)   { lb.error = "Add a message body."; return; }
+        if (!button) { lb.error = "Add a button label (e.g. “View options”)."; return; }
+        if (!total)  { lb.error = "Add at least one list item with a title."; return; }
+        if (total > 10) { lb.error = "A list can have at most 10 items in total."; return; }
+        this.props.onSend(body, "list", {
+            list_button_text: button,
+            list_sections:    sections,
+        });
+        this.state.listBuilder = null;
     }
 
     selectAttach(kind) {

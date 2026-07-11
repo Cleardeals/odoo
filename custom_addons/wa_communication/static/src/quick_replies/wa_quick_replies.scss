@@ -248,3 +248,41 @@
         border-top: 1px solid #eee;
     }
 }
+
+// ── Type toggle (Text / List) in the editor ─────────────────────────────────
+.wa-qr__kind-toggle {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+.wa-qr__kind-opt {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px;
+    border: 1px solid var(--cd-border, #d1d5db);
+    border-radius: 8px;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+
+    &--active {
+        border-color: #16a34a;
+        background: rgba(22, 163, 74, 0.08);
+        color: #16a34a;
+    }
+}
+
+// List badge on quick-reply cards / picker items
+.wa-qr__card-list-badge,
+.cd-qr-picker__item-list-badge {
+    display: inline-flex;
+    align-items: center;
+    color: #00a5f4;
+    margin-right: 4px;
+    font-size: 12px;
+}

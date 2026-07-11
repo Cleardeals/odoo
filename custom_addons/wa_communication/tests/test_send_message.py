@@ -145,6 +145,75 @@ class TestSendMessage(WaTransactionCase):
         self.assertTrue(log, "an outbound send must leave an audit log row")
         self.assertEqual(log.direction, 'outbound')
 
+    # ── send_list_message ─────────────────────────────────────────────────────
+
+    def _sections(self):
+        return [{'title': 'Homes', 'rows': [
+            {'id': 'r1', 'title': '2 BHK', 'description': 'Ready to move'},
+            {'title': '3 BHK'},  # no id → auto-filled
+        ]}]
+
+    def test_list_message_queues_and_publishes(self):
+        conv = self.make_conversation()
+        self._open_window(conv)
+        with self.mock_pubsub() as published:
+            msg = conv.send_list_message(
+                body='Pick a home type', button_text='View options',
+                sections=self._sections())
+
+        self.assertEqual(msg.kind, 'list')
+        self.assertEqual(msg.direction, 'outbound')
+        self.assertEqual(msg.status, 'queued')
+        self.assertEqual(msg.body, 'Pick a home type')
+        # list_payload stores button + normalized sections (row id auto-filled).
+        import json
+        payload_stored = json.loads(msg.list_payload)
+        self.assertEqual(payload_stored['button'], 'View options')
+        rows = payload_stored['sections'][0]['rows']
+        self.assertEqual(rows[0]['id'], 'r1')
+        self.assertTrue(rows[1]['id'], "missing row id must be auto-filled")
+
+        payload = published[-1].payload
+        self.assertEqual(payload['request_type'], 'send')
+        self.assertEqual(payload['kind'], 'list')
+        self.assertEqual(payload['message_text'], 'Pick a home type')
+        self.assertEqual(payload['list_button_text'], 'View options')
+        self.assertEqual(payload['list_sections'][0]['title'], 'Homes')
+
+    def test_list_message_blocked_when_window_closed(self):
+        conv = self.make_conversation()
+        self._close_window(conv)
+        with self.assertRaises(UserError):
+            conv.send_list_message(body='hi', button_text='Menu',
+                                   sections=self._sections())
+
+    def test_list_message_empty_sections_raises(self):
+        conv = self.make_conversation()
+        self._open_window(conv)
+        with self.assertRaises(UserError):
+            conv.send_list_message(body='hi', button_text='Menu',
+                                   sections=[{'title': 'S', 'rows': [{'title': '  '}]}])
+
+    def test_list_message_over_10_rows_raises(self):
+        conv = self.make_conversation()
+        self._open_window(conv)
+        rows = [{'title': f'row {i}'} for i in range(11)]
+        with self.assertRaises(UserError):
+            conv.send_list_message(body='hi', button_text='Menu',
+                                   sections=[{'title': 'S', 'rows': rows}])
+
+    def test_list_message_serializes_into_thread(self):
+        conv = self.make_conversation()
+        self._open_window(conv)
+        with self.mock_pubsub():
+            conv.send_list_message(body='menu', button_text='Open',
+                                   sections=self._sections())
+        thread = conv.get_thread(conv.id)
+        list_row = next(m for m in thread['messages'] if m['kind'] == 'list')
+        self.assertEqual(list_row['list_payload']['button'], 'Open')
+        self.assertEqual(list_row['list_payload']['sections'][0]['rows'][0]['title'],
+                         '2 BHK')
+
     # ── mark_as_read ──────────────────────────────────────────────────────────
 
     def test_mark_as_read_resets_unread(self):

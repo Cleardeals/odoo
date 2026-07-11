@@ -154,6 +154,37 @@
                     </span>
                 </t>
 
+                <!-- Interactive list (outbound kind='list') — WhatsApp style:
+                     body + a tappable button; rows hidden until the button is
+                     tapped, then revealed inline. -->
+                <t t-if="listPayload">
+                    <div class="cd-chat-bubble__list">
+                        <t t-if="listUi.expanded">
+                            <div class="cd-chat-bubble__list-rows">
+                                <t t-foreach="listPayload.sections" t-as="sec" t-key="sec_index">
+                                    <t t-if="sec.title">
+                                        <div class="cd-chat-bubble__list-section" t-esc="sec.title"/>
+                                    </t>
+                                    <t t-foreach="sec.rows" t-as="row" t-key="row_index">
+                                        <div class="cd-chat-bubble__list-row">
+                                            <div class="cd-chat-bubble__list-row-title" t-esc="row.title"/>
+                                            <t t-if="row.description">
+                                                <div class="cd-chat-bubble__list-row-desc" t-esc="row.description"/>
+                                            </t>
+                                        </div>
+                                    </t>
+                                </t>
+                            </div>
+                        </t>
+                        <button class="cd-chat-bubble__list-btn"
+                                t-on-click="() => this.toggleList()">
+                            <i t-attf-class="fa {{ listUi.expanded ? 'fa-chevron-up' : 'fa-list-ul' }}"
+                               aria-hidden="true"/>
+                            <span t-esc="listPayload.button"/>
+                        </button>
+                    </div>
+                </t>
+
                 <!-- Template footer (muted) -->
                 <t t-if="props.message.template_footer">
                     <div class="cd-chat-bubble__tmpl-footer" t-out="footerHtml"/>

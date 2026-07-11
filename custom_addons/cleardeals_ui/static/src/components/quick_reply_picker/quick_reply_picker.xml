@@ -26,6 +26,11 @@
                 <t t-foreach="filtered" t-as="reply" t-key="reply.id">
                     <div class="cd-qr-picker__item" t-on-click="() => this.onPick(reply)">
                         <div class="cd-qr-picker__item-head">
+                            <t t-if="reply.kind === 'list'">
+                                <span class="cd-qr-picker__item-list-badge" title="Interactive list — sends on click">
+                                    <i class="fa fa-list-ul" aria-hidden="true"/>
+                                </span>
+                            </t>
                             <span class="cd-qr-picker__item-title" t-esc="reply.title"/>
                             <t t-if="reply.shortcut">
                                 <span class="cd-qr-picker__item-shortcut" t-esc="reply.shortcut"/>

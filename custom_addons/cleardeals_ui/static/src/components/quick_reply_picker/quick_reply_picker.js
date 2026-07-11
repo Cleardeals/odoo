@@ -8,8 +8,8 @@ import { Component, useState, useRef, onMounted, onWillUnmount } from "@odoo/owl
  * Pure / props-driven (no ORM): the host fetches the list and handles insert.
  *
  * Props:
- *   replies   {Array}    [{id, title, shortcut, body, is_shared}]
- *   onSelect  {Function} (body) => void — insert the chosen reply
+ *   replies   {Array}    [{id, title, shortcut, body, kind, list_payload, is_shared}]
+ *   onSelect  {Function} (reply) => void — the host inserts (text) or sends (list)
  *   onClose   {Function} () => void — dismiss the popover
  *   initialQuery {String} optional — preseed the search (e.g. the "/foo" typed)
  */
@@ -60,7 +60,7 @@ export class CdQuickReplyPicker extends Component {
     }
 
     onPick(reply) {
-        this.props.onSelect(reply.body);
+        this.props.onSelect(reply);
         this.props.onClose?.();
     }
 
