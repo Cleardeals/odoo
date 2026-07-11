@@ -158,6 +158,11 @@
         border-radius: 14px;
         width: 480px;
         max-width: 100%;
+        // Constrain to the viewport (overlay has 24px padding) and lay out as a
+        // column so the header/footer stay fixed and the body scrolls.
+        max-height: calc(100vh - 48px);
+        display: flex;
+        flex-direction: column;
         box-shadow: 0 16px 48px rgba(0, 0, 0, 0.25);
         overflow: hidden;
     }
@@ -170,6 +175,7 @@
         font-size: 16px;
         font-weight: 700;
         border-bottom: 1px solid #eee;
+        flex-shrink: 0;
     }
 
     &__modal-close {
@@ -186,6 +192,15 @@
         padding: 18px 20px;
         display: flex;
         flex-direction: column;
+        // Scroll the body (not the whole modal) when the list builder is tall.
+        overflow-y: auto;
+        flex: 1 1 auto;
+        min-height: 0;
+
+        // Flex children shrink below their natural height by default when the
+        // container is height-constrained — that squished the body textarea.
+        // Pin every field to its natural size so the body scrolls instead.
+        > * { flex-shrink: 0; }
     }
 
     &__label {
@@ -246,6 +261,7 @@
         gap: 10px;
         padding: 14px 20px;
         border-top: 1px solid #eee;
+        flex-shrink: 0;
     }
 }
 
