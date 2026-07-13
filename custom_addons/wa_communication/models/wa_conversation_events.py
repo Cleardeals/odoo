@@ -409,6 +409,11 @@ class WaConversation(models.Model):
         step_id       = event.get('step_id') or ''
         cost_inr      = event.get('cost_inr') or 0.0
         occurred_at   = _parse_iso_dt(event.get('occurred_at', ''))
+        cost_vals     = {
+            'cost_inr':             cost_inr,
+            'cost_whatsapp_inr':    event.get('cost_whatsapp_inr') or 0.0,
+            'cost_interakt_markup': event.get('cost_interakt_markup') or 0.0,
+        }
 
         msg = self._owa_find_message(
             wa_message_id=wa_message_id,
@@ -421,9 +426,9 @@ class WaConversation(models.Model):
             # a late/redelivered delivered event must not knock a read row back.
             vals = {
                 'status':          _max_status(msg.status, 'delivered'),
-                'cost_inr':        cost_inr,
                 'delivered_at':    occurred_at,
                 'status_updated_at': fields.Datetime.now(),
+                **cost_vals,
             }
             vals.update(self._owa_template_content_vals(event, msg))
             msg.write(vals)
@@ -436,7 +441,7 @@ class WaConversation(models.Model):
             # keyed by request_id that this event cannot match → would duplicate).
             self._owa_create_outbound_stub(
                 event, status='delivered',
-                extra_vals={'cost_inr': cost_inr, 'delivered_at': occurred_at},
+                extra_vals={'delivered_at': occurred_at, **cost_vals},
             )
         else:
             _logger.warning(
@@ -468,14 +473,28 @@ class WaConversation(models.Model):
                 'seen_at':         occurred_at,
                 'status_updated_at': fields.Datetime.now(),
             }
+            # Fallback: if delivered was missed, the read event may carry cost —
+            # fill only what the message is still missing (never overwrite).
+            if not msg.cost_inr and event.get('cost_inr'):
+                vals.update({
+                    'cost_inr':             event.get('cost_inr') or 0.0,
+                    'cost_whatsapp_inr':    event.get('cost_whatsapp_inr') or 0.0,
+                    'cost_interakt_markup': event.get('cost_interakt_markup') or 0.0,
+                })
             vals.update(self._owa_template_content_vals(event, msg))
             msg.write(vals)
         elif enrollment_id or step_id:
             # Out-of-order read receipt for a workflow send — see the delivered
-            # handler for why RM-manual sends are excluded.
-            self._owa_create_outbound_stub(
-                event, status='read', extra_vals={'seen_at': occurred_at},
-            )
+            # handler for why RM-manual sends are excluded.  Carry any cost the
+            # read event brought so the stub isn't created cost-less.
+            extra = {'seen_at': occurred_at}
+            if event.get('cost_inr'):
+                extra.update({
+                    'cost_inr':             event.get('cost_inr') or 0.0,
+                    'cost_whatsapp_inr':    event.get('cost_whatsapp_inr') or 0.0,
+                    'cost_interakt_markup': event.get('cost_interakt_markup') or 0.0,
+                })
+            self._owa_create_outbound_stub(event, status='read', extra_vals=extra)
         else:
             _logger.warning(
                 "wa_push: message_read — no wa.message found and no "

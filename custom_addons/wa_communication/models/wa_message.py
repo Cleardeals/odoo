@@ -388,8 +388,21 @@ class WaMessage(models.Model):
     cost_inr = fields.Float(
         'Cost (INR)',
         digits=(10, 4),
-        help="Delivery cost in INR from the Interakt webhook.  "
-             "Stored to 4 decimal places to match NUMERIC(8,4) on the WA platform.",
+        help="Total delivery cost in INR (Interakt ``actual_message_cost``) from "
+             "the delivery webhook.  Stored to 4 decimal places to match "
+             "NUMERIC(8,4) on the WA platform.",
+    )
+    cost_whatsapp_inr = fields.Float(
+        'WhatsApp Cost (INR)',
+        digits=(10, 4),
+        help="WhatsApp's own conversation charge (Interakt ``whatsapp_cost``); "
+             "the total minus Interakt's markup.",
+    )
+    cost_interakt_markup = fields.Float(
+        'Interakt Markup (INR)',
+        digits=(10, 4),
+        help="Interakt's markup on top of WhatsApp's charge "
+             "(Interakt ``interakt_markup``).",
     )
 
     # ------------------------------------------------------------------

@@ -116,6 +116,60 @@ class TestInboundEvents(WaTransactionCase):
         self.assertEqual(msg.cost_inr, 0.65)
         self.assertTrue(msg.delivered_at)
 
+    def test_message_delivered_stores_full_cost_breakdown(self):
+        """The delivered event carries the WhatsApp/markup/total split — all three
+        must land on the message so the detail panel shows them."""
+        conv = self.make_conversation()
+        msg = self._queued_rm_msg(conv, 'req-bd', wa_message_id='wamid.bd',
+                                  status='sent')
+        self._process({
+            'event_type': 'message_delivered',
+            'wa_message_id': 'wamid.bd',
+            'cost_inr': 0.94941,
+            'cost_whatsapp_inr': 0.86,
+            'cost_interakt_markup': 0.09,
+            'occurred_at': '2026-01-02T11:00:00Z',
+        })
+        msg.invalidate_recordset()
+        self.assertAlmostEqual(msg.cost_inr, 0.94941, places=4)
+        self.assertAlmostEqual(msg.cost_whatsapp_inr, 0.86, places=4)
+        self.assertAlmostEqual(msg.cost_interakt_markup, 0.09, places=4)
+
+    def test_message_read_captures_cost_when_delivered_missed(self):
+        """Fallback: if the delivered event was lost, cost arriving on the read
+        event is captured (the platform forwards the effective cost)."""
+        conv = self.make_conversation()
+        msg = self._queued_rm_msg(conv, 'req-rc', wa_message_id='wamid.rc',
+                                  status='sent')
+        self._process({
+            'event_type': 'message_read',
+            'wa_message_id': 'wamid.rc',
+            'cost_inr': 0.94941,
+            'cost_whatsapp_inr': 0.86,
+            'cost_interakt_markup': 0.09,
+            'occurred_at': '2026-01-02T12:00:00Z',
+        })
+        msg.invalidate_recordset()
+        self.assertEqual(msg.status, 'read')
+        self.assertAlmostEqual(msg.cost_inr, 0.94941, places=4)
+        self.assertAlmostEqual(msg.cost_whatsapp_inr, 0.86, places=4)
+
+    def test_message_read_does_not_overwrite_existing_cost(self):
+        """A read event must never clobber a cost the delivered event already set."""
+        conv = self.make_conversation()
+        msg = self._queued_rm_msg(conv, 'req-rc2', wa_message_id='wamid.rc2',
+                                  status='delivered')
+        msg.write({'cost_inr': 0.94941, 'cost_whatsapp_inr': 0.86,
+                   'cost_interakt_markup': 0.09})
+        self._process({
+            'event_type': 'message_read',
+            'wa_message_id': 'wamid.rc2',
+            'cost_inr': 5.0,   # a bogus later value must be ignored
+            'occurred_at': '2026-01-02T12:00:00Z',
+        })
+        msg.invalidate_recordset()
+        self.assertAlmostEqual(msg.cost_inr, 0.94941, places=4)
+
     def test_message_read_sets_status_and_seen_at(self):
         conv = self.make_conversation()
         msg = self._queued_rm_msg(conv, 'req-r', wa_message_id='wamid.r1',

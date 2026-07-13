@@ -272,17 +272,17 @@ class WaMessageLog(models.Model):
         cta     = WaMsg.search_count(domain + [('kind', '=', 'button_reply')])
         failed  = WaMsg.search_count(domain + [('status', 'in', _FAILED_STATUSES)])
 
+        # Odoo 17+ _read_group returns a list of TUPLES (groupby values followed
+        # by aggregate values), NOT dicts.  With no groupby the single row is
+        # ``(sum,)`` — so the total is groups[0][0].  (The old dict-key access
+        # raised TypeError and was silently swallowed to 0.0, which is why the
+        # header read ₹0.00 even once per-row costs were populated.)
         groups = WaMsg._read_group(
             domain=domain,
             groupby=[],
             aggregates=['cost_inr:sum'],
         )
-        total_cost = 0.0
-        if groups:
-            try:
-                total_cost = float(groups[0]['cost_inr:sum'] or 0.0)
-            except (TypeError, KeyError, IndexError):
-                total_cost = 0.0
+        total_cost = float(groups[0][0] or 0.0) if groups else 0.0
 
         return {
             'total':      total,
@@ -348,9 +348,9 @@ class WaMessageLog(models.Model):
             'template_replied_to': msg.template_replied_to or msg.template_name or '',
             'media_url':           msg.media_url or '',
             'media_filename':      msg.media_filename or '',
-            'whatsapp_cost':       f'\u20b9{msg.cost_inr:.4f}' if msg.cost_inr else '',
-            'interakt_markup':     '',
-            'actual_cost':         f'\u20b9{msg.cost_inr:.4f}' if msg.cost_inr else '',
+            'whatsapp_cost':       self._fmt_cost(msg.cost_whatsapp_inr),
+            'interakt_markup':     self._fmt_cost(msg.cost_interakt_markup),
+            'actual_cost':         self._fmt_cost(msg.cost_inr),
             'workflow':            msg.workflow_slug or '',
             'step_id':             msg.step_id or '',
             'enrollment_id':       msg.enrollment_id or '',
@@ -378,6 +378,11 @@ class WaMessageLog(models.Model):
         if code:
             label += f'\nerr: {code}'
         return label
+
+    @staticmethod
+    def _fmt_cost(amount) -> str:
+        """Format an INR cost for the detail panel — blank when there's no cost."""
+        return f'₹{amount:.4f}' if amount else ''
 
     @staticmethod
     def _fmt_dt(dt) -> str:
