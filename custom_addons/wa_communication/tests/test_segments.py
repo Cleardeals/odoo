@@ -230,6 +230,153 @@ class TestSegments(WaTransactionCase):
         self.assertTrue(seg_b.is_active)
         self.assertFalse(self.Segment.browse(seg_a).is_active)
 
+    # ── Property-anchored "New topic" + dedup + guard ─────────────────────────
+
+    def test_new_topic_property_no_inquiry_creates_property_span(self):
+        """'New topic' on a property with no inquiry yet opens a property-anchored,
+        inquiry-less span (deterministic anchor, not a free-text label)."""
+        self._enable()
+        prop = self._property()
+        conv = self.make_conversation(phone_number='919000000020')
+        res = self.Conv.start_property_topic(conv.id, prop.id)
+        self.assertEqual(res['action'], 'started')
+        seg = self.Segment.browse(res['segment_id'])
+        self.assertFalse(seg.inquiry_id, "no inquiry exists for this property yet")
+        self.assertEqual(seg.property_base_id, prop, "span is anchored to the property")
+        conv.invalidate_recordset()
+        self.assertEqual(conv.active_segment_id, seg)
+
+    def test_new_topic_same_property_twice_is_idempotent(self):
+        """Clicking 'New topic' for the same property twice reuses the one span —
+        no silent duplicate (the old label-only duplication bug)."""
+        self._enable()
+        prop = self._property()
+        conv = self.make_conversation(phone_number='919000000021')
+        r1 = self.Conv.start_property_topic(conv.id, prop.id)
+        r2 = self.Conv.start_property_topic(conv.id, prop.id)
+        self.assertEqual(r1['segment_id'], r2['segment_id'], "same span reused")
+        self.assertEqual(len(conv.segment_ids), 1, "exactly one span for the property")
+
+    def test_new_topic_existing_inquiry_switches_no_dup(self):
+        """'New topic' on a property that already has an inquiry does NOT open an
+        orphan span — it guides the RM to the existing inquiry (consideration #4)."""
+        self._enable()
+        prop = self._property()
+        lead = self.make_lead(phone='9000000022', property_base_id=prop.id)
+        conv = self.make_conversation(phone_number='919000000022')
+        res = self.Conv.start_property_topic(conv.id, prop.id)
+        self.assertEqual(res['action'], 'exists')
+        self.assertEqual(res['inquiry_id'], lead.id)
+        # No inquiry-less span was created; the active span points at the inquiry.
+        self.assertFalse(conv.segment_ids.filtered(lambda s: not s.inquiry_id),
+                         "must not create an orphan span when the inquiry exists")
+        conv.invalidate_recordset()
+        self.assertEqual(conv.active_segment_id.inquiry_id, lead)
+
+    def test_pre_inquiry_message_effective_property_from_segment(self):
+        """A message in a property-anchored span attributes to that property even
+        before its inquiry exists — analytics are correct from the start."""
+        self._enable()
+        prop = self._property()
+        conv = self.make_conversation(phone_number='919000000023')
+        seg_id = self.Conv.start_property_topic(conv.id, prop.id)['segment_id']
+        msg = self.make_message(conv, body='about it', segment_id=seg_id,
+                                occurred_at='2026-01-02 10:00:00')
+        self.assertFalse(msg.effective_inquiry_id, "no inquiry yet")
+        self.assertEqual(msg.effective_property_id, prop,
+                         "property resolves from the span before the inquiry exists")
+
+    def test_flag_off_start_property_topic_is_noop(self):
+        self._enable(False)
+        prop = self._property()
+        conv = self.make_conversation(phone_number='919000000024')
+        res = self.Conv.start_property_topic(conv.id, prop.id)
+        self.assertEqual(res['action'], 'noop')
+        self.assertFalse(conv.segment_ids)
+
+    def test_legacy_label_only_dedups_by_label(self):
+        """The off-catalog free-text path still works and no longer duplicates —
+        same normalized label reuses the one span."""
+        self._enable()
+        conv = self.make_conversation(phone_number='919000000025')
+        s1 = self.Conv.start_segment(conv.id, label='Green Acres 2BHK')
+        s2 = self.Conv.start_segment(conv.id, label='  green acres 2bhk ')
+        self.assertEqual(s1, s2, "normalized label dedups the span")
+        self.assertEqual(len(conv.segment_ids), 1)
+
+    # ── Binding on inquiry creation (every path) ──────────────────────────────
+
+    def test_new_inquiry_create_binds_property_segment(self):
+        """Creating an inquiry for a phone+property with a pending property-anchored
+        span binds it — via the leads.new create hook, so it works no matter HOW the
+        inquiry is created (this covers the recommend-wizard disconnect)."""
+        self._enable()
+        prop = self._property()
+        conv = self.make_conversation(phone_number='919000000026')
+        seg_id = self.Conv.start_property_topic(conv.id, prop.id)['segment_id']
+        msg = self.make_message(conv, body='pre-inquiry', segment_id=seg_id,
+                                occurred_at='2026-01-02 10:00:00')
+
+        # Any creation path — here a plain make_lead — must bind the span.
+        lead = self.make_lead(phone='9000000026', property_base_id=prop.id)
+
+        seg = self.Segment.browse(seg_id)
+        seg.invalidate_recordset()
+        msg.invalidate_recordset()
+        self.assertEqual(seg.inquiry_id, lead, "span binds to the new inquiry")
+        self.assertEqual(msg.effective_inquiry_id, lead)
+        self.assertEqual(msg.effective_property_id, prop)
+
+    def test_new_inquiry_create_does_not_bind_when_property_differs(self):
+        """Binding is deterministic by property — an inquiry for a DIFFERENT property
+        must not hijack a pending span."""
+        self._enable()
+        propA = self._property()
+        propB = self._property()
+        conv = self.make_conversation(phone_number='919000000027')
+        seg_id = self.Conv.start_property_topic(conv.id, propA.id)['segment_id']
+        self.make_lead(phone='9000000027', property_base_id=propB.id)
+        seg = self.Segment.browse(seg_id)
+        seg.invalidate_recordset()
+        self.assertFalse(seg.inquiry_id, "a different property must not bind the span")
+
+    # ── Migration: collapse duplicate label-only spans ────────────────────────
+
+    def _load_migration(self):
+        import importlib.util
+        import os
+        path = os.path.join(os.path.dirname(__file__), '..',
+                            'migrations', '1.2.5', 'post-migrate.py')
+        spec = importlib.util.spec_from_file_location('wa_migr_125', path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+    def test_migration_collapses_duplicate_label_only_segments(self):
+        """The 1.2.5 post-migration merges pre-existing duplicate inquiry-less spans
+        (same conversation+property) into the earliest, repointing messages and the
+        active pointer — without touching immutable facts."""
+        self._enable()
+        prop = self._property()
+        conv = self.make_conversation(phone_number='919000000028')
+        Seg = self.Segment.sudo()
+        keep = Seg.create({'conversation_id': conv.id, 'property_base_id': prop.id,
+                           'started_at': '2026-01-01 10:00:00'})
+        dup = Seg.create({'conversation_id': conv.id, 'property_base_id': prop.id,
+                          'started_at': '2026-01-01 11:00:00'})
+        msg = self.make_message(conv, body='on dup', segment_id=dup.id,
+                                occurred_at='2026-01-02 10:00:00')
+        conv.active_segment_id = dup.id
+        self.env.flush_all()
+
+        self._load_migration().migrate(self.env.cr, '1.2.5')
+        self.env.invalidate_all()
+
+        self.assertFalse(dup.exists(), "the duplicate span is removed")
+        self.assertTrue(keep.exists(), "the earliest span survives")
+        self.assertEqual(msg.segment_id, keep, "messages repoint to the survivor")
+        self.assertEqual(conv.active_segment_id, keep, "active pointer follows")
+
     # ── Immutability still holds ──────────────────────────────────────────────
 
     def test_segment_id_is_writable_but_facts_remain_immutable(self):

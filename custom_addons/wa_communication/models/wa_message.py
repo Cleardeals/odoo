@@ -273,13 +273,21 @@ class WaMessage(models.Model):
 
     @api.depends(
         'segment_id', 'segment_id.inquiry_id', 'segment_id.inquiry_id.property_base_id',
+        'segment_id.property_base_id',
         'lead_id', 'lead_id.property_base_id',
     )
     def _compute_effective_attribution(self):
         for rec in self:
             inquiry = rec.segment_id.inquiry_id or rec.lead_id
             rec.effective_inquiry_id = inquiry
-            rec.effective_property_id = inquiry.property_base_id if inquiry else False
+            # Property resolves even for a pre-inquiry span: the segment already
+            # knows its property (picked at 'New topic'), so analytics attribute
+            # correctly before the inquiry exists and stay correct after binding.
+            rec.effective_property_id = (
+                (inquiry.property_base_id if inquiry else False)
+                or rec.segment_id.property_base_id
+                or False
+            )
 
     # ------------------------------------------------------------------
     # Delivery status

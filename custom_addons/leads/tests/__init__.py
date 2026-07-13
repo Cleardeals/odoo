@@ -17,6 +17,7 @@ from . import (
     test_portal_lead_webhook,
     test_portal_lead_whatsapp,
     test_property_activity_dashboard,
+    test_recommend_wizard,
     test_seller_activity_api,
     test_seller_ai_suggestions_api,
     test_seller_funnel_api,

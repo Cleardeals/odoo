@@ -56,11 +56,12 @@ class WaConversationSegment(models.Model):
     property_base_id = fields.Many2one(
         'property.base',
         string='Property',
-        related='inquiry_id.property_base_id',
-        store=True,
-        readonly=True,
         index=True,
-        help="Denormalized analytics key — the property of the linked inquiry.",
+        help="The property this span is about — chosen up front (from 'New topic') "
+             "and kept in sync with the inquiry once one is linked.  Unlike "
+             "inquiry_id it can be set BEFORE the inquiry exists, which makes dedup "
+             "and later binding deterministic instead of guessing from a free-text "
+             "label.  Maintained by the segment helpers, never a raw related.",
     )
     display_name = fields.Char(
         compute='_compute_display_name',

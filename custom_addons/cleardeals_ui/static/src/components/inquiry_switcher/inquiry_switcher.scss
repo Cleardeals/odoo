@@ -223,6 +223,113 @@
 
     &__topic-cancel { padding-left: 4px; padding-right: 4px; }
 
+    // Property typeahead inside "New topic"
+    &__topic { position: relative; }
+
+    &__topic-search {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        flex: 1;
+        min-width: 0;
+    }
+
+    &__results {
+        position: absolute;
+        top: calc(100% + 4px);
+        left: 0;
+        min-width: 268px;
+        max-width: 360px;
+        max-height: #{"min(300px, 55vh)"};
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        background: #fff;
+        border: 1px solid #e4e9f0;
+        border-radius: 10px;
+        box-shadow: 0 12px 32px rgba(16, 24, 40, 0.16);
+        padding: 5px;
+        z-index: 30;
+        animation: cd-inq-pop 0.12s ease-out;
+
+        scrollbar-width: thin;
+        scrollbar-color: #cdd5e0 transparent;
+        &::-webkit-scrollbar { width: 8px; }
+        &::-webkit-scrollbar-thumb {
+            background: #cdd5e0;
+            border-radius: 8px;
+            border: 2px solid #fff;
+        }
+    }
+
+    &__result {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1px;
+        width: 100%;
+        text-align: left;
+        padding: 7px 10px;
+        border: 0;
+        border-radius: 8px;
+        background: transparent;
+        cursor: pointer;
+        line-height: 1.25;
+        transition: background 0.1s ease;
+        &:hover { background: #f4f7fb; }
+    }
+
+    &__result-tag {
+        font-size: 13px;
+        font-weight: 600;
+        color: #1f2a37;
+    }
+
+    &__result-name {
+        font-size: 11.5px;
+        color: #98a2b3;
+    }
+
+    &__label-toggle {
+        font-size: 11.5px;
+        padding: 2px 4px;
+        white-space: nowrap;
+    }
+
+    // ── "No inquiry yet · Create inquiry" call to action ───────────────────────
+    &__create {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 7px 14px;
+        background: #fff7ed;
+        border-bottom: 1px solid #fde2c4;
+        font-size: 12.5px;
+        color: #9a5b1a;
+        animation: cd-inq-slide 0.16s ease-out;
+    }
+
+    &__create-text {
+        flex: 1;
+        min-width: 0;
+        .fa { margin-right: 5px; opacity: 0.85; }
+        b { color: #7c3f0e; }
+    }
+
+    &__create-btn {
+        flex-shrink: 0;
+        border: 0;
+        border-radius: 7px;
+        padding: 4px 12px;
+        background: #ea8a2f;
+        color: #fff;
+        font-size: 12.5px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.12s ease;
+        .fa { font-size: 11px; margin-right: 3px; }
+        &:hover { background: #d9791f; }
+    }
+
     // ── Suggestion chip ────────────────────────────────────────────────────────
     &__suggest {
         display: flex;

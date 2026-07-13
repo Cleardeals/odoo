@@ -321,12 +321,68 @@ export class WaLeadTab extends Component {
         return this.conversation?.active_segment?.inquiry_id || null;
     }
 
+    get activeSegmentPropertyId() {
+        return this.conversation?.active_segment?.property_base_id || null;
+    }
+
     switchInquiry(inquiryId) {
         return this._startSegment({ inquiry_id: inquiryId });
     }
 
     startTopic(label) {
         return this._startSegment({ label });
+    }
+
+    async searchProperties(query) {
+        try {
+            return await this.orm.call("wa.conversation", "search_properties", [], {
+                query: query || "", limit: 20 });
+        } catch (e) {
+            return [];
+        }
+    }
+
+    async pickProperty(prop) {
+        const convId = this.state.convId;
+        if (!convId) return;
+        try {
+            const res = await this.orm.call(
+                "wa.conversation", "start_property_topic", [], {
+                    conversation_id: convId, property_base_id: prop.id });
+            if (res?.action === "exists") {
+                this.notification.add(
+                    `This property already has an inquiry — switched to it.`,
+                    { type: "info" });
+            }
+            await this._loadThread(convId);
+        } catch (e) {
+            this.notification.add(e.data?.message || String(e), { type: "danger" });
+        }
+    }
+
+    // Open the Recommend Property wizard prefilled with the active span's property,
+    // parented to the current inquiry. After it commits, the leads.new create hook
+    // binds the span automatically; we reload the thread to reflect it.
+    async createInquiryForActive() {
+        const propId = this.activeSegmentPropertyId;
+        const inquiryId = this.props.record?.resId;
+        if (!propId || !inquiryId) return;
+        await this.action.doAction(
+            {
+                type: "ir.actions.act_window",
+                res_model: "lead.recommend.property.wizard",
+                view_mode: "form",
+                views: [[false, "form"]],
+                target: "new",
+                context: {
+                    default_inquiry_id: inquiryId,
+                    default_property_base_id: propId,
+                    active_id: inquiryId,
+                    active_model: "leads.new",
+                },
+            },
+            { onClose: () => this._loadThread(this.state.convId) },
+        );
     }
 
     async _startSegment(kw) {

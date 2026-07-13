@@ -617,12 +617,44 @@ export class WaInbox extends Component {
         return this.activeConversation?.active_segment?.inquiry_id || null;
     }
 
+    get activeSegmentPropertyId() {
+        return this.activeConversation?.active_segment?.property_base_id || null;
+    }
+
     switchInquiry(inquiryId) {
         return this._startSegment({ inquiry_id: inquiryId });
     }
 
     startTopic(label) {
         return this._startSegment({ label });
+    }
+
+    async searchTopicProperties(query) {
+        try {
+            return await this.orm.call("wa.conversation", "search_properties", [], {
+                query: query || "", limit: 20 });
+        } catch (e) {
+            return [];
+        }
+    }
+
+    async pickTopicProperty(prop) {
+        const convId = this.state.activeConvId;
+        if (!convId) return;
+        try {
+            const res = await this.orm.call(
+                "wa.conversation", "start_property_topic", [], {
+                    conversation_id: convId, property_base_id: prop.id });
+            if (res?.action === "exists") {
+                this.notification.add(
+                    "This property already has an inquiry — switched to it.",
+                    { type: "info" });
+            }
+            await this._loadThread(convId);
+            await this._loadInbox();
+        } catch (e) {
+            this.notification.add(e.data?.message || String(e), { type: "danger" });
+        }
     }
 
     async _startSegment(kw) {

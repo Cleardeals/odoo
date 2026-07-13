@@ -226,7 +226,6 @@
                             type="object"
                             string="Recommend Property"
                             class="btn-secondary"
-                            invisible="inquiry_type != 'primary'"
                             groups="leads.group_lead_score_rm"/>
                 </header>
                 <sheet>

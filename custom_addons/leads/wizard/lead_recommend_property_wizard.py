@@ -62,10 +62,20 @@ class LeadRecommendPropertyWizard(models.TransientModel):
         if not inquiry:
             raise ValidationError("Inquiry is required.")
 
-        if inquiry.inquiry_type != "primary":
-            raise ValidationError(
-                "Recommended inquiry can only be created from a primary inquiry.",
-            )
+        # A recommended inquiry may be created from a primary OR from another
+        # recommended inquiry.  The hierarchy stays flat (one level under the
+        # primary): when the source is itself recommended, the new inquiry inherits
+        # the SAME primary parent rather than nesting under a recommendation.
+        if inquiry.inquiry_type == "primary":
+            parent = inquiry
+        else:
+            parent = inquiry.parent_inquiry_id
+            if not parent:
+                raise ValidationError(
+                    "This recommended inquiry has no parent primary inquiry, so a "
+                    "new recommended inquiry cannot be attached. Please fix the "
+                    "source inquiry's parent first.",
+                )
 
         if not inquiry.phone:
             raise ValidationError(
@@ -102,7 +112,7 @@ class LeadRecommendPropertyWizard(models.TransientModel):
                 "state": "assigned",
                 "current_status": "lead",
                 "inquiry_type": "recommended",
-                "parent_inquiry_id": inquiry.id,
+                "parent_inquiry_id": parent.id,
             },
         )
 

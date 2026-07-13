@@ -66,10 +66,14 @@
                         segmentsEnabled="segmentsEnabled"
                         activeLabel="activeSegmentLabel"
                         activeInquiryId="activeSegmentInquiryId"
+                        activePropertyId="activeSegmentPropertyId"
                         inquiries="inquiries"
                         suggestion="segmentSuggestion"
+                        searchProperties.bind="searchProperties"
                         onSwitch.bind="switchInquiry"
+                        onPickProperty.bind="pickProperty"
                         onStartTopic.bind="startTopic"
+                        onCreateInquiry.bind="createInquiryForActive"
                         onAcceptSuggestion.bind="acceptSuggestion"
                         onDismissSuggestion.bind="dismissSuggestion"/>
 

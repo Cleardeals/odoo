@@ -276,9 +276,12 @@
                             segmentsEnabled="segmentsEnabled"
                             activeLabel="activeSegmentLabel"
                             activeInquiryId="activeSegmentInquiryId"
+                            activePropertyId="activeSegmentPropertyId"
                             inquiries="inquiries"
                             suggestion="segmentSuggestion"
+                            searchProperties.bind="searchTopicProperties"
                             onSwitch.bind="switchInquiry"
+                            onPickProperty.bind="pickTopicProperty"
                             onStartTopic.bind="startTopic"
                             onAcceptSuggestion.bind="acceptSuggestion"
                             onDismissSuggestion.bind="dismissSuggestion"/>

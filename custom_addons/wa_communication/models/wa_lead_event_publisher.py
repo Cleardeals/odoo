@@ -84,6 +84,16 @@ class WaLeadEventPublisher(models.Model):
                 _logger.warning(
                     "wa: orphan-conversation relink failed for lead %s",
                     rec.id, exc_info=True)
+            # Bind any pre-inquiry ("New topic") segment for this (phone, property)
+            # to the freshly-created inquiry — deterministic, and covers EVERY
+            # creation path (Recommend wizard, manual, import), not just the inbox
+            # orphan flow. Defensive for the same reason as above.
+            try:
+                self.env['wa.conversation'].sudo()._owa_bind_new_inquiry(rec)
+            except Exception:  # noqa: BLE001
+                _logger.warning(
+                    "wa: segment binding failed for new inquiry %s",
+                    rec.id, exc_info=True)
         return records
 
     # ------------------------------------------------------------------

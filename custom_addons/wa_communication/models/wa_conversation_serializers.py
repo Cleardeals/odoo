@@ -320,15 +320,18 @@ class WaConversation(models.Model):
     def search_properties(self, query: str = '', limit: int = 20) -> list[dict]:
         """Typeahead search over ``property.base`` for the Create-lead picker.
 
-        Returns ``[{id, name}]`` so the Inbox modal can offer a lightweight
-        searchable property dropdown without a full Odoo many2one widget.
+        Returns ``[{id, name, tag}]`` so a lightweight searchable property dropdown
+        (Inbox create-lead modal, "New topic" picker) can render without a full Odoo
+        many2one widget. ``tag`` is the ``property_tag`` slug — the intentional
+        display key across the WhatsApp UI.
         """
         domain = []
         if query:
             domain = ['|', ('name', 'ilike', query), ('property_tag', 'ilike', query)]
         props = self.env['property.base'].sudo().search(
             domain, limit=min(int(limit or 20), 50), order='id desc')
-        return [{'id': p.id, 'name': p.display_name or p.name or ''} for p in props]
+        return [{'id': p.id, 'name': p.display_name or p.name or '',
+                 'tag': p.property_tag or ''} for p in props]
 
     @api.model
     def create_lead_from_chat(self, conversation_id: int, name: str,
@@ -407,11 +410,15 @@ class WaConversation(models.Model):
         # messages reclassify to this property without touching their immutable
         # lead_id.  Falls back to ensuring a segment for the lead when none active.
         if conv._owa_segments_enabled():
-            seg = conv.active_segment_id
-            if seg and not seg.inquiry_id:
-                self.relink_segment(seg.id, lead.id)
-            else:
-                conv._owa_ensure_segment(inquiry=lead, started_by='rm')
+            # Property-anchored spans are already bound by the leads.new create hook
+            # (_owa_bind_new_inquiry). Here we only catch a no-property active
+            # label-only span so the orphan flow never strands one, then make sure
+            # the lead has an active segment. ensure_segment dedups by inquiry, so
+            # this is idempotent with the hook.
+            active = conv.active_segment_id
+            if active and not active.inquiry_id and not active.property_base_id:
+                self.relink_segment(active.id, lead.id)
+            conv._owa_ensure_segment(inquiry=lead, started_by='rm')
 
         conv._owa_log_system_event("Lead created from chat: %s" % lead.name)
         return lead.id
@@ -563,6 +570,7 @@ class WaConversation(models.Model):
                 'id': s.id,
                 'label': s.display_name,
                 'inquiry_id': s.inquiry_id.id if s.inquiry_id else None,
+                'property_base_id': s.property_base_id.id or None,
                 'property': s.property_base_id.property_tag or None,
                 'message_count': s.message_count,
             }
@@ -574,6 +582,7 @@ class WaConversation(models.Model):
             'inquiries': [{
                 'id': lead.id,
                 'name': lead.name or '',
+                'property_base_id': lead.property_base_id.id or None,
                 'property': lead.property_base_id.property_tag
                             or (lead.property_base_id.display_name if lead.property_base_id else None),
             } for lead in self.inquiry_ids],
