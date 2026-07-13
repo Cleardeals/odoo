@@ -53,6 +53,17 @@ class TestSendMessage(WaTransactionCase):
         self.assertEqual(payload['request_id'], msg.request_id)
         self.assertEqual(payload['rm_odoo_id'], self.env.uid)
 
+    def test_freetext_send_updates_inbox_preview_and_timestamp(self):
+        """Sending bumps the chat up the 'recent' list and previews the sent
+        message — WhatsApp-style (your own reply is the last line)."""
+        conv = self.make_conversation()
+        self._open_window(conv)
+        with self.mock_pubsub():
+            conv.send_message(body='On my way to the site', kind='freetext')
+        conv.invalidate_recordset()
+        self.assertEqual(conv.last_message_preview, 'On my way to the site')
+        self.assertTrue(conv.last_message_at, "send must set last_message_at for sorting")
+
     def test_media_send_forwards_media_fields(self):
         conv = self.make_conversation()
         self._open_window(conv)

@@ -73,50 +73,83 @@
                             </button>
                         </div>
 
-                        <!-- Filters popover: window / RM / date refinements -->
+                        <!-- Filters popover: sort / window / date / RM refinements
+                             — tactile pill groups instead of native dropdowns. -->
                         <t t-if="state.showFilters">
-                            <div class="wa-inbox__filters-pop">
-                                <div class="wa-inbox__filters-row">
-                                    <label class="wa-inbox__filters-label">24h window</label>
-                                    <select class="wa-inbox__filters-select"
-                                            t-on-change="(e) => this.setWindow(e.target.value)">
-                                        <t t-foreach="windowOptions" t-as="wo" t-key="wo.key">
-                                            <option t-att-value="wo.key"
-                                                    t-att-selected="state.filters.window === wo.key"
-                                                    t-esc="wo.label"/>
-                                        </t>
-                                    </select>
+                            <div class="wa-inbox__filters-pop" t-on-click.stop="() => {}">
+                                <div class="wa-inbox__filters-head">
+                                    <span class="wa-inbox__filters-title">
+                                        <i class="fa fa-sliders" aria-hidden="true"/> Filters &amp; sort
+                                    </span>
+                                    <button class="wa-inbox__filters-x" title="Close"
+                                            t-on-click="() => this.toggleFilters()">
+                                        <i class="fa fa-times" aria-hidden="true"/>
+                                    </button>
                                 </div>
-                                <div class="wa-inbox__filters-row">
-                                    <label class="wa-inbox__filters-label">Date</label>
-                                    <select class="wa-inbox__filters-select"
-                                            t-on-change="(e) => this.setDateRange(e.target.value)">
-                                        <t t-foreach="dateRanges" t-as="dr" t-key="dr.key">
-                                            <option t-att-value="dr.key"
-                                                    t-att-selected="state.filters.date_range === dr.key"
-                                                    t-esc="dr.label"/>
-                                        </t>
-                                    </select>
-                                </div>
-                                <t t-if="state.isManager and state.counts.rms and state.counts.rms.length">
-                                    <div class="wa-inbox__filters-row wa-inbox__filters-row--col">
-                                        <label class="wa-inbox__filters-label">Assigned RM</label>
-                                        <div class="wa-inbox__rm-filter">
-                                            <t t-foreach="state.counts.rms" t-as="rm" t-key="rm.id">
-                                                <button
-                                                    t-attf-class="wa-inbox__rm-pill {{ state.filters.assigned_rm_ids.includes(rm.id) ? 'wa-inbox__rm-pill--active' : '' }}"
-                                                    t-on-click="() => this.toggleRmFilter(rm.id)">
-                                                    <t t-esc="rm.name"/>
-                                                    <span class="wa-inbox__rm-pill-count" t-esc="rm.count"/>
+
+                                <div class="wa-inbox__filters-scroll">
+                                    <!-- Sort -->
+                                    <div class="wa-inbox__fsection">
+                                        <div class="wa-inbox__fsection-title">Sort by</div>
+                                        <div class="wa-inbox__fgroup">
+                                            <t t-foreach="sortOptions" t-as="so" t-key="so.key">
+                                                <button t-attf-class="wa-inbox__fpill {{ state.filters.sort === so.key ? 'wa-inbox__fpill--active' : '' }}"
+                                                        t-on-click="() => this.setSort(so.key)">
+                                                    <t t-esc="so.label"/>
                                                 </button>
                                             </t>
                                         </div>
                                     </div>
-                                </t>
+
+                                    <!-- 24h window -->
+                                    <div class="wa-inbox__fsection">
+                                        <div class="wa-inbox__fsection-title">24h window</div>
+                                        <div class="wa-inbox__fgroup">
+                                            <t t-foreach="windowOptions" t-as="wo" t-key="wo.key">
+                                                <button t-attf-class="wa-inbox__fpill {{ state.filters.window === wo.key ? 'wa-inbox__fpill--active' : '' }}"
+                                                        t-on-click="() => this.setWindow(wo.key)">
+                                                    <t t-esc="wo.label"/>
+                                                </button>
+                                            </t>
+                                        </div>
+                                    </div>
+
+                                    <!-- Date -->
+                                    <div class="wa-inbox__fsection">
+                                        <div class="wa-inbox__fsection-title">Date</div>
+                                        <div class="wa-inbox__fgroup">
+                                            <t t-foreach="dateRanges" t-as="dr" t-key="dr.key">
+                                                <button t-attf-class="wa-inbox__fpill {{ state.filters.date_range === dr.key ? 'wa-inbox__fpill--active' : '' }}"
+                                                        t-on-click="() => this.setDateRange(dr.key)">
+                                                    <t t-esc="dr.label"/>
+                                                </button>
+                                            </t>
+                                        </div>
+                                    </div>
+
+                                    <!-- Assigned RM (managers) -->
+                                    <t t-if="state.isManager and state.counts.rms and state.counts.rms.length">
+                                        <div class="wa-inbox__fsection">
+                                            <div class="wa-inbox__fsection-title">Assigned RM</div>
+                                            <div class="wa-inbox__fgroup">
+                                                <t t-foreach="state.counts.rms" t-as="rm" t-key="rm.id">
+                                                    <button
+                                                        t-attf-class="wa-inbox__fpill {{ state.filters.assigned_rm_ids.includes(rm.id) ? 'wa-inbox__fpill--active' : '' }}"
+                                                        t-on-click="() => this.toggleRmFilter(rm.id)">
+                                                        <t t-esc="rm.name"/>
+                                                        <span class="wa-inbox__fpill-count" t-esc="rm.count"/>
+                                                    </button>
+                                                </t>
+                                            </div>
+                                        </div>
+                                    </t>
+                                </div>
+
                                 <div class="wa-inbox__filters-foot">
                                     <button class="wa-inbox__filters-reset"
+                                            t-att-disabled="!hasActiveRefinements"
                                             t-on-click="() => this.resetFilters()">
-                                        <i class="fa fa-times" aria-hidden="true"/> Reset
+                                        <i class="fa fa-undo" aria-hidden="true"/> Reset
                                     </button>
                                     <button class="btn btn-sm btn-primary"
                                             t-on-click="() => this.toggleFilters()">Done</button>
@@ -124,21 +157,15 @@
                             </div>
                         </t>
 
-                        <!-- Sort + count -->
+                        <!-- Count subhead (WhatsApp-clean: sort lives in Filters) -->
                         <div class="wa-inbox__list-subhead">
-                            <label class="wa-inbox__sort">
-                                <i class="fa fa-sort-amount-desc" aria-hidden="true"/>
-                                <select class="wa-inbox__sort-select"
-                                        t-on-change="(e) => this.setSort(e.target.value)">
-                                    <t t-foreach="sortOptions" t-as="so" t-key="so.key">
-                                        <option t-att-value="so.key"
-                                                t-att-selected="state.filters.sort === so.key"
-                                                t-esc="so.label"/>
-                                    </t>
-                                </select>
-                            </label>
                             <span class="wa-inbox__count">
                                 <t t-esc="state.total"/> chats<t t-if="unreadTotal"> · <t t-esc="unreadTotal"/> unread</t>
+                            </span>
+                            <span class="wa-inbox__sort-hint" t-on-click="() => this.toggleFilters()"
+                                  title="Change sort in Filters">
+                                <i class="fa fa-sort-amount-desc" aria-hidden="true"/>
+                                <t t-esc="sortLabel(state.filters.sort)"/>
                             </span>
                         </div>
                     </div>

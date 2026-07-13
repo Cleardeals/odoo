@@ -116,6 +116,11 @@ class WaConversation(models.Model):
             'occurred_at': fields.Datetime.now(),
         })
 
+        # Bump the conversation to the top of the "recent" list and preview the
+        # message we just sent — WhatsApp-style (your own reply is the last line).
+        last_at, preview = self._owa_conversation_tail(self)
+        self.sudo().write({'last_message_at': last_at, 'last_message_preview': preview})
+
         topic = self.env['ir.config_parameter'].sudo().get_param(
             _TOPIC_WA_REQUESTS, 'cd-prod-odoo-wa-requests'
         )
@@ -219,6 +224,10 @@ class WaConversation(models.Model):
             'status': 'queued',
             'occurred_at': fields.Datetime.now(),
         })
+
+        # Bump + preview the sent list (WhatsApp-style tail refresh).
+        last_at, preview = self._owa_conversation_tail(self)
+        self.sudo().write({'last_message_at': last_at, 'last_message_preview': preview})
 
         topic = self.env['ir.config_parameter'].sudo().get_param(
             _TOPIC_WA_REQUESTS, 'cd-prod-odoo-wa-requests'

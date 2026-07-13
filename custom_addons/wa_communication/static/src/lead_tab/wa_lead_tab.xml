@@ -30,26 +30,11 @@
                 </div>
             </t>
             <t t-else="">
-                <!-- 3-column layout -->
-
-                <!-- Left: Enrollments panel -->
-                <div class="wa-lead-tab__enrollments">
-                    <div class="wa-lead-tab__panel-title">ENROLLMENTS</div>
-                    <t t-if="enrollments.length">
-                        <t t-foreach="enrollments" t-as="enr" t-key="enr.slug">
-                            <div t-attf-class="wa-lead-tab__enr-card {{ enr.active ? 'wa-lead-tab__enr-card--active' : '' }}">
-                                <div class="wa-lead-tab__enr-name" t-esc="enr.name"/>
-                                <div class="wa-lead-tab__enr-step" t-esc="enr.step"/>
-                                <span t-attf-class="wa-lead-tab__enr-badge wa-lead-tab__enr-badge--{{ enr.status_key }}">
-                                    <t t-esc="enr.status_label"/>
-                                </span>
-                            </div>
-                        </t>
-                    </t>
-                    <t t-else="">
-                        <div class="wa-lead-tab__enr-empty text-muted small">No active workflows</div>
-                    </t>
-                </div>
+                <!-- Layout: chat thread + right sidebar.
+                     Phase 2: the left "Enrollments" workflow rail was removed
+                     until workflows deploy — re-add the <div
+                     class="wa-lead-tab__enrollments"> block here (JS getter and
+                     SCSS are kept dormant). -->
 
                 <!-- Centre: Chat thread + composer -->
                 <div class="wa-lead-tab__chat">

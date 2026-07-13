@@ -66,14 +66,14 @@ export class WaInbox extends Component {
             // Filters — mirror the backend get_inbox contract exactly.
             filters: {
                 ownership:       "mine",     // role-aware default set on mount
-                needs_reply:     true,       // default queue = chats awaiting a reply
+                needs_reply:     false,      // WhatsApp-like: show ALL chats, not a queue
                 window:          "all",      // open | closing_soon | closed | all
                 assigned_rm_ids: [],         // explicit RM multi-select
                 date_range:      "anytime",
                 date_from:       null,
                 date_to:         null,
                 search:          "",
-                sort:            "waiting",
+                sort:            "recent",   // WhatsApp-like: newest activity on top
             },
             showFilters: false,              // Filters popover open?
             isManager:   false,
@@ -314,13 +314,13 @@ export class WaInbox extends Component {
     /** Restore the role-aware default and clear every refinement. */
     resetFilters() {
         this.state.filters.ownership       = this.state.isManager ? "all" : "mine";
-        this.state.filters.needs_reply     = true;
+        this.state.filters.needs_reply     = false;
         this.state.filters.window          = "all";
         this.state.filters.assigned_rm_ids = [];
         this.state.filters.date_range      = "anytime";
         this.state.filters.date_from       = null;
         this.state.filters.date_to         = null;
-        this.state.filters.sort            = "waiting";
+        this.state.filters.sort            = "recent";
         this.state.showFilters = false;
         this._loadInbox();
     }

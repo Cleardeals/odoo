@@ -697,6 +697,28 @@ class TestInboundEvents(WaTransactionCase):
         self.assertEqual(len(inbound), 2,
                          "different button labels must each be recorded")
 
+    def test_lead_replied_preview_tracks_newest_message_not_last_processed(self):
+        """Webhooks can arrive out of order. The inbox preview + last_message_at
+        must reflect the message with the NEWEST occurred_at, not whichever was
+        processed last — otherwise an older message clobbers the preview."""
+        conv = self.make_conversation()
+        # Newest message arrives/processes FIRST…
+        self._process({
+            'event_type': 'lead_replied', 'phone': conv.phone_number,
+            'wa_message_id': 'wamid.newest', 'message_text': 'Need details of 2 BHK',
+            'occurred_at': '2026-03-01T10:02:00Z',
+        })
+        # …an OLDER message is processed AFTER it (out of order).
+        self._process({
+            'event_type': 'lead_replied', 'phone': conv.phone_number,
+            'wa_message_id': 'wamid.older', 'message_text': 'https://youtube.com/x',
+            'occurred_at': '2026-03-01T10:00:00Z',
+        })
+        conv.invalidate_recordset()
+        self.assertEqual(conv.last_message_preview, 'Need details of 2 BHK',
+                         "preview must show the newest message, not the last processed")
+        self.assertEqual(conv.last_message_at, datetime(2026, 3, 1, 10, 2, 0))
+
     def test_lead_replied_reopens_expired_window(self):
         """An inbound reply on a conversation whose 24h window has already closed
         must reopen it — otherwise the RM couldn't free-text back."""
@@ -844,7 +866,8 @@ class TestInboundEvents(WaTransactionCase):
 
     def test_lead_replied_list_reply_json_blob_becomes_selected_title(self):
         """A list selection arrives as a JSON blob — store only the picked row's
-        title (what WhatsApp shows), never the raw JSON."""
+        title (what WhatsApp shows), never the raw JSON.  The inbox preview
+        (last_message_preview) must also be the clean title, not the blob."""
         conv = self.make_conversation()
         blob = ('{"type": "list_reply", "list_reply": '
                 '{"id": "row_1", "title": "Property A", "description": "3bhk"}}')
@@ -852,6 +875,10 @@ class TestInboundEvents(WaTransactionCase):
         self.assertEqual(msg.kind, 'list_reply')
         self.assertEqual(msg.body, 'Property A')
         self.assertNotIn('{', msg.body)
+        conv.invalidate_recordset()
+        self.assertEqual(conv.last_message_preview, 'Property A',
+                         "inbox preview must show the clean title, not raw JSON")
+        self.assertNotIn('{', conv.last_message_preview or '')
 
     def test_lead_replied_unmapped_kind_stored_as_unknown_not_text(self):
         """A brand-new Interakt content type must land as 'unknown', never be

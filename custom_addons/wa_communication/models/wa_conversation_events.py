@@ -633,11 +633,14 @@ class WaConversation(models.Model):
         })
 
         window_expires_at = self._owa_inbound_window_expiry(event, occurred_at)
-        conv_vals = {
-            'last_message_at':      occurred_at,
-            'last_message_preview': (message_text or '')[:100],
-            'unread_count':         conv.unread_count + 1,
-        }
+        conv_vals = {'unread_count': conv.unread_count + 1}
+        # Derive the inbox tail (preview + timestamp) from the ACTUAL latest
+        # message, not the one we just processed.  Webhooks can arrive out of
+        # order (or within the same second), so blindly writing this message's
+        # body would let an older message clobber a newer one in the list.
+        last_at, preview = self._owa_conversation_tail(conv)
+        conv_vals['last_message_at'] = last_at
+        conv_vals['last_message_preview'] = preview
         if window_expires_at:
             conv_vals['window_expires_at'] = window_expires_at
         if lead and not conv.lead_id:
@@ -650,6 +653,27 @@ class WaConversation(models.Model):
 
         # Notify the chat owner, or fan out to managers when nobody owns it.
         self._owa_notify_reply(conv, lead, phone, rm_odoo_id, actor_id, message_text)
+
+    def _owa_conversation_tail(self, conv):
+        """Return ``(last_message_at, preview)`` from the conversation's latest
+        non-system message (either direction), ordered by ``occurred_at`` then
+        ``id`` so ties and out-of-order deliveries resolve the same way the thread
+        renders them.  Falls back to the current stored values when empty."""
+        latest = self.env['wa.message'].sudo().search(
+            [('conversation_id', '=', conv.id), ('kind', '!=', 'system')],
+            order='occurred_at desc, id desc', limit=1,
+        )
+        if not latest:
+            return conv.last_message_at, conv.last_message_preview or ''
+        # Prefer the plain body; fall back to rendered/template text so an
+        # outbound template (empty body until enriched) still previews sensibly.
+        preview = (
+            latest.body
+            or latest.template_body
+            or latest.template_name
+            or ''
+        )
+        return latest.occurred_at, preview[:100]
 
     def _owa_resolve_inbound_dedup(self, wa_message_id, button_reply_id, message_text):
         """Resolve the storage id and button-collision source for an inbound reply.
