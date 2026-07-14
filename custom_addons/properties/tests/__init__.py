@@ -14,4 +14,5 @@ from . import (
     test_property_portal_listing,
     test_property_security,
     test_property_sync_helpers,
+    test_property_webhook,
 )
