@@ -295,10 +295,6 @@ class PropertyImportWizard(models.TransientModel):
                 #'property_sold_date': self._clean_date(row.get('Property_Sold_Date')),
                 #'reason_for_unsold': self._clean_string(row.get('Reason_for_Unsold'), to_lower=False),
                 #'instagram_reel': self._clean_string(row.get('Instagram_REEL')) == 'yes',
-                #'id_99acres': self._clean_string(row.get('99acres_ID'), to_lower=False),
-                #'id_housing': self._clean_string(row.get('Housing_ID'), to_lower=False),
-                #'id_magicbricks': self._clean_string(row.get('Magicbricks_ID'), to_lower=False),
-                #'id_olx': self._clean_string(row.get('OLX_ID'), to_lower=False),
             }
 
             # Create record with transaction handling

@@ -98,6 +98,14 @@
             <field name="sequence">51</field>
         </record>
 
+        <record id="lead_source_squareyards" model="lead.source">
+            <field name="name">SquareYards</field>
+            <field name="category_id" ref="lead_source_category_portal"/>
+            <field name="portal_code">SquareYards</field>
+            <field name="default_rm_user_id" search="[('name', '=', 'Purvi Desai'), ('share', '=', False), ('active', '=', True)]"/>
+            <field name="sequence">52</field>
+        </record>
+
         <record id="lead_source_instagram" model="lead.source">
             <field name="name">Instagram</field>
             <field name="category_id" ref="lead_source_category_social_media"/>

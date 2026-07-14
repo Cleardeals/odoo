@@ -558,6 +558,9 @@ class NewPortalLead(models.Model):
             "app inquiry": "Cleardeals",
             "cleardeals website": "Cleardeals",
             "cleardeals": "Cleardeals",
+            "squareyards": "SquareYards",
+            "square yards": "SquareYards",
+            "square_yards": "SquareYards",
         }
         return portal_map.get(normalized)
 

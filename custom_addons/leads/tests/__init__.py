@@ -26,4 +26,5 @@ from . import (
     test_seller_site_visits_api,
     test_seller_summary_api,
     test_website_lead,
+    test_squareyards_webhook,
 )

@@ -1,6 +1,6 @@
 import logging
 import re
-from datetime import datetime
+from datetime import date, datetime
 
 import requests
 
@@ -43,8 +43,8 @@ PAGE_SIZE = 100
 
 # Fields that the API cron is allowed to write.
 # NEVER include manager-editable fields (service_expiry_date, welcome_call_date,
-# property_tag, portal IDs) here — those are owned by the migration cron and
-# the manager UI only.
+# property_tag) here — those are owned by the migration cron and the manager
+# UI only.
 API_WRITABLE_FIELDS = {
     "uuid",
     "prop_id",
@@ -71,12 +71,19 @@ API_WRITABLE_FIELDS = {
 # The API cron must never touch these.
 MIGRATION_FIELDS = {
     "property_tag",
-    "ninety_nine_acres_id",
-    "housing_id",
-    "magicbricks_id",
-    "olx_id",
     "service_expiry_date",
     "welcome_call_date",
+}
+
+# Alias map: normalize variant exec_name spellings (as they may appear in the
+# website API / webhook payload, AFTER basic cleaning) to the canonical Odoo
+# res.users name.  Shared by both the polling cron and the webhook upsert so the
+# RM resolution stays identical on both ingestion paths.
+#   Key   = spelling that may appear in the payload (after cleaning)
+#   Value = canonical name as it appears in Odoo
+RM_NAME_ALIASES = {
+    "Bhumika Prajapati": "Bhoomika Prajapati",
+    "Krusha Kadiya": "Krusha Kadiya",  # canonical spelling; catches 'krusha' after title-case
 }
 
 
@@ -229,6 +236,132 @@ class PropertyBaseSync(models.Model):
     _inherit = "property.base"
 
     # =========================================================================
+    # Reusable ingestion helpers — shared by the polling cron AND the inbound
+    # webhook endpoints (controllers/webhooks.py).  Both ingestion paths receive
+    # the SAME website field vocabulary (property_name, owner_contact_no,
+    # state.name, details.bedroom_count, sell_pricing.offer_price, …) and must
+    # map / resolve / upsert it identically.
+    # =========================================================================
+
+    @api.model
+    def _resolve_rm_user_id(self, exec_name, users_by_name=None, missing=None):
+        """
+        Resolve a website ``exec_name`` string to a ``res.users`` id.
+
+        Normalisation pipeline (kept identical to the original cron logic):
+          1. strip leading/trailing whitespace
+          2. replace hyphens with spaces ('Vivek-Vaghela' → 'Vivek Vaghela')
+          3. collapse runs of internal spaces
+          4. apply RM_NAME_ALIASES overrides
+          5. exact lookup, then Title-Case fallback
+
+        Parameters
+        ----------
+        exec_name:
+            Raw name string from the payload (may be empty / None).
+        users_by_name:
+            Optional pre-built ``{name: id}`` cache.  The cron passes its own
+            cache (built once for the whole run); the webhook omits it and a
+            cache is built on demand for the single call.
+        missing:
+            Optional ``set`` collecting unresolved names so the caller can warn
+            once per name instead of per record.
+
+        Returns
+        -------
+        int | False
+            The resolved user id, or ``False`` when no match is found.
+        """
+        if users_by_name is None:
+            users_by_name = {
+                u.name: u.id
+                for u in self.env["res.users"]
+                .sudo()
+                .search([("active", "in", [True, False])])
+            }
+
+        exec_name = (exec_name or "").strip()
+        exec_name = exec_name.replace("-", " ")
+        exec_name = re.sub(r" {2,}", " ", exec_name)
+        exec_name = RM_NAME_ALIASES.get(exec_name, exec_name)
+
+        if not exec_name:
+            return False
+
+        uid = users_by_name.get(exec_name) or users_by_name.get(exec_name.title())
+        if uid:
+            return uid
+
+        if missing is not None and exec_name not in missing:
+            _logger.warning(
+                "Property ingest: RM '%s' not found in Odoo users.",
+                exec_name,
+            )
+            missing.add(exec_name)
+        return False
+
+    def _upsert_one(self, api_item: dict):
+        """
+        Idempotent single-record upsert from a website property payload.
+
+        Keyed on ``uuid`` (the website ``id``).  Used by the inbound webhook
+        endpoints; safe to call for either a "create" or "update" event because
+        delivery may be retried or arrive out of order.
+
+        Behaviour:
+          * Maps the payload via :func:`_map_api_record` and resolves the RM.
+          * If a record with this uuid exists → writes only the changed
+            ``API_WRITABLE_FIELDS`` (never touches ``MIGRATION_FIELDS``).
+          * Otherwise → creates a new record.
+
+        Returns
+        -------
+        tuple[recordset, str]
+            ``(record, action)`` where action is ``"created"``, ``"updated"``
+            or ``"unchanged"``.
+
+        Raises
+        ------
+        ValueError
+            When the payload has no ``id`` (uuid) — the caller maps this to a
+            422 response.
+        """
+        vals = _map_api_record(api_item)
+        exec_name = vals.pop("_exec_name", "")
+        vals["rm_user_id"] = self._resolve_rm_user_id(exec_name)
+
+        uuid_val = vals.get("uuid")
+        if not uuid_val:
+            raise ValueError("Property payload is missing the required 'id' (uuid).")
+
+        existing = self.sudo().search([("uuid", "=", uuid_val)], limit=1)
+        if existing:
+            current = existing.read(list(API_WRITABLE_FIELDS))[0]
+            if isinstance(current.get("rm_user_id"), (list, tuple)):
+                current["rm_user_id"] = current["rm_user_id"][0]
+
+            # Normalise before diffing: read() returns Date fields as date
+            # objects, while _map_api_record yields YYYY-MM-DD strings — without
+            # this an unchanged reg_date would always look "changed".
+            def _norm(v):
+                if isinstance(v, (date, datetime)):
+                    return v.isoformat()[:10]
+                return v
+
+            diff = {
+                k: v
+                for k, v in vals.items()
+                if k in API_WRITABLE_FIELDS and _norm(current.get(k)) != _norm(v)
+            }
+            if diff:
+                existing.write(diff)
+                return existing, "updated"
+            return existing, "unchanged"
+
+        record = self.sudo().create(vals)
+        return record, "created"
+
+    # =========================================================================
     # PROP-5 — API → Odoo sync cron  (every 3 hours)
     # =========================================================================
 
@@ -283,13 +416,6 @@ class PropertyBaseSync(models.Model):
             .search(
                 [("active", "in", [True, False])],
             )
-        }
-        # Alias map: normalize variant API spellings to the canonical Odoo name.
-        # Key = spelling that may appear in API (AFTER basic cleaning),
-        # Value = canonical name as it appears in Odoo.
-        _rm_name_aliases: dict[str, str] = {
-            "Bhumika Prajapati": "Bhoomika Prajapati",
-            "Krusha Kadiya": "Krusha Kadiya",  # canonical spelling; catches 'krusha' after title-case
         }
         _missing_rm: set[str] = set()
         _logger.info(
@@ -352,32 +478,11 @@ class PropertyBaseSync(models.Model):
                 vals = _map_api_record(api_item)
                 # Resolve exec_name → rm_user_id using the pre-built name cache.
                 exec_name = vals.pop("_exec_name", "")
-                # --- Normalisation pipeline ---
-                # 1. Strip leading/trailing whitespace (handles '     ' and 'Name   ')
-                exec_name = exec_name.strip()
-                # 2. Replace hyphens with spaces (handles 'Vivek-Vaghela' style)
-                exec_name = exec_name.replace("-", " ")
-                # 3. Collapse multiple internal spaces into one
-                exec_name = re.sub(r" {2,}", " ", exec_name)
-                # 4. Apply known alias overrides
-                exec_name = _rm_name_aliases.get(exec_name, exec_name)
-                if exec_name:
-                    uid = users_by_name.get(exec_name)
-                    # 5. Case-insensitive fallback: try Title Case version
-                    if uid is None:
-                        uid = users_by_name.get(exec_name.title())
-                    if uid:
-                        vals["rm_user_id"] = uid
-                    else:
-                        vals["rm_user_id"] = False
-                        if exec_name not in _missing_rm:
-                            _logger.warning(
-                                "API sync: RM '%s' not found in Odoo users.",
-                                exec_name,
-                            )
-                            _missing_rm.add(exec_name)
-                else:
-                    vals["rm_user_id"] = False
+                vals["rm_user_id"] = self._resolve_rm_user_id(
+                    exec_name,
+                    users_by_name=users_by_name,
+                    missing=_missing_rm,
+                )
                 uuid_val = vals.get("uuid")
 
                 if not uuid_val:
@@ -484,10 +589,6 @@ class PropertyBaseSync(models.Model):
                     "id",
                     "form_no",
                     "property_tag",
-                    "ninety_nine_acres_id",
-                    "housing_id",
-                    "magicbricks_id",
-                    "olx_id",
                     "service_expiry_date",
                     "welcome_call_date",
                     "is_active",
@@ -534,10 +635,6 @@ class PropertyBaseSync(models.Model):
             migration_vals = {"inventory_migrated": True}
             field_map = {
                 "property_tag": "property_tag",
-                "ninety_nine_acres_id": "ninety_nine_acres_id",
-                "housing_id": "housing_id",
-                "magicbricks_id": "magicbricks_id",
-                "olx_id": "olx_id",
                 "service_expiry_date": "service_expiry_date",
                 "welcome_call_date": "welcome_call_date",
                 "is_active": "is_active",
@@ -580,8 +677,7 @@ class PropertyBaseSync(models.Model):
 
         Matching key: form_no  (BQ Form_Number == website API form_no).
 
-        Fills: property_tag, portal IDs (99acres / Housing / Magicbricks / OLX),
-               service_expiry_date, welcome_call_date, is_active.
+        Fills: property_tag, service_expiry_date, welcome_call_date, is_active.
 
         Only writes a field when BQ provides a non-empty value; service_expiry_date
         is only overwritten if property.base does not already have one.
@@ -679,10 +775,6 @@ class PropertyBaseSync(models.Model):
             SELECT
                 Form_Number                                         AS form_no,
                 Tag                                                 AS property_tag,
-                `99acres_ID`                                        AS ninety_nine_acres_id,
-                SPLIT(CAST(Housing_ID    AS STRING), '.')[OFFSET(0)] AS housing_id,
-                SPLIT(CAST(Magicbricks_ID AS STRING), '.')[OFFSET(0)] AS magicbricks_id,
-                SPLIT(CAST(OLX_ID        AS STRING), '.')[OFFSET(0)] AS olx_id,
                 Service_Expiry_Date                                 AS service_expiry_date_raw,
                 COALESCE(
                     SAFE.PARSE_DATE('%d/%m/%Y', Service_Expiry_Date),
@@ -764,14 +856,6 @@ class PropertyBaseSync(models.Model):
 
             if row.property_tag:
                 vals["property_tag"] = row.property_tag
-            if row.ninety_nine_acres_id:
-                vals["ninety_nine_acres_id"] = str(row.ninety_nine_acres_id)
-            if row.housing_id and row.housing_id not in ("None", "nan"):
-                vals["housing_id"] = row.housing_id
-            if row.magicbricks_id and row.magicbricks_id not in ("None", "nan"):
-                vals["magicbricks_id"] = row.magicbricks_id
-            if row.olx_id and row.olx_id not in ("None", "nan"):
-                vals["olx_id"] = row.olx_id
             if welcome_call_date:
                 vals["welcome_call_date"] = welcome_call_date
             # Only overwrite service_expiry_date if not already set on the record

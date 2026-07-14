@@ -27,6 +27,7 @@ class PropertyPortalListing(models.Model):
             ("Housing.com", "Housing.com"),
             ("MagicBricks", "MagicBricks"),
             ("OLX", "OLX"),
+            ("SquareYards", "Square Yards"),
         ],
         string="Portal",
         default=lambda self: self.env.context.get("default_portal_name"),
@@ -241,5 +242,12 @@ class PropertyBase(models.Model):
         "property_base_id",
         string="OLX Listings",
         domain=[("portal_name", "=", "OLX")],
+        copy=False,
+    )
+    portal_listing_squareyards_ids = fields.One2many(
+        "property.portal.listing",
+        "property_base_id",
+        string="Square Yards Listings",
+        domain=[("portal_name", "=", "SquareYards")],
         copy=False,
     )
