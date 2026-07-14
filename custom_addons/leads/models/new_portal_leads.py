@@ -554,6 +554,10 @@ class NewPortalLead(models.Model):
             "magicbricks": "MagicBricks",
             "magicbricks.com": "MagicBricks",
             "olx": "OLX",
+            "website inquiry": "Cleardeals",
+            "app inquiry": "Cleardeals",
+            "cleardeals website": "Cleardeals",
+            "cleardeals": "Cleardeals",
             "squareyards": "SquareYards",
             "square yards": "SquareYards",
             "square_yards": "SquareYards",
@@ -678,9 +682,23 @@ class NewPortalLead(models.Model):
                 ("create_date", ">=", time_limit),
             ]
         else:
+            # Dedup across all sources sharing the same portal_code, so leads
+            # that arrive on different sources for the same channel are treated
+            # as one (e.g. the Cleardeals website and the Cleardeals app both
+            # use portal_code "Cleardeals"). For single-source portals the
+            # sibling set is just the source itself, preserving prior behaviour.
+            sibling_source_ids = [source_id]
+            if source and source.portal_code:
+                siblings = (
+                    self.env["lead.source"]
+                    .sudo()
+                    .search([("portal_code", "=", source.portal_code)])
+                )
+                if siblings:
+                    sibling_source_ids = siblings.ids
             domain = [
                 ("phone", "=", phone_clean),
-                ("source_id", "=", source_id),
+                ("source_id", "in", sibling_source_ids),
                 ("portal_property_id", "=", portal_prop_id),
                 ("create_date", ">=", time_limit),
             ]
@@ -995,6 +1013,95 @@ class NewPortalLead(models.Model):
 
         except Exception as e:
             _logger.exception("❌ Failed to process lead %s", self.id)
+            self.write(
+                {
+                    "state": "failed",
+                    "process_notes": f"Processing failed with error: {e!s}\n",
+                },
+            )
+
+    @api.model
+    def _resolve_property_by_prop_id(self, prop_id):
+        """Resolve a property.base directly from its short-code (prop_id).
+
+        Used by the Cleardeals website intake, where the payload carries our own
+        internal property short-code, so no portal-listing lookup is needed.
+        """
+        code = (prop_id or "").strip()
+        if not code:
+            return self.env["property.base"]
+        return (
+            self.env["property.base"]
+            .sudo()
+            .search([("prop_id", "=", code)], limit=1)
+        )
+
+    def _process_website_lead(self):
+        """Assign a Cleardeals website lead.
+
+        Property is matched directly on prop_id (stored in portal_property_id).
+        Assignment always uses the property's RM; falls back to the source's
+        default RM, then Administrator.
+        """
+        self.ensure_one()
+        _logger.info(
+            "🔄 Processing website lead %s: %s (state: %s)",
+            self.id,
+            self.name,
+            self.state,
+        )
+
+        if self.state != "new":
+            _logger.info("⏭️ Skipping website lead %s, state is %s", self.id, self.state)
+            return
+
+        try:
+            property_rec = self._resolve_property_by_prop_id(self.portal_property_id)
+
+            if property_rec and property_rec.rm_user_id:
+                rm_user = property_rec.rm_user_id
+                notes = (
+                    f"Website lead assigned to RM {rm_user.name} "
+                    f"for property {property_rec.property_tag}.\n"
+                )
+            else:
+                if not property_rec:
+                    msg = f"Property not found for prop_id: {self.portal_property_id}"
+                else:
+                    msg = f"Property {property_rec.property_tag} has no RM"
+                _logger.warning(
+                    "⚠️ Website lead %s: %s. Falling back to default RM.",
+                    self.id,
+                    msg,
+                )
+                rm_user = self.source_id.default_rm_user_id
+                if not rm_user:
+                    rm_user = self.env.ref("base.user_admin")
+                    notes = (
+                        f"{msg}\n"
+                        f"Assigned to Administrator because no Fallback RM is configured.\n"
+                    )
+                else:
+                    notes = f"{msg}\nAssigned to Fallback RM: {rm_user.name}.\n"
+
+            self.write(
+                {
+                    "property_base_id": property_rec.id if property_rec else False,
+                    "user_id": rm_user.id,
+                    "state": "assigned",
+                    "process_notes": notes,
+                },
+            )
+
+            _logger.info(
+                "🎉 Website lead %s: Successfully assigned to %s for property %s",
+                self.id,
+                rm_user.name,
+                property_rec.property_tag if property_rec else "N/A",
+            )
+
+        except Exception as e:
+            _logger.exception("❌ Failed to process website lead %s", self.id)
             self.write(
                 {
                     "state": "failed",

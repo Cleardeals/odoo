@@ -17,5 +17,17 @@
             <field name="value"></field>
         </record>
 
+        <!--
+            Cleardeals website/app lead webhook shared secret. Seeded empty on
+            purpose: the real key is provisioned by a manager via Settings >
+            Technical > System Parameters at deploy time, and the webhook rejects
+            all requests with 401 until it is set. noupdate="1" so module upgrades
+            never clobber it.
+        -->
+        <record id="cleardeals_lead_api_key" model="ir.config_parameter">
+            <field name="key">cleardeals.lead.api.key</field>
+            <field name="value"></field>
+        </record>
+
     </data>
 </odoo>
