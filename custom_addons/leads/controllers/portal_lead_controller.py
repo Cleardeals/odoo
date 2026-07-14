@@ -225,6 +225,134 @@ class PortalWebhookController(http.Controller):
             )
 
     @http.route(
+        "/api/v1/cleardeals_lead",
+        type="http",
+        auth="public",
+        methods=["POST"],
+        csrf=False,
+    )
+    def handle_cleardeals_lead(self, **kwargs):
+        """
+        DEDICATED webhook for first-party leads from the Cleardeals website and
+        mobile app. The payload carries our own property short-code (property_id),
+        which maps directly to property.base.prop_id — no portal-listing lookup.
+        """
+
+        # API KEY AUTHENTICATION
+        try:
+            sent_key = request.httprequest.headers.get("X-API-KEY")
+            correct_key = (
+                request.env["ir.config_parameter"]
+                .sudo()
+                .get_param("cleardeals.lead.api.key")
+            )
+
+            if not sent_key or not correct_key or sent_key != correct_key:
+                _logger.warning("Cleardeals Lead Webhook: Failed auth, invalid API key.")
+                return Response(
+                    "Failed to Push Lead: Invalid API Key",
+                    status=401,
+                    mimetype="text/plain",
+                )
+
+        except Exception as auth_err:
+            _logger.error("Cleardeals Lead Webhook: Auth check failed: %s", auth_err)
+            return Response(
+                "Failed to Push Lead: Internal Server Error",
+                status=500,
+                mimetype="text/plain",
+            )
+
+        data = json.loads(request.httprequest.data)
+
+        try:
+            # Validation
+            required_fields = ["name", "phone", "property_id"]
+            missing = [field for field in required_fields if not data.get(field)]
+
+            if missing:
+                _logger.warning(
+                    "Cleardeals Lead webhook rejected: Missing required Fields: %s. Data: %s",
+                    missing,
+                    data,
+                )
+                return Response(
+                    "Failed to push lead: Missing required fields.",
+                    status=400,
+                )
+
+            # Translate website fields to our leads.new fields
+            lead_model = request.env["leads.new"].sudo().with_context(
+                automated_lead_creation=True,
+            )
+            # Bifurcate the source by where the lead originated.
+            #   inquiry_source == "mobile_app" -> Cleardeals app
+            #   anything else / missing        -> Cleardeals website
+            # Both sources share portal_code "Cleardeals" so deduplication treats
+            # a website lead and an app lead as the same lead (see
+            # leads.new._compute_duplicate_domain).
+            inquiry_source = (data.get("inquiry_source") or "").strip().lower()
+            source_name = "App Inquiry" if inquiry_source == "mobile_app" else "Website Inquiry"
+            source = lead_model._get_or_create_source(
+                source_name,
+                source_type="portal",
+            )
+
+            prop_code = (data.get("property_id") or "").strip()
+
+            # Resolve the property up front so the duplicate check uses the
+            # phone + property_base_id criteria (same as matched portal leads).
+            property_rec = lead_model._resolve_property_by_prop_id(prop_code)
+
+            inquiry_type = data.get("inquiry_type")
+            if inquiry_type not in ("primary", "recommended"):
+                inquiry_type = "primary"
+
+            lead_vals = {
+                "name": data.get("name"),
+                "phone": data.get("phone"),
+                "email": data.get("email"),
+                "remarks": data.get("message"),
+                "inquiry_type": inquiry_type,
+                "source_id": source.id,
+                "portal_property_id": prop_code,
+                "raw_data": json.dumps(data, indent=2),
+                "state": "new",
+            }
+            if property_rec:
+                lead_vals["property_base_id"] = property_rec.id
+
+            # Create the basic lead record (dedup-aware)
+            new_lead = lead_model.create_lead_if_not_duplicate(lead_vals)
+
+            # Process the lead synchronously
+            if new_lead:
+                try:
+                    new_lead._process_website_lead()
+                    _logger.info(
+                        f"Cleardeals Lead processed successfully: {new_lead.name}",
+                    )
+                except Exception as process_err:
+                    _logger.error(
+                        f"Failed to process Cleardeals lead {new_lead.name}: {process_err}",
+                    )
+                    # Lead is created but processing failed - can be retried later
+
+            return Response(
+                "Success: Lead punched in the CRM",
+                status=200,
+                mimetype="text/plain",
+            )
+
+        except Exception as e:
+            _logger.error("Cleardeals Lead Webhook Exception: %s. Raw data: %s", e, data)
+            return Response(
+                f"Failed to Push Lead: {e!s}",
+                status=500,
+                mimetype="text/plain",
+            )
+
+    @http.route(
         "/api/v1/squareyards_webhook",
         type="http",
         auth="public",
