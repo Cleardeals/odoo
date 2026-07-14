@@ -32,6 +32,6 @@ def migrate(cr, version):
     )
     if cr.rowcount:
         _logger.info(
-            "properties 19.0.1.4.0: disabled legacy polling cron "
+            "properties 19.0.1.6.0: disabled legacy polling cron "
             "(ir_cron_sync_properties_from_api).",
         )
