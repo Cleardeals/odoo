@@ -216,6 +216,35 @@ class TestPropertyApiGet(PropertyApiTestCase):
         resp = self._call_get(str(self.prop.id))
         self.assertIn("application/json", resp.content_type)
 
+    def test_19b_portal_ids_exposed_via_portal_listings(self):
+        """Portal IDs must be exposed through the `portal_listings` relation.
+
+        This pins the canonical exposure so the redundant `legacy_portal_ids`
+        block can be removed from the serializer without losing data.
+        """
+        prop = self.make_property(
+            name="Portal Listing Serializer Prop",
+            prop_id="PLSER001",
+        )
+        self.env["property.portal.listing"].create(
+            {
+                "property_base_id": prop.id,
+                "portal_name": "MagicBricks",
+                "portal_listing_id": "MB-SER-001",
+                "active": True,
+            }
+        )
+        resp = self._call_get(str(prop.id))
+        data = self.assertSuccessResponse(resp)
+        self.assertIn("portal_listings", data)
+        match = [
+            line
+            for line in data["portal_listings"]
+            if line["portal_name"] == "MagicBricks"
+            and line["portal_listing_id"] == "MB-SER-001"
+        ]
+        self.assertTrue(match, "MagicBricks portal ID must surface via portal_listings")
+
 
 # ---------------------------------------------------------------------------
 # Unit tests for _resolve_identifier() helper (isolated, no HTTP mock needed)

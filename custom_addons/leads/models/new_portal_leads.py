@@ -554,6 +554,9 @@ class NewPortalLead(models.Model):
             "magicbricks": "MagicBricks",
             "magicbricks.com": "MagicBricks",
             "olx": "OLX",
+            "squareyards": "SquareYards",
+            "square yards": "SquareYards",
+            "square_yards": "SquareYards",
         }
         return portal_map.get(normalized)
 
