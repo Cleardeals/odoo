@@ -9,5 +9,10 @@ from . import (
     test_property_base_cron,
     test_property_base_crud,
     test_property_base_dates,
+    test_property_base_misc,
     test_property_base_write,
+    test_property_portal_listing,
+    test_property_security,
+    test_property_sync_helpers,
+    test_property_webhook,
 )

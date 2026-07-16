@@ -235,6 +235,78 @@ class TestLeadSource(TransactionCase):
 
         self.assertFalse(lead.is_portal_source)
 
+    # ------------------------------------------------------------------ #
+    # Square Yards — 5th portal source & config (Part 2A)                 #
+    # ------------------------------------------------------------------ #
+
+    def test_16_canonical_portal_code_squareyards(self):
+        """All inbound SquareYards spellings resolve to the canonical code."""
+        for variant in ("SquareYards", "squareyards", "square yards", "square_yards"):
+            self.assertEqual(
+                self.lead_model._canonical_portal_code(variant),
+                "SquareYards",
+                f"variant {variant!r} should map to 'SquareYards'",
+            )
+
+    def test_17_squareyards_in_portal_code_selection(self):
+        """The portal_code Selection must accept the new value."""
+        selection = dict(self.source_model._fields["portal_code"].selection)
+        self.assertIn("SquareYards", selection)
+        self.assertEqual(selection["SquareYards"], "Square Yards")
+
+    def test_18_seeded_squareyards_source_is_a_portal(self):
+        """The seeded lead.source loads with the right category + code."""
+        source = self.env.ref("leads.lead_source_squareyards")
+        self.assertEqual(source.name, "SquareYards")
+        self.assertEqual(source.portal_code, "SquareYards")
+        self.assertEqual(source.source_type, "portal")
+        self.assertEqual(
+            source.category_id,
+            self.env.ref("leads.lead_source_category_portal"),
+        )
+
+    def test_19_get_or_create_source_reuses_seeded_squareyards(self):
+        """Bootstrapping 'SquareYards' returns the seeded portal source, once."""
+        source = self.lead_model._get_or_create_source(
+            "SquareYards",
+            source_type="portal",
+        )
+        self.assertEqual(source, self.env.ref("leads.lead_source_squareyards"))
+        self.assertEqual(source.portal_code, "SquareYards")
+        self.assertEqual(
+            self.source_model.search_count([("name", "=", "SquareYards")]),
+            1,
+        )
+
+    def test_20_resolve_property_from_squareyards_listing(self):
+        """A SquareYards listing maps to its property; other portals don't cross-match."""
+        source = self.env.ref("leads.lead_source_squareyards")
+        listing_id = f"SY-{self.suffix}"
+
+        prop = self.env["property.base"].create(
+            {
+                "name": f"SY Property {self.suffix}",
+                "property_tag": f"SY-PROP-{self.suffix}",
+                "rm_user_id": self.env.ref("base.user_admin").id,
+                "portal_listing_ids": [
+                    (0, 0, {
+                        "portal_name": "SquareYards",
+                        "portal_listing_id": listing_id,
+                        "active": True,
+                    }),
+                ],
+            }
+        )
+
+        matched = self.lead_model._resolve_property_from_source(source, listing_id)
+        self.assertEqual(matched, prop)
+
+        # Same listing id but a different portal source must NOT match.
+        olx_source = self.env.ref("leads.lead_source_olx")
+        self.assertFalse(
+            self.lead_model._resolve_property_from_source(olx_source, listing_id)
+        )
+
     def test_15_sync_portal_default_rm_does_not_override_manual(self):
         users = self.env["res.users"].with_context(no_reset_password=True)
         manual_user = self.env.user

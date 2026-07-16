@@ -1,4 +1,6 @@
 from . import (
+    test_bulk_reassign,
+    test_relink_bde,
     test_cross_rm_access,
     test_buyer_activity_api,
     test_buyer_site_visits_api,
@@ -24,4 +26,6 @@ from . import (
     test_seller_portal_performance_api,
     test_seller_site_visits_api,
     test_seller_summary_api,
+    test_website_lead,
+    test_squareyards_webhook,
 )

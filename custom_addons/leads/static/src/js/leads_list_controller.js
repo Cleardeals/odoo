@@ -32,12 +32,18 @@ export class LeadsNewListController extends ListController {
     }
 
     async _doRefresh() {
+        const root = this.model?.root;
         if (
             this.isDestroyed ||
             this._refreshInProgress ||
             document.visibilityState !== "visible" ||
-            !this.model?.root ||
-            this.model.root.editedRecord
+            !root ||
+            root.editedRecord ||
+            // Don't reload while the user has rows selected (manual ticks or
+            // "select all matching") — a reload clears the selection and would
+            // wipe out a large in-progress bulk action (e.g. Bulk Reassign RM).
+            root.selection.length ||
+            root.isDomainSelected
         ) {
             // Skip this tick but schedule the next one.
             this._scheduleNextRefresh();

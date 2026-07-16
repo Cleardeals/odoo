@@ -17,9 +17,9 @@
                         <div class="alert alert-info" role="alert">
                             Leads that have a <strong>Portal Property ID</strong> but
                             <strong>no</strong> DB-level <code>property_id</code> link.
-                            The wizard looks up the matching property using the portal field
-                            map (MagicBricks → magicbricks_id, 99acres → ninety_nine_acres_id,
-                            etc.) and writes only <code>property_id</code>.
+                            The wizard looks up the matching property via the portal listing
+                            registry (<code>property.portal.listing</code>, matched on portal +
+                            listing ID) and writes only <code>property_id</code>.
                             Safe to run multiple times — already-linked leads are skipped.
                         </div>
                     </group>

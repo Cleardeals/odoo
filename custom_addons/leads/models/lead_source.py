@@ -65,6 +65,8 @@ class LeadSource(models.Model):
             ("Housing.com", "Housing.com"),
             ("MagicBricks", "MagicBricks"),
             ("OLX", "OLX"),
+            ("Cleardeals", "Cleardeals (Website/App)"),
+            ("SquareYards", "Square Yards"),
         ],
         string="Portal",
         index=True,
@@ -101,6 +103,7 @@ class LeadSource(models.Model):
             "Housing.com": "Jatin Shah",
             "OLX": "Naresh Rojiya",
             "MagicBricks": "Mayuri Malivad",
+            "SquareYards": "Purvi Desai",
         }
 
         user_model = self.env["res.users"].sudo()

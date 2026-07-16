@@ -1,6 +1,6 @@
 {
     "name": "Lead Scoring",
-    "version": "1.5.0",
+    "version": "1.7.1",
     "depends": ["base", "web", "mail", "lead_suggestor", "properties"],
     "author": "Nirat Patel",
     "category": "Sales",
@@ -25,6 +25,7 @@
         "views/lead_csv_import_wizard_views.xml",
         "views/lead_migration_wizard_views.xml",
         "views/lead_recompute_wizard_views.xml",
+        "views/lead_bulk_reassign_wizard_views.xml",
         # 4. Model Views (Defines Actions) -- [MOVED UP]
         "views/lead_score_views.xml",
         "views/leads_bde_views.xml",
@@ -37,6 +38,8 @@
         "views/lead_site_visit_wizard_views.xml",
         "views/lead_site_visit_views.xml",
         "views/new_portal_lead_views.xml",
+        # Reassignment Log (menu depends on lead_score_menu.xml)
+        "views/lead_reassignment_log_views.xml",
         # OLX Account management
         "views/lead_olx_account_views.xml",
         # Property form extension (tab added by this module)

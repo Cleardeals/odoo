@@ -204,6 +204,15 @@ class NewPortalLead(models.Model):
         tracking=True,
     )
 
+    last_reassignment_batch_id = fields.Many2one(
+        "lead.reassignment.log",
+        string="Last Reassignment Batch",
+        readonly=True,
+        copy=False,
+        index=True,
+        help="The most recent bulk reassignment operation that moved this lead.",
+    )
+
     # ------------------------------------------------------------------
     # New related fields — sourced from property.base (property_base_id).
     # Populated as property_base_id gets backfilled / set on new leads.
@@ -327,6 +336,40 @@ class NewPortalLead(models.Model):
                     f"RM '{rec.user_id.name}' is not authorised to refer leads to "
                     f"BDE '{rec.bde_id.name}'. Contact a manager to update the BDE configuration."
                 )
+
+    # --- BDE reassignment helpers (shared by bulk wizard & auto-relink) ---
+
+    @api.model
+    def _bde_candidates_for_rm(self, rm):
+        """Active BDEs ``rm`` may receive OPS-sale leads for.
+
+        A BDE is usable by an RM when it is open to everyone (empty
+        allowed_rm_ids) or explicitly lists that RM — mirrors
+        _check_bde_allowed_for_rm.
+        """
+        bdes = self.env["leads.bde"].search([("active", "=", True)])
+        return bdes.filtered(lambda b: not b.allowed_rm_ids or rm in b.allowed_rm_ids)
+
+    def _resolve_bde_for_rm(self, rm, candidates=None):
+        """Pick the BDE for this OPS-sale lead when it is reassigned to ``rm``.
+
+        Returns a leads.bde recordset:
+          * the current BDE if it is still valid for ``rm`` (keep),
+          * otherwise a valid BDE — preferring one that explicitly lists ``rm``
+            over an open one, chosen deterministically by name (swap),
+          * an empty recordset if ``rm`` is authorised for no BDE (the caller
+            must then not reassign the RM).
+
+        Call only for OPS-sale leads.
+        """
+        self.ensure_one()
+        if candidates is None:
+            candidates = self._bde_candidates_for_rm(rm)
+        if self.bde_id and self.bde_id in candidates:
+            return self.bde_id
+        explicit = candidates.filtered(lambda b: rm in b.allowed_rm_ids)
+        pool = explicit or candidates
+        return pool.sorted(lambda b: (b.name or "").lower())[:1]
 
     # --- Compute Methods ---
 
@@ -511,6 +554,13 @@ class NewPortalLead(models.Model):
             "magicbricks": "MagicBricks",
             "magicbricks.com": "MagicBricks",
             "olx": "OLX",
+            "website inquiry": "Cleardeals",
+            "app inquiry": "Cleardeals",
+            "cleardeals website": "Cleardeals",
+            "cleardeals": "Cleardeals",
+            "squareyards": "SquareYards",
+            "square yards": "SquareYards",
+            "square_yards": "SquareYards",
         }
         return portal_map.get(normalized)
 
@@ -632,9 +682,23 @@ class NewPortalLead(models.Model):
                 ("create_date", ">=", time_limit),
             ]
         else:
+            # Dedup across all sources sharing the same portal_code, so leads
+            # that arrive on different sources for the same channel are treated
+            # as one (e.g. the Cleardeals website and the Cleardeals app both
+            # use portal_code "Cleardeals"). For single-source portals the
+            # sibling set is just the source itself, preserving prior behaviour.
+            sibling_source_ids = [source_id]
+            if source and source.portal_code:
+                siblings = (
+                    self.env["lead.source"]
+                    .sudo()
+                    .search([("portal_code", "=", source.portal_code)])
+                )
+                if siblings:
+                    sibling_source_ids = siblings.ids
             domain = [
                 ("phone", "=", phone_clean),
-                ("source_id", "=", source_id),
+                ("source_id", "in", sibling_source_ids),
                 ("portal_property_id", "=", portal_prop_id),
                 ("create_date", ">=", time_limit),
             ]
@@ -692,23 +756,39 @@ class NewPortalLead(models.Model):
             vals["phone"] = self._standardize_phone(vals.get("phone"))
             new_phone = vals["phone"]
             if new_phone:
-                duplicate = self.sudo().search(
-                    [("phone", "=", new_phone), ("id", "not in", self.ids)],
-                    limit=1,
-                )
-                if duplicate:
-                    status_selection = dict(self._fields["current_status"].selection)
-                    status_label = status_selection.get(
-                        duplicate.current_status,
-                        duplicate.current_status or "Unknown",
+                for rec in self:
+                    # Determine the effective property after this write completes.
+                    # Same phone is allowed for different properties (a buyer can
+                    # inquire about multiple properties); only the same phone +
+                    # same property combination is a duplicate.
+                    effective_property_id = (
+                        vals["property_base_id"]
+                        if "property_base_id" in vals
+                        else rec.property_base_id.id
                     )
-                    rm_name = duplicate.user_id.name or "Unassigned"
-                    raise ValidationError(
-                        f"Phone number {new_phone} is already assigned to another inquiry.\n"
-                        f"Lead: {duplicate.name}\n"
-                        f"Assigned RM: {rm_name}\n"
-                        f"Current Status: {status_label}",
+                    if not effective_property_id:
+                        continue
+                    duplicate = self.sudo().search(
+                        [
+                            ("phone", "=", new_phone),
+                            ("property_base_id", "=", effective_property_id),
+                            ("id", "not in", self.ids),
+                        ],
+                        limit=1,
                     )
+                    if duplicate:
+                        status_selection = dict(self._fields["current_status"].selection)
+                        status_label = status_selection.get(
+                            duplicate.current_status,
+                            duplicate.current_status or "Unknown",
+                        )
+                        rm_name = duplicate.user_id.name or "Unassigned"
+                        raise ValidationError(
+                            f"Phone number {new_phone} is already assigned to another inquiry for the same property.\n"
+                            f"Lead: {duplicate.name}\n"
+                            f"Assigned RM: {rm_name}\n"
+                            f"Current Status: {status_label}",
+                        )
 
         leads_to_stamp = self.env["leads.new"]
         first_contact_time = False
@@ -770,6 +850,20 @@ class NewPortalLead(models.Model):
             # written (whose user_id no longer matches the current user).
             return self.sudo().with_context(bin_size=True).web_read(specification)
         return super().web_save(vals, specification, next_id=next_id)
+
+    def action_open_bulk_reassign(self):
+        """Open the Bulk Reassign wizard for the selected leads.
+
+        Triggered by the manager-only header button on the list view. ``self``
+        is the current selection; its ids are forwarded to the wizard via the
+        standard active_ids context that its default_get reads.
+        """
+        return (
+            self.env["lead.bulk.reassign.wizard"]
+            .with_context(active_model="leads.new", active_ids=self.ids)
+            .create({})
+            .action_open()
+        )
 
     # --- Lead Processing & Assignment ---
 
@@ -919,6 +1013,95 @@ class NewPortalLead(models.Model):
 
         except Exception as e:
             _logger.exception("❌ Failed to process lead %s", self.id)
+            self.write(
+                {
+                    "state": "failed",
+                    "process_notes": f"Processing failed with error: {e!s}\n",
+                },
+            )
+
+    @api.model
+    def _resolve_property_by_prop_id(self, prop_id):
+        """Resolve a property.base directly from its short-code (prop_id).
+
+        Used by the Cleardeals website intake, where the payload carries our own
+        internal property short-code, so no portal-listing lookup is needed.
+        """
+        code = (prop_id or "").strip()
+        if not code:
+            return self.env["property.base"]
+        return (
+            self.env["property.base"]
+            .sudo()
+            .search([("prop_id", "=", code)], limit=1)
+        )
+
+    def _process_website_lead(self):
+        """Assign a Cleardeals website lead.
+
+        Property is matched directly on prop_id (stored in portal_property_id).
+        Assignment always uses the property's RM; falls back to the source's
+        default RM, then Administrator.
+        """
+        self.ensure_one()
+        _logger.info(
+            "🔄 Processing website lead %s: %s (state: %s)",
+            self.id,
+            self.name,
+            self.state,
+        )
+
+        if self.state != "new":
+            _logger.info("⏭️ Skipping website lead %s, state is %s", self.id, self.state)
+            return
+
+        try:
+            property_rec = self._resolve_property_by_prop_id(self.portal_property_id)
+
+            if property_rec and property_rec.rm_user_id:
+                rm_user = property_rec.rm_user_id
+                notes = (
+                    f"Website lead assigned to RM {rm_user.name} "
+                    f"for property {property_rec.property_tag}.\n"
+                )
+            else:
+                if not property_rec:
+                    msg = f"Property not found for prop_id: {self.portal_property_id}"
+                else:
+                    msg = f"Property {property_rec.property_tag} has no RM"
+                _logger.warning(
+                    "⚠️ Website lead %s: %s. Falling back to default RM.",
+                    self.id,
+                    msg,
+                )
+                rm_user = self.source_id.default_rm_user_id
+                if not rm_user:
+                    rm_user = self.env.ref("base.user_admin")
+                    notes = (
+                        f"{msg}\n"
+                        f"Assigned to Administrator because no Fallback RM is configured.\n"
+                    )
+                else:
+                    notes = f"{msg}\nAssigned to Fallback RM: {rm_user.name}.\n"
+
+            self.write(
+                {
+                    "property_base_id": property_rec.id if property_rec else False,
+                    "user_id": rm_user.id,
+                    "state": "assigned",
+                    "process_notes": notes,
+                },
+            )
+
+            _logger.info(
+                "🎉 Website lead %s: Successfully assigned to %s for property %s",
+                self.id,
+                rm_user.name,
+                property_rec.property_tag if property_rec else "N/A",
+            )
+
+        except Exception as e:
+            _logger.exception("❌ Failed to process website lead %s", self.id)
             self.write(
                 {
                     "state": "failed",

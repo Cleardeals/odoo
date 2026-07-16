@@ -3,10 +3,21 @@
     <data noupdate="1">
 
         <!-- ================================================================
-             CRON 1 — API sync  (every 3 hours)
+             CRON 1 — API sync  (DISABLED — replaced by inbound webhooks)
              Source: api.cleardeals.cc/api/v1/properties
              Writes: API-sourced fields only (see API_WRITABLE_FIELDS in
                      property_sync.py).  Never writes manager-editable fields.
+
+             As of 19.0.1.6.0 the website pushes property create/update events
+             to /api/v1/properties/webhook/{create,update} (controllers/webhooks.py),
+             so this polling cron is left INACTIVE.  The method and the manual
+             "Sync Properties from API" button are kept for backfill /
+             reconciliation if a webhook is ever missed.
+             NOTE: this file is noupdate="1", so on an already-installed DB the
+             active=False below does not apply on upgrade — the
+             migrations/19.0.1.6.0/post-disable_cron.py script handles that.
+             (Placed at 19.0.1.6.0 = the current module version so it runs on the
+             upgrade regardless of whichever prior version prod has installed.)
         ================================================================ -->
         <record id="ir_cron_sync_properties_from_api" model="ir.cron">
             <field name="name">Properties: Sync from Website API</field>
@@ -15,6 +26,7 @@
             <field name="code">model._cron_sync_from_api()</field>
             <field name="interval_number">3</field>
             <field name="interval_type">hours</field>
+            <field name="active" eval="False"/>
         </record>
 
         <!-- ================================================================
