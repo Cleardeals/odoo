@@ -71,6 +71,12 @@
         <field name="value">cd-prod-customer-events</field>
     </record>
 
+    <!-- Outbound — initial-nudge trigger (settled lead, has_property flag) -->
+    <record id="param_topic_nudge_events" model="ir.config_parameter">
+        <field name="key">wa_communication.topic_nudge_events</field>
+        <field name="value">cd-prod-nudge-events</field>
+    </record>
+
     <!-- Interakt direct API (template catalogue fetch).
          Set the API key (Interakt > Developer Settings) per environment. -->
     <record id="param_interakt_api_key" model="ir.config_parameter">

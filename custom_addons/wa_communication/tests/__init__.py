@@ -13,3 +13,4 @@ from . import test_conversation_model
 from . import test_segments
 from . import test_recommend_wizard
 from . import test_message_log
+from . import test_initial_nudge

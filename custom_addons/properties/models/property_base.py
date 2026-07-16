@@ -194,6 +194,30 @@ class PropertyBase(models.Model):
         readonly=True,
         help="Number of bedrooms (BHK count) from the API.",
     )
+    # API-sourced media / attributes consumed by the WhatsApp initial-nudge
+    # templates.  Stored but not surfaced in any view — populated by the sync
+    # mapper (webhook + "Sync from API" cron/button) alongside the fields above.
+    primary_image_url = fields.Char(
+        string="Primary Image URL",
+        readonly=True,
+        help="URL of the property's primary listing image (media[].is_primary).",
+    )
+    property_size = fields.Char(
+        string="Size",
+        readonly=True,
+        help="Human-readable size string built from the API areas block "
+        "(super built-up plot/construction area, falling back to carpet area).",
+    )
+    furnishing_type = fields.Char(
+        string="Furnishing",
+        readonly=True,
+        help="Furnishing status from the API (Unfurnished / Semi-Furnished / Furnished).",
+    )
+    tour_360_url = fields.Char(
+        string="360° Tour URL",
+        readonly=True,
+        help="360° virtual tour link from the API.",
+    )
 
     # =========================================================================
     # PROP-2.2 — Computed fields  (no manual input)

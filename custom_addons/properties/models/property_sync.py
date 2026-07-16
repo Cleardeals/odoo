@@ -65,6 +65,10 @@ API_WRITABLE_FIELDS = {
     "pricing_unit",
     "gmaps_url",
     "bedroom_count",
+    "primary_image_url",
+    "property_size",
+    "furnishing_type",
+    "tour_360_url",
 }
 
 # Fields that the migration cron populates from property.inventory.
@@ -161,6 +165,75 @@ def _parse_pricing_unit(api_item: dict) -> str:
     return str(rent.get("rent_price_unit") or "")
 
 
+def _parse_primary_image(api_item: dict) -> str:
+    """
+    Return the URL of the property's primary listing image.
+
+    Scans the API ``media`` array for the first entry flagged
+    ``is_primary == true`` and returns its ``file_path``.  Robust to a missing
+    or empty media array, non-list media, and entries without a file_path.
+
+    Examples:
+        media=[{is_primary: false, ...}, {is_primary: true, file_path: "u"}] -> "u"
+        media=[] / missing / null                                             -> ""
+    """
+    media = api_item.get("media")
+    if not isinstance(media, list):
+        return ""
+    for item in media:
+        if isinstance(item, dict) and item.get("is_primary"):
+            return str(item.get("file_path") or "")
+    return ""
+
+
+def _parse_size(api_item: dict) -> str:
+    """
+    Build a human-readable size string from the API ``areas`` block.
+
+    Prefers super built-up area (plot for residential land, construction for
+    built-up), falling back to carpet area when super built-up is absent — which
+    is common in the payload.  Each area is emitted as "<value> <unit>".  When
+    both a plot and a construction area are present, they are joined with " | ".
+
+    Robust to a missing/None ``areas`` block and to null values within it;
+    returns "" when nothing usable is present.
+
+    Examples:
+        super_built_up_plot_area="187", unit="sq. yard"      -> "187 sq. yard"
+        (no super built-up) carpet_construction_area="370"   -> "370 sq. yard"
+        both plot + construction present                      -> "A .. | B .."
+    """
+    areas = api_item.get("areas") or {}
+    if not isinstance(areas, dict):
+        return ""
+
+    def _fmt(value, unit) -> str:
+        value = str(value or "").strip()
+        if not value:
+            return ""
+        unit = str(unit or "").strip()
+        return f"{value} {unit}".strip()
+
+    # Prefer super built-up; fall back to carpet for each of plot / construction.
+    plot = _fmt(
+        areas.get("super_built_up_plot_area"),
+        areas.get("super_built_up_plot_area_unit"),
+    ) or _fmt(
+        areas.get("carpet_plot_area"),
+        areas.get("carpet_plot_area_unit"),
+    )
+    construction = _fmt(
+        areas.get("super_built_up_construction_area"),
+        areas.get("super_built_up_construction_area_unit"),
+    ) or _fmt(
+        areas.get("carpet_construction_area"),
+        areas.get("carpet_construction_area_unit"),
+    )
+
+    parts = [p for p in (plot, construction) if p]
+    return " | ".join(parts)
+
+
 def _map_api_record(api_item: dict) -> dict:
     """
     Map a single property JSON object returned by the Cleardeals website API
@@ -222,6 +295,11 @@ def _map_api_record(api_item: dict) -> dict:
         "gmaps_url": api_item.get("gmaps_url") or "",
         # Details — nested object
         "bedroom_count": _parse_bedroom_count(details.get("bedroom_count")),
+        # Media / attributes for the WhatsApp initial-nudge templates
+        "primary_image_url": _parse_primary_image(api_item),
+        "property_size": _parse_size(api_item),
+        "furnishing_type": str(details.get("furnishing_type") or ""),
+        "tour_360_url": api_item.get("tour_360_url") or "",
     }
 
 

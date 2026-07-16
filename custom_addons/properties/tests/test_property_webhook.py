@@ -146,10 +146,48 @@ class TestPropertyWebhook(PropertyApiTestCase):
             self.env["property.base"].search([("uuid", "=", body["id"])], limit=1)
         )
 
-    def test_06_media_array_is_ignored(self):
-        body = self._payload(media=[{"id": "m1", "file_path": "http://x/y.jpg"}])
+    def test_06_primary_image_is_persisted(self):
+        """The primary image URL is stored; the rest of the media array is not."""
+        body = self._payload(
+            media=[
+                {"id": "m1", "is_primary": False, "file_path": "http://x/other.jpg"},
+                {"id": "m2", "is_primary": True, "file_path": "http://x/main.jpg"},
+            ]
+        )
         resp = self._call("create", body=body)
-        self.assertSuccessResponse(resp, 201)  # no crash; media simply dropped
+        self.assertSuccessResponse(resp, 201)
+        rec = self.env["property.base"].search(
+            [("uuid", "=", body["property"]["id"])], limit=1
+        )
+        self.assertEqual(rec.primary_image_url, "http://x/main.jpg")
+
+    def test_06b_wa_attributes_are_mapped(self):
+        """Size / furnishing / 360 tour flow through the webhook end-to-end."""
+        body = self._payload(
+            details={"bedroom_count": "5 BHK", "furnishing_type": "Semi-Furnished"},
+            tour_360_url="http://tour/x",
+            areas={
+                "super_built_up_plot_area": "187",
+                "super_built_up_plot_area_unit": "sq. yard",
+            },
+        )
+        self._call("create", body=body)
+        rec = self.env["property.base"].search(
+            [("uuid", "=", body["property"]["id"])], limit=1
+        )
+        self.assertEqual(rec.furnishing_type, "Semi-Furnished")
+        self.assertEqual(rec.property_size, "187 sq. yard")
+        self.assertEqual(rec.tour_360_url, "http://tour/x")
+
+    def test_06c_missing_media_does_not_crash(self):
+        body = self._payload()  # no media / areas / tour keys at all
+        resp = self._call("create", body=body)
+        self.assertSuccessResponse(resp, 201)
+        rec = self.env["property.base"].search(
+            [("uuid", "=", body["property"]["id"])], limit=1
+        )
+        self.assertFalse(rec.primary_image_url)  # mapper writes "" when absent
+        self.assertFalse(rec.property_size)
 
     # ------------------------------------------------------------------
     # Idempotency

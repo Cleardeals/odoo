@@ -1,6 +1,6 @@
 {
     'name': 'WhatsApp Communication',
-    'version': '1.2.6',
+    'version': '1.2.7',
     'summary': 'WA messaging layer: push receiver, conversation threads, outbound publishing.',
     'description': """
 WhatsApp ↔ Odoo communication layer built on GCP Pub/Sub transport.

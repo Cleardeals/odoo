@@ -29,7 +29,7 @@ Configurable topics (ir.config_parameter):
 
 import logging
 
-from odoo import api, models
+from odoo import api, fields, models
 
 _logger = logging.getLogger(__name__)
 
@@ -38,6 +38,9 @@ _TOPIC_ACTOR = 'wa_communication.topic_actor_events'
 _TOPIC_VISIT = 'wa_communication.topic_visit_events'
 _TOPIC_PROPERTY = 'wa_communication.topic_property_events'
 _TOPIC_CUSTOMER = 'wa_communication.topic_customer_events'
+# nudge.initial — the single settled-state trigger for the initial-nudge
+# WhatsApp workflows (property vs no-property variants filter on has_property).
+_TOPIC_NUDGE = 'wa_communication.topic_nudge_events'
 
 # current_status values → visit event_type (canonical platform names)
 _VISIT_STATUS_MAP = {
@@ -63,18 +66,35 @@ class WaLeadEventPublisher(models.Model):
 
     _inherit = 'leads.new'
 
+    # Once-only guard so the initial-nudge trigger fires exactly one event per
+    # lead, whichever settled-state hook reaches it first (manual → create,
+    # portal → the assign transition).
+    wa_nudge_emitted = fields.Boolean(
+        string='WA Initial Nudge Emitted',
+        default=False,
+        copy=False,
+        help='Internal: set once the nudge.initial event has been published '
+        'for this lead, preventing duplicate initial-nudge campaigns.',
+    )
+
     # ------------------------------------------------------------------
     # Create hook — actor.created
     # ------------------------------------------------------------------
 
     @api.model_create_multi
     def create(self, vals_list):
+        # Manual leads are created already settled (state='assigned' in the
+        # leads.new create override); portal/automated leads settle later in
+        # _process_lead_logic. Emit the nudge here only for the manual path.
+        automated = bool(self.env.context.get('automated_lead_creation'))
         records = super().create(vals_list)
         for rec in records:
             rec._wa_schedule_publish(
                 _TOPIC_ACTOR,
                 rec._wa_build_event('actor.created'),
             )
+            if not automated:
+                rec._wa_emit_initial_nudge()
             # If a phone-only (orphan) WhatsApp conversation already exists for
             # this lead's number, attach it now so prior inbound history isn't
             # stranded. Defensive: a WA hiccup must never block lead creation.
@@ -155,6 +175,13 @@ class WaLeadEventPublisher(models.Model):
                 })
                 rec._wa_schedule_publish(_TOPIC_PROPERTY, event)
 
+            # -- initial nudge: portal lead settles into 'assigned' -------
+            # _process_lead_logic writes state='assigned' (with the resolved
+            # property_base_id, or False) — that is the settled point where the
+            # has-property decision is final for the automated/portal path.
+            if vals.get('state') == 'assigned':
+                rec._wa_emit_initial_nudge()
+
             # -- RM reassigned --------------------------------------------
             if (
                 'user_id' in vals
@@ -224,11 +251,27 @@ class WaLeadEventPublisher(models.Model):
                 'email': rm.email or '',
             },
             # ── Nested property dict — actor.property.* var resolution ──────
+            # Enriched so the initial-nudge templates can render entirely from
+            # the event snapshot (the engine never fetches Odoo).
             'property': {
-                'id':       prop.id or None,
-                'tag':      prop.property_tag or '',
-                'locality': prop.location or '',
-                'link':     prop.property_link or '',
+                'id':          prop.id or None,
+                'tag':         prop.property_tag or '',
+                # Clean project name — `name` excludes the "[...]" tag that
+                # display_name appends; strip defensively in case it ever leaks in.
+                'name':        (prop.name or '').split('[')[0].strip(),
+                'locality':    prop.location or '',
+                'link':        prop.property_link or '',
+                # Composed "Type": "<BHK> <sub_type>" when a BHK is present
+                # (e.g. "3 BHK Apartment"), else just the sub-type (e.g. "Shop").
+                'type_label':  (
+                    f"{prop.bhk} {prop.prop_sub_type}".strip()
+                    if prop.bhk and prop.prop_sub_type
+                    else (prop.prop_sub_type or prop.bhk or '')
+                ),
+                'size':        prop.property_size or '',
+                'furnishing':  prop.furnishing_type or '',
+                'image_url':   prop.primary_image_url or '',
+                'tour_360_url': prop.tour_360_url or '',
             },
         }
 
@@ -256,6 +299,38 @@ class WaLeadEventPublisher(models.Model):
                 'actor': snapshot,
             },
         }
+
+    def _wa_emit_initial_nudge(self) -> None:
+        """Publish the ``nudge.initial`` trigger for the initial-nudge workflows.
+
+        Fires exactly once per lead (guarded by ``wa_nudge_emitted``), only for
+        leads in the "Lead" status with a WhatsApp phone. Adds
+        ``payload.has_property`` = ``'yes'``/``'no'`` so the two workflow
+        variants can route on a simple ``==`` condition; the enriched
+        ``payload.actor.property`` snapshot carries everything the templates need.
+
+        Called at the settled decision point of each creation path:
+          * manual leads   → from ``create`` (already ``state='assigned'``),
+          * portal leads   → from ``write`` when ``state`` becomes ``'assigned'``
+                             (i.e. after ``_process_lead_logic`` resolves the
+                             property).
+        """
+        self.ensure_one()
+        if self.wa_nudge_emitted:
+            return
+        if self.current_status != 'lead':
+            return
+        if not self.phone:
+            return
+
+        event = self._wa_build_event('nudge.initial')
+        event['payload']['has_property'] = 'yes' if self.property_base_id else 'no'
+        self._wa_schedule_publish(_TOPIC_NUDGE, event)
+
+        # Mark emitted in-transaction so a rollback also discards the scheduled
+        # publish. This write touches no field the write() hook reacts to, so it
+        # does not re-enter the nudge logic.
+        self.wa_nudge_emitted = True
 
     def _wa_schedule_publish(self, topic_key: str, event: dict) -> None:
         """Schedule a Pub/Sub publish to run after the current transaction.

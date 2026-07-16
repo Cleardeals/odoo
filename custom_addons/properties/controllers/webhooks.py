@@ -75,9 +75,11 @@ class PropertyWebhookController(http.Controller):
 
         media = prop.get("media")
         if media:
-            # Media is intentionally not persisted yet (see module docstring).
+            # Only the primary image URL is persisted (property.base.primary_image_url,
+            # extracted by _map_api_record); the rest of the media array is not stored.
             _logger.info(
-                "Property webhook (%s): ignoring %d media item(s) for uuid=%s.",
+                "Property webhook (%s): received %d media item(s) for uuid=%s "
+                "(persisting primary image only).",
                 intent,
                 len(media) if isinstance(media, list) else 1,
                 prop.get("id"),
