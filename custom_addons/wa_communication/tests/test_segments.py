@@ -81,6 +81,42 @@ class TestSegments(WaTransactionCase):
         self.assertEqual(conv.active_segment_id, msg.segment_id)
         self.assertEqual(msg.effective_property_id, propA)
 
+    def test_segment_label_shows_property_name_not_lead_name(self):
+        """Regression: the DISCUSSING chip (segment.display_name) must name the
+        PROPERTY the span is about, never the person/lead name."""
+        self._enable()
+        propA = self._property(name='Siddhipriya Imperial')
+        lead = self.make_lead(phone='9000000099', name='Nirat',
+                              property_base_id=propA.id)
+        conv = self.make_conversation(phone_number='919000000099')
+        self._process(self._workflow_sent_event(conv, lead))
+        seg = conv.active_segment_id
+        self.assertTrue(seg)
+        self.assertEqual(seg.display_name, 'Siddhipriya Imperial',
+                         "chip shows the property name, not 'Nirat'")
+
+    def test_segment_label_falls_back_to_property_via_inquiry(self):
+        """Even when the span carries only its inquiry (no own property_base_id),
+        the label resolves through inquiry_id.property_base_id.name."""
+        self._enable()
+        prop = self._property(name='Mahashakti Apartment')
+        lead = self.make_lead(phone='9000000098', name='Nirat',
+                              property_base_id=prop.id)
+        conv = self.make_conversation(phone_number='919000000098')
+        seg = self.Segment.create({
+            'conversation_id': conv.id,
+            'inquiry_id': lead.id,          # inquiry set, property_base_id left blank
+        })
+        self.assertEqual(seg.display_name, 'Mahashakti Apartment')
+
+    def test_segment_label_explicit_label_wins(self):
+        """An explicit human label (e.g. a bare 'New topic') still takes priority."""
+        self._enable()
+        conv = self.make_conversation(phone_number='919000000097')
+        seg_id = self.Conv.start_segment(conv.id, label='Diwali Offer')
+        seg = self.Segment.browse(seg_id)
+        self.assertEqual(seg.display_name, 'Diwali Offer')
+
     def test_two_inquiries_each_get_their_own_segment(self):
         self._enable()
         propA = self._property()

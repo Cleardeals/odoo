@@ -101,12 +101,18 @@ class WaConversationSegment(models.Model):
         string='Messages',
     )
 
-    @api.depends('label', 'inquiry_id.name', 'property_base_id.property_tag')
+    @api.depends('label', 'inquiry_id.name',
+                 'property_base_id.name', 'inquiry_id.property_base_id.name')
     def _compute_display_name(self):
         for rec in self:
+            # The "DISCUSSING" chip names the PROPERTY this span is about — resolve
+            # it from the span's own property_base_id or, if the span only carries
+            # its inquiry, that inquiry's property.  Fall back to the lead name only
+            # when there is genuinely no property (a bare label-only topic).
+            prop = rec.property_base_id or rec.inquiry_id.property_base_id
             rec.display_name = (
                 rec.label
-                or rec.property_base_id.property_tag
+                or (prop.name if prop else False)
                 or (rec.inquiry_id.name if rec.inquiry_id else False)
                 or 'Unassigned'
             )

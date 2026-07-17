@@ -81,7 +81,9 @@ class WaConversation(models.Model):
                 'conversation_id': self.id,
                 'inquiry_id': inquiry.id if inquiry else False,
                 'property_base_id': prop.id if prop else False,
-                'label': label or (prop.property_tag if prop else False),
+                # Store only an explicit human label; the property NAME is derived
+                # from property_base_id at display time (never the raw tag slug).
+                'label': label or False,
                 'started_by': started_by,
             })
         else:
