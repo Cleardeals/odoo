@@ -36,18 +36,17 @@ export class CdRecentFailuresTable extends Component {
     }
 
     /**
-     * Convert an ISO UTC datetime string to a locale time string with timezone.
+     * Convert an ISO UTC datetime string to a local "DD Mon, HH:MM" string so the
+     * failures table shows BOTH the date and the time (previously time-only).
      * Returns an empty string for falsy values.
      */
     formatTime(iso) {
         if (!iso) return "";
         try {
             const d = new Date(iso.endsWith("Z") ? iso : iso + "Z");
-            return d.toLocaleTimeString([], {
-                hour:   "2-digit",
-                minute: "2-digit",
-                timeZoneName: "short",
-            });
+            const date = d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+            const time = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+            return `${date}, ${time}`;
         } catch {
             return iso;
         }

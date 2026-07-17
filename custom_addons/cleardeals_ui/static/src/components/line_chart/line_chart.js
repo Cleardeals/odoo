@@ -31,8 +31,13 @@ export class CdLineChart extends Component {
 
     // ── Coordinate helpers ────────────────────────────────────────────────────
 
-    get _maxSent() {
-        return Math.max(...this.props.bars.map((b) => b.sent || 0), 1);
+    get _max() {
+        // Scale to the tallest point across BOTH series so neither clips.
+        return Math.max(
+            ...this.props.bars.map((b) => b.sent || 0),
+            ...this.props.bars.map((b) => b.failed || 0),
+            1,
+        );
     }
 
     _px(i) {
@@ -42,26 +47,58 @@ export class CdLineChart extends Component {
     }
 
     _py(val) {
-        return PT + CH - (val / this._maxSent) * CH;
+        return PT + CH - (val / this._max) * CH;
+    }
+
+    /** Points [{x, y}] for a series keyed by ``field``. */
+    _points(field) {
+        return this.props.bars.map((b, i) => ({ x: this._px(i), y: this._py(b[field] || 0) }));
+    }
+
+    /**
+     * A smooth SVG path through the given points using a Catmull-Rom spline
+     * converted to cubic béziers — gives the flowing curve of the reference
+     * chart instead of hard straight segments.
+     */
+    _smoothPath(pts) {
+        if (pts.length === 0) return "";
+        if (pts.length === 1) return `M ${pts[0].x} ${pts[0].y}`;
+        const t = 0.2; // tension — lower is straighter, higher is loopier
+        let d = `M ${pts[0].x} ${pts[0].y}`;
+        for (let i = 0; i < pts.length - 1; i++) {
+            const p0 = pts[i - 1] || pts[i];
+            const p1 = pts[i];
+            const p2 = pts[i + 1];
+            const p3 = pts[i + 2] || p2;
+            const c1x = p1.x + (p2.x - p0.x) * t;
+            const c1y = p1.y + (p2.y - p0.y) * t;
+            const c2x = p2.x - (p3.x - p1.x) * t;
+            const c2y = p2.y - (p3.y - p1.y) * t;
+            d += ` C ${c1x} ${c1y}, ${c2x} ${c2y}, ${p2.x} ${p2.y}`;
+        }
+        return d;
     }
 
     // ── SVG path data ─────────────────────────────────────────────────────────
 
-    get sentPolyline() {
-        return this.props.bars
-            .map((b, i) => `${this._px(i)},${this._py(b.sent || 0)}`)
-            .join(" ");
+    get sentPath() {
+        return this._smoothPath(this._points("sent"));
     }
 
-    /** Closed polygon for the area fill below the sent line. */
-    get areaPolygon() {
-        const n = this.props.bars.length;
-        if (n === 0) return "";
-        const pts = this.props.bars
-            .map((b, i) => `${this._px(i)},${this._py(b.sent || 0)}`)
-            .join(" ");
+    get failedPath() {
+        // Only draw the failed line if there's at least one failure to show.
+        return this.props.bars.some((b) => (b.failed || 0) > 0)
+            ? this._smoothPath(this._points("failed"))
+            : "";
+    }
+
+    /** Smooth area under the sent line, closed to the baseline for the gradient fill. */
+    get sentAreaPath() {
+        const pts = this._points("sent");
+        if (pts.length === 0) return "";
         const baseY = PT + CH;
-        return `${this._px(0)},${baseY} ${pts} ${this._px(n - 1)},${baseY}`;
+        const line = this._smoothPath(pts);
+        return `${line} L ${pts[pts.length - 1].x} ${baseY} L ${pts[0].x} ${baseY} Z`;
     }
 
     // ── Enriched data ─────────────────────────────────────────────────────────

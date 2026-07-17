@@ -26,10 +26,14 @@
                 </td>
                 <td><t t-esc="row.phone or '-'"/></td>
                 <td><t t-esc="row.workflow_name or '-'"/></td>
-                <td>
+                <td class="cd-recent-failures-table__reason">
                   <span t-att-class="'cd-status-badge badge rounded-pill ' + badgeClass(row.failure_status)">
-                    <t t-esc="row.failure_reason"/>
+                    <t t-esc="row.failure_label or row.failure_status"/>
                   </span>
+                  <div class="cd-recent-failures-table__reason-detail" t-att-title="row.failure_reason">
+                    <t t-esc="row.failure_reason"/>
+                    <t t-if="row.failure_code"> (code <t t-esc="row.failure_code"/>)</t>
+                  </div>
                 </td>
                 <td class="cd-recent-failures-table__time">
                   <t t-esc="formatTime(row.occurred_at)"/>

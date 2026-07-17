@@ -41,6 +41,33 @@ _FAILURE_LABELS = {
     'expired':        'Expired',
 }
 
+# Human-readable descriptions per Interakt/Meta error code, used as a fallback
+# reason when a failed message carries a code but no forwarded reason text.
+# Mirrors the platform's wa-sender _CODE_TO_STATUS classification.
+_FAILURE_CODE_LABELS = {
+    '131026': 'Undeliverable — invalid number or the recipient has an outdated WhatsApp.',
+    '131049': 'Undeliverable — blocked by Meta ecosystem health checks.',
+    '131047': 'Re-engagement required — the 24-hour window is closed.',
+    '131053': 'Media upload/format error — check the header media URL and type.',
+    '130429': 'Rate limit reached — too many messages sent too quickly.',
+    '130472': 'Recipient is in a Meta A/B experiment and did not receive the message.',
+    '368':    'Temporarily blocked by Meta for policy reasons.',
+    '132000': 'Template error — parameter count or format does not match the approved template.',
+    '132001': 'Template error — the template does not exist or is not approved for this language.',
+    '131052': 'Invalid phone number — could not be delivered.',
+}
+
+# Fallback reason per internal status when neither a reason nor a known code exists.
+_STATUS_REASON_FALLBACK = {
+    'failed':         'Delivery failed.',
+    'meta_blocked':   'Blocked by Meta — message could not be delivered.',
+    'invalid_number': 'Invalid phone number.',
+    'opted_out':      'Recipient opted out of messages.',
+    'rate_limited':   'Rate limit reached.',
+    'template_error': 'Template error.',
+    'expired':        'The 24-hour messaging window expired before sending.',
+}
+
 
 class WaDashboard(models.Model):
     """Read-only analytics model for the WA Dashboard.
@@ -369,8 +396,27 @@ class WaDashboard(models.Model):
                 'lead_name':      lead.name if lead else '',
                 'phone':          msg.conversation_id.phone_number if msg.conversation_id else '',
                 'workflow_name':  msg.workflow_slug or '',
-                'failure_reason': _FAILURE_LABELS.get(msg.status, msg.status),
+                # Short category label for the coloured badge …
+                'failure_label':  _FAILURE_LABELS.get(msg.status, msg.status.replace('_', ' ').title()),
+                # … and the descriptive, human-readable reason for the detail text.
+                'failure_reason': self._owa_failure_detail(msg),
+                'failure_code':   msg.failure_code or '',
                 'failure_status': msg.status,
                 'occurred_at':    msg.occurred_at.isoformat() if msg.occurred_at else '',
             })
         return rows
+
+    @staticmethod
+    def _owa_failure_detail(msg) -> str:
+        """The most descriptive failure reason available for a failed message.
+
+        Priority: the platform-forwarded reason text → a per-code description →
+        a per-status fallback → the status itself.  Never returns an empty string.
+        """
+        reason = (msg.failure_reason or '').strip()
+        if reason and reason.lower() != 'send failed':
+            return reason
+        code = (msg.failure_code or '').strip()
+        if code and code in _FAILURE_CODE_LABELS:
+            return _FAILURE_CODE_LABELS[code]
+        return _STATUS_REASON_FALLBACK.get(msg.status, reason or msg.status.replace('_', ' ').title())

@@ -13,23 +13,37 @@
              viewBox="0 0 1000 220"
              preserveAspectRatio="none">
 
+          <defs>
+            <!-- Soft vertical gradient for the area under the sent line. -->
+            <linearGradient id="cdLineChartSentFill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%"   class="cd-line-chart__grad-top"/>
+              <stop offset="100%" class="cd-line-chart__grad-bottom"/>
+            </linearGradient>
+          </defs>
+
           <!-- Horizontal grid lines -->
           <t t-foreach="gridLines" t-as="gl" t-key="gl_index">
             <line x1="20" t-att-y1="gl.y" x2="980" t-att-y2="gl.y"
                   class="cd-line-chart__grid"/>
           </t>
 
-          <!-- Area fill under the sent line -->
-          <polygon t-att-points="areaPolygon" class="cd-line-chart__area"/>
+          <!-- Gradient area fill under the (smoothed) sent line -->
+          <path t-att-d="sentAreaPath" class="cd-line-chart__area"
+                fill="url(#cdLineChartSentFill)"/>
 
-          <!-- Sent line -->
-          <polyline t-att-points="sentPolyline" class="cd-line-chart__line"/>
+          <!-- Failed line (smooth, secondary) — drawn under the sent line -->
+          <t t-if="failedPath">
+            <path t-att-d="failedPath" class="cd-line-chart__line-failed"/>
+          </t>
+
+          <!-- Sent line (smooth, primary) -->
+          <path t-att-d="sentPath" class="cd-line-chart__line"/>
 
           <!-- Data-point dots with native SVG tooltips -->
           <t t-foreach="enrichedBars" t-as="bar" t-key="bar_index">
-            <circle t-att-cx="bar.cx" t-att-cy="bar.cy" r="7"
+            <circle t-att-cx="bar.cx" t-att-cy="bar.cy" r="6"
                     class="cd-line-chart__dot">
-              <title t-esc="bar.label + ' — Sent: ' + (bar.sent || 0)"/>
+              <title t-esc="bar.label + ' — Sent: ' + (bar.sent || 0) + ', Failed: ' + (bar.failed || 0)"/>
             </circle>
           </t>
 
@@ -42,6 +56,18 @@
           </t>
 
         </svg>
+
+        <!-- Legend -->
+        <div class="cd-line-chart__legend">
+          <span class="cd-line-chart__legend-item">
+            <span class="cd-line-chart__legend-dot cd-line-chart__legend-dot--sent"/> Sent
+          </span>
+          <t t-if="failedPath">
+            <span class="cd-line-chart__legend-item">
+              <span class="cd-line-chart__legend-dot cd-line-chart__legend-dot--failed"/> Failed
+            </span>
+          </t>
+        </div>
       </t>
 
     </div>

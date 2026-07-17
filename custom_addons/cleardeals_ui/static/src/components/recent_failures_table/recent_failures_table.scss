@@ -59,6 +59,23 @@
         font-size: 0.8rem;
     }
 
+    // Failure reason cell: a compact status badge above the descriptive detail.
+    &__reason {
+        max-width: 360px;
+    }
+
+    &__reason-detail {
+        margin-top: 4px;
+        color: #6b7280;
+        font-size: 0.78rem;
+        line-height: 1.35;
+        // Keep long Interakt/Meta messages readable but bounded to 2 lines.
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+
     &__no-lead {
         color: #d1d5db;
     }

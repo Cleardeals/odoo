@@ -23,8 +23,12 @@
     }
 
     &__area {
-        fill: rgba(99, 102, 241, 0.08);
+        stroke: none;
     }
+
+    // Gradient stops for the area fill (referenced by the <linearGradient>).
+    &__grad-top    { stop-color: #6366f1; stop-opacity: 0.28; }
+    &__grad-bottom { stop-color: #6366f1; stop-opacity: 0.02; }
 
     &__line {
         fill: none;
@@ -32,6 +36,15 @@
         stroke-width: 3;
         stroke-linejoin: round;
         stroke-linecap: round;
+    }
+
+    &__line-failed {
+        fill: none;
+        stroke: #ef4444;
+        stroke-width: 2;
+        stroke-linejoin: round;
+        stroke-linecap: round;
+        opacity: 0.85;
     }
 
     &__dot {
@@ -44,6 +57,32 @@
         &:hover {
             fill: #4f46e5;
         }
+    }
+
+    // ── Legend ────────────────────────────────────────────────────────────────
+    &__legend {
+        display: flex;
+        gap: 18px;
+        justify-content: flex-end;
+        padding: 4px 8px 0;
+        font-size: 0.78rem;
+        color: #6b7280;
+    }
+
+    &__legend-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    &__legend-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        display: inline-block;
+
+        &--sent   { background: #6366f1; }
+        &--failed { background: #ef4444; }
     }
 
     // SVG text — font-size in SVG user units (1000-wide viewBox)
