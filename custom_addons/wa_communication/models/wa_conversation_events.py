@@ -258,7 +258,8 @@ class WaConversation(models.Model):
         Only fills ``body`` when the message doesn't already carry text.
         """
         rendered_body = event.get('rendered_body')
-        if rendered_body is None and not event.get('template_buttons'):
+        if (rendered_body is None and not event.get('template_buttons')
+                and not event.get('header_media_url')):
             return {}
         vals = {}
         # 'body' is immutable (append-only); render into the dedicated
@@ -268,6 +269,12 @@ class WaConversation(models.Model):
         header = event.get('rendered_header')
         if header:
             vals['template_header'] = header
+        # Header media (image/video/document/audio) — only fill blanks so a later
+        # status event can't clobber an already-populated header.
+        header_media_url = event.get('header_media_url')
+        if header_media_url and not msg.template_header_media_url:
+            vals['template_header_media_url'] = header_media_url
+            vals['template_header_media_type'] = event.get('header_media_type') or False
         footer = event.get('template_footer')
         if footer:
             vals['template_footer'] = footer
@@ -340,6 +347,9 @@ class WaConversation(models.Model):
             create_vals['template_body'] = event['rendered_body']
         if event.get('rendered_header'):
             create_vals['template_header'] = event['rendered_header']
+        if event.get('header_media_url'):
+            create_vals['template_header_media_url'] = event['header_media_url']
+            create_vals['template_header_media_type'] = event.get('header_media_type') or False
         if event.get('template_footer'):
             create_vals['template_footer'] = event['template_footer']
         if event.get('template_buttons'):
@@ -516,6 +526,10 @@ class WaConversation(models.Model):
             msg.write({
                 'status':          new_status,
                 'status_updated_at': fields.Datetime.now(),
+                # Persist the descriptive failure detail so the dashboard shows
+                # the real reason instead of just the status label.
+                'failure_code':    str(failure_code) if failure_code is not None else msg.failure_code,
+                'failure_reason':  failure_reason or msg.failure_reason,
             })
             _logger.info(
                 "wa_push: message_failed — wa_message_id=%r code=%s reason=%r status→%s",
@@ -932,7 +946,12 @@ class WaConversation(models.Model):
 
         msg = self._owa_find_message(wa_message_id=wa_message_id, request_id=request_id)
         if msg:
-            msg.write({'status': new_status, 'status_updated_at': fields.Datetime.now()})
+            msg.write({
+                'status': new_status,
+                'status_updated_at': fields.Datetime.now(),
+                'failure_code':   str(failure_code) if failure_code is not None else msg.failure_code,
+                'failure_reason': failure_reason or msg.failure_reason,
+            })
 
         lead = self._owa_resolve_lead(actor_id, actor_type, phone)
 

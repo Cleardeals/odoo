@@ -186,6 +186,24 @@ class WaMessage(models.Model):
         help="Rendered template header text (placeholders substituted), "
              "extracted from the Interakt status webhook's raw_template.",
     )
+    template_header_media_url = fields.Char(
+        'Template Header Media',
+        help="Media link for a template with an image/video/document/audio HEADER "
+             "(from OdooWaEvent.header_media_url).  Rendered above the body in the "
+             "chat bubble so workflow sends show their header media.",
+    )
+    template_header_media_type = fields.Selection(
+        [
+            ('image', 'Image'),
+            ('video', 'Video'),
+            ('document', 'Document'),
+            ('audio', 'Audio'),
+        ],
+        string='Template Header Media Type',
+        help="Kind of the template header media, from the approved template's "
+             "header_format (OdooWaEvent.header_media_type) — drives how the bubble "
+             "renders it (img / video / audio / document link).",
+    )
     template_footer = fields.Char(
         'Template Footer',
         help="Static template footer text, from the Interakt raw_template.",
@@ -315,6 +333,22 @@ class WaMessage(models.Model):
         index=True,
     )
     status_updated_at = fields.Datetime('Status Updated At', readonly=True)
+
+    # ------------------------------------------------------------------
+    # Failure detail (from OdooWaEvent.failure_code / failure_reason)
+    # ------------------------------------------------------------------
+
+    failure_code = fields.Char(
+        'Failure Code',
+        help="Interakt/Meta error code for a failed send (e.g. '131026'), "
+             "from OdooWaEvent.failure_code.  Drives the descriptive reason.",
+    )
+    failure_reason = fields.Char(
+        'Failure Reason',
+        help="Human-readable failure detail from the platform — the Interakt/Meta "
+             "error message (e.g. \"Phone Number & Country Code provided is invalid\"). "
+             "Shown on the WA Dashboard's Recent Failures table.",
+    )
 
     # ------------------------------------------------------------------
     # Media

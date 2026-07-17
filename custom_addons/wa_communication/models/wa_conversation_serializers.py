@@ -461,6 +461,8 @@ class WaConversation(models.Model):
                 ),
                 'template_name': msg.template_name or None,
                 'template_header': msg.template_header or None,
+                'template_header_media_url': msg.template_header_media_url or None,
+                'template_header_media_type': msg.template_header_media_type or None,
                 'template_footer': msg.template_footer or None,
                 'template_buttons': msg.template_buttons or self._extract_template_buttons(msg),
                 'quoted_body': msg.quoted_body or None,

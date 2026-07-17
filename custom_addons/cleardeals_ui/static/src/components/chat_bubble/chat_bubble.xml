@@ -137,6 +137,46 @@
                     </div>
                 </t>
 
+                <!-- Template header MEDIA (image / video / audio / document) —
+                     workflow templates whose header is media, shown above the body. -->
+                <t t-if="headerMediaUrl">
+                    <div class="cd-chat-bubble__media cd-chat-bubble__tmpl-header-media">
+                        <t t-if="headerMediaType === 'image'">
+                            <img t-att-src="headerMediaUrl"
+                                 class="cd-chat-bubble__img" alt="Header image"
+                                 t-on-click="(ev) => this.onHeaderMediaClick(ev)"/>
+                        </t>
+                        <t t-elif="headerMediaType === 'video'">
+                            <div class="cd-chat-bubble__video-wrap"
+                                 t-on-click="(ev) => this.onHeaderMediaClick(ev)">
+                                <video class="cd-chat-bubble__video"
+                                       t-att-src="headerMediaUrl" preload="metadata"/>
+                                <div class="cd-chat-bubble__video-play">
+                                    <i class="fa fa-play-circle" aria-hidden="true"/>
+                                </div>
+                            </div>
+                        </t>
+                        <t t-elif="headerMediaType === 'audio'">
+                            <audio class="cd-chat-bubble__audio"
+                                   t-att-src="headerMediaUrl" controls="true" preload="metadata"/>
+                        </t>
+                        <t t-else="">
+                            <div class="cd-chat-bubble__file-link"
+                                 t-on-click="(ev) => this.onHeaderMediaClick(ev)">
+                                <div class="cd-chat-bubble__file-icon">
+                                    <i class="fa fa-file" aria-hidden="true"/>
+                                </div>
+                                <div class="cd-chat-bubble__file-info">
+                                    <span class="cd-chat-bubble__file-name"
+                                          t-esc="headerMediaFilename"/>
+                                    <span class="cd-chat-bubble__file-label">Document</span>
+                                </div>
+                                <i class="fa fa-eye cd-chat-bubble__file-dl" aria-hidden="true"/>
+                            </div>
+                        </t>
+                    </div>
+                </t>
+
                 <!-- Template header (rendered, bold) -->
                 <t t-if="props.message.template_header">
                     <div class="cd-chat-bubble__tmpl-header" t-out="headerHtml"/>

@@ -125,6 +125,19 @@ export class CdChatBubble extends Component {
     get headerHtml() { return this._renderHtml(this.props.message.template_header); }
     get footerHtml() { return this._renderHtml(this.props.message.template_footer); }
 
+    // ── Template header MEDIA (image/video/document/audio header) ────────────
+    // A template's header can be media instead of text; the platform forwards the
+    // link + type so the bubble renders it above the body, just like inbound media.
+    get headerMediaUrl()  { return this.props.message.template_header_media_url || null; }
+    get headerMediaType() { return this.props.message.template_header_media_type || null; }
+
+    get headerMediaFilename() {
+        const url = this.headerMediaUrl;
+        if (!url) return this.headerMediaType || "Attachment";
+        // Strip query string, then take the last path segment as a filename hint.
+        return url.split("?")[0].split("/").pop() || (this.headerMediaType || "Attachment");
+    }
+
     get senderLabel() {
         const m = this.props.message;
         if (m.direction === "inbound") return m.sender_name || "Customer";
@@ -162,6 +175,15 @@ export class CdChatBubble extends Component {
         if (this.props.onOpenMedia && m.media_url) {
             ev.preventDefault();
             this.props.onOpenMedia(m.media_url, m.kind, m.media_filename || m.kind);
+        }
+    }
+
+    onHeaderMediaClick(ev) {
+        if (this.props.onOpenMedia && this.headerMediaUrl) {
+            ev.preventDefault();
+            ev.stopPropagation();
+            this.props.onOpenMedia(
+                this.headerMediaUrl, this.headerMediaType, this.headerMediaFilename);
         }
     }
 

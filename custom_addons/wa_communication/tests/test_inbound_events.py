@@ -99,6 +99,47 @@ class TestInboundEvents(WaTransactionCase):
         self.assertEqual(created.kind, 'template')
         self.assertEqual(created.workflow_slug, 'welcome_flow')
 
+    def test_message_sent_stores_header_media_on_workflow_message(self):
+        """A media-header template send (workflow) lands its header image/video on
+        the new wa.message so the bubble can render it above the body."""
+        conv = self.make_conversation()
+        self._process({
+            'event_type': 'message_sent',
+            'phone': conv.phone_number,
+            'request_id': 'wf-hdr-1',
+            'wa_message_id': 'wamid.hdr1',
+            'workflow_slug': 'initial_nudge_property_v1',
+            'step_id': 'msg_2',
+            'template_name': 'initial_nudge_v1_msg_2',
+            'rendered_body': 'Property details…',
+            'header_media_url': 'https://cdn/p/hero.jpg',
+            'header_media_type': 'image',
+            'occurred_at': '2026-01-02T10:00:00Z',
+        })
+        created = self.Msg.sudo().search(
+            [('wa_message_id', '=', 'wamid.hdr1')], limit=1)
+        self.assertEqual(created.template_header_media_url, 'https://cdn/p/hero.jpg')
+        self.assertEqual(created.template_header_media_type, 'image')
+
+    def test_message_sent_backfills_header_media_onto_queued_rm_message(self):
+        """The rendered message_sent (from the Interakt webhook) enriches a row that
+        already exists, filling its header media without clobbering."""
+        conv = self.make_conversation()
+        msg = self._queued_rm_msg(conv, 'req-hdr-2')
+        self._process({
+            'event_type': 'message_sent',
+            'phone': conv.phone_number,
+            'request_id': 'req-hdr-2',
+            'wa_message_id': 'wamid.hdr2',
+            'rendered_body': 'Body',
+            'header_media_url': 'https://cdn/x/promo.mp4',
+            'header_media_type': 'video',
+            'occurred_at': '2026-01-02T10:00:00Z',
+        })
+        msg.invalidate_recordset()
+        self.assertEqual(msg.template_header_media_url, 'https://cdn/x/promo.mp4')
+        self.assertEqual(msg.template_header_media_type, 'video')
+
     # ── message_delivered / read / failed ─────────────────────────────────────
 
     def test_message_delivered_sets_status_cost_and_timestamp(self):
