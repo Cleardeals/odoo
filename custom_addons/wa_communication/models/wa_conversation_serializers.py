@@ -92,12 +92,22 @@ class WaConversation(models.Model):
         if 'window' not in exclude:
             domain += self._owa_inbox_window_domain(filters.get('window'), now, cfg)
 
-        # RM scoping — ALWAYS applied (never excluded by a facet): a non-manager
-        # only ever sees conversations assigned to them. The serializers run as
-        # sudo(), so this is the real access boundary for the Inbox, not a record
-        # rule. Managers (and privileged/system contexts) are unrestricted.
+        # RM scoping — ALWAYS applied (never excluded by a facet). The serializers
+        # run as sudo(), so this is the real access boundary for the Inbox, not a
+        # record rule. Managers (and privileged/system contexts) are unrestricted.
+        #
+        # A non-manager RM sees every chat they are assigned OR own an inquiry in:
+        # the design is "see the chats for your inquiries; you can only *reply*
+        # once it's assigned to you" — replying is gated separately by _can_send,
+        # which stays assignment-only. inquiry_ids is a non-stored compute, so we
+        # scope on the stored ownership paths: the anchor lead, and the per-message
+        # inquiry tag (which carries secondary inquiries on the same number).
         if not self._owa_inbox_unrestricted():
-            domain.append(('assigned_user_id', '=', self.env.uid))
+            uid = self.env.uid
+            domain += ['|', '|',
+                       ('assigned_user_id', '=', uid),
+                       ('lead_id.user_id', '=', uid),
+                       ('message_ids.lead_id.user_id', '=', uid)]
 
         return domain
 
@@ -111,13 +121,20 @@ class WaConversation(models.Model):
     def _owa_can_view_thread(self, conv) -> bool:
         """Whether the current user may open ``conv``'s thread.
 
-        Managers / privileged contexts and the assignee always may.  A non-owner
-        RM may also open a chat they have an OPEN handover request on, so the
-        "request sent — waiting for approval" state still renders for them.
+        Managers / privileged contexts and the assignee always may.  An RM may
+        also open a chat they own an inquiry in (read-only — replying is gated by
+        _can_send on assignment), or one they have an OPEN handover request on so
+        the "request sent — waiting for approval" state still renders for them.
+
+        This must stay in lock-step with the Inbox list scoping in
+        _owa_inbox_domain: a row that appears in the list must be openable.
         """
         if self._owa_inbox_unrestricted():
             return True
-        if conv.assigned_user_id.id == self.env.uid:
+        uid = self.env.uid
+        if conv.assigned_user_id.id == uid:
+            return True
+        if conv.lead_id.user_id.id == uid or uid in conv.message_ids.lead_id.user_id.ids:
             return True
         return bool(self.env['wa.reassignment.request'].sudo().search_count([
             ('conversation_id', '=', conv.id),

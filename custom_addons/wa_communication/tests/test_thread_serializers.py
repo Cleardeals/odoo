@@ -595,3 +595,54 @@ class TestThreadSerializers(WaTransactionCase):
         conv.sudo().write({'last_message_at': datetime.utcnow()})
         ids = self._ids_for({'search': 'Zenobia'})
         self.assertIn(conv.id, ids)
+
+    # ── RM view-scoping: see chats for your inquiries, reply only if assigned ──
+
+    def test_rm_sees_chat_for_inquiry_they_own_even_when_unassigned(self):
+        """The reported bug: an RM owns the inquiry but the chat is unassigned/
+        assigned to someone else, so the inbox came back empty. They must SEE it
+        (view), while replying stays gated on assignment."""
+        rm = self.make_user()
+        lead = self.make_lead(user_id=rm.id)
+        conv = self.make_conversation(assigned_user_id=False, lead_id=lead.id)
+        conv.sudo().write({'last_message_at': datetime.utcnow()})
+
+        as_rm = self.Conv.with_user(rm)
+        rows = {r['id'] for r in as_rm.get_inbox({'ownership': 'all'})['rows']}
+        self.assertIn(conv.id, rows, "RM cannot see a chat for an inquiry they own")
+
+        # And they can OPEN it (list rows must be openable) ...
+        thread = as_rm.get_thread(conv.id)
+        self.assertNotIn('error', thread)
+        self.assertEqual(thread['conversation']['id'], conv.id)
+        # ... but NOT reply — it isn't assigned to them.
+        self.assertFalse(thread['conversation']['can_send'])
+
+    def test_rm_does_not_see_chat_for_someone_elses_inquiry(self):
+        """The boundary still holds: no ownership + not assigned = not visible."""
+        rm = self.make_user()
+        other = self.make_user()
+        lead = self.make_lead(user_id=other.id)
+        conv = self.make_conversation(assigned_user_id=other.id, lead_id=lead.id)
+        conv.sudo().write({'last_message_at': datetime.utcnow()})
+
+        as_rm = self.Conv.with_user(rm)
+        rows = {r['id'] for r in as_rm.get_inbox({'ownership': 'all'})['rows']}
+        self.assertNotIn(conv.id, rows)
+        self.assertIn('error', as_rm.get_thread(conv.id))
+
+    def test_rm_sees_chat_where_they_own_a_tagged_message_inquiry(self):
+        """Secondary inquiry: the RM owns a lead tagged on a message in a chat
+        anchored to a different lead — the per-message path must surface it."""
+        rm = self.make_user()
+        other = self.make_user()
+        anchor = self.make_lead(user_id=other.id)
+        mine = self.make_lead(user_id=rm.id)
+        conv = self.make_conversation(assigned_user_id=other.id, lead_id=anchor.id)
+        self.make_message(conv, direction='inbound', kind='text_reply',
+                          status='delivered', lead_id=mine.id)
+        conv.sudo().write({'last_message_at': datetime.utcnow()})
+
+        rows = {r['id'] for r in
+                self.Conv.with_user(rm).get_inbox({'ownership': 'all'})['rows']}
+        self.assertIn(conv.id, rows)
