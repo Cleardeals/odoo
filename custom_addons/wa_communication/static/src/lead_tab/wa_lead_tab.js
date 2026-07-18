@@ -437,7 +437,9 @@ export class WaLeadTab extends Component {
     get messages()       { return this.state.thread?.messages     || []; }
     get stats()          { return this.state.thread?.stats        || {}; }
     get windowState()    { return this.conversation?.window_state || "closed"; }
-    get windowExpiresAt(){ return this.conversation?.window_expires_at || null; }
+    // undefined (not null): CdWindowBadge types windowExpiresAt as an optional
+    // String — an absent prop is fine, but null fails OWL validation.
+    get windowExpiresAt(){ return this.conversation?.window_expires_at || undefined; }
 
     get enrollments() {
         // Derive from messages: collect unique workflow_slug entries with last known status

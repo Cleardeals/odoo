@@ -521,7 +521,9 @@ export class WaInbox extends Component {
     }
 
     get windowExpiresAt() {
-        return this.activeConversation?.window_expires_at || null;
+        // undefined (not null): CdWindowBadge's windowExpiresAt is an optional
+        // String — absent is fine, null fails OWL prop validation.
+        return this.activeConversation?.window_expires_at || undefined;
     }
 
     // Assignment gating (populated by get_thread; default open).

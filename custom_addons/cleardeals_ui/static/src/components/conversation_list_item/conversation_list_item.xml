@@ -13,7 +13,7 @@
             <div class="cd-conv-item__footer">
                 <CdWindowBadge
                     state="props.conversation.window_state"
-                    windowExpiresAt="props.conversation.window_expires_at"/>
+                    windowExpiresAt="props.conversation.window_expires_at || undefined"/>
 
                 <t t-if="props.waiting">
                     <span t-att-class="'cd-conv-item__waiting cd-conv-item__waiting--' + props.waiting.tone"
