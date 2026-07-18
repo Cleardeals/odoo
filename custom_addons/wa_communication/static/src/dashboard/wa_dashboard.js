@@ -398,6 +398,19 @@ export class WaDashboard extends Component {
         return `vs ${from} – ${to}`;
     }
 
+    /**
+     * Trend % for a metric, or ``undefined`` when there's no baseline.
+     * ``get_metrics`` returns ``null`` for a trend when the previous period had
+     * zero activity (``_pct_change`` → None). CdMetricCard types ``trend`` as an
+     * *optional Number*: an absent prop is fine, but ``null`` fails validation.
+     * Returning ``undefined`` omits the prop so the card simply shows no trend —
+     * which is correct, since "no previous data" is not the same as "0% change".
+     */
+    trendOf(key) {
+        const t = this.state.metrics?.trend?.[key];
+        return typeof t === "number" ? t : undefined;
+    }
+
     // ── Template helpers ─────────────────────────────────────────────────────
 
     /** Format a metric value as a compact string (e.g. 1200 → "1.2k"). */

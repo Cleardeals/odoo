@@ -134,7 +134,7 @@
           <CdMetricCard
             label="'Messages Sent'"
             value="fmt(state.metrics.sent)"
-            trend="state.metrics.trend.sent"
+            trend="trendOf('sent')"
             trendLabel="trendLabel"
           />
 
@@ -154,7 +154,7 @@
             label="'Failed'"
             value="fmt(state.metrics.failed)"
             variant="failedVariant"
-            trend="state.metrics.trend.failed"
+            trend="trendOf('failed')"
             trendLabel="trendLabel"
             breakdown="failedBreakdownText"
           />
@@ -168,7 +168,7 @@
             label="'Replied'"
             value="fmt(state.metrics.replied)"
             subValue="fmtRate(state.metrics.reply_rate) + ' Reply Rate'"
-            trend="state.metrics.trend.replied"
+            trend="trendOf('replied')"
             trendLabel="trendLabel"
           />
 
