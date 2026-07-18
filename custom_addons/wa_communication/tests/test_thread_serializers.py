@@ -77,6 +77,57 @@ class TestThreadSerializers(WaTransactionCase):
         self.assertEqual(stats['replies'], 1)
         self.assertEqual(stats['read_pct'], 33)
 
+    def test_stats_exclude_system_log_rows(self):
+        """`system` bubbles (enrolled/completed/assignment notices) are internal
+        logs, never sent to WhatsApp — they must not count as sent nor dilute %."""
+        lead = self.make_lead(phone='9123456781')
+        conv = self.make_conversation(lead_id=lead.id)
+        # One real template, read.
+        self.make_message(conv, direction='outbound', initiator='workflow',
+                          kind='template', status='read', lead_id=lead.id)
+        # Three system log rows the engine writes — must be ignored.
+        for st in ('enrolled', 'enrollment_completed', 'sent'):
+            self.make_message(conv, direction='outbound', initiator='workflow',
+                              kind='system', status=st, lead_id=lead.id)
+        stats = self.Conv.get_thread(conv.id)['stats']
+        self.assertEqual(stats['sent'], 1)          # not 4
+        self.assertEqual(stats['read'], 1)
+        self.assertEqual(stats['read_pct'], 100)    # 1/1, not 1/4 = 25
+
+    def test_failed_send_is_not_counted_as_sent(self):
+        lead = self.make_lead(phone='9123456782')
+        conv = self.make_conversation(lead_id=lead.id)
+        self.make_message(conv, direction='outbound', initiator='workflow',
+                          kind='template', status='read', lead_id=lead.id)
+        self.make_message(conv, direction='outbound', initiator='workflow',
+                          kind='image', status='failed', lead_id=lead.id)
+        stats = self.Conv.get_thread(conv.id)['stats']
+        self.assertEqual(stats['sent'], 1)          # the failed image is not "sent"
+        self.assertEqual(stats['delivered'], 1)
+        self.assertEqual(stats['read_pct'], 100)
+
+    def test_stats_span_whole_conversation_not_just_linked_lead(self):
+        """The thread shows every message on the number (all inquiries), so the
+        stats must too — otherwise a second inquiry's replies vanish from the
+        count while still being visible above."""
+        lead_a = self.make_lead(phone='9123456783')
+        lead_b = self.make_lead(phone='9123456784')
+        conv = self.make_conversation(lead_id=lead_a.id)
+        # One template + one reply on each inquiry.
+        self.make_message(conv, direction='outbound', initiator='workflow',
+                          kind='template', status='read', lead_id=lead_a.id)
+        self.make_message(conv, direction='outbound', initiator='workflow',
+                          kind='template', status='delivered', lead_id=lead_b.id)
+        self.make_message(conv, direction='inbound', initiator='buyer',
+                          kind='button_reply', status='delivered', lead_id=lead_a.id)
+        self.make_message(conv, direction='inbound', initiator='buyer',
+                          kind='text_reply', status='delivered', lead_id=lead_b.id)
+        self.make_message(conv, direction='inbound', initiator='buyer',
+                          kind='text_reply', status='delivered', lead_id=lead_b.id)
+        stats = self.Conv.get_thread(conv.id)['stats']
+        self.assertEqual(stats['sent'], 2)          # both inquiries' sends
+        self.assertEqual(stats['replies'], 3)       # not 1 (lead_a only)
+
     # ── quoted-link resolution ────────────────────────────────────────────────
 
     def test_resolve_quoted_links_by_template_name(self):

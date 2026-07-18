@@ -429,7 +429,8 @@ class WaConversation(models.Model):
 
         :param conversation_id: ``wa.conversation`` record ID.
         :return: Dict with ``conversation`` metadata, ``messages`` list,
-                 and ``stats`` (sent/delivered/read counts for current inquiry).
+                 and ``stats`` (whole-conversation sent/delivered/read/replies,
+                 excluding internal system log rows).
         """
         conv = self.env['wa.conversation'].sudo().browse(conversation_id)
         if not conv.exists():
@@ -481,27 +482,34 @@ class WaConversation(models.Model):
 
         self._owa_resolve_quoted_links(messages)
 
-        # Per-inquiry stats (for the current linked lead)
-        stats = {'sent': 0, 'delivered': 0, 'read': 0, 'replies': 0}
-        if conv.lead_id:
-            lid = conv.lead_id.id
-            inquiry_msgs = conv.message_ids.filtered(
-                lambda m: m.lead_id.id == lid and m.direction == 'outbound'
-            )
-            inbound_msgs = conv.message_ids.filtered(
-                lambda m: m.lead_id.id == lid and m.direction == 'inbound'
-            )
-            total = len(inquiry_msgs)
-            delivered = len(inquiry_msgs.filtered(lambda m: m.status in ('delivered', 'read')))
-            read_count = len(inquiry_msgs.filtered(lambda m: m.status == 'read'))
-            stats = {
-                'sent': total,
-                'delivered': delivered,
-                'read': read_count,
-                'replies': len(inbound_msgs),
-                'delivered_pct': round(100 * delivered / total) if total else 0,
-                'read_pct': round(100 * read_count / total) if total else 0,
-            }
+        # Conversation stats — must describe the SAME messages the thread above
+        # shows, which is every message in the conversation (all inquiries on
+        # this number), not just conv.lead_id's. Two things were wrong before:
+        #   1. Stats were scoped to conv.lead_id, so a second inquiry's replies
+        #      (visible in the thread) were dropped — "Replies 1" when the screen
+        #      shows several.
+        #   2. `system` rows (workflow enrolled/completed, assignment notices) are
+        #      internal log bubbles, never sent to WhatsApp. Counting them as
+        #      "Sent" inflated the total and dragged delivered/read % down.
+        # A message counts as *sent* only if it was actually handed to WhatsApp,
+        # i.e. reached sent/delivered/read — a `failed` send is not "sent".
+        _SENT_STATES = ('sent', 'delivered', 'read')
+        outbound_real = conv.message_ids.filtered(
+            lambda m: m.direction == 'outbound' and m.kind != 'system'
+        )
+        sent_msgs = outbound_real.filtered(lambda m: m.status in _SENT_STATES)
+        delivered = sent_msgs.filtered(lambda m: m.status in ('delivered', 'read'))
+        read = sent_msgs.filtered(lambda m: m.status == 'read')
+        replies = conv.message_ids.filtered(lambda m: m.direction == 'inbound')
+        sent_n = len(sent_msgs)
+        stats = {
+            'sent': sent_n,
+            'delivered': len(delivered),
+            'read': len(read),
+            'replies': len(replies),
+            'delivered_pct': round(100 * len(delivered) / sent_n) if sent_n else 0,
+            'read_pct': round(100 * len(read) / sent_n) if sent_n else 0,
+        }
 
         # Pending handover requests the current user may act on (they are the
         # current assignee, or a manager). Surfaced in the thread so approval is
