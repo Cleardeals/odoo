@@ -102,5 +102,18 @@
         <field name="value">workflow-control</field>
     </record>
 
+    <!-- Inquiry segments — the "Discussing: <property>" attribution chip.
+         Shipped ON. This began as an opt-in flag while the feature was proven
+         out; it is now standard behaviour, so it lives in the noupdate="0"
+         block and is re-asserted on every upgrade rather than being set by hand
+         per database. Without it _owa_segments_enabled() returns False, no
+         segment is ever created or attached, and the inbox/lead tab silently
+         drop the attribution bar — which is how a fresh install looks like a
+         regression. -->
+    <record id="param_segments_enabled" model="ir.config_parameter">
+        <field name="key">wa_communication.segments_enabled</field>
+        <field name="value">1</field>
+    </record>
+
     </data>
 </odoo>

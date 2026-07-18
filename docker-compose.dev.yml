@@ -111,17 +111,37 @@ services:
       #   xml     → reload XML view definitions without restart
       - ODOO_DEV=all
 
-      # ── Pub/Sub ──────────────────────────────────────────────────────────────
-      # The emulator runs in the WhatsApp communications module's Docker stack.
-      # host.docker.internal resolves to the Mac host IP inside any container,
-      # so this reaches whatever is listening on port 8085 on your Mac —
-      # whether that's the emulator container or a real GCP push receiver.
-      - PUBSUB_EMULATOR_HOST=host.docker.internal:8085
-      - PUBSUB_PROJECT_ID=cleardeals-wa-local
+      # ── Pub/Sub — POINTED AT REAL PRODUCTION ─────────────────────────────────
+      # ⚠️  This local Odoo talks to the LIVE cd-prod-* topics, not the emulator.
+      # Publishing a lead event from here reaches real customers on WhatsApp.
+      #
+      # To go back to the offline emulator, restore:
+      #   - PUBSUB_EMULATOR_HOST=host.docker.internal:8085
+      #   - PUBSUB_PROJECT_ID=cleardeals-wa-local
+      # and drop GCP_ENV + the credentials mount below.
+      #
+      # PUBSUB_EMULATOR_HOST is deliberately ABSENT: setting it would (a) send
+      # traffic to the emulator and (b) make the /wa/pubsub/push controller skip
+      # OIDC verification entirely (see push_controller.py) — we want real tokens.
+      - PUBSUB_PROJECT_ID=cleardeals-wa-prod
+
+      # Topic aliases that the code prefixes at runtime (wa_workflow.py builds
+      # 'cd-{prefix}-{alias}' from this). 'production' → 'prod'. Without it the
+      # workflow pause/resume toggle would publish to cd-local-* and vanish.
+      - GCP_ENV=production
+
+      # Application Default Credentials — google-cloud-pubsub picks this up.
+      # Mounted read-only from the host (see volumes below).
+      - GOOGLE_APPLICATION_CREDENTIALS=/gcp/application_default_credentials.json
 
     volumes:
       # Dev config — read-only (same as production, different content)
       - ./odoo.dev.conf:/etc/odoo/odoo.conf:ro
+
+      # Host ADC (gcloud auth application-default login) — read-only, so the
+      # container authenticates as the logged-in user rather than needing a
+      # long-lived service-account key on disk.
+      - ~/.config/gcloud/application_default_credentials.json:/gcp/application_default_credentials.json:ro
 
       # Separate filestore — never shares attachments with production data
       - ./odoo-dev-web-data:/var/lib/odoo

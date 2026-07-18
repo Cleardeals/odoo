@@ -25,11 +25,21 @@ Configurable topics (ir.config_parameter):
   ``wa_communication.topic_visit_events``    — site visit scheduled / done
   ``wa_communication.topic_property_events`` — property linked to lead
   ``wa_communication.topic_customer_events`` — customer data updates
+  ``wa_communication.topic_nudge_events``    — initial-nudge trigger (on create)
+
+Publish timing
+--------------
+Most events describe a change that has already happened, so their envelope is
+built when the hook fires and only the network call is deferred
+(``_wa_schedule_publish``). ``nudge.initial`` is different: it is triggered by
+lead *creation*, but a lead is not settled until later in the same transaction
+(``_process_lead_logic`` resolves the property), so its envelope is built at
+publish time instead (``_wa_schedule_publish_lazy``).
 """
 
 import logging
 
-from odoo import api, fields, models
+from odoo import api, models
 
 _logger = logging.getLogger(__name__)
 
@@ -66,35 +76,23 @@ class WaLeadEventPublisher(models.Model):
 
     _inherit = 'leads.new'
 
-    # Once-only guard so the initial-nudge trigger fires exactly one event per
-    # lead, whichever settled-state hook reaches it first (manual → create,
-    # portal → the assign transition).
-    wa_nudge_emitted = fields.Boolean(
-        string='WA Initial Nudge Emitted',
-        default=False,
-        copy=False,
-        help='Internal: set once the nudge.initial event has been published '
-        'for this lead, preventing duplicate initial-nudge campaigns.',
-    )
-
     # ------------------------------------------------------------------
     # Create hook — actor.created
     # ------------------------------------------------------------------
 
     @api.model_create_multi
     def create(self, vals_list):
-        # Manual leads are created already settled (state='assigned' in the
-        # leads.new create override); portal/automated leads settle later in
-        # _process_lead_logic. Emit the nudge here only for the manual path.
-        automated = bool(self.env.context.get('automated_lead_creation'))
         records = super().create(vals_list)
         for rec in records:
             rec._wa_schedule_publish(
                 _TOPIC_ACTOR,
                 rec._wa_build_event('actor.created'),
             )
-            if not automated:
-                rec._wa_emit_initial_nudge()
+            # Initial-nudge trigger. Lead creation is the trigger, so this is
+            # the only hook — and it needs no once-only guard, because create()
+            # runs exactly once per record. The envelope is resolved at publish
+            # time, not here; see _wa_emit_initial_nudge.
+            rec._wa_emit_initial_nudge()
             # If a phone-only (orphan) WhatsApp conversation already exists for
             # this lead's number, attach it now so prior inbound history isn't
             # stranded. Defensive: a WA hiccup must never block lead creation.
@@ -174,13 +172,6 @@ class WaLeadEventPublisher(models.Model):
                     'property_location': rec.property_base_id.location,
                 })
                 rec._wa_schedule_publish(_TOPIC_PROPERTY, event)
-
-            # -- initial nudge: portal lead settles into 'assigned' -------
-            # _process_lead_logic writes state='assigned' (with the resolved
-            # property_base_id, or False) — that is the settled point where the
-            # has-property decision is final for the automated/portal path.
-            if vals.get('state') == 'assigned':
-                rec._wa_emit_initial_nudge()
 
             # -- RM reassigned --------------------------------------------
             if (
@@ -301,36 +292,44 @@ class WaLeadEventPublisher(models.Model):
         }
 
     def _wa_emit_initial_nudge(self) -> None:
-        """Publish the ``nudge.initial`` trigger for the initial-nudge workflows.
+        """Schedule the ``nudge.initial`` trigger for the initial-nudge workflows.
 
-        Fires exactly once per lead (guarded by ``wa_nudge_emitted``), only for
-        leads in the "Lead" status with a WhatsApp phone. Adds
-        ``payload.has_property`` = ``'yes'``/``'no'`` so the two workflow
-        variants can route on a simple ``==`` condition; the enriched
-        ``payload.actor.property`` snapshot carries everything the templates need.
+        Lead creation is the trigger, so this is called from ``create`` only —
+        which is also why it needs no once-only bookkeeping: ``create`` runs
+        exactly once per record.
 
-        Called at the settled decision point of each creation path:
-          * manual leads   → from ``create`` (already ``state='assigned'``),
-          * portal leads   → from ``write`` when ``state`` becomes ``'assigned'``
-                             (i.e. after ``_process_lead_logic`` resolves the
-                             property).
+        The envelope is built at *publish* time rather than now, because a lead
+        is not settled at creation. A portal lead is created ``state='new'``
+        with no property, and ``_process_lead_logic`` resolves and writes
+        ``property_base_id`` later in the *same* transaction. Deciding
+        ``has_property`` here would therefore route every portal lead to the
+        no-property variant. Post-commit, the lead has settled.
         """
         self.ensure_one()
-        if self.wa_nudge_emitted:
-            return
+        self._wa_schedule_publish_lazy(
+            _TOPIC_NUDGE, self._wa_build_initial_nudge_event,
+        )
+
+    def _wa_build_initial_nudge_event(self) -> dict | None:
+        """Build the ``nudge.initial`` envelope from the lead's settled state.
+
+        Adds ``payload.has_property`` = ``'yes'``/``'no'`` so the two workflow
+        variants route on a simple ``==`` condition; the enriched
+        ``payload.actor.property`` snapshot carries everything the templates need.
+
+        Returns ``None`` — skipping the publish — when the lead turned out not
+        to be nudgeable. Eligibility is judged here, at publish time, for the
+        same reason the payload is: it is only true of the settled lead.
+        """
+        self.ensure_one()
         if self.current_status != 'lead':
-            return
+            return None
         if not self.phone:
-            return
+            return None
 
         event = self._wa_build_event('nudge.initial')
         event['payload']['has_property'] = 'yes' if self.property_base_id else 'no'
-        self._wa_schedule_publish(_TOPIC_NUDGE, event)
-
-        # Mark emitted in-transaction so a rollback also discards the scheduled
-        # publish. This write touches no field the write() hook reacts to, so it
-        # does not re-enter the nudge logic.
-        self.wa_nudge_emitted = True
+        return event
 
     def _wa_schedule_publish(self, topic_key: str, event: dict) -> None:
         """Schedule a Pub/Sub publish to run after the current transaction.
@@ -361,6 +360,48 @@ class WaLeadEventPublisher(models.Model):
                 _logger.exception(
                     "wa_lead_event: publish_async failed for event=%r lead=%s topic=%s",
                     event.get('event_type'),
+                    self.id,
+                    topic,
+                )
+
+        self.env.cr.postcommit.add(_publish)
+
+    def _wa_schedule_publish_lazy(self, topic_key: str, build_event) -> None:
+        """Schedule a publish whose envelope is built *after* the transaction.
+
+        Same deferral as :meth:`_wa_schedule_publish`, except ``build_event`` is
+        invoked at publish time. Use this when the event must describe the
+        record's settled state rather than its state at the moment the hook
+        fired — e.g. a lead whose property is resolved by a later write in the
+        same transaction.
+
+        ``build_event`` returning a falsy value skips the publish, so it doubles
+        as the eligibility check.
+
+        :param topic_key:   ``ir.config_parameter`` key for the topic name.
+        :param build_event: Zero-arg callable returning an event envelope dict,
+                            or ``None`` to publish nothing.
+        """
+        self.ensure_one()
+        topic = self.env['ir.config_parameter'].sudo().get_param(topic_key, '')
+        if not topic:
+            _logger.debug(
+                "wa_lead_event: topic key %r not configured — deferred event "
+                "skipped for lead %s",
+                topic_key,
+                self.id,
+            )
+            return
+
+        def _publish():
+            try:
+                event = build_event()
+                if not event:
+                    return
+                self.env['cleardeals.pubsub'].publish_async(topic, event)
+            except Exception:
+                _logger.exception(
+                    "wa_lead_event: deferred publish failed for lead=%s topic=%s",
                     self.id,
                     topic,
                 )
