@@ -426,3 +426,39 @@ class TestSegments(WaTransactionCase):
         # ...but the immutable facts are still rejected.
         with self.assertRaises(ValidationError):
             msg.write({'body': 'tampered'})
+
+    # ── "View Lead" target follows the discussing inquiry ─────────────────────
+
+    def test_view_lead_falls_back_to_anchor_when_no_active_segment(self):
+        self._enable()
+        propA = self._property()
+        leadA = self.make_lead(phone='9000000020', property_base_id=propA.id)
+        conv = self.make_conversation(phone_number='919000000020', lead_id=leadA.id)
+        self.assertEqual(conv._owa_view_lead_id(), leadA.id,
+                         "with no discussing segment, View Lead uses the anchor lead")
+
+    def test_view_lead_prefers_active_segment_inquiry(self):
+        self._enable()
+        propA = self._property()
+        propB = self._property()
+        leadA = self.make_lead(phone='9000000021', property_base_id=propA.id)
+        leadB = self.make_lead(phone='9000000021', property_base_id=propB.id)
+        # Anchor is A, but the chat is currently discussing B.
+        conv = self.make_conversation(phone_number='919000000021', lead_id=leadA.id)
+        self.Conv.start_segment(conv.id, inquiry_id=leadB.id)
+        self.assertEqual(conv.active_segment_id.inquiry_id, leadB)
+        self.assertEqual(conv._owa_view_lead_id(), leadB.id,
+                         "View Lead follows the inquiry in the discussing chip")
+
+    def test_view_lead_resolves_label_only_segment_by_property(self):
+        self._enable()
+        propA = self._property()
+        propB = self._property()
+        leadA = self.make_lead(phone='9000000022', property_base_id=propA.id)
+        leadB = self.make_lead(phone='9000000022', property_base_id=propB.id)
+        conv = self.make_conversation(phone_number='919000000022', lead_id=leadA.id)
+        # A property-only (label) segment with no bound inquiry, but B exists.
+        self.Conv.start_segment(conv.id, property_base_id=propB.id)
+        self.assertFalse(conv.active_segment_id.inquiry_id)
+        self.assertEqual(conv._owa_view_lead_id(), leadB.id,
+                         "a label-only segment resolves to the matching inquiry")

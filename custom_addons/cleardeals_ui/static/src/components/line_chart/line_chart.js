@@ -1,25 +1,25 @@
 /** @odoo-module */
 
-import { Component } from "@odoo/owl";
+import { Component, useState } from "@odoo/owl";
 
 // ── SVG coordinate constants ─────────────────────────────────────────────────
-// ViewBox: 0 0 1000 220.  Chart area: x 20–980 (960 wide), y 15–165 (150 tall).
-// X-axis labels sit at y ≈ 193 (28 px below chart bottom).
-const W = 1000, H = 220;
-const PL = 20, PR = 20, PT = 15, PB = 55;
-const CW = W - PL - PR;   // 960
-const CH = H - PT - PB;   // 150
+// ViewBox: 0 0 1000 240.  Chart area: x 46–980 (left gutter holds the Y labels),
+// y 15–175.  X-axis labels sit ~26 px below the chart bottom.
+const W = 1000, H = 240;
+const PL = 46, PR = 20, PT = 15, PB = 65;
+const CW = W - PL - PR;   // 934
+const CH = H - PT - PB;   // 160
 
 /**
  * CdLineChart — SVG line chart for time-series WA send volume.
  *
  * Props:
- *   bars  {Array}   Each element: {hour_label (ISO string), sent, failed}
+ *   bars  {Array}   Each element: {hour_label (ISO string, already IST), sent, failed}
  *   title {String}  Optional — not rendered (section title lives in parent).
  *
- * hour_label format:
- *   "2026-05-25T14:00:00" → rendered as "14:00"   (hourly bucket)
- *   "2026-05-25"          → rendered as "25 May"   (daily bucket)
+ * hour_label format (server buckets in Asia/Kolkata):
+ *   "2026-05-25T14:00:00" → rendered as "2:00 PM"  (hourly bucket)
+ *   "2026-05-25"          → rendered as "25 May"    (daily bucket)
  */
 export class CdLineChart extends Component {
     static template = "cleardeals_ui.LineChart";
@@ -28,6 +28,11 @@ export class CdLineChart extends Component {
         bars:  { type: Array },
         title: { type: String, optional: true },
     };
+
+    setup() {
+        // Index of the currently hovered data point (-1 = none).
+        this.hover = useState({ index: -1 });
+    }
 
     // ── Coordinate helpers ────────────────────────────────────────────────────
 
@@ -92,6 +97,10 @@ export class CdLineChart extends Component {
             : "";
     }
 
+    get hasFailures() {
+        return this.props.bars.some((b) => (b.failed || 0) > 0);
+    }
+
     /** Smooth area under the sent line, closed to the baseline for the gradient fill. */
     get sentAreaPath() {
         const pts = this._points("sent");
@@ -106,9 +115,11 @@ export class CdLineChart extends Component {
     get enrichedBars() {
         return this.props.bars.map((b, i) => ({
             ...b,
-            cx:    this._px(i),
-            cy:    this._py(b.sent || 0),
-            label: this._fmtLabel(b.hour_label),
+            index:  i,
+            cx:     this._px(i),
+            cy:     this._py(b.sent || 0),
+            cyFail: this._py(b.failed || 0),
+            label:  this._fmtLabel(b.hour_label),
         }));
     }
 
@@ -121,26 +132,97 @@ export class CdLineChart extends Component {
         return bars.filter((_, i) => i % step === 0 || i === n - 1);
     }
 
-    /** Faint horizontal reference lines at 0 %, 50 %, 100 % of max. */
+    /**
+     * Y-axis reference lines with numeric labels. Uses "nice" rounded values so
+     * the gridline numbers are readable (e.g. 0 / 25 / 50 / 75 / 100), and the
+     * top line sits at the smallest nice value ≥ the data max.
+     */
     get gridLines() {
-        const max = this._maxSent;
-        return [0, 0.5, 1.0].map((pct) => ({
-            y:     PT + CH - pct * CH,
-            label: pct === 0 ? "0" : Math.round(pct * max),
-        }));
+        const niceTop = this._niceMax;
+        const steps = 4;
+        return Array.from({ length: steps + 1 }, (_, k) => {
+            const pct = k / steps;               // 0 … 1 bottom→top
+            const value = Math.round(niceTop * pct);
+            return {
+                y:     PT + CH - pct * CH,
+                label: String(value),
+            };
+        });
+    }
+
+    /** Smallest "nice" round number ≥ the data max, so gridline labels stay clean. */
+    get _niceMax() {
+        const max = this._max;
+        if (max <= 4) return 4;
+        const pow = Math.pow(10, Math.floor(Math.log10(max)));
+        const norm = max / pow;                  // 1 … 10
+        const nice = norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 5 ? 5 : 10;
+        return nice * pow;
+    }
+
+    // ── Hover / tooltip ───────────────────────────────────────────────────────
+
+    onPointEnter(index) {
+        this.hover.index = index;
+    }
+
+    onPointLeave() {
+        this.hover.index = -1;
+    }
+
+    /** The hovered bar (enriched) or null. */
+    get hoveredBar() {
+        const i = this.hover.index;
+        if (i < 0) return null;
+        return this.enrichedBars[i] || null;
+    }
+
+    /**
+     * In-SVG tooltip geometry for the hovered point, or null. Rendered as a
+     * <g> so it scales with the chart and its text is never distorted. Flips to
+     * the left of the point past the midline and clamps vertically to the plot.
+     */
+    get tooltip() {
+        const bar = this.hoveredBar;
+        if (!bar) return null;
+        const hasFail = this.hasFailures;
+        const boxW = 190;
+        const boxH = hasFail ? 92 : 66;
+        const flip = bar.cx > W * 0.6;
+        const bx = flip ? bar.cx - 14 - boxW : bar.cx + 14;
+        const anchorY = Math.min(bar.cy, bar.cyFail);
+        const by = Math.max(PT, Math.min(anchorY - boxH / 2, PT + CH - boxH));
+        return {
+            bx, by, boxW, boxH,
+            tx: bx + 14,
+            titleY:  by + 26,
+            sentY:   by + 50,
+            failedY: by + 74,
+            hasFail,
+            label:  bar.label,
+            sent:   bar.sent || 0,
+            failed: bar.failed || 0,
+            cx: bar.cx, cy: bar.cy,
+        };
     }
 
     // ── Fixed SVG coordinates exposed to the template ─────────────────────────
-    get labelY() { return PT + CH + 28; }
-    get baseY()  { return PT + CH; }
+    get labelY()   { return PT + CH + 28; }
+    get baseY()    { return PT + CH; }
+    get axisX()    { return PL; }
+    get chartRight() { return W - PR; }
 
     // ── Label formatter ───────────────────────────────────────────────────────
 
     _fmtLabel(isoStr) {
         if (!isoStr) return "";
         if (isoStr.includes("T")) {
-            // Hourly bucket: "2026-05-25T14:00:00" → "14:00"
-            return isoStr.split("T")[1].slice(0, 5);
+            // Hourly bucket (IST): "2026-05-25T14:00:00" → "2:00 PM"
+            const [h, m] = isoStr.split("T")[1].slice(0, 5).split(":");
+            const hh = parseInt(h, 10);
+            const ampm = hh >= 12 ? "PM" : "AM";
+            const h12 = hh % 12 === 0 ? 12 : hh % 12;
+            return `${h12}:${m} ${ampm}`;
         }
         // Daily bucket: "2026-05-25" → "25 May"
         const d = new Date(isoStr + "T00:00:00");

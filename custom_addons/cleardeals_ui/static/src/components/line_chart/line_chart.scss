@@ -12,7 +12,8 @@
 
     &__svg {
         width: 100%;
-        height: 200px;
+        height: auto;            // keep the 1000:240 aspect — no text/dot distortion
+        max-height: 260px;
         display: block;
         overflow: visible; // allow dots/labels near edge to show
     }
@@ -20,6 +21,18 @@
     &__grid {
         stroke: #f3f4f6;
         stroke-width: 1;
+    }
+
+    &__axis {
+        stroke: #e5e7eb;
+        stroke-width: 1.5;
+    }
+
+    // Vertical guide line dropped from the hovered point.
+    &__cursor {
+        stroke: #c7d2fe;
+        stroke-width: 1.5;
+        stroke-dasharray: 4 4;
     }
 
     &__area {
@@ -51,12 +64,18 @@
         fill: #6366f1;
         stroke: #fff;
         stroke-width: 2.5;
-        cursor: pointer;
-        transition: fill 0.15s;
+        transition: r 0.12s ease;
+        pointer-events: none;    // the invisible hit-circle handles hover
 
-        &:hover {
-            fill: #4f46e5;
+        &--failed {
+            fill: #ef4444;
         }
+    }
+
+    // Invisible, generously sized hover target over each point.
+    &__hit {
+        fill: transparent;
+        cursor: pointer;
     }
 
     // ── Legend ────────────────────────────────────────────────────────────────
@@ -85,11 +104,55 @@
         &--failed { background: #ef4444; }
     }
 
+    &__legend-tz {
+        margin-left: auto;
+        color: #9ca3af;
+        font-size: 0.72rem;
+    }
+
     // SVG text — font-size in SVG user units (1000-wide viewBox)
     // 22 units ≈ 14-16 px at typical dashboard widths
     &__xlabel {
         font-size: 22px;
         fill: #9ca3af;
         font-family: system-ui, -apple-system, sans-serif;
+    }
+
+    &__ylabel {
+        font-size: 20px;
+        fill: #9ca3af;
+        font-family: system-ui, -apple-system, sans-serif;
+    }
+
+    // ── Hover tooltip (in-SVG) ─────────────────────────────────────────────────
+    &__tip {
+        pointer-events: none;
+    }
+
+    &__tip-box {
+        fill: #111827;
+        opacity: 0.95;
+    }
+
+    &__tip-title {
+        font-size: 21px;
+        font-weight: 600;
+        fill: #f9fafb;
+        font-family: system-ui, -apple-system, sans-serif;
+    }
+
+    &__tip-row {
+        font-size: 20px;
+        font-family: system-ui, -apple-system, sans-serif;
+    }
+
+    &__tip-key {
+        fill: #c7d2fe;
+        &--failed { fill: #fca5a5; }
+    }
+
+    &__tip-val {
+        fill: #ffffff;
+        font-weight: 700;
     }
 }

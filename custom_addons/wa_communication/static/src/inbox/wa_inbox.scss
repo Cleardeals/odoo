@@ -502,6 +502,74 @@ $topbar-h: 52px;
         margin-left: auto;
     }
 
+    // ── Assign-conversation picker (managers) ──────────────────────────────────
+    &__assign-wrap {
+        position: relative;
+        display: inline-block;
+    }
+
+    &__assign-picker {
+        position: absolute;
+        top: calc(100% + 6px);
+        right: 0;
+        z-index: 30;
+        width: 240px;
+        max-height: 320px;
+        display: flex;
+        flex-direction: column;
+        background: #fff;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+        overflow: hidden;
+    }
+
+    &__assign-picker-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 8px 12px;
+        font-size: 12px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: #6b7280;
+        border-bottom: 1px solid #f0f0f0;
+    }
+
+    &__assign-picker-close {
+        border: none;
+        background: none;
+        font-size: 18px;
+        line-height: 1;
+        color: #9ca3af;
+        cursor: pointer;
+
+        &:hover { color: #374151; }
+    }
+
+    &__assign-picker-list {
+        overflow-y: auto;
+    }
+
+    &__assign-picker-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        padding: 8px 12px;
+        border: none;
+        background: none;
+        text-align: left;
+        font-size: 13px;
+        color: #111827;
+        cursor: pointer;
+
+        &:hover { background: #f3f4f6; }
+
+        i { color: #9ca3af; }
+    }
+
     &__send-error {
         margin: 8px 16px 0;
         font-size: 13px;

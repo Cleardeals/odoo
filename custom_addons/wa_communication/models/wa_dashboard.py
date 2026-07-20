@@ -323,10 +323,18 @@ class WaDashboard(models.Model):
         params = [dt_from, dt_to]
         wf_clause = self._sql_slug_clause(wf_slugs, params)
 
+        # occurred_at is stored as naive UTC. Bucket in IST (Asia/Kolkata) so the
+        # hour/day boundaries — and the labels the chart renders — line up with the
+        # ops team's local clock, not UTC. The WHERE bounds stay in UTC (they compare
+        # against dt_from/dt_to, which are UTC).
+        ist_bucket = (
+            f"DATE_TRUNC('{bucket}', (occurred_at AT TIME ZONE 'UTC') "
+            f"AT TIME ZONE 'Asia/Kolkata')"
+        )
         self.env.cr.execute(
             f"""
             SELECT
-                DATE_TRUNC('{bucket}', occurred_at) AS bucket_time,
+                {ist_bucket} AS bucket_time,
                 SUM(CASE WHEN status NOT IN (
                     'failed','meta_blocked','invalid_number','opted_out',
                     'rate_limited','template_error','expired'
@@ -341,7 +349,7 @@ class WaDashboard(models.Model):
               AND occurred_at >= %s
               AND occurred_at < %s
               {wf_clause}
-            GROUP BY DATE_TRUNC('{bucket}', occurred_at)
+            GROUP BY {ist_bucket}
             ORDER BY bucket_time
             """,
             params,

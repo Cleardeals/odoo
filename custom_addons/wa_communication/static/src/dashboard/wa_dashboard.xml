@@ -160,8 +160,9 @@
           />
 
           <CdMetricCard
-            label="'Active Enrollments'"
+            label="'Open Enrollments'"
             value="fmt(state.metrics.active_enrollments)"
+            hint="'Buyers currently in a workflow — started but not yet completed. Includes journeys parked waiting for the buyer to tap a button (most stay here), so this is an in-progress count, not messages being sent right now.'"
           />
 
           <CdMetricCard

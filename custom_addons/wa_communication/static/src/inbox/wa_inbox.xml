@@ -249,9 +249,9 @@
                                         t-on-click="() => this.openTemplatePicker()">
                                     <i class="fa fa-envelope-o" aria-hidden="true"/> Template
                                 </button>
-                                <t t-if="activeConversation and activeConversation.lead_id">
+                                <t t-if="viewLeadId">
                                     <button class="btn btn-sm btn-outline-secondary"
-                                            t-on-click="() => this.openLead(activeConversation.lead_id)">
+                                            t-on-click="() => this.openLead(viewLeadId)">
                                         <i class="fa fa-user" aria-hidden="true"/> View Lead
                                     </button>
                                 </t>
@@ -261,6 +261,34 @@
                                             title="This number isn't linked to a lead yet">
                                         <i class="fa fa-user-plus" aria-hidden="true"/> Create lead
                                     </button>
+                                </t>
+                                <t t-if="state.isManager and activeConversation">
+                                    <div class="wa-inbox__assign-wrap">
+                                        <button class="btn btn-sm btn-outline-secondary"
+                                                t-att-class="state.showAssignPicker ? 'btn btn-sm btn-secondary' : 'btn btn-sm btn-outline-secondary'"
+                                                t-on-click="() => this.openAssignPicker()"
+                                                title="Assign this chat to an RM">
+                                            <i class="fa fa-user-plus" aria-hidden="true"/> Assign
+                                        </button>
+                                        <t t-if="state.showAssignPicker">
+                                            <div class="wa-inbox__assign-picker">
+                                                <div class="wa-inbox__assign-picker-header">
+                                                    Assign to RM
+                                                    <button class="wa-inbox__assign-picker-close"
+                                                            t-on-click="() => this.closeAssignPicker()">×</button>
+                                                </div>
+                                                <div class="wa-inbox__assign-picker-list">
+                                                    <t t-foreach="state.assignUsers" t-as="u" t-key="u.id">
+                                                        <button class="wa-inbox__assign-picker-row"
+                                                                t-on-click="() => this.pickAssignUser(u.id)">
+                                                            <i class="fa fa-user-circle-o" aria-hidden="true"/>
+                                                            <span t-esc="u.name"/>
+                                                        </button>
+                                                    </t>
+                                                </div>
+                                            </div>
+                                        </t>
+                                    </div>
                                 </t>
                                 <t t-if="activeConversation and activeConversation.interakt_url">
                                     <button class="btn btn-sm btn-outline-success"

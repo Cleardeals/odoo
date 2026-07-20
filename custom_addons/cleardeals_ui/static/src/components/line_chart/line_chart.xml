@@ -9,9 +9,7 @@
       </t>
 
       <t t-else="">
-        <svg class="cd-line-chart__svg"
-             viewBox="0 0 1000 220"
-             preserveAspectRatio="none">
+        <svg class="cd-line-chart__svg" viewBox="0 0 1000 240">
 
           <defs>
             <!-- Soft vertical gradient for the area under the sent line. -->
@@ -21,11 +19,18 @@
             </linearGradient>
           </defs>
 
-          <!-- Horizontal grid lines -->
+          <!-- Horizontal grid lines + Y-axis value labels -->
           <t t-foreach="gridLines" t-as="gl" t-key="gl_index">
-            <line x1="20" t-att-y1="gl.y" x2="980" t-att-y2="gl.y"
+            <line t-att-x1="axisX" t-att-y1="gl.y" t-att-x2="chartRight" t-att-y2="gl.y"
                   class="cd-line-chart__grid"/>
+            <text t-att-x="axisX - 10" t-att-y="gl.y + 5"
+                  text-anchor="end" class="cd-line-chart__ylabel"
+                  t-esc="gl.label"/>
           </t>
+
+          <!-- Y axis + X baseline -->
+          <line t-att-x1="axisX" t-att-y1="baseY" t-att-x2="chartRight" t-att-y2="baseY"
+                class="cd-line-chart__axis"/>
 
           <!-- Gradient area fill under the (smoothed) sent line -->
           <path t-att-d="sentAreaPath" class="cd-line-chart__area"
@@ -39,12 +44,25 @@
           <!-- Sent line (smooth, primary) -->
           <path t-att-d="sentPath" class="cd-line-chart__line"/>
 
-          <!-- Data-point dots with native SVG tooltips -->
+          <!-- Guide line at the hovered point -->
+          <t t-if="tooltip">
+            <line t-att-x1="tooltip.cx" y1="15" t-att-x2="tooltip.cx" t-att-y2="baseY"
+                  class="cd-line-chart__cursor"/>
+          </t>
+
+          <!-- Data points. Big invisible circle = easy hover target; small visible dot. -->
           <t t-foreach="enrichedBars" t-as="bar" t-key="bar_index">
-            <circle t-att-cx="bar.cx" t-att-cy="bar.cy" r="6"
-                    class="cd-line-chart__dot">
-              <title t-esc="bar.label + ' — Sent: ' + (bar.sent || 0) + ', Failed: ' + (bar.failed || 0)"/>
-            </circle>
+            <t t-if="hasFailures">
+              <circle t-att-cx="bar.cx" t-att-cy="bar.cyFail" r="4"
+                      class="cd-line-chart__dot cd-line-chart__dot--failed"/>
+            </t>
+            <circle t-att-cx="bar.cx" t-att-cy="bar.cy"
+                    t-att-r="hover.index === bar.index ? 7 : 5"
+                    class="cd-line-chart__dot"/>
+            <circle t-att-cx="bar.cx" t-att-cy="bar.cy" r="20"
+                    class="cd-line-chart__hit"
+                    t-on-mouseenter="() => this.onPointEnter(bar.index)"
+                    t-on-mouseleave="() => this.onPointLeave()"/>
           </t>
 
           <!-- X-axis labels (thinned to ≤ 10) -->
@@ -55,6 +73,29 @@
                   t-esc="lb.label"/>
           </t>
 
+          <!-- Hover tooltip (in-SVG so it scales and never distorts) -->
+          <t t-if="tooltip">
+            <g class="cd-line-chart__tip">
+              <rect t-att-x="tooltip.bx" t-att-y="tooltip.by"
+                    t-att-width="tooltip.boxW" t-att-height="tooltip.boxH"
+                    rx="8" class="cd-line-chart__tip-box"/>
+              <text t-att-x="tooltip.tx" t-att-y="tooltip.titleY"
+                    class="cd-line-chart__tip-title" t-esc="tooltip.label"/>
+              <text t-att-x="tooltip.tx" t-att-y="tooltip.sentY" class="cd-line-chart__tip-row">
+                <tspan class="cd-line-chart__tip-key">Sent</tspan>
+                <tspan t-att-x="tooltip.bx + tooltip.boxW - 14" text-anchor="end"
+                       class="cd-line-chart__tip-val" t-esc="tooltip.sent"/>
+              </text>
+              <t t-if="tooltip.hasFail">
+                <text t-att-x="tooltip.tx" t-att-y="tooltip.failedY" class="cd-line-chart__tip-row">
+                  <tspan class="cd-line-chart__tip-key cd-line-chart__tip-key--failed">Failed</tspan>
+                  <tspan t-att-x="tooltip.bx + tooltip.boxW - 14" text-anchor="end"
+                         class="cd-line-chart__tip-val" t-esc="tooltip.failed"/>
+                </text>
+              </t>
+            </g>
+          </t>
+
         </svg>
 
         <!-- Legend -->
@@ -62,11 +103,12 @@
           <span class="cd-line-chart__legend-item">
             <span class="cd-line-chart__legend-dot cd-line-chart__legend-dot--sent"/> Sent
           </span>
-          <t t-if="failedPath">
+          <t t-if="hasFailures">
             <span class="cd-line-chart__legend-item">
               <span class="cd-line-chart__legend-dot cd-line-chart__legend-dot--failed"/> Failed
             </span>
           </t>
+          <span class="cd-line-chart__legend-tz">Times in IST</span>
         </div>
       </t>
 

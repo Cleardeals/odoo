@@ -13,6 +13,8 @@ import { Component } from "@odoo/owl";
  *   trendLabel {String}         Optional label appended to the trend line.
  *   variant    {String}         "default" | "warning" | "danger"
  *   breakdown  {String}         Optional small text below the trend line.
+ *   hint       {String}         Optional explanation — shows an ⓘ marker next
+ *                               to the label with this text as a hover tooltip.
  *
  * Not a field widget — imported directly by WaDashboard.
  */
@@ -27,6 +29,7 @@ export class CdMetricCard extends Component {
         trendLabel: { type: String,  optional: true },
         variant:    { type: String,  optional: true },
         breakdown:  { type: String,  optional: true },
+        hint:       { type: String,  optional: true },
     };
 
     static defaultProps = {

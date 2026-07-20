@@ -6,6 +6,9 @@
 
       <div class="cd-metric-card__label">
         <t t-esc="props.label"/>
+        <t t-if="props.hint">
+          <span class="cd-metric-card__hint" t-att-title="props.hint" aria-label="Info">&#x24D8;</span>
+        </t>
       </div>
 
       <div class="cd-metric-card__value-row">

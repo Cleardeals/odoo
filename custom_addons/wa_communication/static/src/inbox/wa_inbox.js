@@ -101,6 +101,10 @@ export class WaInbox extends Component {
             tplLoading:         false,
             tplError:           "",
 
+            // Assign-conversation picker (managers only) — mirrors the lead form.
+            showAssignPicker:   false,
+            assignUsers:        [],
+
             // Inquiry segment: suggestion the RM dismissed this session
             dismissedSegmentId: null,
 
@@ -375,6 +379,38 @@ export class WaInbox extends Component {
         }
     }
 
+    // ── Assign conversation (managers) — direct force-assign, mirrors lead form ──
+
+    async openAssignPicker() {
+        if (!this.state.assignUsers.length) {
+            this.state.assignUsers = await this.orm.searchRead(
+                "res.users", [["share", "=", false]], ["id", "name"], { limit: 50 },
+            );
+        }
+        this.state.showAssignPicker = !this.state.showAssignPicker;
+    }
+
+    closeAssignPicker() {
+        this.state.showAssignPicker = false;
+    }
+
+    async pickAssignUser(userId) {
+        this.state.showAssignPicker = false;
+        const convId = this.state.activeConvId;
+        if (!convId) return;
+        try {
+            await this.orm.call("wa.conversation", "action_reassign", [[convId]], {
+                user_id: userId,
+            });
+            this.notification.add("Assigning… the chat updates when the platform confirms.",
+                { type: "success" });
+            await this._loadThread(convId);
+            await this._loadInbox();
+        } catch (e) {
+            this.notification.add(e.data?.message || "Could not assign the chat.", { type: "danger" });
+        }
+    }
+
     // ── Row actions ───────────────────────────────────────────────────────────
 
     openThread(convId) {
@@ -542,6 +578,13 @@ export class WaInbox extends Component {
 
     get isUnassigned() {
         return !this.activeConversation?.assigned_user_id;
+    }
+
+    // Lead the "View Lead" button opens — the discussing inquiry when known
+    // (server-resolved), else the conversation's anchor lead.
+    get viewLeadId() {
+        const c = this.activeConversation;
+        return c?.view_lead_id ?? c?.lead_id ?? null;
     }
 
     get myOpenRequest() {

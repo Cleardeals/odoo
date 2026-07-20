@@ -553,6 +553,9 @@ class WaConversation(models.Model):
                 'phone': conv.phone_number,
                 'lead_id': conv.lead_id.id if conv.lead_id else None,
                 'lead_name': conv.lead_id.name if conv.lead_id else None,
+                # "View Lead" target: the inquiry currently being discussed (active
+                # segment) when known, else the conversation's anchor lead.
+                'view_lead_id': conv._owa_view_lead_id(),
                 'assigned_user_id': conv.assigned_user_id.id if conv.assigned_user_id else None,
                 'assigned_user_name': conv.assigned_user_id.name if conv.assigned_user_id else None,
                 'window_state': 'open' if window_open else 'closed',
@@ -579,6 +582,31 @@ class WaConversation(models.Model):
             'messages': messages,
             'stats': stats,
         }
+
+    def _owa_view_lead_id(self):
+        """Lead id the inbox "View Lead" button should open.
+
+        When a chat has several inquiries on the same number, the RM is usually
+        working the one shown in the "Discussing: <property>" chip (the active
+        segment). Prefer that inquiry so the button lands on the right lead:
+
+        1. the active segment's bound inquiry, if any;
+        2. otherwise an inquiry on this phone that matches the active segment's
+           property (covers a label-only segment not yet bound to a lead);
+        3. otherwise the conversation's anchor ``lead_id``.
+        """
+        self.ensure_one()
+        seg = self.active_segment_id
+        if seg:
+            if seg.inquiry_id:
+                return seg.inquiry_id.id
+            if seg.property_base_id:
+                match = self.inquiry_ids.filtered(
+                    lambda l: l.property_base_id.id == seg.property_base_id.id
+                )[:1]
+                if match:
+                    return match.id
+        return self.lead_id.id if self.lead_id else None
 
     def _owa_segment_thread_context(self) -> dict:
         """Segment/inquiry context block merged into the get_thread payload.
