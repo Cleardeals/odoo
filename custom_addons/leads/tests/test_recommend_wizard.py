@@ -86,3 +86,24 @@ class TestRecommendWizard(PortalLeadTestCase):
             'assigned_rm_id': self.rm_user.id})
         with self.assertRaises(ValidationError):
             wiz.action_create_recommended_inquiry()
+
+    # ── Current status ────────────────────────────────────────────────────────
+
+    def test_recommended_defaults_current_status_to_lead(self):
+        primary = self._inquiry('9000000105', self._prop('A'))
+        rec = self._recommend(primary, self._prop('B'))
+        self.assertEqual(rec.current_status, 'lead',
+                         "unset status defaults to 'lead' as before")
+
+    def test_recommended_saves_chosen_current_status(self):
+        primary = self._inquiry('9000000106', self._prop('A'))
+        wiz = self.env['lead.recommend.property.wizard'].create({
+            'inquiry_id': primary.id,
+            'property_base_id': self._prop('B').id,
+            'assigned_rm_id': self.rm_user.id,
+            'current_status': 'site_visit_scheduled',
+        })
+        rec = self.env['leads.new'].browse(
+            wiz.action_create_recommended_inquiry()['res_id'])
+        self.assertEqual(rec.current_status, 'site_visit_scheduled',
+                         "the status picked in the wizard is saved on the new inquiry")

@@ -38,6 +38,14 @@ class LeadRecommendPropertyWizard(models.TransientModel):
         readonly=True,
     )
 
+    # Reuse the leads.new selection so the two never drift apart.
+    current_status = fields.Selection(
+        selection=lambda self: self.env["leads.new"]._fields["current_status"].selection,
+        string="Current Status",
+        default="lead",
+        required=True,
+    )
+
     @api.model
     def default_get(self, fields_list):
         vals = super().default_get(fields_list)
@@ -110,7 +118,7 @@ class LeadRecommendPropertyWizard(models.TransientModel):
                 "property_base_id": self.property_base_id.id,
                 "user_id": (self.assigned_rm_id or inquiry.user_id).id,
                 "state": "assigned",
-                "current_status": "lead",
+                "current_status": self.current_status or "lead",
                 "inquiry_type": "recommended",
                 "parent_inquiry_id": parent.id,
             },
