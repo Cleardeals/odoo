@@ -702,6 +702,44 @@ export class WaInbox extends Component {
         }
     }
 
+    // "Create inquiry" CTA (active span has a property but no inquiry yet).
+    // Mirrors the lead form: open the Recommend Property wizard seeded with the
+    // conversation's existing inquiry as the source and the topic's property.
+    async createInquiryForActive() {
+        const propId = this.activeSegmentPropertyId;
+        if (!propId) return;
+        const conv = this.activeConversation;
+        const sourceInquiryId =
+            conv?.lead_id || (this.inquiries[0] && this.inquiries[0].id) || null;
+        if (!sourceInquiryId) {
+            // No inquiry on the number yet — fall back to the create-lead flow.
+            this.openCreateLead();
+            return;
+        }
+        const convId = this.state.activeConvId;
+        await this.action.doAction(
+            {
+                type: "ir.actions.act_window",
+                res_model: "lead.recommend.property.wizard",
+                view_mode: "form",
+                views: [[false, "form"]],
+                target: "new",
+                context: {
+                    default_inquiry_id: sourceInquiryId,
+                    default_property_base_id: propId,
+                    active_id: sourceInquiryId,
+                    active_model: "leads.new",
+                },
+            },
+            {
+                onClose: async () => {
+                    await this._loadThread(convId);
+                    await this._loadInbox();
+                },
+            },
+        );
+    }
+
     async _startSegment(kw) {
         const convId = this.state.activeConvId;
         if (!convId) return;

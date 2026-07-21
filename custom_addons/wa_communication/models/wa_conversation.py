@@ -232,6 +232,11 @@ class WaConversation(models.Model):
         'leads.new',
         string='Inquiries',
         compute='_compute_inquiry_ids',
+        # An RM often lacks record-rule read access to every leads.new on the
+        # phone, but the switcher must still list them. compute_sudo runs the
+        # compute AND its Many2many assignment elevated, so writing the relation
+        # cache doesn't trip an AccessError on leads.new.
+        compute_sudo=True,
         help="All leads.new inquiries that share this conversation's phone "
              "(one per property).  Drives the inbox inquiry switcher.",
     )

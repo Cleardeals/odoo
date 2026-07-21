@@ -131,7 +131,9 @@ class WaConversation(models.Model):
         if not prop.exists():
             return {'action': 'noop'}
 
-        existing = conv.inquiry_ids.filtered(
+        # inquiry_ids may include leads the acting RM can't read directly — read
+        # them sudo so the duplicate check never trips an AccessError.
+        existing = conv.inquiry_ids.sudo().filtered(
             lambda l: l.property_base_id.id == prop.id)[:1]
         if existing:
             # Prefer the real inquiry over a fresh orphan span — switch to it.

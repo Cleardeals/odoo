@@ -450,6 +450,50 @@ class TestSegments(WaTransactionCase):
         self.assertEqual(conv._owa_view_lead_id(), leadB.id,
                          "View Lead follows the inquiry in the discussing chip")
 
+    # ── RM without leads.new access can still use the switcher ────────────────
+
+    def _lead_rm(self):
+        """An RM with the leads role: reads all properties but, by record rule,
+        only their own leads — exactly the account that hit the New-topic error."""
+        rm = self.make_user()
+        rm.group_ids = [
+            (4, self.env.ref('leads.group_lead_score_rm').id),
+            (4, self.env.ref('properties.group_property_rm').id),
+        ]
+        return rm
+
+    def test_rm_without_lead_access_can_start_new_topic(self):
+        """An RM opening a New topic on a number whose inquiry is owned by ANOTHER
+        RM (so the record rule hides it) must not trip an AccessError when the
+        conversation's inquiry_ids are recomputed/flushed."""
+        self._enable()
+        propA = self._property()
+        propB = self._property()
+        other = self.make_user()
+        # A lead on the number owned by someone else → unreadable to our RM.
+        self.make_lead(phone='9000000023', property_base_id=propA.id, user_id=other.id)
+        conv = self.make_conversation(phone_number='919000000023')
+        rm = self._lead_rm()
+        conv.assigned_user_id = rm.id
+        res = self.Conv.with_user(rm).start_property_topic(conv.id, propB.id)
+        self.assertEqual(res.get('action'), 'started',
+                         "the RM opens a new property topic with no AccessError")
+        self.assertTrue(conv.active_segment_id)
+
+    def test_rm_thread_lists_inquiries_it_cannot_read(self):
+        """The switcher lists every inquiry on the number even when the RM has no
+        direct read access to some of them (served sudo)."""
+        self._enable()
+        propA = self._property()
+        leadA = self.make_lead(phone='9000000024', property_base_id=propA.id)
+        conv = self.make_conversation(phone_number='919000000024')
+        rm = self.make_user()
+        conv.assigned_user_id = rm.id
+        data = self.Conv.with_user(rm).get_thread(conv.id)
+        self.assertIn('conversation', data)
+        self.assertEqual([i['id'] for i in data['conversation']['inquiries']],
+                         [leadA.id])
+
     def test_view_lead_resolves_label_only_segment_by_property(self):
         self._enable()
         propA = self._property()

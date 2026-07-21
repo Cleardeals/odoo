@@ -601,7 +601,7 @@ class WaConversation(models.Model):
             if seg.inquiry_id:
                 return seg.inquiry_id.id
             if seg.property_base_id:
-                match = self.inquiry_ids.filtered(
+                match = self.inquiry_ids.sudo().filtered(
                     lambda l: l.property_base_id.id == seg.property_base_id.id
                 )[:1]
                 if match:
@@ -634,13 +634,15 @@ class WaConversation(models.Model):
             'segments_enabled': True,
             'active_segment': _seg(self.active_segment_id) if self.active_segment_id else None,
             'segments': [_seg(s) for s in self.segment_ids],
+            # The switcher lists every inquiry on the number, including ones owned
+            # by other RMs the current user can't read — so read them sudo.
             'inquiries': [{
                 'id': lead.id,
                 'name': lead.name or '',
                 'property_base_id': lead.property_base_id.id or None,
                 'property': lead.property_base_id.property_tag
                             or (lead.property_base_id.display_name if lead.property_base_id else None),
-            } for lead in self.inquiry_ids],
+            } for lead in self.inquiry_ids.sudo()],
         }
 
     @staticmethod

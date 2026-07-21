@@ -311,6 +311,7 @@
                             onSwitch.bind="switchInquiry"
                             onPickProperty.bind="pickTopicProperty"
                             onStartTopic.bind="startTopic"
+                            onCreateInquiry.bind="createInquiryForActive"
                             onAcceptSuggestion.bind="acceptSuggestion"
                             onDismissSuggestion.bind="dismissSuggestion"/>
 
