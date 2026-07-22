@@ -13,6 +13,14 @@ for the RM to edit before sending. No placeholder substitution.
 import json
 
 from odoo import api, fields, models
+from odoo.exceptions import ValidationError
+
+from .wa_conversation_outbound import (
+    WA_LIST_BUTTON_MAX,
+    WA_LIST_ROW_DESC_MAX,
+    WA_LIST_ROW_TITLE_MAX,
+    WA_LIST_SECTION_TITLE_MAX,
+)
 
 
 class WaQuickReply(models.Model):
@@ -96,6 +104,60 @@ class WaQuickReply(models.Model):
             'list_payload': r._parsed_list_payload(),
             'is_shared': r.is_shared,
         } for r in replies]
+
+    @api.constrains('kind', 'list_payload')
+    def _check_list_payload_limits(self):
+        """Reject a saved list that WhatsApp would refuse to deliver.
+
+        Without this a quick reply can be stored with, say, a 38-character row
+        title and only blow up months later at send time with an opaque Interakt
+        400 — far from whoever authored it.  Same caps as
+        :meth:`wa.conversation._owa_assert_list_limits`.
+        """
+        for rec in self:
+            if rec.kind != 'list' or not rec.list_payload:
+                continue
+            # Unparseable payloads stay tolerated (_parsed_list_payload returns
+            # None and the reply simply never sends as a list) — this constraint
+            # is only about lengths WhatsApp would reject.
+            try:
+                data = json.loads(rec.list_payload)
+            except (ValueError, TypeError):
+                continue
+            if not isinstance(data, dict):
+                continue
+            button = (data.get('button') or '').strip()
+            if len(button) > WA_LIST_BUTTON_MAX:
+                raise ValidationError(
+                    "The list button label is %d characters — WhatsApp allows at most %d."
+                    % (len(button), WA_LIST_BUTTON_MAX)
+                )
+            for section in data.get('sections') or []:
+                if not isinstance(section, dict):
+                    continue
+                s_title = (section.get('title') or '').strip()
+                if len(s_title) > WA_LIST_SECTION_TITLE_MAX:
+                    raise ValidationError(
+                        "The section title “%s” is %d characters — WhatsApp allows "
+                        "at most %d." % (s_title, len(s_title), WA_LIST_SECTION_TITLE_MAX)
+                    )
+                for row in section.get('rows') or []:
+                    if not isinstance(row, dict):
+                        continue
+                    title = (row.get('title') or '').strip()
+                    if len(title) > WA_LIST_ROW_TITLE_MAX:
+                        raise ValidationError(
+                            "The list item “%s” is %d characters — WhatsApp allows at "
+                            "most %d. Please shorten it."
+                            % (title, len(title), WA_LIST_ROW_TITLE_MAX)
+                        )
+                    desc = (row.get('description') or '').strip()
+                    if len(desc) > WA_LIST_ROW_DESC_MAX:
+                        raise ValidationError(
+                            "The description for “%s” is %d characters — WhatsApp "
+                            "allows at most %d."
+                            % (title, len(desc), WA_LIST_ROW_DESC_MAX)
+                        )
 
     def _parsed_list_payload(self):
         """Return the list_payload as a dict, or None for non-list replies."""

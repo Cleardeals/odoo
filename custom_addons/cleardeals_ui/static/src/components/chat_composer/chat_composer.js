@@ -3,16 +3,7 @@
 import { Component, useState, useRef, onMounted, onWillUnmount } from "@odoo/owl";
 import { CdQuickReplyPicker } from "../quick_reply_picker/quick_reply_picker";
 import { wrapSelection } from "../../utils/whatsapp_format";
-
-// WhatsApp interactive-list length caps. Interakt rejects the WHOLE message with
-// a 400 if any is exceeded, so the builder caps input and blocks send.
-// Mirrors wa_conversation_outbound.py (Odoo) and shared/interakt.py (platform).
-const WA_LIST_LIMITS = {
-    button: 20,
-    sectionTitle: 24,
-    rowTitle: 24,
-    rowDesc: 72,
-};
+import { WA_LIST_LIMITS, findOverLongListText } from "../../utils/wa_list_limits";
 
 /**
  * CdChatComposer — message compose box with multi-file attach and send.
@@ -268,28 +259,6 @@ export class CdChatComposer extends Component {
         return WA_LIST_LIMITS;
     }
 
-    /** First over-long piece of list text, as a ready-to-show error, or null. */
-    _findOverLongListText(button, sections) {
-        const L = WA_LIST_LIMITS;
-        if (button.length > L.button) {
-            return `The button label is ${button.length} characters — max ${L.button}.`;
-        }
-        for (const s of sections) {
-            if (s.title.length > L.sectionTitle) {
-                return `Section title “${s.title}” is ${s.title.length} characters — max ${L.sectionTitle}.`;
-            }
-            for (const r of s.rows) {
-                if (r.title.length > L.rowTitle) {
-                    return `Item “${r.title}” is ${r.title.length} characters — max ${L.rowTitle}. Please shorten it.`;
-                }
-                if (r.description.length > L.rowDesc) {
-                    return `The description for “${r.title}” is ${r.description.length} characters — max ${L.rowDesc}.`;
-                }
-            }
-        }
-        return null;
-    }
-
     sendList() {
         const lb = this.state.listBuilder;
         if (!lb || !this.canSendList) return;
@@ -311,7 +280,7 @@ export class CdChatComposer extends Component {
         if (total > 10) { lb.error = "A list can have at most 10 items in total."; return; }
         // WhatsApp rejects the whole message if any of these is over — the inputs
         // cap typing, but a list loaded from a saved quick reply can still be long.
-        const tooLong = this._findOverLongListText(button, sections);
+        const tooLong = findOverLongListText(button, sections);
         if (tooLong) { lb.error = tooLong; return; }
         this.props.onSend(body, "list", {
             list_button_text: button,

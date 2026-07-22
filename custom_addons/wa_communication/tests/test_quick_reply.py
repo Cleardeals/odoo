@@ -104,6 +104,47 @@ class TestQuickReply(TransactionCase):
         self.assertEqual(row['kind'], 'list')
         self.assertEqual(row['list_payload']['button'], 'Go')
 
+    def test_list_quick_reply_row_title_over_24_chars_rejected(self):
+        """A saved list with an over-long row title would fail at send time with
+        an opaque Interakt 400 — reject it while the author is still here."""
+        import json
+        from odoo.exceptions import ValidationError
+        long_title = 'Liked & Want Another visit with family'   # 38 chars
+        with self.assertRaises(ValidationError) as ctx:
+            self.QR.with_user(self.rm_a).create({
+                'title': 'FB', 'body': 'b', 'kind': 'list',
+                'list_payload': json.dumps({'button': 'Show Feedback', 'sections': [
+                    {'title': 'S', 'rows': [{'id': 'r1', 'title': long_title}]}]}),
+            })
+        self.assertIn(long_title, str(ctx.exception))
+
+    def test_list_quick_reply_row_title_exactly_24_chars_allowed(self):
+        import json
+        r = self.QR.with_user(self.rm_a).create({
+            'title': 'FB', 'body': 'b', 'kind': 'list',
+            'list_payload': json.dumps({'button': 'Show Feedback', 'sections': [
+                {'title': 'S', 'rows': [
+                    {'id': 'r1', 'title': 'Looking for more options'}]}]}),
+        })
+        self.assertEqual(r._parsed_list_payload()['sections'][0]['rows'][0]['title'],
+                         'Looking for more options')
+
+    def test_list_quick_reply_button_over_20_chars_rejected(self):
+        import json
+        from odoo.exceptions import ValidationError
+        with self.assertRaises(ValidationError):
+            self.QR.with_user(self.rm_a).create({
+                'title': 'FB', 'body': 'b', 'kind': 'list',
+                'list_payload': json.dumps({'button': 'B' * 21, 'sections': [
+                    {'title': 'S', 'rows': [{'id': 'r1', 'title': 'ok'}]}]}),
+            })
+
+    def test_text_quick_reply_ignores_list_limits(self):
+        """A text reply with a long body is untouched by the list caps."""
+        r = self.QR.with_user(self.rm_a).create({
+            'title': 'T', 'body': 'x' * 500, 'kind': 'text'})
+        self.assertEqual(r.kind, 'text')
+
     def test_malformed_list_payload_returns_none(self):
         r = self.QR.with_user(self.rm_a).create({
             'title': 'bad', 'body': 'b', 'kind': 'list',

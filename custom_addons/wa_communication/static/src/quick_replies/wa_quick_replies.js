@@ -5,6 +5,7 @@ import { registry }   from "@web/core/registry";
 import { useService } from "@web/core/utils/hooks";
 import { user }       from "@web/core/user";
 import { wrapSelection, formatWhatsApp } from "@cleardeals_ui/utils/whatsapp_format";
+import { WA_LIST_LIMITS, findOverLongListText } from "@cleardeals_ui/utils/wa_list_limits";
 
 /**
  * WaQuickReplies — custom management surface for WhatsApp quick replies.
@@ -102,6 +103,25 @@ export class WaQuickReplies extends Component {
             (n, s) => n + s.rows.filter(r => r.title.trim()).length, 0);
     }
 
+    /** WhatsApp interactive-list length caps (exposed to the template). */
+    get LIMITS() {
+        return WA_LIST_LIMITS;
+    }
+
+    /** Rows that will actually be sent, for the preview's expanded list. */
+    get previewRows() {
+        if (!this.state.editing || this.state.editing.kind !== "list") return [];
+        const out = [];
+        for (const s of this.state.editing.list.sections) {
+            for (const r of s.rows) {
+                if (r.title.trim()) {
+                    out.push({ title: r.title.trim(), description: (r.description || "").trim() });
+                }
+            }
+        }
+        return out;
+    }
+
     cancelEdit() { this.state.editing = null; }
 
     canEdit(r) { return r.owned || (r.is_shared && this.state.isManager); }
@@ -148,8 +168,16 @@ export class WaQuickReplies extends Component {
                 this.notification.add("Add at least one list item with a title", { type: "warning" });
                 return;
             }
-            if (total > 10) {
-                this.notification.add("A list can have at most 10 items", { type: "warning" });
+            if (total > WA_LIST_LIMITS.maxRows) {
+                this.notification.add(
+                    `A list can have at most ${WA_LIST_LIMITS.maxRows} items`, { type: "warning" });
+                return;
+            }
+            // Same caps the composer enforces — a saved-but-over-long list would
+            // fail at send time with an Interakt 400, long after the author left.
+            const tooLong = findOverLongListText(e.list.button, sections);
+            if (tooLong) {
+                this.notification.add(tooLong, { type: "warning" });
                 return;
             }
             vals.list_payload = JSON.stringify({ button: e.list.button.trim(), sections });

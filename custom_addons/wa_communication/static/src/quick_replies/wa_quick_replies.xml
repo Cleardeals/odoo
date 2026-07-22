@@ -106,17 +106,47 @@
 
                             <!-- List builder (kind='list') — reuses composer .cd-list-builder styles -->
                             <t t-if="state.editing.kind === 'list'">
-                                <label class="wa-qr__label">List button label</label>
+                                <!-- Live WhatsApp preview: collapsed bubble + the list it opens -->
+                                <div class="cd-list-builder__preview wa-qr__preview">
+                                    <div class="cd-list-builder__preview-label">Preview</div>
+                                    <div class="cd-list-builder__preview-bubble">
+                                        <div class="cd-list-builder__preview-text"
+                                             t-esc="state.editing.body.trim() || 'List body text…'"/>
+                                        <div class="cd-list-builder__preview-btn">
+                                            <i class="fa fa-list-ul" aria-hidden="true"/>
+                                            <span t-esc="state.editing.list.button.trim() || 'Button'"/>
+                                        </div>
+                                    </div>
+                                    <t t-if="previewRows.length">
+                                        <div class="wa-qr__preview-sheet">
+                                            <t t-foreach="previewRows" t-as="pr" t-key="pr_index">
+                                                <div class="wa-qr__preview-row">
+                                                    <div class="wa-qr__preview-row-title" t-esc="pr.title"/>
+                                                    <t t-if="pr.description">
+                                                        <div class="wa-qr__preview-row-desc" t-esc="pr.description"/>
+                                                    </t>
+                                                </div>
+                                            </t>
+                                        </div>
+                                    </t>
+                                </div>
+
+                                <label class="wa-qr__label">
+                                    List button label
+                                    <span class="cd-list-builder__hint">max <t t-esc="LIMITS.button"/></span>
+                                </label>
                                 <input type="text" class="wa-qr__input" placeholder="e.g. View options"
+                                       t-att-maxlength="LIMITS.button"
                                        t-att-value="state.editing.list.button"
                                        t-on-input="(ev) => { this.state.editing.list.button = ev.target.value; }"/>
 
-                                <label class="wa-qr__label">Sections &amp; items (<t t-esc="listRowCount"/>/10)</label>
+                                <label class="wa-qr__label">Sections &amp; items (<t t-esc="listRowCount"/>/<t t-esc="LIMITS.maxRows"/>)</label>
                                 <t t-foreach="state.editing.list.sections" t-as="sec" t-key="sec_index">
                                     <div class="cd-list-builder__section">
                                         <div class="cd-list-builder__section-head">
                                             <input type="text" class="cd-list-builder__input cd-list-builder__section-title"
                                                    placeholder="Section title (optional)"
+                                                   t-att-maxlength="LIMITS.sectionTitle"
                                                    t-att-value="sec.title"
                                                    t-on-input="(ev) => { sec.title = ev.target.value; }"/>
                                             <button class="cd-list-builder__icon-btn"
@@ -130,12 +160,19 @@
                                             <div class="cd-list-builder__row">
                                                 <span class="cd-list-builder__row-num" t-esc="row_index + 1"/>
                                                 <div class="cd-list-builder__row-fields">
-                                                    <input type="text" class="cd-list-builder__input"
-                                                           placeholder="Item title (required)"
-                                                           t-att-value="row.title"
-                                                           t-on-input="(ev) => { row.title = ev.target.value; }"/>
+                                                    <div class="cd-list-builder__row-title-wrap">
+                                                        <input type="text" class="cd-list-builder__input"
+                                                               placeholder="Item title (required)"
+                                                               t-att-maxlength="LIMITS.rowTitle"
+                                                               t-att-value="row.title"
+                                                               t-on-input="(ev) => { row.title = ev.target.value; }"/>
+                                                        <span t-attf-class="cd-list-builder__counter {{ (row.title || '').length >= LIMITS.rowTitle ? 'cd-list-builder__counter--max' : '' }}">
+                                                            <t t-esc="(row.title || '').length"/>/<t t-esc="LIMITS.rowTitle"/>
+                                                        </span>
+                                                    </div>
                                                     <input type="text" class="cd-list-builder__input"
                                                            placeholder="Description (optional)"
+                                                           t-att-maxlength="LIMITS.rowDesc"
                                                            t-att-value="row.description"
                                                            t-on-input="(ev) => { row.description = ev.target.value; }"/>
                                                 </div>
