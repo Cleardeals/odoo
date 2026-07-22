@@ -14,6 +14,15 @@ from .wa_conversation import _TOPIC_WA_REQUESTS
 
 _logger = logging.getLogger(__name__)
 
+# WhatsApp interactive-list length caps. Interakt rejects the entire message with
+# a 400 when any is exceeded, so we validate before publishing rather than letting
+# the send fail downstream. Kept in sync with shared/interakt.py on the platform.
+WA_LIST_BUTTON_MAX = 20
+WA_LIST_SECTION_TITLE_MAX = 24
+WA_LIST_ROW_TITLE_MAX = 24
+WA_LIST_ROW_DESC_MAX = 72
+
+
 class WaConversation(models.Model):
     _inherit = 'wa.conversation'
 
@@ -192,6 +201,7 @@ class WaConversation(models.Model):
         n_rows = sum(len(s['rows']) for s in clean_sections)
         if n_rows > 10:
             raise UserError("A WhatsApp list can have at most 10 items in total.")
+        self._owa_assert_list_limits(button_text, clean_sections)
 
         # List messages need an open 24h window (they are not templates).
         self._compute_window_state()
@@ -264,6 +274,48 @@ class WaConversation(models.Model):
             status='processed',
         )
         return wa_msg
+
+    @staticmethod
+    def _owa_assert_list_limits(button_text: str, clean_sections: list) -> None:
+        """Enforce WhatsApp's interactive-list length caps before we publish.
+
+        Interakt rejects the WHOLE message with a 400 if any of these is exceeded
+        (e.g. "'title' is a required string which maximum of 24 characters in each
+        JSON of 'rows' array"), so catching it here turns a silent failed send into
+        an actionable message naming the offending row.
+
+        We reject rather than truncate: silently clipping "Liked & Want Another
+        visit with family" to "Liked & Want Another vis" would ship a different
+        question to the buyer than the RM wrote.
+        """
+        button = (button_text or 'Menu').strip()
+        if len(button) > WA_LIST_BUTTON_MAX:
+            raise UserError(
+                "The list button text is %d characters — WhatsApp allows at most %d.\n\n“%s”"
+                % (len(button), WA_LIST_BUTTON_MAX, button)
+            )
+        for section in clean_sections:
+            s_title = section.get('title') or ''
+            if len(s_title) > WA_LIST_SECTION_TITLE_MAX:
+                raise UserError(
+                    "A list section title is %d characters — WhatsApp allows at most %d.\n\n“%s”"
+                    % (len(s_title), WA_LIST_SECTION_TITLE_MAX, s_title)
+                )
+            for row in section.get('rows') or []:
+                title = row.get('title') or ''
+                if len(title) > WA_LIST_ROW_TITLE_MAX:
+                    raise UserError(
+                        "This list item is %d characters — WhatsApp allows at most %d:\n\n"
+                        "“%s”\n\nPlease shorten it and send again."
+                        % (len(title), WA_LIST_ROW_TITLE_MAX, title)
+                    )
+                desc = row.get('description') or ''
+                if len(desc) > WA_LIST_ROW_DESC_MAX:
+                    raise UserError(
+                        "A list item description is %d characters — WhatsApp allows at "
+                        "most %d:\n\n“%s”"
+                        % (len(desc), WA_LIST_ROW_DESC_MAX, desc)
+                    )
 
     @staticmethod
     def _owa_normalize_list_sections(sections: list) -> list:

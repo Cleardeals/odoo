@@ -352,6 +352,37 @@
         gap: 4px;
     }
 
+    // Row title + its live character counter (WhatsApp caps titles at 24).
+    &__row-title-wrap {
+        position: relative;
+        display: flex;
+        align-items: center;
+
+        .cd-list-builder__input {
+            flex: 1;
+            padding-right: 48px;   // room for the counter
+        }
+    }
+
+    &__counter {
+        position: absolute;
+        right: 8px;
+        font-size: 11px;
+        color: var(--cd-text-muted, #9ca3af);
+        pointer-events: none;
+        font-variant-numeric: tabular-nums;
+
+        &--max { color: #d97706; font-weight: 600; }
+    }
+
+    &__hint {
+        margin-left: 6px;
+        font-size: 11px;
+        font-weight: 400;
+        color: var(--cd-text-muted, #9ca3af);
+        text-transform: none;
+    }
+
     // Live WhatsApp-style preview of the collapsed bubble
     &__preview {
         margin-bottom: 6px;

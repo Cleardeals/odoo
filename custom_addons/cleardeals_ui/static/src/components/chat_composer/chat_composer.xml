@@ -219,9 +219,15 @@
                                       t-att-value="state.listBuilder.body"
                                       t-on-input="(ev) => { state.listBuilder.body = ev.target.value; }"/>
 
-                            <label class="cd-list-builder__label">List button label</label>
+                            <label class="cd-list-builder__label">
+                                List button label
+                                <span class="cd-list-builder__hint">
+                                    max <t t-esc="LIMITS.button"/>
+                                </span>
+                            </label>
                             <input type="text" class="cd-list-builder__input"
                                    placeholder="e.g. View options"
+                                   t-att-maxlength="LIMITS.button"
                                    t-att-value="state.listBuilder.button"
                                    t-on-input="(ev) => { state.listBuilder.button = ev.target.value; }"/>
 
@@ -232,6 +238,7 @@
                                     <div class="cd-list-builder__section-head">
                                         <input type="text" class="cd-list-builder__input cd-list-builder__section-title"
                                                placeholder="Section title (optional)"
+                                               t-att-maxlength="LIMITS.sectionTitle"
                                                t-att-value="sec.title"
                                                t-on-input="(ev) => { sec.title = ev.target.value; }"/>
                                         <button class="cd-list-builder__icon-btn"
@@ -246,12 +253,19 @@
                                         <div class="cd-list-builder__row">
                                             <span class="cd-list-builder__row-num" t-esc="row_index + 1"/>
                                             <div class="cd-list-builder__row-fields">
-                                                <input type="text" class="cd-list-builder__input"
-                                                       placeholder="Item title (required)"
-                                                       t-att-value="row.title"
-                                                       t-on-input="(ev) => { row.title = ev.target.value; }"/>
+                                                <div class="cd-list-builder__row-title-wrap">
+                                                    <input type="text" class="cd-list-builder__input"
+                                                           placeholder="Item title (required)"
+                                                           t-att-maxlength="LIMITS.rowTitle"
+                                                           t-att-value="row.title"
+                                                           t-on-input="(ev) => { row.title = ev.target.value; }"/>
+                                                    <span t-attf-class="cd-list-builder__counter {{ (row.title || '').length >= LIMITS.rowTitle ? 'cd-list-builder__counter--max' : '' }}">
+                                                        <t t-esc="(row.title || '').length"/>/<t t-esc="LIMITS.rowTitle"/>
+                                                    </span>
+                                                </div>
                                                 <input type="text" class="cd-list-builder__input"
                                                        placeholder="Description (optional)"
+                                                       t-att-maxlength="LIMITS.rowDesc"
                                                        t-att-value="row.description"
                                                        t-on-input="(ev) => { row.description = ev.target.value; }"/>
                                             </div>

@@ -213,6 +213,55 @@ class TestSendMessage(WaTransactionCase):
             conv.send_list_message(body='hi', button_text='Menu',
                                    sections=[{'title': 'S', 'rows': rows}])
 
+    def test_list_message_row_title_over_24_chars_raises(self):
+        """WhatsApp caps row titles at 24 chars; Interakt 400s the whole message
+        otherwise (the real "Liked & Want Another visit with family" failure)."""
+        conv = self.make_conversation()
+        self._open_window(conv)
+        long_title = 'Liked & Want Another visit with family'   # 38 chars
+        self.assertGreater(len(long_title), 24)
+        with self.assertRaises(UserError) as ctx:
+            conv.send_list_message(
+                body='hi', button_text='Menu',
+                sections=[{'title': 'S', 'rows': [{'title': long_title}]}])
+        self.assertIn(long_title, str(ctx.exception),
+                      "the error names the offending item so the RM can fix it")
+
+    def test_list_message_row_title_exactly_24_chars_is_allowed(self):
+        conv = self.make_conversation()
+        self._open_window(conv)
+        title = 'Looking for more options'   # exactly 24
+        self.assertEqual(len(title), 24)
+        with self.mock_pubsub():
+            msg = conv.send_list_message(
+                body='hi', button_text='Menu',
+                sections=[{'title': 'S', 'rows': [{'title': title}]}])
+        self.assertEqual(msg.status, 'queued')
+
+    def test_list_message_button_over_20_chars_raises(self):
+        conv = self.make_conversation()
+        self._open_window(conv)
+        with self.assertRaises(UserError):
+            conv.send_list_message(body='hi', button_text='A' * 21,
+                                   sections=self._sections())
+
+    def test_list_message_section_title_over_24_chars_raises(self):
+        conv = self.make_conversation()
+        self._open_window(conv)
+        with self.assertRaises(UserError):
+            conv.send_list_message(
+                body='hi', button_text='Menu',
+                sections=[{'title': 'S' * 25, 'rows': [{'title': 'ok'}]}])
+
+    def test_list_message_row_description_over_72_chars_raises(self):
+        conv = self.make_conversation()
+        self._open_window(conv)
+        with self.assertRaises(UserError):
+            conv.send_list_message(
+                body='hi', button_text='Menu',
+                sections=[{'title': 'S',
+                           'rows': [{'title': 'ok', 'description': 'd' * 73}]}])
+
     def test_list_message_serializes_into_thread(self):
         conv = self.make_conversation()
         self._open_window(conv)
