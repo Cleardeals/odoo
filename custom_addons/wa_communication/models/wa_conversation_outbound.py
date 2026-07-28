@@ -22,6 +22,72 @@ WA_LIST_SECTION_TITLE_MAX = 24
 WA_LIST_ROW_TITLE_MAX = 24
 WA_LIST_ROW_DESC_MAX = 72
 
+# WhatsApp media size caps, in bytes (Meta Cloud API limits).
+#
+# Two reasons to enforce these as early as possible:
+#  1. Interakt accepts the send, then WhatsApp rejects the oversized media
+#     asynchronously — and that failure webhook carries no reason, so the RM
+#     just sees "Failed" with no explanation.
+#  2. Every upload is read into memory and base64-encoded (~3.5x the file size)
+#     before it reaches the filestore, so an 80 MB video blows the Odoo worker's
+#     memory limit and recycles the worker mid-request — which can drop
+#     in-flight Pub/Sub publishes (see the lost assign of 2026-07-28).
+WA_MEDIA_MAX_BYTES = {
+    'image':     5 * 1024 * 1024,
+    'video':    16 * 1024 * 1024,
+    'audio':    16 * 1024 * 1024,
+    'document': 100 * 1024 * 1024,
+}
+
+# Mime prefixes WhatsApp refuses for the Document type ("mp4 is not supported
+# for Document media") — these must be sent as their own media kind.
+WA_DOCUMENT_FORBIDDEN_MIME_PREFIXES = ('video/', 'image/', 'audio/')
+
+
+def wa_media_kind_for_mimetype(mimetype: str) -> str:
+    """Map a mimetype to the WhatsApp media kind whose cap applies."""
+    mt = (mimetype or '').lower()
+    if mt.startswith('image/'):
+        return 'image'
+    if mt.startswith('video/'):
+        return 'video'
+    if mt.startswith('audio/'):
+        return 'audio'
+    return 'document'
+
+
+def wa_format_bytes(n: int) -> str:
+    """Human-readable size for user-facing errors."""
+    n = n or 0
+    mb = n / (1024 * 1024)
+    return '%.1f MB' % mb if mb >= 0.1 else '%d KB' % (n / 1024)
+
+
+def wa_media_size_cap(kind: str) -> int:
+    """Byte cap for *kind*, falling back to the document cap."""
+    return WA_MEDIA_MAX_BYTES.get(
+        (kind or 'document').lower(), WA_MEDIA_MAX_BYTES['document'])
+
+
+def wa_check_media(kind: str, size_bytes: int, mimetype: str = '') -> str:
+    """Return a user-facing error for an unsendable attachment, else ''.
+
+    Checks the size cap for *kind* and rejects mime/kind combinations WhatsApp
+    refuses outright.
+    """
+    kind = (kind or 'document').lower()
+    if kind == 'document' and (mimetype or '').lower().startswith(
+            WA_DOCUMENT_FORBIDDEN_MIME_PREFIXES):
+        real = wa_media_kind_for_mimetype(mimetype)
+        return ("WhatsApp does not accept %s files as a Document. "
+                "Use the %s button instead." % (mimetype, real.title()))
+    cap = wa_media_size_cap(kind)
+    if size_bytes and size_bytes > cap:
+        return ("This %s is %s — WhatsApp allows at most %s. "
+                "Please compress it or share a link instead."
+                % (kind, wa_format_bytes(size_bytes), wa_format_bytes(cap)))
+    return ''
+
 
 class WaConversation(models.Model):
     _inherit = 'wa.conversation'

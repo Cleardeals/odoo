@@ -19,7 +19,17 @@ from urllib.parse import quote
 from odoo import http
 from odoo.http import request
 
+from ..models.wa_conversation_outbound import (
+    wa_check_media,
+    wa_format_bytes,
+    wa_media_size_cap,
+)
+
 _logger = logging.getLogger(__name__)
+
+# Multipart framing (headers, boundaries) adds a little to the raw file size, so
+# the Content-Length pre-check allows a small margin before rejecting.
+_MULTIPART_OVERHEAD_BYTES = 8 * 1024
 
 
 class WaMediaUploadController(http.Controller):
@@ -32,6 +42,26 @@ class WaMediaUploadController(http.Controller):
         csrf=False,
     )
     def upload(self, **kwargs):
+        # ── Guard 1: pre-parse ────────────────────────────────────────────────
+        # Reject on Content-Length BEFORE touching request.httprequest.files —
+        # that attribute is what makes werkzeug parse the body and spool it to a
+        # temp file. ``kind`` therefore travels as a QUERY parameter, so we can
+        # pick the right cap without reading the body at all.
+        kind = (request.httprequest.args.get("kind") or "document").lower()
+        cap = wa_media_size_cap(kind)
+        declared = request.httprequest.content_length or 0
+        if declared > cap + _MULTIPART_OVERHEAD_BYTES:
+            _logger.info(
+                "wa_media_upload: rejected %s upload of %s (cap %s) before parsing",
+                kind, wa_format_bytes(declared), wa_format_bytes(cap),
+            )
+            return request.make_json_response(
+                {"error": "This %s is %s — WhatsApp allows at most %s. "
+                          "Please compress it or share a link instead."
+                          % (kind, wa_format_bytes(declared), wa_format_bytes(cap))},
+                status=413,
+            )
+
         file = request.httprequest.files.get("file")
         if not file:
             return request.make_json_response({"error": "no file"}, status=400)
@@ -42,6 +72,27 @@ class WaMediaUploadController(http.Controller):
         # everything else (including spaces) with underscores.
         safe_filename = re.sub(r"[^\w.\-]", "_", original_filename.lstrip("/\\"))
         mimetype = file.content_type or "application/octet-stream"
+
+        # ── Guard 2: post-parse, pre-read ─────────────────────────────────────
+        # Measure via seek/tell (no bytes into RAM) for the cases guard 1 can't
+        # cover: a missing or understated Content-Length. Still ahead of the
+        # base64 encode and the ir.attachment create, so an oversized file never
+        # reaches the filestore.
+        try:
+            file.seek(0, 2)
+            actual = file.tell()
+            file.seek(0)
+        except (OSError, ValueError):  # non-seekable stream — fall back to the header
+            actual = declared
+
+        error = wa_check_media(kind, actual, mimetype)
+        if error:
+            _logger.info(
+                "wa_media_upload: rejected %r (%s, kind=%s, %s): %s",
+                original_filename, mimetype, kind, wa_format_bytes(actual), error,
+            )
+            return request.make_json_response({"error": error}, status=413)
+
         data = base64.b64encode(file.read()).decode()
 
         attachment = request.env["ir.attachment"].sudo().create({

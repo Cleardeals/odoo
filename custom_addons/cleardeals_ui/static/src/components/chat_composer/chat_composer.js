@@ -4,6 +4,7 @@ import { Component, useState, useRef, onMounted, onWillUnmount } from "@odoo/owl
 import { CdQuickReplyPicker } from "../quick_reply_picker/quick_reply_picker";
 import { wrapSelection } from "../../utils/whatsapp_format";
 import { WA_LIST_LIMITS, findOverLongListText } from "../../utils/wa_list_limits";
+import { checkMediaFile } from "../../utils/wa_media_limits";
 
 /**
  * CdChatComposer — message compose box with multi-file attach and send.
@@ -303,9 +304,22 @@ export class CdChatComposer extends Component {
     }
 
     async onFileSelected(ev) {
-        const files = Array.from(ev.target.files);
-        if (!files.length) return;
+        const allFiles = Array.from(ev.target.files);
+        if (!allFiles.length) return;
         const kind = this._selectingKind || "document";
+
+        // Reject files WhatsApp would refuse BEFORE uploading a single byte:
+        // the server enforces the same caps, but only after the transfer, and a
+        // large upload also spikes Odoo worker memory. Oversized files are
+        // reported and dropped; the rest continue.
+        const rejected = [];
+        const files = allFiles.filter((file) => {
+            const err = checkMediaFile(kind, file);
+            if (err) rejected.push(err);
+            return !err;
+        });
+        this.state.uploadError = rejected.length ? rejected.join(" ") : null;
+        if (!files.length) return;
 
         // Add all files to the pending list immediately so thumbnails appear
         const newEntries = files.map(file => ({
@@ -320,15 +334,18 @@ export class CdChatComposer extends Component {
         for (const entry of newEntries) {
             this.state.pendingFiles.push(entry);
         }
-        this.state.uploadError = null;
 
-        // Upload each file concurrently; identify by id after resolution
+        // Upload each file concurrently; identify by id after resolution.
+        // ``kind`` goes in the QUERY STRING (not the form body) so the server can
+        // apply the right size cap and reject on Content-Length before it parses
+        // and spools the upload.
         await Promise.all(files.map(async (file, i) => {
             const id = newEntries[i].id;
             try {
                 const formData = new FormData();
                 formData.append("file", file);
-                const resp = await fetch("/wa/media/upload", {
+                const resp = await fetch(
+                    `/wa/media/upload?kind=${encodeURIComponent(kind)}`, {
                     method:  "POST",
                     body:    formData,
                     headers: { "X-Requested-With": "XMLHttpRequest" },
