@@ -4,6 +4,7 @@ Part of the ``wa.conversation`` model — see wa_conversation.py for the base
 definition (fields, constraints, inbound push dispatcher).
 """
 import logging
+import re
 import uuid
 
 from odoo import api, models
@@ -182,6 +183,36 @@ class WaConversation(models.Model):
             target = self.env['res.users'].sudo().browse(user_id)
             self._request_assign(target)
 
+    @staticmethod
+    def _owa_humanize_assign_failure(raw: str) -> str:
+        """Turn an Interakt assign error into something an RM can act on.
+
+        Raw values arrive like::
+
+            Permanent error 400: ['Chat is already assigned to same agent']
+
+        which reads as an alarming system fault for what is usually a mundane,
+        recoverable situation. Strip the transport framing and map the known
+        cases to plain language.
+        """
+        text = (raw or '').strip()
+        if not text:
+            return "WhatsApp did not accept the assignment."
+        low = text.lower()
+        if 'already assigned to same agent' in low:
+            return "This chat is already with that RM — nothing needed to change."
+        if 'agent' in low and ('not found' in low or 'does not exist' in low):
+            return ("That RM isn't set up as an agent in Interakt yet. "
+                    "Ask an admin to add them, then try again.")
+        if 'inactive' in low or 'disabled' in low:
+            return ("That RM's Interakt account looks inactive. "
+                    "Ask an admin to re-enable it, then try again.")
+        # Unknown case: drop the "Permanent error NNN:" prefix and the list
+        # brackets Interakt wraps its messages in, keeping the actual sentence.
+        cleaned = re.sub(r'^\s*\w+ error \d+:\s*', '', text)
+        cleaned = cleaned.strip("[]'\" ")
+        return cleaned or "WhatsApp did not accept the assignment."
+
     def _handle_odoo_assignment_confirmed(self, event: dict, pubsub_message_id: str) -> None:
         """Platform confirmed (or failed) an Interakt chat assignment.
 
@@ -205,8 +236,8 @@ class WaConversation(models.Model):
                 [('request_id', '=', request_id)], limit=1)
 
         if not success:
-            reason = (event.get('failure_reason') or '').strip() \
-                or "Interakt rejected the assignment."
+            reason = self._owa_humanize_assign_failure(
+                event.get('failure_reason') or '')
             conv.sudo().write({'assignment_pending': False})
 
             target_user = (self.env['res.users'].sudo().browse(rm_odoo_id)

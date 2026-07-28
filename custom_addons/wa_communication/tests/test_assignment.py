@@ -150,13 +150,16 @@ class TestAssignment(TransactionCase):
         self.assertEqual(self.conv.assigned_user_id, self.rm_a,
                          "ownership must stay put on failure")
         # BOTH the requester and the approver get a persisted failure notification
-        # carrying the reason.
+        # carrying the reason — humanised, not Interakt's raw wording.
         for uid in (self.rm_a.id, self.rm_b.id):
             n = Notif.search([('user_id', '=', uid),
                               ('notif_type', '=', 'reassignment_failed')],
                              order='id desc', limit=1)
             self.assertTrue(n, "uid %s must be notified of the failure" % uid)
-            self.assertIn('Agent with email not found', (n.payload or {}).get('reason', ''))
+            reason = (n.payload or {}).get('reason', '')
+            self.assertIn('agent in Interakt', reason)
+            self.assertIn('admin', reason.lower(),
+                          "the RM is told who can fix it")
         # A persistent system event is appended to the thread.
         sys_after = self.env['wa.message'].sudo().search_count([
             ('conversation_id', '=', self.conv.id), ('kind', '=', 'system')])
@@ -284,3 +287,29 @@ class TestAssignment(TransactionCase):
             self.env.cr.postcommit.run()
         self.assertTrue(conv.assignment_pending)
         self.assertEqual(captured[-1]['rm_odoo_id'], self.rm_b.id)
+
+    # ── Assign-failure wording ────────────────────────────────────────────────
+
+    def test_already_assigned_reads_as_a_non_event(self):
+        """Interakt refuses a re-assign to the current owner. That is a mundane
+        no-op, not a system fault, so it must not read like one."""
+        msg = self.Conv._owa_humanize_assign_failure(
+            "Permanent error 400: ['Chat is already assigned to same agent']")
+        self.assertIn('already with that RM', msg)
+        self.assertNotIn('error', msg.lower())
+        self.assertNotIn('400', msg)
+
+    def test_unknown_reason_drops_transport_framing(self):
+        msg = self.Conv._owa_humanize_assign_failure(
+            "Permanent error 400: ['Something odd happened']")
+        self.assertEqual(msg, 'Something odd happened')
+
+    def test_empty_reason_gets_a_sentence(self):
+        self.assertEqual(
+            self.Conv._owa_humanize_assign_failure(''),
+            'WhatsApp did not accept the assignment.')
+
+    def test_missing_agent_reason_is_actionable(self):
+        msg = self.Conv._owa_humanize_assign_failure(
+            "Permanent error 400: ['Agent not found']")
+        self.assertIn('admin', msg.lower())

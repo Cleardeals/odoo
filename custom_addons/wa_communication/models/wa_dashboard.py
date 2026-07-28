@@ -57,6 +57,16 @@ _FAILURE_CODE_LABELS = {
     '131052': 'Invalid phone number — could not be delivered.',
 }
 
+# Last-resort hint for media that failed with no reason and no code from Interakt
+# — overwhelmingly a file WhatsApp refused, so name the limit rather than leaving
+# the RM with a bare "Delivery failed."
+_MEDIA_KIND_LIMIT_HINT = {
+    'video':    'Delivery failed — most often a video over WhatsApp\'s 16 MB limit.',
+    'image':    'Delivery failed — most often an image over WhatsApp\'s 5 MB limit.',
+    'audio':    'Delivery failed — most often audio over WhatsApp\'s 16 MB limit.',
+    'document': 'Delivery failed — check the file is under 100 MB and a supported type.',
+}
+
 # Fallback reason per internal status when neither a reason nor a known code exists.
 _STATUS_REASON_FALLBACK = {
     'failed':         'Delivery failed.',
@@ -419,7 +429,8 @@ class WaDashboard(models.Model):
         """The most descriptive failure reason available for a failed message.
 
         Priority: the platform-forwarded reason text → a per-code description →
-        a per-status fallback → the status itself.  Never returns an empty string.
+        a media-aware hint → a per-status fallback → the status itself.  Never
+        returns an empty string.
         """
         reason = (msg.failure_reason or '').strip()
         if reason and reason.lower() != 'send failed':
@@ -427,4 +438,9 @@ class WaDashboard(models.Model):
         code = (msg.failure_code or '').strip()
         if code and code in _FAILURE_CODE_LABELS:
             return _FAILURE_CODE_LABELS[code]
+        # Interakt sometimes reports a failure with no reason and no code at all.
+        # For media that almost always means WhatsApp refused the file, so point
+        # at the size limits rather than leaving a dead-end "Delivery failed."
+        if msg.status == 'failed' and msg.kind in _MEDIA_KIND_LIMIT_HINT:
+            return _MEDIA_KIND_LIMIT_HINT[msg.kind]
         return _STATUS_REASON_FALLBACK.get(msg.status, reason or msg.status.replace('_', ' ').title())
