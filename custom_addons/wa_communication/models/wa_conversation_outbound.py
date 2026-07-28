@@ -43,6 +43,29 @@ WA_MEDIA_MAX_BYTES = {
 # for Document media") — these must be sent as their own media kind.
 WA_DOCUMENT_FORBIDDEN_MIME_PREFIXES = ('video/', 'image/', 'audio/')
 
+# Interakt: "fileName value can be at max 100 characters" — it rejects the whole
+# send otherwise. A filename is only a label (unlike a list row title, where
+# truncating would change the question the buyer is asked), so we trim instead
+# of refusing an otherwise valid file. Mirrors FILENAME_MAX in shared/interakt.py.
+WA_FILENAME_MAX = 100
+
+
+def wa_clamp_filename(name: str) -> str:
+    """Shorten *name* to Interakt's cap, preserving the extension.
+
+    The extension drives how WhatsApp renders the document, so it is kept even
+    when the stem has to be cut.
+    """
+    name = (name or '').strip()
+    if len(name) <= WA_FILENAME_MAX:
+        return name
+    stem, dot, ext = name.rpartition('.')
+    if dot and 0 < len(ext) <= 10:
+        keep = WA_FILENAME_MAX - len(ext) - 1
+        if keep > 0:
+            return '%s.%s' % (stem[:keep], ext)
+    return name[:WA_FILENAME_MAX]
+
 
 def wa_media_kind_for_mimetype(mimetype: str) -> str:
     """Map a mimetype to the WhatsApp media kind whose cap applies."""

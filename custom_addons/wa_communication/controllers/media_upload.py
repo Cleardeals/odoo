@@ -21,6 +21,7 @@ from odoo.http import request
 
 from ..models.wa_conversation_outbound import (
     wa_check_media,
+    wa_clamp_filename,
     wa_format_bytes,
     wa_media_size_cap,
 )
@@ -66,7 +67,10 @@ class WaMediaUploadController(http.Controller):
         if not file:
             return request.make_json_response({"error": "no file"}, status=400)
 
-        original_filename = file.filename or "attachment"
+        # Clamp first: Interakt rejects a fileName over 100 chars, and this name
+        # flows straight through to the send as both the URL segment and the
+        # stored attachment name.
+        original_filename = wa_clamp_filename(file.filename or "attachment")
         # Strip path components and sanitise for use in a URL segment.
         # Keep only alphanumerics, dots, dashes and underscores; replace
         # everything else (including spaces) with underscores.

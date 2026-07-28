@@ -14,6 +14,7 @@ from odoo.tests import TransactionCase, tagged
 from ..models.wa_conversation_outbound import (
     WA_MEDIA_MAX_BYTES,
     wa_check_media,
+    wa_clamp_filename,
     wa_format_bytes,
     wa_media_kind_for_mimetype,
     wa_media_size_cap,
@@ -93,3 +94,26 @@ class TestMediaLimits(TransactionCase):
     def test_format_bytes_is_human_readable(self):
         self.assertEqual(wa_format_bytes(16 * MB), '16.0 MB')
         self.assertEqual(wa_format_bytes(5 * MB), '5.0 MB')
+
+    # ── Filename cap (Interakt: max 100 chars, rejects the whole send) ────────
+
+    def test_short_filename_untouched(self):
+        self.assertEqual(wa_clamp_filename('report.pdf'), 'report.pdf')
+
+    def test_exactly_100_untouched(self):
+        name = 'a' * 96 + '.pdf'
+        self.assertEqual(len(name), 100)
+        self.assertEqual(wa_clamp_filename(name), name)
+
+    def test_long_filename_trimmed_and_keeps_extension(self):
+        out = wa_clamp_filename('b' * 200 + '.pdf')
+        self.assertEqual(len(out), 100)
+        self.assertTrue(out.endswith('.pdf'),
+                        "the extension drives how WhatsApp renders the file")
+
+    def test_extensionless_long_filename_hard_trimmed(self):
+        self.assertEqual(wa_clamp_filename('c' * 150), 'c' * 100)
+
+    def test_blank_filename_is_safe(self):
+        self.assertEqual(wa_clamp_filename(''), '')
+        self.assertEqual(wa_clamp_filename(None), '')
