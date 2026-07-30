@@ -493,7 +493,9 @@ class NewPortalLead(models.Model):
                         )
                         rm_name = existing_lead.user_id.name or "Unassigned"
                         raise ValidationError(
-                            "Duplicate lead detected in last 30 days for the same phone/property criteria.\n"
+                            f"Duplicate lead detected in last {self.DUPLICATE_WINDOW_DAYS} days "
+                            "for the same phone/property criteria.\n"
+                            f"Lead: {existing_lead.name}\n"
                             f"Assigned RM: {rm_name}\n"
                             f"Current Status: {status_label}",
                         )
@@ -630,6 +632,103 @@ class NewPortalLead(models.Model):
             }
         )
 
+    # Duplicate-detection window, in days.  A buyer re-enquiring about the same
+    # property after this long is treated as a genuinely new inquiry.
+    DUPLICATE_WINDOW_DAYS = 180
+
+    @api.model
+    def _find_duplicate_lead(self, phone, property_id, exclude_ids=None):
+        """
+        Return an existing lead with the same phone + property, or an empty
+        recordset.
+
+        This is the single source of truth for the "same buyer, same property"
+        rule.  Every inflow (webhook processing, manual edit, Recommend wizard)
+        must go through here so the criteria cannot drift between paths.
+
+        The same phone on a *different* property is legitimate — a buyer may
+        enquire about several properties — so the property is always part of
+        the key, and no check is possible without one.
+        """
+        phone_clean = self._standardize_phone(phone)
+        if not phone_clean or not property_id:
+            return self.browse()
+
+        domain = [
+            ("phone", "=", phone_clean),
+            ("property_base_id", "=", property_id),
+            (
+                "create_date",
+                ">=",
+                fields.Datetime.now() - timedelta(days=self.DUPLICATE_WINDOW_DAYS),
+            ),
+        ]
+        if exclude_ids:
+            domain.append(("id", "not in", list(exclude_ids)))
+        return self.sudo().search(domain, limit=1)
+
+    def _reject_if_duplicate(self, property_rec):
+        """
+        Guard the moment an automated inflow links a property to this lead.
+
+        Portal/website leads are created before their property is resolved, so
+        the create-time duplicate check may have had no property to key on.  By
+        the time we link one, an inquiry for the same buyer + property can
+        already exist — that is exactly how duplicates used to slip through.
+
+        Automated inflows must never raise here (an exception would abort
+        ingestion and strand the lead), so a duplicate is *rejected*: the
+        property is left unlinked, the lead is marked ``failed`` with a note
+        pointing at the original, and the event is logged — mirroring how
+        :meth:`create_lead_if_not_duplicate` logs and skips.
+
+        Returns True when the lead was rejected and the caller must stop.
+        """
+        self.ensure_one()
+        duplicate = self._find_duplicate_lead(
+            self.phone,
+            property_rec.id,
+            exclude_ids=self.ids,
+        )
+        if not duplicate:
+            return False
+
+        _logger.info(
+            "Duplicate lead detected on property link. Phone: %s, Property: %s. "
+            "Rejecting lead %s (original: %s).",
+            self.phone,
+            property_rec.property_tag or property_rec.id,
+            self.id,
+            duplicate.id,
+        )
+        self.write(
+            {
+                "state": "failed",
+                "process_notes": (
+                    "Rejected as a duplicate inquiry — the same phone already "
+                    f"has an inquiry for this property.\nOriginal lead: "
+                    f"{duplicate.name} (ID {duplicate.id})\n"
+                    f"Assigned RM: {duplicate.user_id.name or 'Unassigned'}\n"
+                ),
+            },
+        )
+        return True
+
+    def _duplicate_error_message(self, duplicate, phone):
+        """Human-readable duplicate description, shared by every error path."""
+        status_selection = dict(self._fields["current_status"].selection)
+        status_label = status_selection.get(
+            duplicate.current_status,
+            duplicate.current_status or "Unknown",
+        )
+        return (
+            f"Phone number {phone} is already assigned to another inquiry "
+            "for the same property.\n"
+            f"Lead: {duplicate.name}\n"
+            f"Assigned RM: {duplicate.user_id.name or 'Unassigned'}\n"
+            f"Current Status: {status_label}"
+        )
+
     @api.model
     def _compute_duplicate_domain(self, lead_vals):
         """Build duplicate-check domain using the same criteria for all lead inflows."""
@@ -668,7 +767,7 @@ class NewPortalLead(models.Model):
         if resolved_property:
             lead_vals.setdefault("property_base_id", resolved_property.id)
 
-        time_limit = fields.Datetime.now() - timedelta(days=180)
+        time_limit = fields.Datetime.now() - timedelta(days=self.DUPLICATE_WINDOW_DAYS)
         if resolved_property:
             domain = [
                 ("phone", "=", phone_clean),
@@ -715,7 +814,8 @@ class NewPortalLead(models.Model):
         create duplicates).
 
         Fallback (when no portal-listing mapping exists yet):
-        same phone + same portal source + same portal_property_id in 30 days.
+        same phone + same portal source + same portal_property_id in the same
+        window.
         """
         duplicate_domain, phone_clean, portal_prop_id = self._compute_duplicate_domain(
             lead_vals,
@@ -754,41 +854,43 @@ class NewPortalLead(models.Model):
         if "phone" in vals:
             vals = dict(vals)
             vals["phone"] = self._standardize_phone(vals.get("phone"))
-            new_phone = vals["phone"]
-            if new_phone:
-                for rec in self:
-                    # Determine the effective property after this write completes.
-                    # Same phone is allowed for different properties (a buyer can
-                    # inquire about multiple properties); only the same phone +
-                    # same property combination is a duplicate.
-                    effective_property_id = (
-                        vals["property_base_id"]
-                        if "property_base_id" in vals
-                        else rec.property_base_id.id
+
+        # Re-check for duplicates whenever *either* half of the duplicate key
+        # changes.  Linking a property is just as capable of creating a
+        # phone+property duplicate as changing the phone — before this, a lead
+        # created without a property could silently acquire one that already
+        # belonged to another inquiry.
+        #
+        # Automated inflows are skipped here: they reject-and-log upstream
+        # (see _process_lead_logic / _process_website_lead), because raising
+        # inside their own property-linking write would abort ingestion.
+        checks_duplicates = ("phone" in vals or "property_base_id" in vals) and not (
+            self.env.context.get("automated_lead_creation")
+        )
+        if checks_duplicates:
+            for rec in self:
+                effective_phone = vals.get("phone", rec.phone)
+                # Determine the effective property after this write completes.
+                # Same phone is allowed for different properties (a buyer can
+                # inquire about multiple properties); only the same phone +
+                # same property combination is a duplicate.
+                effective_property_id = (
+                    vals["property_base_id"]
+                    if "property_base_id" in vals
+                    else rec.property_base_id.id
+                )
+                duplicate = self._find_duplicate_lead(
+                    effective_phone,
+                    effective_property_id,
+                    exclude_ids=self.ids,
+                )
+                if duplicate:
+                    raise ValidationError(
+                        self._duplicate_error_message(
+                            duplicate,
+                            self._standardize_phone(effective_phone),
+                        ),
                     )
-                    if not effective_property_id:
-                        continue
-                    duplicate = self.sudo().search(
-                        [
-                            ("phone", "=", new_phone),
-                            ("property_base_id", "=", effective_property_id),
-                            ("id", "not in", self.ids),
-                        ],
-                        limit=1,
-                    )
-                    if duplicate:
-                        status_selection = dict(self._fields["current_status"].selection)
-                        status_label = status_selection.get(
-                            duplicate.current_status,
-                            duplicate.current_status or "Unknown",
-                        )
-                        rm_name = duplicate.user_id.name or "Unassigned"
-                        raise ValidationError(
-                            f"Phone number {new_phone} is already assigned to another inquiry for the same property.\n"
-                            f"Lead: {duplicate.name}\n"
-                            f"Assigned RM: {rm_name}\n"
-                            f"Current Status: {status_label}",
-                        )
 
         leads_to_stamp = self.env["leads.new"]
         first_contact_time = False
@@ -995,6 +1097,9 @@ class NewPortalLead(models.Model):
                 else:
                     notes = f"{msg}\nAssigned to Fallback RM: {rm_user.name}.\n"
 
+            if property_rec and self._reject_if_duplicate(property_rec):
+                return
+
             self.write(
                 {
                     "property_base_id": property_rec.id if property_rec else False,
@@ -1083,6 +1188,9 @@ class NewPortalLead(models.Model):
                     )
                 else:
                     notes = f"{msg}\nAssigned to Fallback RM: {rm_user.name}.\n"
+
+            if property_rec and self._reject_if_duplicate(property_rec):
+                return
 
             self.write(
                 {

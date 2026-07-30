@@ -16,6 +16,7 @@ from . import (
     test_portal_lead_duplicate,
     test_portal_lead_phone,
     test_portal_lead_processing,
+    test_portal_lead_property_link_duplicate,
     test_portal_lead_webhook,
     test_portal_lead_whatsapp,
     test_property_activity_dashboard,
