@@ -193,6 +193,21 @@ class CleardealsPublisher(models.AbstractModel):
         thread is never blocked.  Delivery errors are caught by the future
         callback and logged at ERROR level.
 
+        .. warning::
+
+           **Known gap — in-flight messages are lost if the worker exits.**
+
+           This call performs no network I/O.  It appends to an in-memory batch
+           that a *daemon* thread flushes up to 50 ms later.  Until that flush
+           the message exists only in this process's heap: not in Postgres, not
+           in Pub/Sub, not on disk.  Any worker exit in that window — OOM kill,
+           ``limit_memory_soft`` recycle, deploy, restart — drops it silently.
+           The future callback cannot fire, so **nothing is logged anywhere**.
+
+           Confirmed message loss twice in staging (2026-07-18, 2026-08-01).
+           Deferred, not fixed.  Full analysis and the proposed fixes (atexit
+           flush + transactional outbox) are in ``../docs/IMPROVEMENTS.md``.
+
         Args:
             topic_id:   Short topic name (e.g. ``'wa-events'``).  The full
                         ``projects/{project}/topics/{name}`` path is built
