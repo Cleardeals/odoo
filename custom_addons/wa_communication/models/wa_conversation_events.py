@@ -20,6 +20,16 @@ from .wa_conversation import (
 
 _logger = logging.getLogger(__name__)
 
+# Postgres concurrency errors that Odoo's service.model.retrying() will re-run
+# the whole request for.  Kept identical to that module's
+# PG_CONCURRENCY_EXCEPTIONS_TO_RETRY so we never swallow something Odoo would
+# have recovered from on its own.
+_PG_CONCURRENCY_ERRORS = (
+    psycopg2.errors.LockNotAvailable,
+    psycopg2.errors.SerializationFailure,
+    psycopg2.errors.DeadlockDetected,
+)
+
 
 def _parse_special_inbound(raw_body):
     """Detect a shared LOCATION or CONTACT payload from an inbound message body.
@@ -162,16 +172,29 @@ class WaConversation(models.Model):
                     "wa_push: unhandled OdooWaEvent type=%r message=%s",
                     event_type, pubsub_message_id,
                 )
-        except psycopg2.errors.SerializationFailure:
-            # Two concurrent Pub/Sub deliveries of the same event raced to update
-            # the same wa.message row.  The other transaction won; this one is a
-            # no-op.  Log at DEBUG to avoid noisy error alerts.
-            _logger.debug(
-                "wa_push: SerializationFailure on type=%r message=%s — concurrent "
-                "delivery, row already updated by the other worker (harmless)",
+        except _PG_CONCURRENCY_ERRORS:
+            # A serialisation failure means THIS transaction lost a write race —
+            # it does NOT mean another worker already applied this event.  The
+            # competing write is usually ordinary traffic on the same
+            # wa_conversation row (unread_count, last_message_at), not a
+            # duplicate delivery of the same event.
+            #
+            # So this must never be swallowed.  Odoo already wraps the request in
+            # service.model.retrying(), which rolls back and re-runs it up to 5
+            # times with exponential backoff; re-raising is what hands the event
+            # to that machinery.  Catching it here defeated the retry and dropped
+            # the event silently — an assignment_confirmed lost this way left the
+            # chat pending and its reassignment request stuck in 'confirming'
+            # forever (conversation 918238268187, request #36, 2026-08-05).
+            #
+            # Re-raising from inside an except block bypasses the sibling
+            # handlers below, so this does not get logged as a handler failure.
+            _logger.info(
+                "wa_push: serialisation failure on type=%r message=%s — "
+                "re-raising for Odoo's retry",
                 event_type, pubsub_message_id,
             )
-            return
+            raise
         except Exception as exc:
             _logger.exception(
                 "wa_push: OdooWaEvent handler failed for type=%r message=%s",

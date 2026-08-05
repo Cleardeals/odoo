@@ -16,3 +16,4 @@ from . import test_message_log
 from . import test_initial_nudge
 from . import test_media_limits
 from . import test_inbox_create_inquiry
+from . import test_event_concurrency
