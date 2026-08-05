@@ -426,7 +426,7 @@ export class WaInbox extends Component {
     }
 
     openLead(leadId) {
-        this.action.doAction({
+        return this.action.doAction({
             type:      "ir.actions.act_window",
             res_model: "leads.new",
             res_id:    leadId,
@@ -851,7 +851,21 @@ export class WaInbox extends Component {
             this.notification.add("Lead created and linked to this chat.", { type: "success" });
             await this._loadThread(convId);
             await this._loadInbox();
-            if (leadId) this.openLead(leadId);
+            // Picking a property routes the lead to that property's RM, who is
+            // often somebody else — and then this RM cannot open it. Navigating
+            // is a convenience, so failing to do so must not read as an error:
+            // stay in the inbox and say where the lead went.
+            if (leadId) {
+                try {
+                    await this.openLead(leadId);
+                } catch {
+                    this.notification.add(
+                        "The lead was created and routed to the property's RM, " +
+                        "so it isn't yours to open.",
+                        { type: "info" },
+                    );
+                }
+            }
         } catch (e) {
             this.state.createLeadError = e.data?.message || String(e);
         } finally {

@@ -398,21 +398,37 @@ class WaConversation(models.Model):
             if prop.exists():
                 vals['property_base_id'] = prop.id
 
+        # Resolve the owning RM up front: property RM first, else the triaging
+        # user.  Ownership here is a business decision — an RM triaging an
+        # unknown number routes the lead to whoever owns the property, which is
+        # usually not themselves — so it must not be constrained by the
+        # triaging RM's own rights.  Setting user_id in ``vals`` also means the
+        # lead is never written ownerless, even for an instant.
+        rm = prop.rm_user_id if (prop and prop.exists() and prop.rm_user_id) else self.env.user
+        vals['user_id'] = rm.id
+        vals['state'] = 'assigned'
+
         # Canonical creation (handles dedup + standardization). Returns None when
         # a duplicate is detected — in that case link the existing lead instead.
-        lead = Leads.create_lead_if_not_duplicate(vals)
+        #
+        # Elevated deliberately: ``leads.new`` carries an RM record rule of
+        # [('user_id', '=', user.id)] on *create* as well as read, so an RM
+        # handing a lead to another RM's property would otherwise be refused
+        # outright.  Everything after this point keeps the sudo recordset for
+        # the same reason — once ``user_id`` is another RM, the caller can no
+        # longer read the record they just created.
+        lead = Leads.sudo().create_lead_if_not_duplicate(vals)
         if not lead:
             lead = Leads.sudo().search(
                 [('phone', '=', phone10)], order='create_date desc', limit=1)
         if not lead:
             raise UserError("Could not create a lead for this conversation.")
+        lead = lead.sudo()
 
-        # Resolve the owning RM: property RM first, else the triaging user.
-        rm = prop.rm_user_id if (prop and prop.exists() and prop.rm_user_id) else self.env.user
         write_vals = {'user_id': rm.id, 'state': 'assigned'}
         if prop and prop.exists():
             write_vals['property_base_id'] = prop.id
-        lead.sudo().write(write_vals)
+        lead.write(write_vals)
 
         # Link the conversation to the lead. (wa.message rows are append-only, so
         # earlier messages keep their original lead_id — the conversation link is
