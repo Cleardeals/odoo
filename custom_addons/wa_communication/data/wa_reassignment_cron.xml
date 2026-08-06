@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!--
+        Releases chat handovers whose confirmation never arrived.
+
+        'confirming' is the only wa.reassignment.request state that cannot be
+        left by a user action: it exits when the platform sends back an
+        assignment_confirmed event.  Any failure to deliver that event strands
+        the request permanently — the requester is locked out of asking again
+        and the assignee's Approve/Decline do nothing.
+
+        Three separate causes have produced that in practice (a Pub/Sub publish
+        lost on worker exit, a swallowed serialisation failure, and Interakt not
+        answering), so this sweep exists to bound the damage of the *next* one
+        rather than any particular bug.
+
+        Threshold: wa_communication.confirming_timeout_minutes (default 5).
+        The normal round-trip is under two seconds.
+    -->
+    <record id="ir_cron_release_stuck_confirming" model="ir.cron">
+        <field name="name">WhatsApp: release stuck chat handovers</field>
+        <field name="model_id" ref="model_wa_reassignment_request"/>
+        <field name="state">code</field>
+        <field name="code">model._cron_release_stuck_confirming()</field>
+        <field name="user_id" ref="base.user_root"/>
+        <field name="interval_number">5</field>
+        <field name="interval_type">minutes</field>
+        <field name="active" eval="True"/>
+    </record>
+</odoo>

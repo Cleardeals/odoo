@@ -17,3 +17,4 @@ from . import test_initial_nudge
 from . import test_media_limits
 from . import test_inbox_create_inquiry
 from . import test_event_concurrency
+from . import test_reassignment_sweeper

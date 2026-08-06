@@ -10,12 +10,19 @@ State machine::
 
     pending ──approve──▶ confirming ──(assignment_confirmed ok)──▶ approved
         │                    │
-        │                    └──(assignment_confirmed fail)──▶ failed
+        │                    ├──(assignment_confirmed fail)──▶ failed
+        │                    └──(no confirmation in N min)────▶ failed
         ├──decline──▶ declined
         └──cancel───▶ cancelled
+
+``confirming`` is the only state whose exit depends on an inbound event rather
+than a user action, so it is the only one that can strand.  The sweeper cron
+``_cron_release_stuck_confirming`` bounds that: see
+``data/wa_reassignment_cron.xml``.
 """
 
 import logging
+from datetime import timedelta
 
 from odoo import api, fields, models
 from odoo.exceptions import UserError
@@ -72,12 +79,34 @@ class WaReassignmentRequest(models.Model):
             raise UserError("Only the current assignee or a WhatsApp manager "
                             "can act on this reassignment request.")
 
+    def _assert_still_actionable(self):
+        """Refuse — audibly — to act on a request that is no longer pending.
+
+        Both buttons used to ``return`` silently here, so a stale notification
+        card (or a request that had moved to 'confirming') swallowed the click
+        with no state change, no error and no feedback.  That is what made a
+        stuck handover look like a broken button: the assignee pressed Decline,
+        nothing happened, and nothing explained why.
+        """
+        self.ensure_one()
+        if self.state == 'pending':
+            return
+        if self.state == 'confirming':
+            raise UserError(
+                "This chat is already being handed over — we're waiting for "
+                "WhatsApp to confirm it. If the handover doesn't complete it is "
+                "released automatically within a few minutes, and the requester "
+                "can ask again.")
+        raise UserError(
+            "This request has already been %s."
+            % dict(self._fields['state'].selection).get(
+                self.state, self.state).lower())
+
     def approve(self):
         """Approve the handover → ask the platform to reassign to the requester."""
         self.ensure_one()
         self._assert_can_resolve()
-        if self.state not in ('pending',):
-            return
+        self._assert_still_actionable()
         # Trigger the platform-routed assign; ownership flips on confirmation.
         # Persist the correlation id returned by _request_assign so the
         # platform's assignment_confirmed event can be matched back to THIS
@@ -90,8 +119,7 @@ class WaReassignmentRequest(models.Model):
     def decline(self):
         self.ensure_one()
         self._assert_can_resolve()
-        if self.state not in ('pending',):
-            return
+        self._assert_still_actionable()
         self.state = 'declined'
         self.resolved_at = fields.Datetime.now()
         self._notify_requester(
@@ -135,6 +163,76 @@ class WaReassignmentRequest(models.Model):
             if notify:
                 rec._notify_requester('reassignment_failed',
                                       reason or "Reassignment failed in Interakt.")
+
+    # ------------------------------------------------------------------
+    # Stuck-handover sweeper
+    # ------------------------------------------------------------------
+
+    @api.model
+    def _confirming_timeout_minutes(self) -> int:
+        """Minutes a request may sit in 'confirming' before it is released.
+
+        The normal Odoo → platform → Interakt → Odoo round-trip completes in
+        under two seconds, so anything still confirming after the default 5
+        minutes is not slow — the confirmation is never coming.
+        """
+        raw = self.env['ir.config_parameter'].sudo().get_param(
+            'wa_communication.confirming_timeout_minutes', '5')
+        try:
+            return max(1, int(raw))
+        except (TypeError, ValueError):
+            return 5
+
+    @api.model
+    def _cron_release_stuck_confirming(self) -> int:
+        """Release handovers whose confirmation never arrived.
+
+        'confirming' is the only state this model cannot leave on its own: it
+        exits when the platform sends back ``assignment_confirmed``, so any
+        failure to deliver that event strands the request permanently.  Three
+        distinct causes have done so in practice — an in-flight Pub/Sub publish
+        lost on worker exit, a swallowed serialisation failure, and Interakt
+        itself never answering.  Without this sweep each one needed a DBA.
+
+        Releasing to 'failed' (rather than 'approved') is the safe direction:
+        the requester is told and can ask again, and a retry is harmless because
+        wa-sender treats an already-assigned chat as success.  The cost of being
+        wrong is one redundant request; the cost of guessing 'approved' would be
+        Odoo claiming an ownership change that never happened in Interakt.
+
+        :returns: how many requests were released.
+        """
+        timeout = self._confirming_timeout_minutes()
+        cutoff = fields.Datetime.now() - timedelta(minutes=timeout)
+        # write_date is when the row entered 'confirming': approve() sets
+        # request_id and state in one write, and nothing else touches the row
+        # until it leaves the state.
+        stuck = self.sudo().search([
+            ('state', '=', 'confirming'),
+            ('write_date', '<', cutoff),
+        ])
+        if not stuck:
+            return 0
+
+        reason = ("WhatsApp never confirmed the handover, so the chat stays "
+                  "with its current owner. You can request it again.")
+        for rec in stuck:
+            conv = rec.conversation_id.sudo()
+            _logger.warning(
+                "reassignment sweep: releasing request #%s (conv %s, phone %s, "
+                "requester %s) — stuck in 'confirming' since %s (> %s min)",
+                rec.id, conv.id, conv.phone_number,
+                rec.requester_id.name, rec.write_date, timeout,
+            )
+            # Clear the spinner the assign set, or the composer stays locked
+            # even though nothing is in flight any more.
+            if conv.assignment_pending:
+                conv.write({'assignment_pending': False})
+            conv._owa_log_system_event(
+                "Handover to %s was released — WhatsApp never confirmed it."
+                % (rec.requester_id.name or 'the requesting RM'))
+            rec._mark_failed(reason)
+        return len(stuck)
 
     # ------------------------------------------------------------------
     # Helpers

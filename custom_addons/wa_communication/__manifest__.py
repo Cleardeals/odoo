@@ -1,6 +1,6 @@
 {
     'name': 'WhatsApp Communication',
-    'version': '1.3.7',
+    'version': '1.3.8',
     'summary': 'WA messaging layer: push receiver, conversation threads, outbound publishing.',
     'description': """
 WhatsApp ↔ Odoo communication layer built on GCP Pub/Sub transport.
@@ -52,6 +52,7 @@ Client action at WhatsApp → Dashboard providing:
         'security/wa_quick_reply_rules.xml',
         'data/wa_communication_config_data.xml',
         'data/wa_lead_source_data.xml',
+        'data/wa_reassignment_cron.xml',
         'views/wa_message_views.xml',
         'views/wa_dashboard_action.xml',
         'views/wa_inbox_action.xml',
