@@ -30,3 +30,4 @@ from . import (
     test_website_lead,
     test_squareyards_webhook,
 )
+from . import test_lead_phone_validation

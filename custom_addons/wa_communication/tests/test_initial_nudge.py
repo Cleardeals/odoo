@@ -183,8 +183,15 @@ class TestInitialNudge(WaTransactionCase):
         self.assertFalse(self._nudges(published))
 
     def test_lead_without_phone_does_not_emit(self):
+        """No phone → no nudge; there is nobody to message.
+
+        Uses the portal path because a *manual* lead can no longer be saved
+        without a phone (leads.new._check_phone_number).  Portal and webhook
+        creates stay exempt, so a phoneless lead is still reachable there — and
+        this is the case that must not emit.
+        """
         with self.mock_pubsub() as published:
-            self._manual_lead(phone=False)
+            self._portal_lead(phone=False)
         self.assertFalse(self._nudges(published))
 
     # ── behaviour deltas vs the old assign-triggered hook ─────────────────────

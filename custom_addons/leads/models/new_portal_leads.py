@@ -317,6 +317,64 @@ class NewPortalLead(models.Model):
 
     # --- Constraints ---
 
+    @api.constrains("phone")
+    def _check_phone_number(self):
+        """Reject a missing or malformed phone on manually entered leads.
+
+        Scope is deliberate.  Every automated path (portal webhooks, the CSV
+        import wizard, the SquareYards/OLX pulls, WhatsApp triage, the recommend
+        wizard) sets ``automated_lead_creation``; the lead form is the only
+        creator that does not.  Enforcing there and only there means an RM can
+        no longer save a lead nobody can call, while a portal sending a bad
+        number still lands the lead instead of being rejected at the door —
+        losing a real inbound enquiry is worse than storing a number an RM will
+        have to correct.
+
+        Because Odoo only runs a constraint when one of its trigger fields is
+        written, existing rows with bad numbers stay editable: the check bites
+        when someone touches ``phone``, not when they edit anything else.
+        """
+        if self.env.context.get("automated_lead_creation"):
+            return
+        for rec in self:
+            error = self._phone_validation_error(rec.phone)
+            if error:
+                raise ValidationError(error)
+
+    @api.model
+    def _phone_validation_error(self, phone):
+        """Return a human error for *phone*, or ``''`` when it is acceptable.
+
+        Split out from the constraint so the same rule can be reused (and
+        tested) without needing a record.
+        """
+        digits = re.sub(r"\D", "", phone or "")
+        if not digits:
+            return (
+                "A phone number is required. Enter the buyer's 10-digit mobile "
+                "number so the team can call or WhatsApp them."
+            )
+        # Accept exactly what _standardize_phone stores: a bare 10-digit number,
+        # or one carrying the 91 country code, however the RM spaced or
+        # punctuated it.  Deliberately NOT accepting an 11-digit '0'-prefixed
+        # number: '08012345678' is a Bangalore landline, and trimming the zero
+        # would turn it into '8012345678', which merely looks like a mobile.
+        # Rejecting it makes the RM retype the real number instead of silently
+        # storing an unreachable one.
+        if len(digits) == 12 and digits.startswith("91"):
+            digits = digits[2:]
+        if len(digits) != 10:
+            return (
+                "'%s' is not a valid phone number. Enter a 10-digit Indian "
+                "mobile number (the +91 country code is optional)." % phone
+            )
+        if digits[0] not in "6789":
+            return (
+                "'%s' is not a valid mobile number. Indian mobile numbers start "
+                "with 6, 7, 8 or 9 — please check the number." % phone
+            )
+        return ""
+
     @api.constrains("is_ops_sale_lead", "bde_id")
     def _check_bde_required_for_ops_sale(self):
         for rec in self:

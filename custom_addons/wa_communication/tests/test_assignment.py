@@ -186,6 +186,7 @@ class TestAssignment(TransactionCase):
         source = self.env['leads.new']._get_or_create_source('AsgTest')
         lead = self.env['leads.new'].sudo().create({
             'name': 'Secret Lead', 'source_id': source.id, 'user_id': owner.id,
+            'phone': '9876500001',
         })
         conv = self.Conv.create({
             'phone_number': '9199' + suffix[-8:],

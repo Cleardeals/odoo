@@ -252,7 +252,9 @@
 
                             <label for="phone"/>
                             <div class="d-flex align-items-center">
-                                <field name="phone" nolabel="1" class="w-auto"/>
+                                <field name="phone" nolabel="1" class="w-auto"
+                                       required="1"
+                                       placeholder="10-digit mobile, e.g. 9876543210"/>
                                 <button name="action_whatsapp_with_copy"
                                         type="object"
                                         icon="fa-whatsapp"
