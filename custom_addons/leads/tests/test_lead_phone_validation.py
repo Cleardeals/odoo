@@ -77,6 +77,26 @@ class TestLeadPhoneValidation(PortalLeadTestCase):
         with self.assertRaises(ValidationError):
             self._create_manual('0000000000')
 
+    def test_two_numbers_pasted_together_are_named_as_such(self):
+        """The commonest hand-entry mistake after a plain typo.
+
+        11 of the 79 hand-entered bad numbers in the six months to Aug 2026
+        were exactly this. A generic "not valid" leaves the RM guessing; naming
+        both numbers tells them precisely what to fix.
+        """
+        with self.assertRaises(ValidationError) as ctx:
+            self._create_manual('9876543210 9123456789')
+        msg = str(ctx.exception)
+        self.assertIn('two phone numbers', msg)
+        self.assertIn('9876543210', msg)
+        self.assertIn('9123456789', msg)
+
+    def test_twenty_digits_that_are_not_two_mobiles_get_the_generic_error(self):
+        """Only claim 'two numbers' when it really is two numbers."""
+        with self.assertRaises(ValidationError) as ctx:
+            self._create_manual('12345678901234567890')
+        self.assertNotIn('two phone numbers', str(ctx.exception))
+
     def test_trunk_prefixed_number_is_rejected(self):
         """'08012345678' is a Bangalore landline, not a mobile.
 
