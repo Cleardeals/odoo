@@ -46,10 +46,14 @@ jobs:
           echo "Looking for module manifests:"
           find ${{ github.workspace }}/custom_addons -name "__manifest__.py" -o -name "__openerp__.py" || echo "No manifests found"
 
+      # Python suites plus the OWL/Hoot browser suites: each JS-bearing module
+      # ships a post_install HttpCase that drives /web/tests headlessly, so this
+      # one step gates both. Chromium comes from the image (see Dockerfile).
       - name: Run Odoo Tests
         run: |
           docker run --rm \
             --network host \
+            --shm-size=2g \
             -v ${{ github.workspace }}/custom_addons:/mnt/extra-addons \
             -e HOST=localhost \
             -e PORT=5432 \
@@ -62,8 +66,9 @@ jobs:
             --db_user=odoo \
             --db_password=odoo \
             --addons-path=/mnt/extra-addons,/usr/lib/python3/dist-packages/odoo/addons \
-            -i leads,lead_suggestor,cleardeals_dashboards,properties,cleardeals_pubsub,cleardeals_notification,wa_communication \
+            -i leads,lead_suggestor,cleardeals_dashboards,properties,cleardeals_pubsub,cleardeals_notification,cleardeals_ui,wa_communication \
             --test-enable \
-            --test-tags /leads,/lead_suggestor,/cleardeals_dashboards,/properties,/cleardeals_pubsub,/cleardeals_notification,/wa_communication \
+            --test-tags /leads,/lead_suggestor,/cleardeals_dashboards,/properties,/cleardeals_pubsub,/cleardeals_notification,/cleardeals_ui,/wa_communication \
+            --http-port=8069 \
             --stop-after-init \
             --log-level=test

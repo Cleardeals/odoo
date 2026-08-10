@@ -110,3 +110,8 @@ google-auth>=2.28.0
 google-cloud-bigquery==3.37.0
 typing-extensions>=4.0.0
 pandas
+
+# Chrome DevTools Protocol client used by odoo.tests.HttpCase.browser_js.
+# Without it the OWL/Hoot browser suites SKIP instead of running (and a skip
+# does not fail the build) — see custom_addons/*/tests/test_js.py.
+websocket-client

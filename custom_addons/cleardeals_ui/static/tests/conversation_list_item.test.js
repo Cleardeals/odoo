@@ -27,10 +27,17 @@ describe("CdConversationListItem", () => {
         };
     }
 
-    async function mountRow(props = {}) {
+    // `conversation` is set last, and from the destructured override, so the
+    // spread of the remaining props can never put the caller's *partial* row
+    // back over the complete one makeRow() just built.
+    async function mountRow({ conversation, ...rest } = {}) {
         await mountWithCleanup(CdConversationListItem, {
-            props: { conversation: makeRow(props.conversation), selected: false,
-                     onSelect: () => {}, ...props },
+            props: {
+                selected: false,
+                onSelect: () => {},
+                ...rest,
+                conversation: makeRow(conversation),
+            },
         });
     }
 
@@ -60,15 +67,18 @@ describe("CdConversationListItem", () => {
         expect(".cd-conv-item__waiting").toHaveText(/4h 10m/);
     });
 
-    test("an unassigned row offers Claim; an owned row offers Reassign", async () => {
-        // Unassigned → Claim
+    // One mount per test: mountWithCleanup only tears down when the test ends,
+    // so mounting both rows here would leave the first row's Claim button in
+    // the DOM for the second row's assertions to find.
+    test("an unassigned row offers Claim", async () => {
         await mountRow({
             conversation: { assigned_user_name: null },
             onClaim: () => {}, onAssign: () => {},
         });
         expect(".cd-conv-item__action-btn--claim").toHaveCount(1);
+    });
 
-        // Owned → no Claim, the reassign action instead
+    test("an owned row offers Reassign instead of Claim", async () => {
         await mountRow({ onClaim: () => {}, onAssign: () => {} });
         expect(".cd-conv-item__action-btn--claim").toHaveCount(0);
         expect(".fa-exchange").toHaveCount(1);

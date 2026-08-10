@@ -63,7 +63,7 @@ describe("WaInbox", () => {
         });
     });
 
-    test("RM sees no ownership tabs, three quick chips, and the caught-up state", async () => {
+    test("RM sees no ownership tabs, three quick chips, and the plain empty state", async () => {
         patchWithCleanup(user, { hasGroup: () => false });
         onRpc("get_inbox", () => inboxPayload({ is_manager: false }));
 
@@ -72,6 +72,28 @@ describe("WaInbox", () => {
 
         expect(".wa-inbox__segments").toHaveCount(0);          // ownership tabs hidden
         expect(".wa-inbox__chip").toHaveCount(3);              // Needs reply / Closing soon / Filters
+        // The inbox defaults to the WhatsApp-like "all chats" view, not a
+        // needs-reply queue, so an empty list is just an empty inbox.
+        expect(".wa-inbox__empty-title").toHaveText("No conversations here yet");
+    });
+
+    test("the caught-up state appears only once 'Needs reply' is on", async () => {
+        patchWithCleanup(user, { hasGroup: () => false });
+        const filterCalls = [];
+        onRpc("get_inbox", ({ kwargs }) => {
+            filterCalls.push(kwargs.filters);
+            return inboxPayload({ is_manager: false });
+        });
+
+        await mountWithCleanup(WaInbox);
+        await ready();
+
+        await click(queryAll(".wa-inbox__chip")[0]);           // the "Needs reply" chip
+        await animationFrame();
+
+        // needs_reply is a queue, not a refinement — an empty result means the
+        // queue is drained, not that the filters matched nothing.
+        expect(filterCalls.at(-1).needs_reply).toBe(true);
         expect(".wa-inbox__empty-title").toHaveText("You're all caught up");
     });
 
