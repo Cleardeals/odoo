@@ -322,6 +322,13 @@ class WaLeadEventPublisher(models.Model):
         same reason the payload is: it is only true of the settled lead.
         """
         self.ensure_one()
+        # Only leads the system ingested.  The initial-nudge copy opens by
+        # referring to an enquiry the buyer just submitted on a portal, so on a
+        # lead an RM created by hand (or recommended, or imported, or triaged
+        # out of the inbox) it is simply untrue.  It would also hand that lead a
+        # WhatsApp attempt the RM never made, defeating the status gate.
+        if not self.is_auto_created:
+            return None
         if self.current_status != 'lead':
             return None
         if not self.phone:

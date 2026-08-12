@@ -31,3 +31,4 @@ from . import (
     test_squareyards_webhook,
 )
 from . import test_lead_phone_validation
+from . import test_lead_auto_created

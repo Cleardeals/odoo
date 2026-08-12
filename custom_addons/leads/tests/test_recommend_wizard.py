@@ -95,15 +95,31 @@ class TestRecommendWizard(PortalLeadTestCase):
         self.assertEqual(rec.current_status, 'lead',
                          "unset status defaults to 'lead' as before")
 
-    def test_recommended_saves_chosen_current_status(self):
+    def test_recommended_inquiry_always_starts_at_lead(self):
+        """A recommended inquiry is new: nobody has contacted the buyer yet.
+
+        The wizard used to let the RM pick any status, which is exactly the
+        unverified status-setting the WhatsApp attempt gate exists to stop — so
+        the field is gone and creation always parks at ``lead``.
+        """
         primary = self._inquiry('9000000106', self._prop('A'))
         wiz = self.env['lead.recommend.property.wizard'].create({
             'inquiry_id': primary.id,
             'property_base_id': self._prop('B').id,
             'assigned_rm_id': self.rm_user.id,
-            'current_status': 'site_visit_scheduled',
         })
         rec = self.env['leads.new'].browse(
             wiz.action_create_recommended_inquiry()['res_id'])
-        self.assertEqual(rec.current_status, 'site_visit_scheduled',
-                         "the status picked in the wizard is saved on the new inquiry")
+        self.assertEqual(rec.current_status, 'lead')
+
+    def test_recommended_inquiry_is_not_flagged_auto_created(self):
+        """So the initial-nudge workflow does not message this buyer."""
+        primary = self._inquiry('9000000107', self._prop('A'))
+        wiz = self.env['lead.recommend.property.wizard'].create({
+            'inquiry_id': primary.id,
+            'property_base_id': self._prop('B').id,
+            'assigned_rm_id': self.rm_user.id,
+        })
+        rec = self.env['leads.new'].browse(
+            wiz.action_create_recommended_inquiry()['res_id'])
+        self.assertFalse(rec.is_auto_created)

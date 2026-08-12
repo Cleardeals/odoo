@@ -417,7 +417,15 @@ class WaConversation(models.Model):
         # outright.  Everything after this point keeps the sudo recordset for
         # the same reason — once ``user_id`` is another RM, the caller can no
         # longer read the record they just created.
-        lead = Leads.sudo().create_lead_if_not_duplicate(vals)
+        #
+        # ``lead_manual_origin`` marks this as a human act despite going through
+        # the automated-creation helper: an RM triaged an inbound message by
+        # hand.  Without it the lead would be flagged auto-created and picked up
+        # by the initial-nudge workflow, which would message a customer who is
+        # already mid-conversation with that same RM.
+        lead = Leads.sudo().with_context(
+            lead_manual_origin=True
+        ).create_lead_if_not_duplicate(vals)
         if not lead:
             lead = Leads.sudo().search(
                 [('phone', '=', phone10)], order='create_date desc', limit=1)

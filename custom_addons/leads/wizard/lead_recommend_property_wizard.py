@@ -38,13 +38,11 @@ class LeadRecommendPropertyWizard(models.TransientModel):
         readonly=True,
     )
 
-    # Reuse the leads.new selection so the two never drift apart.
-    current_status = fields.Selection(
-        selection=lambda self: self.env["leads.new"]._fields["current_status"].selection,
-        string="Current Status",
-        default="lead",
-        required=True,
-    )
+    # No ``current_status`` field: a recommended inquiry is brand new and nobody
+    # has contacted the buyer about this property yet, so it always starts at
+    # "Lead" like every other inquiry (forced in ``leads.new.create``).  The
+    # wizard used to let the RM pick a status here, which is exactly the
+    # unverified status-setting the WhatsApp attempt gate exists to stop.
 
     @api.model
     def default_get(self, fields_list):
@@ -107,8 +105,13 @@ class LeadRecommendPropertyWizard(models.TransientModel):
                 "An inquiry already exists for this buyer and property.",
             )
 
+        # lead_manual_origin: an RM chose this property for this buyer, so the
+        # inquiry is manual however much of the creation is automated.  It must
+        # not get the initial-nudge workflow, whose copy assumes the buyer just
+        # submitted a portal enquiry about this property themselves.
         new_inquiry = self.env["leads.new"].with_context(
             automated_lead_creation=True,
+            lead_manual_origin=True,
         ).create(
             {
                 "name": inquiry.name,
@@ -118,7 +121,7 @@ class LeadRecommendPropertyWizard(models.TransientModel):
                 "property_base_id": self.property_base_id.id,
                 "user_id": (self.assigned_rm_id or inquiry.user_id).id,
                 "state": "assigned",
-                "current_status": self.current_status or "lead",
+                "current_status": "lead",
                 "inquiry_type": "recommended",
                 "parent_inquiry_id": parent.id,
             },

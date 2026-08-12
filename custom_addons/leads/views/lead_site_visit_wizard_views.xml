@@ -56,7 +56,6 @@
                         <group>
                             <field name="inquiry_id" readonly="1"/>
                             <field name="source_id" readonly="1"/>
-                            <field name="current_status"/>
                         </group>
                         <group>
                             <field name="property_base_id"/>

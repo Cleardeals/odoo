@@ -56,6 +56,21 @@ class NewPortalLead(models.Model):
         index=True,
     )
     raw_data = fields.Text("Raw Data Dump")
+    is_auto_created = fields.Boolean(
+        "Auto-Created",
+        default=False,
+        readonly=True,
+        copy=False,
+        index=True,
+        help="True only for leads ingested by the system — portal webhooks and "
+             "the Housing/OLX crons.  Leads an RM created by hand (the lead "
+             "form, the Recommend Property wizard, the CSV import, the "
+             "WhatsApp inbox) are False.\n"
+             "The automated WhatsApp initial-nudge workflow fires on "
+             "auto-created leads only: its copy addresses a buyer who just "
+             "submitted a portal enquiry, so it reads wrong on a lead an RM "
+             "typed in themselves.",
+    )
 
     # Processing and Assignment Fields
     state = fields.Selection(
@@ -542,11 +557,29 @@ class NewPortalLead(models.Model):
     @api.model_create_multi
     def create(self, vals_list):
         automated_creation = bool(self.env.context.get("automated_lead_creation"))
+        # ``automated_lead_creation`` is not on its own a "the system made this"
+        # signal — it only means "skip the duplicate check and the force-assign".
+        # The Recommend Property wizard, the CSV import wizard and
+        # ``create_lead_if_not_duplicate`` (which the WhatsApp inbox's
+        # create-lead button goes through) all pass it while being manual acts.
+        # Those three set ``lead_manual_origin`` to say so.  The paths that set
+        # ``automated_lead_creation`` *without* it are a short, closed list: the
+        # four portal webhooks in portal_lead_controller.py and the Housing/OLX
+        # crons below.
+        auto_created = automated_creation and not self.env.context.get(
+            "lead_manual_origin"
+        )
 
         normalized_vals_list = []
         for vals in vals_list:
             vals = dict(vals)
             vals["phone"] = self._standardize_phone(vals.get("phone"))
+            vals["is_auto_created"] = auto_created
+            # Every lead starts at "Lead", whoever creates it and whatever they
+            # ask for.  Moving off it requires a WhatsApp attempt (enforced by
+            # wa_communication's status gate), which is the point: the status
+            # must reflect contact that actually happened.
+            vals["current_status"] = "lead"
 
             if not vals.get("source_id") and vals.get("portal_name"):
                 source = self._get_or_create_source(
