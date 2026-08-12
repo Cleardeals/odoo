@@ -11,6 +11,36 @@
                     <widget name="wa_whatsapp_tab"/>
                 </page>
             </notebook>
+
+            <!-- Lock the status until a WhatsApp message has been attempted.
+                 The bindings live here rather than in the leads module because
+                 wa_status_change_allowed is defined by wa_communication —
+                 leads must stay installable on its own. -->
+            <xpath expr="//header/field[@name='current_status']" position="before">
+                <field name="wa_status_change_allowed" invisible="1"/>
+            </xpath>
+            <xpath expr="//header/field[@name='current_status']" position="attributes">
+                <attribute name="readonly">not wa_status_change_allowed</attribute>
+            </xpath>
+            <xpath expr="//page[@name='primary_inquiry']//field[@name='current_status']"
+                   position="attributes">
+                <attribute name="readonly">not wa_status_change_allowed</attribute>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Same lock in the list view, which is editable in bulk. -->
+    <record id="view_leads_new_list_wa_inherit" model="ir.ui.view">
+        <field name="name">leads.new.list.wa_communication</field>
+        <field name="model">leads.new</field>
+        <field name="inherit_id" ref="leads.view_new_portal_lead_list"/>
+        <field name="arch" type="xml">
+            <field name="current_status" position="before">
+                <field name="wa_status_change_allowed" column_invisible="1"/>
+            </field>
+            <field name="current_status" position="attributes">
+                <attribute name="readonly">not wa_status_change_allowed</attribute>
+            </field>
         </field>
     </record>
 </odoo>
