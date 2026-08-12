@@ -115,5 +115,39 @@
         <field name="value">1</field>
     </record>
 
+    <!-- Quick property-details share — the template the "Share Property
+         Details" button sends.  Meta keeps reclassifying this copy as Marketing
+         rather than Utility, so the wording gets reworked and resubmitted under
+         a new name; keeping the name here means swapping templates is a system
+         parameter edit, not a code change.
+
+         Any replacement MUST keep the same variable contract: an image header
+         plus 7 body variables in the order project name, locality, type, size,
+         furnishing, property link, 360° tour link.  That order is bound in
+         QUICK_SHARE_BODY_VARS (models/wa_conversation_outbound.py) and mirrors
+         the workflow's msg_2, so the manual and automatic cards match. -->
+    <record id="param_quick_share_template" model="ir.config_parameter">
+        <field name="key">wa_communication.quick_share_template</field>
+        <field name="value">quick_details_share_odoo_w8</field>
+    </record>
+    <record id="param_quick_share_template_language" model="ir.config_parameter">
+        <field name="key">wa_communication.quick_share_template_language</field>
+        <field name="value">hi</field>
+    </record>
+
+    <!-- Templates whose delivery means "the buyer has been sent the property
+         details", which moves the inquiry to "Details Shared of Property".
+         Comma-separated, matched on wa.message.template_name.
+
+         Keyed on template name rather than workflow step id so it survives YAML
+         step renames, and so a newly-approved template can be added here
+         without a deploy.  Add the quick-share template name too if you want
+         the manual send to move the status as well — today it deliberately
+         does not. -->
+    <record id="param_details_shared_templates" model="ir.config_parameter">
+        <field name="key">wa_communication.details_shared_templates</field>
+        <field name="value">initial_nudge_v1_msg_2_xc</field>
+    </record>
+
     </data>
 </odoo>

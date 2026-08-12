@@ -18,4 +18,7 @@ from . import test_media_limits
 from . import test_inbox_create_inquiry
 from . import test_event_concurrency
 from . import test_reassignment_sweeper
+from . import test_lead_status_gate
+from . import test_quick_details_share
+from . import test_details_shared_status
 from . import test_js

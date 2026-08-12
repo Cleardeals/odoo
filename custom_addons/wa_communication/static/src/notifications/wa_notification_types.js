@@ -81,6 +81,16 @@ types.add("lead_replied", {
     open: openLead,
 });
 
+// The property-details card reached the buyer, so the system moved the inquiry
+// to "Details Shared of Property" on the RM's behalf. Told rather than asked —
+// the status is already changed by the time this fires.
+types.add("details_shared", {
+    title: "Property details delivered",
+    icon: "fa-home",
+    mod: "replied",
+    open: openLead,
+});
+
 types.add("ambiguous_reply", {
     title: "WhatsApp: review needed",
     icon: "fa-exclamation-triangle",

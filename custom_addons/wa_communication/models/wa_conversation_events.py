@@ -30,6 +30,21 @@ _PG_CONCURRENCY_ERRORS = (
     psycopg2.errors.DeadlockDetected,
 )
 
+# ── "Details shared" auto-status ─────────────────────────────────────────────
+#
+# When the property-details card actually reaches the buyer, the inquiry has
+# genuinely got as far as "details shared" — so record that rather than waiting
+# for an RM to remember.  Delivery is the trigger, not the button tap: a tap
+# that fails to deliver has told the buyer nothing.
+_PARAM_DETAILS_SHARED_TEMPLATES = 'wa_communication.details_shared_templates'
+_DEFAULT_DETAILS_SHARED_TEMPLATES = 'initial_nudge_v1_msg_2_xc'
+
+# The status the inquiry moves to, and the only status it may move *from*.
+# Anything else means a human has already judged this inquiry, and automation
+# does not overrule a human.
+_DETAILS_SHARED_STATUS = 'details_shared_of_property'
+_DETAILS_SHARED_FROM = 'lead'
+
 
 def _parse_special_inbound(raw_body):
     """Detect a shared LOCATION or CONTACT payload from an inbound message body.
@@ -306,6 +321,126 @@ class WaConversation(models.Model):
             vals['template_buttons'] = buttons
         return vals
 
+    # ------------------------------------------------------------------
+    # "Details shared" auto-status
+    # ------------------------------------------------------------------
+
+    def _owa_details_shared_templates(self) -> set:
+        """Template names whose delivery means "the details have been shared"."""
+        raw = self.env['ir.config_parameter'].sudo().get_param(
+            _PARAM_DETAILS_SHARED_TEMPLATES, _DEFAULT_DETAILS_SHARED_TEMPLATES)
+        return {name.strip() for name in (raw or '').split(',') if name.strip()}
+
+    def _owa_inquiry_is_authoritative(self, msg, lead) -> bool:
+        """Was *lead* genuinely identified, or merely the best phone guess?
+
+        ``_owa_resolve_lead`` deliberately falls back to the newest lead on the
+        phone number when the platform sends no ``actor_id``.  Three things
+        count as the inquiry having actually been named:
+
+        * an **RM** pointed the segment at it — a human attribution;
+        * the platform named this exact inquiry as the workflow's actor;
+        * the RM sent it themselves from a conversation already linked to the
+          inquiry.
+
+        Anything else is a guess, and a guess must not move a lead's status.
+
+        Note the ``started_by == 'rm'`` requirement on the first arm.  A stub
+        opens its own segment via ``_owa_ensure_segment(inquiry=lead)``, so a
+        segment created off the back of a phone guess carries that guess in
+        ``inquiry_id`` — accepting any populated segment would launder the guess
+        straight back into a trusted answer.
+        """
+        seg = msg.segment_id
+        if seg and seg.inquiry_id and seg.started_by == 'rm':
+            return True
+        if msg.platform_actor_id and msg.platform_actor_id == lead.id:
+            return True
+        return msg.initiator == 'rm' and bool(msg.lead_id)
+
+    def _owa_maybe_mark_details_shared(self, msg) -> None:
+        """Move the inquiry to "Details Shared of Property" once the card lands.
+
+        Called from the ``delivered`` **and** ``read`` handlers: ``read`` implies
+        ``delivered``, and a delivered receipt does get lost, so keying on only
+        one of them would miss cases.  Both are safe to call repeatedly — the
+        ``current_status == 'lead'`` guard makes the whole thing idempotent, so
+        a redelivered receipt is a no-op and cannot produce a second
+        notification.
+
+        Deliberately does nothing when:
+
+        * the message is not one of the configured templates;
+        * the inquiry cannot be identified — never guess from the phone, since
+          one number carries several inquiries;
+        * an RM has already moved the inquiry on.  Automation does not overrule
+          a human, and a notification about a status we did not set is noise.
+
+        Runs inside the push handler's transaction on purpose: if that
+        transaction hits a serialisation failure and Odoo retries it, the status
+        change is redone atomically with the receipt that caused it.
+        """
+        if not msg or msg.direction != 'outbound':
+            return
+        if (msg.template_name or '') not in self._owa_details_shared_templates():
+            return
+
+        # effective_inquiry_id, not lead_id: it resolves through the segment, so
+        # an RM correcting which inquiry the thread was about moves the status
+        # onto the right one.
+        lead = msg.effective_inquiry_id
+        if not lead or not lead.exists():
+            _logger.warning(
+                "wa_push: %r delivered but no inquiry is attached to wa.message "
+                "%s — status not advanced (conversation=%s)",
+                msg.template_name, msg.id, msg.conversation_id.id,
+            )
+            return
+
+        if not self._owa_inquiry_is_authoritative(msg, lead):
+            # ``_owa_resolve_lead`` falls back to "most recent lead on this
+            # phone" when the platform did not name an actor.  That guess is
+            # good enough for *attributing* a message in the thread, but not for
+            # writing a funnel status: one number routinely carries several
+            # inquiries, and picking the newest would silently mark the wrong
+            # property as shared.  Attribute, but do not judge.
+            _logger.warning(
+                "wa_push: %r delivered but the inquiry was resolved by phone "
+                "fallback (wa.message %s → lead %s) — status not advanced",
+                msg.template_name, msg.id, lead.id,
+            )
+            return
+
+        lead = lead.sudo()
+        if lead.current_status != _DETAILS_SHARED_FROM:
+            _logger.info(
+                "wa_push: %r delivered for lead %s but its status is already "
+                "%r — leaving it alone",
+                msg.template_name, lead.id, lead.current_status,
+            )
+            return
+
+        lead.write({'current_status': _DETAILS_SHARED_STATUS})
+        _logger.info(
+            "wa_push: lead %s → %s (template %r delivered)",
+            lead.id, _DETAILS_SHARED_STATUS, msg.template_name,
+        )
+
+        phone = msg.conversation_id.phone_number or ''
+        self._push_user_notification(
+            lead.user_id.id,
+            'details_shared',
+            title='Property details delivered to %s' % (lead.name or 'the buyer'),
+            body=('The details reached them on WhatsApp, so this inquiry is now '
+                  'marked "Details Shared of Property".'),
+            payload={
+                'lead_id': lead.id,
+                'lead_name': lead.name or '',
+                'phone': phone,
+                'suppress_key': phone,
+            },
+        )
+
     def _owa_create_outbound_stub(self, event: dict, *, status: str,
                                   extra_vals: dict | None = None):
         """Create a fresh outbound ``wa.message`` for a status event whose row
@@ -465,6 +600,7 @@ class WaConversation(models.Model):
             }
             vals.update(self._owa_template_content_vals(event, msg))
             msg.write(vals)
+            self._owa_maybe_mark_details_shared(msg)
         elif enrollment_id or step_id:
             # Out-of-order: the delivered receipt beat message_sent for a
             # WORKFLOW send (which has no request_id-keyed queued row).  Create
@@ -472,10 +608,11 @@ class WaConversation(models.Model):
             # message_sent finds it by wa_message_id and only enriches it.
             # RM-manual sends are deliberately excluded (they own a queued row
             # keyed by request_id that this event cannot match → would duplicate).
-            self._owa_create_outbound_stub(
+            msg = self._owa_create_outbound_stub(
                 event, status='delivered',
                 extra_vals={'delivered_at': occurred_at, **cost_vals},
             )
+            self._owa_maybe_mark_details_shared(msg)
         else:
             _logger.warning(
                 "wa_push: message_delivered — no wa.message found and no "
@@ -516,6 +653,8 @@ class WaConversation(models.Model):
                 })
             vals.update(self._owa_template_content_vals(event, msg))
             msg.write(vals)
+            # read implies delivered — covers a lost delivered receipt.
+            self._owa_maybe_mark_details_shared(msg)
         elif enrollment_id or step_id:
             # Out-of-order read receipt for a workflow send — see the delivered
             # handler for why RM-manual sends are excluded.  Carry any cost the
@@ -527,7 +666,9 @@ class WaConversation(models.Model):
                     'cost_whatsapp_inr':    event.get('cost_whatsapp_inr') or 0.0,
                     'cost_interakt_markup': event.get('cost_interakt_markup') or 0.0,
                 })
-            self._owa_create_outbound_stub(event, status='read', extra_vals=extra)
+            msg = self._owa_create_outbound_stub(
+                event, status='read', extra_vals=extra)
+            self._owa_maybe_mark_details_shared(msg)
         else:
             _logger.warning(
                 "wa_push: message_read — no wa.message found and no "

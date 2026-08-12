@@ -76,12 +76,57 @@ class TestInitialNudge(WaTransactionCase):
             if p.payload.get("event_type") == "nudge.initial"
         ]
 
-    # ── manual path ───────────────────────────────────────────────────────────
+    # ── the auto-created gate ────────────────────────────────────────────────
+    #
+    # The workflow only fires on leads the *system* ingested.  Its copy opens by
+    # referring to an enquiry the buyer just submitted on a portal, so on a lead
+    # an RM created themselves it is simply untrue — and it would hand that lead
+    # a WhatsApp "attempt" the RM never made, which is exactly what the status
+    # gate exists to prevent.
 
-    def test_manual_lead_with_property_emits_yes(self):
+    def test_manual_lead_with_property_does_not_emit(self):
         prop = self._make_property()
         with self.mock_pubsub() as published:
-            self._manual_lead(property_base_id=prop.id)
+            lead = self._manual_lead(property_base_id=prop.id)
+
+        self.assertFalse(lead.is_auto_created)
+        self.assertEqual(self._nudges(published), [])
+
+    def test_manual_lead_without_property_does_not_emit(self):
+        with self.mock_pubsub() as published:
+            self._manual_lead()
+        self.assertEqual(self._nudges(published), [])
+
+    def test_recommended_inquiry_does_not_emit(self):
+        """The Recommend Property wizard is a human act, however automated."""
+        prop = self._make_property()
+        source = self.env["leads.new"]._get_or_create_source(
+            self._uniq("RecSrc "), source_type="manual")
+        with self.mock_pubsub() as published:
+            lead = self.env["leads.new"].with_context(
+                automated_lead_creation=True,
+                lead_manual_origin=True,
+            ).create({
+                "name": self._uniq("Recommended "),
+                "phone": self._uniq_phone(),
+                "source_id": source.id,
+                "property_base_id": prop.id,
+            })
+
+        self.assertFalse(lead.is_auto_created)
+        self.assertEqual(self._nudges(published), [])
+
+    def test_portal_lead_is_flagged_auto_created(self):
+        with self.mock_pubsub():
+            lead = self._portal_lead()
+        self.assertTrue(lead.is_auto_created)
+
+    # ── payload shape (portal path — the only one that emits) ────────────────
+
+    def test_portal_lead_with_property_emits_yes(self):
+        prop = self._make_property()
+        with self.mock_pubsub() as published:
+            self._portal_lead(property_base_id=prop.id)
 
         nudges = self._nudges(published)
         self.assertEqual(len(nudges), 1)
@@ -97,9 +142,9 @@ class TestInitialNudge(WaTransactionCase):
         self.assertEqual(prop_snap["image_url"], "http://img/main.jpg")
         self.assertEqual(prop_snap["tour_360_url"], "http://tour/x")
 
-    def test_manual_lead_without_property_emits_no(self):
+    def test_portal_lead_without_property_emits_no(self):
         with self.mock_pubsub() as published:
-            self._manual_lead()
+            self._portal_lead()
 
         nudges = self._nudges(published)
         self.assertEqual(len(nudges), 1)
@@ -108,14 +153,14 @@ class TestInitialNudge(WaTransactionCase):
     def test_type_label_without_bhk_is_sub_type_only(self):
         prop = self._make_property(bedroom_count=0, prop_sub_type="Shop")
         with self.mock_pubsub() as published:
-            self._manual_lead(property_base_id=prop.id)
+            self._portal_lead(property_base_id=prop.id)
         prop_snap = self._nudges(published)[0].payload["payload"]["actor"]["property"]
         self.assertEqual(prop_snap["type_label"], "Shop")
 
     def test_project_name_strips_bracket_tag(self):
         prop = self._make_property(name="Umiyatirth Apartment [C-102-tag]")
         with self.mock_pubsub() as published:
-            self._manual_lead(property_base_id=prop.id)
+            self._portal_lead(property_base_id=prop.id)
         prop_snap = self._nudges(published)[0].payload["payload"]["actor"]["property"]
         self.assertEqual(prop_snap["name"], "Umiyatirth Apartment")
 
@@ -155,7 +200,7 @@ class TestInitialNudge(WaTransactionCase):
     def test_create_emits_once_and_later_assign_does_not_re_emit(self):
         """``create`` is the only trigger — the assign write is no longer one."""
         with self.mock_pubsub() as published_create:
-            lead = self._manual_lead()
+            lead = self._portal_lead()
         self.assertEqual(len(self._nudges(published_create)), 1)
 
         with self.mock_pubsub() as published_write:
@@ -165,7 +210,7 @@ class TestInitialNudge(WaTransactionCase):
     def test_repeated_assign_writes_never_emit(self):
         """The old level-check re-fired on every save mentioning state=assigned."""
         with self.mock_pubsub():
-            lead = self._manual_lead()
+            lead = self._portal_lead()
 
         with self.mock_pubsub() as published:
             lead.write({"state": "assigned"})
@@ -178,7 +223,7 @@ class TestInitialNudge(WaTransactionCase):
     def test_lead_moved_off_lead_status_before_commit_does_not_emit(self):
         """Status is read from the settled lead, not from creation."""
         with self.mock_pubsub() as published:
-            lead = self._manual_lead()
+            lead = self._portal_lead()
             lead.current_status = "requirement_closed"
         self.assertFalse(self._nudges(published))
 
