@@ -47,6 +47,8 @@ export class WaLeadTab extends Component {
             templates:          [],
             tplLoading:         false,
             tplError:           "",
+            // Share Property Details — in flight (guards double-send)
+            sharingDetails:     false,
             // Inquiry segment: suggestion the RM dismissed this session
             dismissedSegmentId: null,
         });
@@ -157,6 +159,43 @@ export class WaLeadTab extends Component {
     openInInterakt() {
         const url = this.state.thread?.conversation?.interakt_url;
         if (url) window.open(url, "_blank", "noopener");
+    }
+
+    // ── Share Property Details ─────────────────────────────────────────────────
+
+    get hasProperty() {
+        return Boolean(this.props.record?.data?.property_base_id);
+    }
+
+    /**
+     * Send the property-details card — the same one the initial-nudge workflow
+     * sends after the buyer taps "View Property Details", but on demand.
+     *
+     * Every variable is filled server-side from the linked property, so unlike
+     * "Send Template" there is nothing to type and nothing to get wrong.
+     */
+    async sendPropertyDetails() {
+        if (this.state.sharingDetails || !this.hasProperty) return;
+        this.state.sendError = null;
+        this.state.sharingDetails = true;
+        try {
+            const convId = await this.orm.call(
+                "wa.conversation", "send_property_details_for_lead", [], {
+                    lead_id: this.leadId,
+                }
+            );
+            if (!this.state.convId) {
+                this.state.convId = convId;
+                const fullPhone =
+                    this.phone.length === 10 ? `91${this.phone}` : this.phone;
+                this.cdNotif.setActiveSuppressKey(fullPhone);
+            }
+            await this._loadThread(convId);
+        } catch (e) {
+            this.state.sendError = e.data?.message || String(e);
+        } finally {
+            this.state.sharingDetails = false;
+        }
     }
 
     // ── Send Template ──────────────────────────────────────────────────────────

@@ -39,6 +39,48 @@ WA_MEDIA_MAX_BYTES = {
     'document': 100 * 1024 * 1024,
 }
 
+# ── Quick property-details share ─────────────────────────────────────────────
+#
+# The RM-triggered twin of the initial-nudge workflow's second message.  The
+# workflow only sends that card when the buyer taps "View Property Details";
+# this lets an RM send the same card on demand — on a recommended lead, or after
+# a call.
+#
+# The variable contract below MUST stay in step with the workflow's msg_2, or
+# the manual card and the automatic one render differently for the same
+# property.  Source of truth:
+#   cleardeals-whatsapp-platform/services/workflow-engine/configs/
+#       initial_nudge_property.yaml  (step msg_2, vars block)
+#
+# Template name and language are config parameters, not constants: Meta keeps
+# reclassifying this copy as Marketing, so the wording gets reworked and
+# resubmitted under a new name.  Swapping templates must not need a redeploy.
+_PARAM_QUICK_SHARE_TEMPLATE = 'wa_communication.quick_share_template'
+_PARAM_QUICK_SHARE_LANGUAGE = 'wa_communication.quick_share_template_language'
+_DEFAULT_QUICK_SHARE_TEMPLATE = 'quick_details_share_odoo_w8'
+_DEFAULT_QUICK_SHARE_LANGUAGE = 'hi'
+
+# Header var 1 — the property's primary image. Same GCS asset the workflow falls
+# back to, so a property with no photo looks identical either way.
+QUICK_SHARE_IMAGE_FALLBACK = (
+    'https://storage.googleapis.com/cleardeals-wa-assets/'
+    'initial_nudge_unassigned/fallback_media_property.jpeg'
+)
+
+# Body vars 1-7, in template order.  Each entry is
+# (key in the actor snapshot's ``property`` dict, human label, fallback).
+# An empty fallback means the value is required — Interakt rejects a blank
+# variable outright, so we catch it here and tell the RM which field to fill.
+QUICK_SHARE_BODY_VARS = (
+    ('name',         'Project name',   ''),
+    ('locality',     'Locality',       ''),
+    ('type_label',   'Property type',  ''),
+    ('size',         'Size',           ''),
+    ('furnishing',   'Furnishing',     ''),
+    ('link',         'Property link',  ''),
+    ('tour_360_url', '360° tour link', 'https://www.cleardeals.in/buy'),
+)
+
 # Mime prefixes WhatsApp refuses for the Document type ("mp4 is not supported
 # for Document media") — these must be sent as their own media kind.
 WA_DOCUMENT_FORBIDDEN_MIME_PREFIXES = ('video/', 'image/', 'audio/')
@@ -459,6 +501,132 @@ class WaConversation(models.Model):
         :raises UserError: if the key is unset or Interakt is unreachable.
         """
         return interakt_client.fetch_templates(self.env, template_name=template_name)
+
+    # ------------------------------------------------------------------
+    # Quick property-details share
+    # ------------------------------------------------------------------
+
+    @api.model
+    def _quick_share_template(self) -> tuple:
+        """Configured (template_name, language) for the quick-share card."""
+        Param = self.env['ir.config_parameter'].sudo()
+        name = (Param.get_param(
+            _PARAM_QUICK_SHARE_TEMPLATE, _DEFAULT_QUICK_SHARE_TEMPLATE) or '').strip()
+        lang = (Param.get_param(
+            _PARAM_QUICK_SHARE_LANGUAGE, _DEFAULT_QUICK_SHARE_LANGUAGE) or '').strip()
+        if not name:
+            raise UserError(
+                "No quick-share template is configured. Ask an administrator to "
+                "set the '%s' system parameter." % _PARAM_QUICK_SHARE_TEMPLATE)
+        return name, (lang or _DEFAULT_QUICK_SHARE_LANGUAGE)
+
+    @api.model
+    def _quick_share_values(self, lead) -> tuple:
+        """Build (body_values, header_values) for *lead*'s property.
+
+        Reuses ``leads.new._wa_actor_snapshot()`` — the very same helper that
+        fills the workflow's event payload — rather than reading
+        ``property.base`` again.  That is what guarantees the manual card and
+        the automatic one show identical text: the snapshot already composes
+        ``type_label`` ("3 BHK Apartment") and strips the "[tag]" suffix from
+        the project name, and neither rule has to be restated here.
+
+        :raises UserError: if the lead has no property, or a required field on
+                           that property is blank.  Interakt rejects a template
+                           with an empty variable, so catching it here turns a
+                           silent failed send into something the RM can fix.
+        """
+        if not lead or not lead.exists():
+            raise UserError(
+                "This conversation isn't linked to an inquiry yet. Link or "
+                "create one before sharing property details.")
+        if not lead.property_base_id:
+            raise UserError(
+                "This inquiry has no property linked, so there are no details "
+                "to share. Set the property on the inquiry first.")
+
+        prop = lead.sudo()._wa_actor_snapshot()['property']
+
+        body_values, missing = [], []
+        for key, label, fallback in QUICK_SHARE_BODY_VARS:
+            value = (prop.get(key) or '').strip()
+            if not value:
+                value = fallback
+            if not value:
+                missing.append(label)
+            body_values.append(value)
+
+        if missing:
+            raise UserError(
+                "%s is missing on this property, and WhatsApp will not accept a "
+                "template with a blank field.\n\nFill it in on the property "
+                "record, then share the details.\n\nMissing: %s"
+                % (missing[0], ', '.join(missing)))
+
+        header_values = [(prop.get('image_url') or '').strip()
+                         or QUICK_SHARE_IMAGE_FALLBACK]
+        return body_values, header_values
+
+    def send_property_details(self) -> 'models.Model':
+        """Send the property-details card for this conversation's inquiry.
+
+        The RM-facing twin of the initial-nudge workflow's msg_2.  Goes out
+        through the ordinary :meth:`send_message` template path, so it inherits
+        the ownership gate, the queued ``wa.message``, the post-commit publish
+        and the audit-log entry.  A closed 24h window is not a blocker — this is
+        a template.
+
+        :returns: the queued ``wa.message``.
+        """
+        self.ensure_one()
+        template_name, language = self._quick_share_template()
+        body_values, header_values = self._quick_share_values(self.lead_id)
+        return self.send_message(
+            kind='template',
+            template_name=template_name,
+            template_language=language,
+            body_values=body_values,
+            header_values=header_values,
+        )
+
+    @api.model
+    def send_property_details_for_lead(self, lead_id: int) -> int:
+        """Share property details from the lead form, conversation or not.
+
+        Mirrors :meth:`send_first_message` for the case where the lead has never
+        been messaged: create/claim the conversation, then send.
+
+        :returns: the ``wa.conversation`` id, so the caller can load the thread.
+        """
+        lead = self.env['leads.new'].browse(int(lead_id))
+        if not lead.exists():
+            raise UserError("Inquiry not found.")
+        # Validate before touching anything, so a property with a missing field
+        # doesn't leave a freshly-created empty conversation behind.
+        body_values, header_values = self._quick_share_values(lead)
+        template_name, language = self._quick_share_template()
+
+        conv = self.sudo().search([('lead_id', '=', lead.id)], limit=1)
+        if conv:
+            # Re-fetch as the acting user: send_message's ownership gate must
+            # judge the real user, not a sudo recordset.
+            self.browse(conv.id).send_message(
+                kind='template',
+                template_name=template_name,
+                template_language=language,
+                body_values=body_values,
+                header_values=header_values,
+            )
+            return conv.id
+
+        return self.send_first_message(
+            phone=lead.phone,
+            lead_id=lead.id,
+            template_name=template_name,
+            template_language=language,
+            body_values=body_values,
+            header_values=header_values,
+        )
 
     @api.model
     def send_first_message(

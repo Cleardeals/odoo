@@ -23,6 +23,21 @@
                         <i class="fa fa-paper-plane" aria-hidden="true"/>
                         Send First Message
                     </button>
+                    <!-- The one-click first outreach: no variables to type,
+                         everything comes from the linked property. -->
+                    <button t-if="hasProperty"
+                            class="btn btn-outline-primary wa-lead-tab__first-msg-btn mt-2"
+                            t-att-disabled="state.sharingDetails"
+                            t-on-click="() => this.sendPropertyDetails()">
+                        <t t-if="state.sharingDetails">
+                            <i class="fa fa-spinner fa-spin" aria-hidden="true"/>
+                            Sending…
+                        </t>
+                        <t t-else="">
+                            <i class="fa fa-home" aria-hidden="true"/>
+                            Share Property Details
+                        </t>
+                    </button>
                     <t t-if="state.sendError">
                         <div class="alert alert-danger wa-lead-tab__send-error mt-2"
                              t-esc="state.sendError"/>
@@ -165,6 +180,23 @@
                                 t-on-click="() => this.openTemplatePicker()">
                             <i class="fa fa-envelope-o" aria-hidden="true"/>
                             Send Template
+                        </button>
+
+                        <!-- Sends the same property card the initial-nudge
+                             workflow sends, with every field filled from the
+                             linked property. -->
+                        <button class="wa-lead-tab__action-btn"
+                                t-att-disabled="!hasProperty or state.sharingDetails"
+                                t-att-title="hasProperty ? 'Send this property\'s details to the buyer' : 'Link a property to this inquiry first'"
+                                t-on-click="() => this.sendPropertyDetails()">
+                            <t t-if="state.sharingDetails">
+                                <i class="fa fa-spinner fa-spin" aria-hidden="true"/>
+                                Sending…
+                            </t>
+                            <t t-else="">
+                                <i class="fa fa-home" aria-hidden="true"/>
+                                Share Property Details
+                            </t>
                         </button>
 
                         <button class="wa-lead-tab__action-btn"
