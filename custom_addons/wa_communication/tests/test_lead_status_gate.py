@@ -156,8 +156,14 @@ class TestLeadStatusGate(WaTransactionCase):
         anon = lead.with_env(self._anonymous_env())
         self.assertFalse(anon.env.user, "env.user must be an empty recordset")
 
+        # The regression: merely asking the gate a question blew up.
         self.assertFalse(anon._wa_user_is_gated())
-        anon.write({'current_status': 'details_shared_of_property'})
+
+        # ...and the write the handler actually performs goes through.  sudo()
+        # mirrors _owa_maybe_mark_details_shared; without it Odoo's own
+        # check_access needs a user and fails deeper in core, which is a
+        # property of anonymous writes generally and not of this gate.
+        anon.sudo().write({'current_status': 'details_shared_of_property'})
         lead.invalidate_recordset()
         self.assertEqual(lead.current_status, 'details_shared_of_property')
 
