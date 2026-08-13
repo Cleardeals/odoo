@@ -360,6 +360,63 @@ class WaConversation(models.Model):
             return True
         return msg.initiator == 'rm' and bool(msg.lead_id)
 
+    def _owa_heal_failed_message(self, msg) -> None:
+        """Undo a failure verdict that delivery has since disproved.
+
+        Interakt can report a message failed and then, seconds later, report it
+        delivered and read — observed three times on 13 Aug, once with only 88ms
+        between the two webhooks, which is far too fast to be a genuine retry.
+        ``_max_status`` already lets the later status win, so the message ends up
+        correctly marked ``read``.  What it does not undo is the wreckage the
+        failure left behind:
+
+        * ``failure_code`` / ``failure_reason`` stay stamped on a message that
+          demonstrably arrived, so any report keyed on "has a failure code"
+          counts a delivered message as failed;
+        * the RM has already been told "your message didn't go through", and
+          nothing ever retracts it.  They got that alert four seconds before
+          "property details delivered" — two contradictory claims about one
+          message.
+
+        So on delivery/read, clear the failure fields and resolve the stale
+        alert.  This never *creates* an alert and never touches a message that
+        did not carry a failure, so a genuine permanent failure is unaffected.
+        """
+        if not msg or not (msg.failure_code or msg.failure_reason):
+            return
+        stale_code, stale_reason = msg.failure_code, msg.failure_reason
+        msg.write({'failure_code': False, 'failure_reason': False})
+        _logger.info(
+            "wa_push: wa.message %s recovered — clearing stale failure %s (%r); "
+            "it reached the handset after all",
+            msg.id, stale_code, stale_reason,
+        )
+
+        # Retract the "didn't go through" alert for this chat.  Matched on the
+        # phone carried in the payload, which is what the alert was raised
+        # against; only unread ones, so a dismissed alert is left alone.
+        phone = msg.conversation_id.phone_number or ''
+        if not phone:
+            return
+        try:
+            stale = self.env['cleardeals.notification'].sudo().search([
+                ('notif_type', 'in', ('permanent_failure', 'rm_send_status')),
+                ('is_read', '=', False),
+                ('create_date', '>=', fields.Datetime.now() - timedelta(hours=6)),
+            ])
+            stale = stale.filtered(
+                lambda n: (n.payload or {}).get('phone') == phone)
+            if stale:
+                stale.write({'is_read': True})
+                _logger.info(
+                    "wa_push: retracted %s stale failure alert(s) for %s",
+                    len(stale), phone,
+                )
+        except Exception:  # noqa: BLE001
+            _logger.warning(
+                "wa_push: could not retract the stale failure alert for %s",
+                phone, exc_info=True)
+
     def _owa_log_details_shared_note(self, lead, msg) -> None:
         """Explain the automatic status change in the lead's chatter.
 
@@ -666,6 +723,7 @@ class WaConversation(models.Model):
             }
             vals.update(self._owa_template_content_vals(event, msg))
             msg.write(vals)
+            self._owa_heal_failed_message(msg)
             self._owa_maybe_mark_details_shared(msg)
         elif enrollment_id or step_id:
             # Out-of-order: the delivered receipt beat message_sent for a
@@ -719,6 +777,7 @@ class WaConversation(models.Model):
                 })
             vals.update(self._owa_template_content_vals(event, msg))
             msg.write(vals)
+            self._owa_heal_failed_message(msg)
             # read implies delivered — covers a lost delivered receipt.
             self._owa_maybe_mark_details_shared(msg)
         elif enrollment_id or step_id:

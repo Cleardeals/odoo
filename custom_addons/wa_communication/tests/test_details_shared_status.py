@@ -289,6 +289,93 @@ class TestDetailsSharedStatus(WaTransactionCase):
         self.assertEqual(lead_a.current_status, SHARED)
         self.assertEqual(lead_b.current_status, 'lead')
 
+    # ── Healing a failure that delivery disproved ────────────────────────────
+
+    def test_delivery_clears_a_stale_failure(self):
+        """Interakt reported failed, then delivered 88ms later. Believe delivery.
+
+        Leaving failure_code on a message that demonstrably arrived makes any
+        report keyed on "has a failure code" count it as failed.
+        """
+        lead, conv = self._lead_conv()
+        msg = self.make_message(
+            conv, direction='outbound', initiator='workflow', kind='template',
+            status='meta_blocked', template_name=TEMPLATE,
+            wa_message_id=self._uniq('wamid_'), lead_id=lead.id,
+            failure_code='131026', failure_reason='Message undeliverable')
+
+        self.Conv._process_odoo_wa_event(
+            self._delivered_event(conv, lead, wa_message_id=msg.wa_message_id),
+            self._uniq('psm_'))
+
+        msg.invalidate_recordset()
+        self.assertFalse(msg.failure_code)
+        self.assertFalse(msg.failure_reason)
+        self.assertEqual(msg.status, 'delivered')
+
+    def test_delivery_retracts_the_false_failure_alert(self):
+        """The RM was told it didn't go through, four seconds before it did."""
+        rm = self.make_user()
+        lead, conv = self._lead_conv()
+        lead.write({'user_id': rm.id})
+        msg = self.make_message(
+            conv, direction='outbound', initiator='workflow', kind='template',
+            status='meta_blocked', template_name=TEMPLATE,
+            wa_message_id=self._uniq('wamid_'), lead_id=lead.id,
+            failure_code='131026', failure_reason='Message undeliverable')
+
+        alert = self.env['cleardeals.notification'].sudo().create({
+            'user_id': rm.id, 'notif_type': 'permanent_failure',
+            'title': "Your message didn't go through",
+            'payload': {'phone': conv.phone_number},
+        })
+        self.assertFalse(alert.is_read)
+
+        self.Conv._process_odoo_wa_event(
+            self._delivered_event(conv, lead, wa_message_id=msg.wa_message_id),
+            self._uniq('psm_'))
+
+        alert.invalidate_recordset()
+        self.assertTrue(alert.is_read, "the false alarm must not survive")
+
+    def test_healing_leaves_other_chats_alone(self):
+        """Only the alert for THIS number is retracted."""
+        rm = self.make_user()
+        lead, conv = self._lead_conv()
+        msg = self.make_message(
+            conv, direction='outbound', initiator='workflow', kind='template',
+            status='meta_blocked', template_name=TEMPLATE,
+            wa_message_id=self._uniq('wamid_'), lead_id=lead.id,
+            failure_code='131026', failure_reason='undeliverable')
+        other = self.env['cleardeals.notification'].sudo().create({
+            'user_id': rm.id, 'notif_type': 'permanent_failure',
+            'title': 'A genuinely failed message',
+            'payload': {'phone': '910000000999'},
+        })
+
+        self.Conv._process_odoo_wa_event(
+            self._delivered_event(conv, lead, wa_message_id=msg.wa_message_id),
+            self._uniq('psm_'))
+
+        other.invalidate_recordset()
+        self.assertFalse(other.is_read)
+
+    def test_a_message_that_never_failed_is_untouched(self):
+        """Healing must never fabricate work on the happy path."""
+        lead, conv = self._lead_conv()
+        msg = self.make_message(
+            conv, direction='outbound', initiator='workflow', kind='template',
+            status='sent', template_name=TEMPLATE,
+            wa_message_id=self._uniq('wamid_'), lead_id=lead.id)
+
+        self.Conv._process_odoo_wa_event(
+            self._delivered_event(conv, lead, wa_message_id=msg.wa_message_id),
+            self._uniq('psm_'))
+
+        msg.invalidate_recordset()
+        self.assertEqual(msg.status, 'delivered')
+        self.assertFalse(msg.failure_code)
+
     # ── No feedback loop ─────────────────────────────────────────────────────
 
     def test_the_status_write_publishes_no_actor_event(self):
