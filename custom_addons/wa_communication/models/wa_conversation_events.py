@@ -9,8 +9,10 @@ import logging
 from datetime import timedelta
 
 import psycopg2
+from markupsafe import Markup
 
-from odoo import api, fields, models
+from odoo import api, fields, models, SUPERUSER_ID
+from odoo.tools.misc import format_datetime
 from .wa_conversation import (
     _INTERAKT_KIND_TO_ODOO,
     _FAILURE_CODE_TO_STATUS,
@@ -372,22 +374,38 @@ class WaConversation(models.Model):
         be named explicitly or ``message_post`` has nobody to attribute it to.
         """
         try:
-            when = fields.Datetime.to_string(msg.delivered_at or msg.seen_at
-                                             or fields.Datetime.now())
-            body = (
-                "<p><b>Status set automatically: Details Shared of Property</b></p>"
-                "<p>The property details reached this buyer on WhatsApp — the "
-                "card <i>%s</i> was confirmed delivered to their handset at "
-                "%s UTC. Delivery, not sending, is what triggers this: a card "
-                "that failed to arrive changes nothing.</p>"
-                "<p>This ran only because the inquiry was still at "
-                "<b>Lead</b>. A status you set yourself is never overwritten.</p>"
-                % (msg.template_name or 'property details', when)
+            # Render in the owning RM's timezone, so this reads the same as the
+            # tracking entry Odoo posts directly above it.  A UTC stamp next to a
+            # local one just looks like two different events.
+            tz = lead.user_id.sudo().tz or self.env.company.partner_id.tz or 'UTC'
+            when = format_datetime(
+                self.env,
+                msg.delivered_at or msg.seen_at or fields.Datetime.now(),
+                tz=tz, dt_format='d MMM yyyy, HH:mm',
             )
-            author = self.env.ref('base.partner_root', raise_if_not_found=False)
+            # Markup, not a plain string: message_post escapes str, which is how
+            # the first version of this note rendered its own tags as text.
+            body = Markup(
+                '<div style="margin:4px 0">'
+                '<p style="margin:0 0 6px"><b>🏠 Details shared — status updated '
+                'automatically</b></p>'
+                '<p style="margin:0 0 6px">The property card was '
+                '<b>delivered to the buyer\'s WhatsApp</b> on %(when)s.</p>'
+                '<ul style="margin:0 0 6px; padding-left:18px">'
+                '<li>Delivery is the trigger — a card that never arrives '
+                'changes nothing.</li>'
+                '<li>Only inquiries still at <b>Lead</b> are updated. A status '
+                'you set yourself is never overwritten.</li>'
+                '</ul>'
+                '<p style="margin:0; color:#777; font-size:12px">Template: '
+                '%(template)s</p>'
+                '</div>'
+            ) % {
+                'when': when,
+                'template': msg.template_name or 'property details',
+            }
             lead.message_post(
                 body=body,
-                author_id=author.id if author else False,
                 message_type='comment',
                 subtype_xmlid='mail.mt_note',
             )
@@ -452,7 +470,13 @@ class WaConversation(models.Model):
             )
             return
 
-        lead = lead.sudo()
+        # with_user(OdooBot) rather than sudo(): sudo() raises the superuser flag
+        # but leaves env.uid as None on this auth='none' route, so the tracking
+        # entry mail.thread posts for the status change has no author partner and
+        # renders as "Unnamed".  Acting as OdooBot gives it a real author, which
+        # is also the honest answer to "who changed this?".  OdooBot holds no
+        # leads groups, so the status gate correctly ignores it.
+        lead = lead.with_user(SUPERUSER_ID)
         if lead.current_status != _DETAILS_SHARED_FROM:
             _logger.info(
                 "wa_push: %r delivered for lead %s but its status is already "

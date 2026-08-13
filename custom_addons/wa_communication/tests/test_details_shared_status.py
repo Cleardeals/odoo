@@ -93,10 +93,48 @@ class TestDetailsSharedStatus(WaTransactionCase):
         lead.invalidate_recordset()
         notes = lead.message_ids[:len(lead.message_ids) - before]
         body = ' '.join(notes.mapped('body'))
-        self.assertIn('Details Shared of Property', body)
+        self.assertIn('status updated', body.lower())
         self.assertIn(TEMPLATE, body, "names the evidence it acted on")
         self.assertIn('never overwritten', body,
                       "states the rule that protects the RM's own edits")
+
+    def test_the_note_renders_as_html_not_as_escaped_tags(self):
+        """message_post escapes plain strings — the body must be Markup.
+
+        The first version printed its own tags at the reader, which is worse
+        than no note at all.
+        """
+        lead, conv = self._lead_conv()
+        self.Conv._process_odoo_wa_event(
+            self._delivered_event(conv, lead), self._uniq('psm_'))
+
+        lead.invalidate_recordset()
+        note = lead.message_ids.filtered(
+            lambda m: 'status updated' in (m.body or '').lower())[:1]
+        self.assertTrue(note)
+        self.assertNotIn('&lt;p&gt;', note.body)
+        self.assertNotIn('&lt;b&gt;', note.body)
+        self.assertIn('<b>', note.body)
+
+    def test_every_chatter_entry_has_a_real_author(self):
+        """No acting user meant the tracking entry rendered as "Unnamed".
+
+        The status write now acts as OdooBot so the change is attributable —
+        both the tracking row Odoo posts and the explanatory note.
+        """
+        lead, conv = self._lead_conv()
+        before = lead.message_ids.ids
+
+        self.Conv._process_odoo_wa_event(
+            self._delivered_event(conv, lead), self._uniq('psm_'))
+
+        lead.invalidate_recordset()
+        new = lead.message_ids.filtered(lambda m: m.id not in before)
+        self.assertTrue(new)
+        for m in new:
+            self.assertTrue(
+                m.author_id,
+                "chatter entry %s has no author and renders as 'Unnamed'" % m.id)
 
     def test_a_broken_note_never_undoes_the_status_change(self):
         """The note explains the outcome; it must not be able to prevent it."""
