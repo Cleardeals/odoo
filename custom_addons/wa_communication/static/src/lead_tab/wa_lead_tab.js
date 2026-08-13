@@ -71,7 +71,12 @@ export class WaLeadTab extends Component {
 
     _phone(props) { return props.record?.data?.phone || ""; }
     get phone()   { return this._phone(this.props); }
-    get leadId()  { return this.props.record?.data?.id || null; }
+    // resId, not data.id: a form record's id lives on the record itself, and
+    // `data.id` is undefined.  This read null for every lead, which was silent
+    // while its only consumer (send_first_message) treated lead_id as optional —
+    // so first messages sent from this tab created a conversation that was never
+    // linked back to the inquiry.
+    get leadId()  { return this.props.record?.resId || null; }
 
     _subscribeBus() {
         this.busService.addChannel("wa_message_log");

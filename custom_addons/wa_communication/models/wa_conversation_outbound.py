@@ -598,6 +598,12 @@ class WaConversation(models.Model):
 
         :returns: the ``wa.conversation`` id, so the caller can load the thread.
         """
+        # Guard before int(): a missing id used to surface as a raw
+        # "int() argument must be ... not 'NoneType'" TypeError, which tells the
+        # RM nothing and looks like a server fault rather than a stale form.
+        if not lead_id:
+            raise UserError(
+                "Save this inquiry before sharing property details.")
         lead = self.env['leads.new'].browse(int(lead_id))
         if not lead.exists():
             raise UserError("Inquiry not found.")

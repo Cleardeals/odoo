@@ -105,6 +105,18 @@ class TestQuickDetailsShare(WaTransactionCase):
         with self.assertRaises(UserError):
             self.Conv._quick_share_values(self.env['leads.new'])
 
+    def test_absent_lead_id_gives_a_readable_error(self):
+        """A null id must not surface as a raw int() TypeError.
+
+        The UI reads the lead id off the form record, so a stale or unsaved
+        form sends nothing — the RM should be told to save, not shown a
+        Python type error.
+        """
+        for missing in (None, False, 0, ''):
+            with self.assertRaises(UserError) as ctx:
+                self.Conv.send_property_details_for_lead(missing)
+            self.assertIn('Save this inquiry', str(ctx.exception))
+
     # ── Template configuration ───────────────────────────────────────────────
 
     def test_template_name_comes_from_config(self):
