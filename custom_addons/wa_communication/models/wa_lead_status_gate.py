@@ -82,6 +82,15 @@ class WaLeadStatusGate(models.Model):
         gate have no bypass flag while leaving the automated paths alone.
         """
         user = self.env.user
+        # No acting user at all.  The Pub/Sub push route is auth='none', so
+        # env.uid is None and env.user is an EMPTY res.users recordset —
+        # has_group() calls ensure_one() and would raise "Expected singleton:
+        # res.users()", taking down the whole event handler.  That is not a
+        # theoretical edge: it is the exact path the automatic "details shared"
+        # status update runs on, so this gate crashed the feature it was meant
+        # to leave alone.  No user means no RM to gate.
+        if not user or not user.id:
+            return False
         return (
             user.has_group(_RM_GROUP)
             and not user.has_group(_MANAGER_GROUP)

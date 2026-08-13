@@ -14,6 +14,7 @@ gate, because they are what stop it becoming a blunt instrument:
 :meth:`test_manager_is_not_gated`.
 """
 
+from odoo import api
 from odoo.exceptions import UserError
 from odoo.tests import new_test_user, tagged
 
@@ -45,6 +46,15 @@ class TestLeadStatusGate(WaTransactionCase):
         lead = self.make_lead(**vals)
         lead.write({'user_id': self.rm.id})
         return lead
+
+    def _anonymous_env(self):
+        """An env with no acting user, as the auth='none' push route has.
+
+        Built with ``uid=None`` rather than ``env(user=...)``: only the former
+        makes ``env.user`` an empty recordset, which is the condition that
+        breaks ``has_group()``.
+        """
+        return api.Environment(self.env.cr, None, {})
 
     def _attempt(self, lead, **vals):
         """Record an outbound WhatsApp message against *lead*."""
@@ -132,6 +142,30 @@ class TestLeadStatusGate(WaTransactionCase):
         lead = self._lead()
         lead.with_user(self.manager).write({'current_status': 'requirement_closed'})
         self.assertEqual(lead.current_status, 'requirement_closed')
+
+    def test_anonymous_context_does_not_crash_the_gate(self):
+        """The Pub/Sub push route is auth='none', so there is no acting user.
+
+        env.uid is None there and env.user is an EMPTY res.users recordset.
+        has_group() calls ensure_one(), so touching it raised "Expected
+        singleton: res.users()" and took down the whole event handler — which
+        is how this gate managed to break the automatic status update it was
+        supposed to leave alone.
+        """
+        lead = self._lead()
+        anon = lead.with_env(self._anonymous_env())
+        self.assertFalse(anon.env.user, "env.user must be an empty recordset")
+
+        self.assertFalse(anon._wa_user_is_gated())
+        anon.write({'current_status': 'details_shared_of_property'})
+        lead.invalidate_recordset()
+        self.assertEqual(lead.current_status, 'details_shared_of_property')
+
+    def test_anonymous_context_can_compute_the_ui_flag(self):
+        lead = self._lead()
+        anon = lead.with_env(self._anonymous_env())
+        anon.invalidate_recordset()
+        self.assertTrue(anon.wa_status_change_allowed)
 
     def test_system_write_is_not_gated(self):
         """OdooBot / the Pub/Sub push user are not RMs, so they pass through.
