@@ -118,6 +118,14 @@ export class WaLeadTab extends Component {
     async _loadThread(convId) {
         try {
             const data = await this.orm.call("wa.conversation", "get_thread", [[convId]], {});
+            // A refused thread comes back as {error}, not as a thread. Assigning
+            // it straight to state.thread rendered "No messages yet" over a chat
+            // that exists and is simply someone else's — show the reason.
+            if (data?.error) {
+                this.state.thread = null;
+                this.state.error = data.error;
+                return;
+            }
             this.state.thread = data;
             this.state.error = null;
         } catch (e) {

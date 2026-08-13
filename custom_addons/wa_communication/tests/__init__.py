@@ -21,4 +21,5 @@ from . import test_reassignment_sweeper
 from . import test_lead_status_gate
 from . import test_quick_details_share
 from . import test_details_shared_status
+from . import test_thread_own_lead_visibility
 from . import test_js

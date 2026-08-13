@@ -136,6 +136,22 @@ class WaConversation(models.Model):
             return True
         if conv.lead_id.user_id.id == uid or uid in conv.message_ids.lead_id.user_id.ids:
             return True
+        # Owning an inquiry on this number is enough, even when nothing in the
+        # chat points at it yet.  The two paths above are the *stored* ownership
+        # links — the chat's anchor lead, and the per-message inquiry tag — and
+        # a freshly created inquiry has neither: no message is tagged with it and
+        # the chat is still anchored to whichever inquiry came first.  Without
+        # this, an RM opening a lead they own saw an empty WhatsApp tab on a
+        # number with months of history, with no way to tell why.
+        #
+        # Replying stays assignment-only (_can_send), so what this grants is
+        # exactly what the inbox already grants: read the thread, and use
+        # "Request assignment" to take it over.
+        if conv.phone_number and self.env['leads.new'].sudo().search_count([
+            ('user_id', '=', uid),
+            ('phone', '=', self._owa_standardize_lead_phone(conv.phone_number)),
+        ], limit=1):
+            return True
         return bool(self.env['wa.reassignment.request'].sudo().search_count([
             ('conversation_id', '=', conv.id),
             ('requester_id', '=', self.env.uid),

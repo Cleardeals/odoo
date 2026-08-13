@@ -89,6 +89,7 @@ export class WaInbox extends Component {
             // Thread panel (right side)
             activeConvId:   null,
             thread:         null,
+            threadError:    null,
             threadLoading:  false,
             sendError:      null,
 
@@ -240,6 +241,14 @@ export class WaInbox extends Component {
         this.state.threadLoading = true;
         try {
             const data = await this.orm.call("wa.conversation", "get_thread", [[convId]], {});
+            // {error} means the thread was refused, not that it is empty.
+            if (data?.error) {
+                this.state.thread = null;
+                this.state.threadError = data.error;
+                this.state.activeConvId = convId;
+                return;
+            }
+            this.state.threadError = null;
             this.state.thread = data;
             this.state.activeConvId = convId;
             this.cdNotif.setActiveSuppressKey(data?.conversation?.phone || null);

@@ -343,6 +343,9 @@
                         <t t-if="state.threadLoading and !state.thread">
                             <div class="wa-inbox__loading"><i class="fa fa-spinner fa-spin"/></div>
                         </t>
+                        <t t-elif="state.threadError">
+                            <div class="alert alert-info m-3" t-esc="state.threadError"/>
+                        </t>
                         <t t-else="">
                             <CdChatThread messages="activeMessages"/>
                         </t>
