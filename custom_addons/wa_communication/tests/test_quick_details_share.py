@@ -196,6 +196,46 @@ class TestQuickDetailsShare(WaTransactionCase):
             returned = self.Conv.send_property_details_for_lead(lead.id)
         self.assertEqual(returned, conv.id)
 
+    def test_send_files_under_the_shared_inquiry_not_the_active_span(self):
+        """The card must be attributed to the lead the RM is acting on.
+
+        A buyer with several inquiries has one thread, and the active span is
+        whichever property was last discussed.  Inheriting it tagged the card
+        with the wrong property and attributed the send to the wrong inquiry.
+        """
+        shared, _prop = self._lead_with_property()
+        other, other_prop = self._lead_with_property()
+        other.write({'phone': shared.phone})
+
+        conv = self.make_conversation(
+            phone_number='91%s' % shared.phone, lead_id=other.id)
+        # The thread is mid-discussion about the OTHER property.
+        conv._owa_ensure_segment(inquiry=other, started_by='rm')
+        self.assertEqual(conv.active_segment_id.inquiry_id, other)
+
+        with self.mock_pubsub():
+            self.Conv.send_property_details_for_lead(shared.id)
+
+        msg = self.Msg.sudo().search(
+            [('conversation_id', '=', conv.id), ('direction', '=', 'outbound')],
+            order='id desc', limit=1)
+        self.assertEqual(msg.segment_id.inquiry_id, shared)
+        self.assertEqual(msg.effective_inquiry_id, shared)
+
+    def test_send_finds_the_thread_when_the_lead_is_not_its_anchor(self):
+        """Second inquiry on a number: the thread is anchored to the first."""
+        anchor, _p1 = self._lead_with_property()
+        second, _p2 = self._lead_with_property()
+        second.write({'phone': anchor.phone})
+        conv = self.make_conversation(
+            phone_number='91%s' % anchor.phone, lead_id=anchor.id)
+
+        with self.mock_pubsub():
+            returned = self.Conv.send_property_details_for_lead(second.id)
+
+        self.assertEqual(returned, conv.id,
+                         "must reuse the number's thread, not start a second one")
+
     def test_bad_property_leaves_no_orphan_conversation_behind(self):
         """Validate before creating anything, or a failed click litters the DB."""
         lead, _prop = self._lead_with_property(location=False)

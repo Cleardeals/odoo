@@ -612,27 +612,41 @@ class WaConversation(models.Model):
         body_values, header_values = self._quick_share_values(lead)
         template_name, language = self._quick_share_template()
 
-        conv = self.sudo().search([('lead_id', '=', lead.id)], limit=1)
-        if conv:
-            # Re-fetch as the acting user: send_message's ownership gate must
-            # judge the real user, not a sudo recordset.
-            self.browse(conv.id).send_message(
-                kind='template',
-                template_name=template_name,
-                template_language=language,
-                body_values=body_values,
-                header_values=header_values,
-            )
-            return conv.id
+        if not lead.phone:
+            raise UserError(
+                "This inquiry has no phone number, so there is nowhere to send "
+                "the details.")
 
-        return self.send_first_message(
-            phone=lead.phone,
-            lead_id=lead.id,
+        # Resolve by PHONE, not by lead: a buyer asking about three properties
+        # has three inquiries but one WhatsApp thread, and only the first of them
+        # is the thread's anchor.  Searching by lead_id would miss the thread for
+        # the other two and start a second conversation on the same number.
+        full_phone = ('91' + lead.phone) if len(lead.phone) == 10 else lead.phone
+        conv = self.sudo()._get_or_create_for_phone(full_phone)
+        if not conv.lead_id:
+            conv.write({'lead_id': lead.id})
+        if not conv.assigned_user_id:
+            # Nobody owns this chat yet — whoever sends the first message does.
+            conv.write({'assigned_user_id': self.env.uid})
+
+        # File the send under THIS inquiry's span before sending.  Without it
+        # send_message inherits whatever span happens to be active — which, on a
+        # thread that has already discussed another property, tags the card with
+        # the wrong property and attributes it to the wrong inquiry.  The RM is
+        # explicitly acting on this lead, so that is the span this belongs to.
+        conv._owa_ensure_segment(inquiry=lead, started_by='rm')
+
+        # Send as the acting user: the ownership gate must judge them, not sudo.
+        as_user = self.browse(conv.id)
+        as_user.invalidate_recordset(['active_segment_id'])
+        as_user.send_message(
+            kind='template',
             template_name=template_name,
             template_language=language,
             body_values=body_values,
             header_values=header_values,
         )
+        return conv.id
 
     @api.model
     def send_first_message(
