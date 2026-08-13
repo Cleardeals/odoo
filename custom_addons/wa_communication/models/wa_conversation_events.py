@@ -358,6 +358,47 @@ class WaConversation(models.Model):
             return True
         return msg.initiator == 'rm' and bool(msg.lead_id)
 
+    def _owa_log_details_shared_note(self, lead, msg) -> None:
+        """Explain the automatic status change in the lead's chatter.
+
+        The tracking entry Odoo writes on its own says *what* changed but not
+        *why*, and an RM finding a status they did not set has no way to tell
+        whether it was a colleague, a script, or a mistake.  This says who did
+        it, what evidence it acted on, and — the part that actually matters —
+        that it will never overwrite a status a human has set.
+
+        Posted as an internal note, authored by OdooBot: this runs on the
+        auth='none' push route where ``env.user`` is empty, so an author has to
+        be named explicitly or ``message_post`` has nobody to attribute it to.
+        """
+        try:
+            when = fields.Datetime.to_string(msg.delivered_at or msg.seen_at
+                                             or fields.Datetime.now())
+            body = (
+                "<p><b>Status set automatically: Details Shared of Property</b></p>"
+                "<p>The property details reached this buyer on WhatsApp — the "
+                "card <i>%s</i> was confirmed delivered to their handset at "
+                "%s UTC. Delivery, not sending, is what triggers this: a card "
+                "that failed to arrive changes nothing.</p>"
+                "<p>This ran only because the inquiry was still at "
+                "<b>Lead</b>. A status you set yourself is never overwritten.</p>"
+                % (msg.template_name or 'property details', when)
+            )
+            author = self.env.ref('base.partner_root', raise_if_not_found=False)
+            lead.message_post(
+                body=body,
+                author_id=author.id if author else False,
+                message_type='comment',
+                subtype_xmlid='mail.mt_note',
+            )
+        except Exception:  # noqa: BLE001
+            # The note is an explanation, not the outcome.  Never let it undo a
+            # status change that has already been made and notified.
+            _logger.warning(
+                "wa_push: could not post the details-shared note on lead %s",
+                lead.id, exc_info=True,
+            )
+
     def _owa_maybe_mark_details_shared(self, msg) -> None:
         """Move the inquiry to "Details Shared of Property" once the card lands.
 
@@ -425,6 +466,7 @@ class WaConversation(models.Model):
             "wa_push: lead %s → %s (template %r delivered)",
             lead.id, _DETAILS_SHARED_STATUS, msg.template_name,
         )
+        self._owa_log_details_shared_note(lead, msg)
 
         phone = msg.conversation_id.phone_number or ''
         self._push_user_notification(

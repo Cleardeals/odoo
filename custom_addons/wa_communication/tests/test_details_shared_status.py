@@ -82,6 +82,35 @@ class TestDetailsSharedStatus(WaTransactionCase):
             [('user_id', '=', rm.id), ('notif_type', '=', 'details_shared')])
         self.assertEqual(after, before + 1)
 
+    def test_delivery_explains_itself_in_the_chatter(self):
+        """An RM finding a status they didn't set must be able to see why."""
+        lead, conv = self._lead_conv()
+        before = len(lead.message_ids)
+
+        self.Conv._process_odoo_wa_event(
+            self._delivered_event(conv, lead), self._uniq('psm_'))
+
+        lead.invalidate_recordset()
+        notes = lead.message_ids[:len(lead.message_ids) - before]
+        body = ' '.join(notes.mapped('body'))
+        self.assertIn('Details Shared of Property', body)
+        self.assertIn(TEMPLATE, body, "names the evidence it acted on")
+        self.assertIn('never overwritten', body,
+                      "states the rule that protects the RM's own edits")
+
+    def test_a_broken_note_never_undoes_the_status_change(self):
+        """The note explains the outcome; it must not be able to prevent it."""
+        from unittest.mock import patch
+        lead, conv = self._lead_conv()
+
+        with patch.object(type(lead), 'message_post',
+                          side_effect=ValueError('chatter down')):
+            self.Conv._process_odoo_wa_event(
+                self._delivered_event(conv, lead), self._uniq('psm_'))
+
+        lead.invalidate_recordset()
+        self.assertEqual(lead.current_status, SHARED)
+
     # ── Idempotency and ordering ─────────────────────────────────────────────
 
     def test_duplicate_delivery_does_not_notify_twice(self):
