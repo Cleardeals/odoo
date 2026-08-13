@@ -32,3 +32,4 @@ from . import (
 )
 from . import test_lead_phone_validation
 from . import test_lead_auto_created
+from . import test_property_rm_search_scope
