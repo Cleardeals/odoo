@@ -621,8 +621,10 @@ class WaConversation(models.Model):
         # has three inquiries but one WhatsApp thread, and only the first of them
         # is the thread's anchor.  Searching by lead_id would miss the thread for
         # the other two and start a second conversation on the same number.
-        full_phone = ('91' + lead.phone) if len(lead.phone) == 10 else lead.phone
-        conv = self.sudo()._get_or_create_for_phone(full_phone)
+        # _get_or_create_for_phone canonicalises to 12-digit E.164 itself, so any
+        # shape the lead happens to hold (10-digit, +91, spaces) resolves to the
+        # same thread rather than starting a second one.
+        conv = self.sudo()._get_or_create_for_phone(lead.phone)
         if not conv.lead_id:
             conv.write({'lead_id': lead.id})
         if not conv.assigned_user_id:
