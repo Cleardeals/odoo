@@ -1,0 +1,55 @@
+# Isolated, throwaway Odoo 19 stack used ONLY to build a real schema to
+# introspect for the ER diagram.
+#
+# Deliberately NOT docker-compose.dev.yml:
+#   - no GCP credentials mounted
+#   - PUBSUB_EMULATOR_HOST points at a dead port, so nothing can reach the
+#     live cd-prod-* topics
+#   - own Postgres + named volumes, so odoo-dev-db and cleardeals_19_dev are
+#     never touched
+#   - port 8071 (8069 is odoo-dev-nginx, 8070 was the handbook instance)
+
+services:
+
+  erddb:
+    image: postgres:17
+    container_name: odoo-erd-db
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: odoo
+      POSTGRES_PASSWORD: odoo
+    volumes:
+      - erd-db:/var/lib/postgresql/data
+    networks: [erd]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U odoo -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  odoo:
+    image: odoo-cleardeals:dev
+    container_name: odoo-erd-app
+    depends_on:
+      erddb:
+        condition: service_healthy
+    environment:
+      - PUBSUB_EMULATOR_HOST=127.0.0.1:9
+      - PUBSUB_PROJECT_ID=cleardeals-wa-local
+    volumes:
+      - ./odoo.erd.conf:/etc/odoo/odoo.conf:ro
+      - erd-filestore:/var/lib/odoo
+      - ${CUSTOM_ADDONS}:/mnt/extra-addons/custom:ro
+    ports:
+      - "8071:8069"
+    networks: [erd]
+
+volumes:
+  erd-db:
+  erd-filestore:
+
+networks:
+  erd:
+    driver: bridge
+    name: odoo-erd

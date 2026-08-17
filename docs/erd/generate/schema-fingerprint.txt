@@ -1,0 +1,149 @@
+FK cleardeals_notification.user_id -> res_users on_delete=cascade required=true
+FK ir_attachment.company_id -> res_company on_delete=setnull required=false
+FK ir_attachment.original_id -> ir_attachment on_delete=setnull required=false
+FK ir_attachment_lead_csv_import_wizard_rel.ir_attachment_id -> ir_attachment on_delete=cascade required=true
+FK ir_attachment_lead_csv_import_wizard_rel.lead_csv_import_wizard_id -> lead_csv_import_wizard on_delete=cascade required=true
+FK lead_add_site_visit_wizard.assigned_rm_id -> res_users on_delete=setnull required=false
+FK lead_add_site_visit_wizard.feedback_option_id -> lead_site_visit_feedback_option on_delete=setnull required=false
+FK lead_add_site_visit_wizard.inquiry_id -> leads_new on_delete=cascade required=true
+FK lead_add_site_visit_wizard.previous_visit_id -> lead_site_visit on_delete=setnull required=false
+FK lead_add_site_visit_wizard.property_base_id -> property_base on_delete=setnull required=false
+FK lead_add_site_visit_wizard.status_id -> lead_site_visit_status on_delete=cascade required=true
+FK lead_bulk_reassign_failed_rel.lead_bulk_reassign_wizard_id -> lead_bulk_reassign_wizard on_delete=cascade required=true
+FK lead_bulk_reassign_failed_rel.leads_new_id -> leads_new on_delete=cascade required=true
+FK lead_bulk_reassign_wizard.batch_id -> lead_reassignment_log on_delete=setnull required=false
+FK lead_bulk_reassign_wizard.new_rm_id -> res_users on_delete=setnull required=false
+FK lead_bulk_reassign_wizard_leads_new_rel.lead_bulk_reassign_wizard_id -> lead_bulk_reassign_wizard on_delete=cascade required=true
+FK lead_bulk_reassign_wizard_leads_new_rel.leads_new_id -> leads_new on_delete=cascade required=true
+FK lead_property_interest.lead_id -> leads_new on_delete=cascade required=true
+FK lead_property_interest.property_base_id -> property_base on_delete=setnull required=false
+FK lead_reassignment_log.new_rm_id -> res_users on_delete=setnull required=false
+FK lead_reassignment_log.reassigned_by_id -> res_users on_delete=setnull required=false
+FK lead_reassignment_log_failed_rel.lead_reassignment_log_id -> lead_reassignment_log on_delete=cascade required=true
+FK lead_reassignment_log_failed_rel.leads_new_id -> leads_new on_delete=cascade required=true
+FK lead_recommend_property_wizard.assigned_rm_id -> res_users on_delete=setnull required=false
+FK lead_recommend_property_wizard.inquiry_id -> leads_new on_delete=cascade required=true
+FK lead_recommend_property_wizard.property_base_id -> property_base on_delete=cascade required=true
+FK lead_recommend_property_wizard.source_id -> lead_source on_delete=setnull required=false
+FK lead_score.assigned_rm_id -> res_users on_delete=setnull required=false
+FK lead_scoring_event.lead_id -> lead_scoring_lead on_delete=cascade required=true
+FK lead_site_visit.assigned_rm_id -> res_users on_delete=setnull required=false
+FK lead_site_visit.feedback_option_id -> lead_site_visit_feedback_option on_delete=restrict required=false
+FK lead_site_visit.inquiry_id -> leads_new on_delete=cascade required=true
+FK lead_site_visit.previous_visit_id -> lead_site_visit on_delete=setnull required=false
+FK lead_site_visit.property_base_id -> property_base on_delete=restrict required=true
+FK lead_site_visit.root_visit_id -> lead_site_visit on_delete=setnull required=false
+FK lead_site_visit.status_id -> lead_site_visit_status on_delete=restrict required=true
+FK lead_site_visit_feedback_option.status_id -> lead_site_visit_status on_delete=restrict required=true
+FK lead_site_visit_quick_update_wizard.feedback_option_id -> lead_site_visit_feedback_option on_delete=setnull required=false
+FK lead_site_visit_quick_update_wizard.status_id -> lead_site_visit_status on_delete=cascade required=true
+FK lead_site_visit_quick_update_wizard.visit_id -> lead_site_visit on_delete=cascade required=true
+FK lead_source.category_id -> lead_source_category on_delete=restrict required=true
+FK lead_source.default_rm_user_id -> res_users on_delete=setnull required=false
+FK leads_bde_allowed_rm_rel.bde_id -> leads_bde on_delete=cascade required=true
+FK leads_bde_allowed_rm_rel.user_id -> res_users on_delete=cascade required=true
+FK leads_new.bde_id -> leads_bde on_delete=setnull required=false
+FK leads_new.last_reassignment_batch_id -> lead_reassignment_log on_delete=setnull required=false
+FK leads_new.parent_inquiry_id -> leads_new on_delete=setnull required=false
+FK leads_new.property_base_id -> property_base on_delete=setnull required=false
+FK leads_new.property_id -> property_inventory on_delete=setnull required=false
+FK leads_new.source_id -> lead_source on_delete=setnull required=false
+FK leads_new.user_id -> res_users on_delete=setnull required=false
+FK leads_new_dashboard.assigned_rm -> res_users on_delete=setnull required=false
+FK leads_new_dashboard.lead_id -> leads_new on_delete=cascade required=true
+FK leads_new_event.dashboard_id -> leads_new_dashboard on_delete=cascade required=true
+FK leads_new_property_base_rel.leads_new_id -> leads_new on_delete=cascade required=true
+FK leads_new_property_base_rel.property_base_id -> property_base on_delete=cascade required=true
+FK property_base.rm_user_id -> res_users on_delete=setnull required=false
+FK property_inventory.rm_user_id -> res_users on_delete=setnull required=false
+FK property_lead_suggestion.property_base_id -> property_base on_delete=cascade required=false
+FK property_lead_suggestion.rm_user_id -> res_users on_delete=setnull required=false
+FK property_portal_listing.property_base_id -> property_base on_delete=cascade required=true
+FK renewal_interakt_event.owner_id -> renewal_property_owner on_delete=cascade required=true
+FK renewal_lead_assignment.owner_id -> renewal_property_owner on_delete=cascade required=true
+FK res_company.parent_id -> res_company on_delete=restrict required=false
+FK res_company.partner_id -> res_partner on_delete=restrict required=true
+FK res_partner.commercial_partner_id -> res_partner on_delete=setnull required=false
+FK res_partner.company_id -> res_company on_delete=setnull required=false
+FK res_partner.parent_id -> res_partner on_delete=setnull required=false
+FK res_partner.user_id -> res_users on_delete=setnull required=false
+FK res_users.company_id -> res_company on_delete=restrict required=true
+FK res_users.partner_id -> res_partner on_delete=restrict required=true
+FK wa_conversation.active_segment_id -> wa_conversation_segment on_delete=setnull required=false
+FK wa_conversation.assigned_user_id -> res_users on_delete=setnull required=false
+FK wa_conversation.lead_id -> leads_new on_delete=setnull required=false
+FK wa_conversation_segment.conversation_id -> wa_conversation on_delete=cascade required=true
+FK wa_conversation_segment.inquiry_id -> leads_new on_delete=setnull required=false
+FK wa_conversation_segment.property_base_id -> property_base on_delete=setnull required=false
+FK wa_enrollment.lead_id -> leads_new on_delete=setnull required=false
+FK wa_enrollment.workflow_id -> wa_workflow on_delete=setnull required=false
+FK wa_message.conversation_id -> wa_conversation on_delete=cascade required=true
+FK wa_message.effective_inquiry_id -> leads_new on_delete=setnull required=false
+FK wa_message.effective_property_id -> property_base on_delete=setnull required=false
+FK wa_message.lead_id -> leads_new on_delete=setnull required=false
+FK wa_message.quoted_message_id -> wa_message on_delete=setnull required=false
+FK wa_message.segment_id -> wa_conversation_segment on_delete=setnull required=false
+FK wa_quick_reply.user_id -> res_users on_delete=cascade required=false
+FK wa_reassignment_request.conversation_id -> wa_conversation on_delete=cascade required=true
+FK wa_reassignment_request.current_assignee_id -> res_users on_delete=setnull required=false
+FK wa_reassignment_request.requester_id -> res_users on_delete=cascade required=true
+FK whatsapp_response.assigned_rm_id -> res_users on_delete=setnull required=false
+FK whatsapp_response.lead_id -> lead_score on_delete=restrict required=true
+TABLE active_lead_assignment cols=6
+TABLE active_template_stats cols=12
+TABLE cleardeals_notification cols=9
+TABLE ir_attachment cols=18
+TABLE ir_attachment_lead_csv_import_wizard_rel cols=2
+TABLE lead_add_site_visit_wizard cols=9
+TABLE lead_bulk_reassign_failed_rel cols=2
+TABLE lead_bulk_reassign_wizard cols=17
+TABLE lead_bulk_reassign_wizard_leads_new_rel cols=2
+TABLE lead_csv_import_wizard cols=1
+TABLE lead_import_wizard cols=2
+TABLE lead_migration_wizard cols=10
+TABLE lead_olx_account cols=9
+TABLE lead_property_interest cols=14
+TABLE lead_reassignment_log cols=11
+TABLE lead_reassignment_log_failed_rel cols=2
+TABLE lead_recommend_property_wizard cols=6
+TABLE lead_recompute_wizard cols=4
+TABLE lead_score cols=31
+TABLE lead_score_bq_wizard cols=4
+TABLE lead_scoring_event cols=11
+TABLE lead_scoring_lead cols=30
+TABLE lead_scoring_template_stats cols=11
+TABLE lead_site_visit cols=17
+TABLE lead_site_visit_feedback_option cols=9
+TABLE lead_site_visit_quick_update_wizard cols=6
+TABLE lead_site_visit_status cols=13
+TABLE lead_source cols=8
+TABLE lead_source_category cols=6
+TABLE leads_bde cols=5
+TABLE leads_bde_allowed_rm_rel cols=2
+TABLE leads_new cols=36
+TABLE leads_new_dashboard cols=23
+TABLE leads_new_event cols=11
+TABLE leads_new_property_base_rel cols=2
+TABLE leads_new_template_stats cols=15
+TABLE message_wizard cols=2
+TABLE property_base cols=33
+TABLE property_daily_stat cols=5
+TABLE property_inventory cols=18
+TABLE property_lead_suggestion cols=12
+TABLE property_portal_listing cols=6
+TABLE renewal_interakt_event cols=13
+TABLE renewal_lead_assignment cols=6
+TABLE renewal_property_owner cols=22
+TABLE renewal_template_stats cols=9
+TABLE res_company cols=28
+TABLE res_partner cols=40
+TABLE res_users cols=19
+TABLE wa_conversation cols=12
+TABLE wa_conversation_segment cols=8
+TABLE wa_enrollment cols=10
+TABLE wa_event_log cols=9
+TABLE wa_message cols=43
+TABLE wa_quick_reply cols=10
+TABLE wa_reassignment_request cols=8
+TABLE wa_workflow cols=14
+TABLE whatsapp_response cols=15

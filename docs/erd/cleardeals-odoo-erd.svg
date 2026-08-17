@@ -1,0 +1,683 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2720" height="1534" viewBox="0 0 2720 1534" font-family="Inter,Helvetica,Arial,sans-serif">
+<rect width="100%" height="100%" fill="#ffffff"/>
+<defs><marker id="crow" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="11" markerHeight="11" orient="auto-start-reverse"><path d="M12,6 L1,1 M12,6 L1,11 M12,6 L1,6" stroke="#5A6570" stroke-width="1.3" fill="none"/></marker><marker id="one" viewBox="0 0 12 12" refX="2" refY="6" markerWidth="11" markerHeight="11" orient="auto-start-reverse"><path d="M4,1 L4,11" stroke="#5A6570" stroke-width="1.6" fill="none"/></marker></defs>
+<text x="40" y="42" font-size="24" font-weight="700" fill="#1B2733">Cleardeals Odoo 19 — Custom Domain ER Diagram</text>
+<text x="40" y="54" font-size="12" font-weight="700" fill="#6B7885" letter-spacing="0.9">ODOO CORE</text>
+<text x="400" y="54" font-size="12" font-weight="700" fill="#6B7885" letter-spacing="0.9">PROPERTIES</text>
+<text x="400" y="426" font-size="12" font-weight="700" fill="#6B7885" letter-spacing="0.9">LEGACY / SUPERSEDED</text>
+<text x="780" y="54" font-size="12" font-weight="700" fill="#6B7885" letter-spacing="0.9">LEADS — CONFIGURATION</text>
+<text x="1160" y="54" font-size="12" font-weight="700" fill="#6B7885" letter-spacing="0.9">LEADS — CORE</text>
+<text x="1540" y="54" font-size="12" font-weight="700" fill="#6B7885" letter-spacing="0.9">LEADS — SITE VISITS</text>
+<text x="1960" y="54" font-size="12" font-weight="700" fill="#6B7885" letter-spacing="0.9">WA_COMMUNICATION</text>
+<text x="2360" y="54" font-size="12" font-weight="700" fill="#6B7885" letter-spacing="0.9">CLEARDEALS_NOTIFICATION</text>
+<path d="M340,390.5 C340.0,390.5 340.0,89.0 340,89.0" fill="none" stroke="#5A6570" stroke-width="1.25" opacity="0.75" marker-start="url(#crow)" marker-end="url(#one)"/>
+<path d="M340,447.5 C340.0,447.5 340.0,332.0 340,332.0" fill="none" stroke="#5A6570" stroke-width="1.25" opacity="0.75" marker-start="url(#crow)" marker-end="url(#one)"/>
+<path d="M340,485.5 C340.0,485.5 340.0,632.0 340,632.0" fill="none" stroke="#5A6570" stroke-width="1.25" opacity="0.75" marker-start="url(#crow)" marker-end="url(#one)"/>
+<path d="M340,371.5 C340.0,371.5 340.0,332.0 340,332.0" fill="none" stroke="#5A6570" stroke-width="1.25" opacity="0.75" marker-start="url(#crow)" marker-end="url(#one)"/>
+<path d="M340,204.5 C340.0,204.5 340.0,89.0 340,89.0" fill="none" stroke="#5A6570" stroke-width="1.25" opacity="0.75" marker-start="url(#crow)" marker-end="url(#one)"/>
+<path d="M340,223.5 C340.0,223.5 340.0,332.0 340,332.0" fill="none" stroke="#5A6570" stroke-width="1.25" opacity="0.75" marker-start="url(#crow)" marker-end="url(#one)"/>
+<path d="M340,690.5 C340.0,690.5 340.0,332.0 340,332.0" fill="none" stroke="#5A6570" stroke-width="1.25" opacity="0.75" marker-start="url(#crow)" marker-end="url(#one)"/>
+<path d="M340,671.5 C340.0,671.5 340.0,89.0 340,89.0" fill="none" stroke="#5A6570" stroke-width="1.25" opacity="0.75" marker-start="url(#crow)" marker-end="url(#one)"/>
+<path d="M2360,128.5 C1350.0,128.5 1350.0,632.0 340,632.0" fill="none" stroke="#C0392B" stroke-width="1.25" opacity="0.75" marker-start="url(#crow)" marker-end="url(#one)"/>
+<path d="M400,128.5 C370.0,128.5 370.0,632.0 340,632.0" fill="none" stroke="#5A6570" stroke-width="1.25" opacity="0.75" marker-start="url(#crow)" marker-end="url(#one)"/>
+<path d="M700,333.5 C700.0,333.5 700.0,89.0 700,89.0" fill="none" stroke="#C0392B" stroke-width="1.25" opacity="0.75" marker-start="url(#crow)" marker-end="url(#one)"/>
+<path d="M400,500.5 C370.0,500.5 370.0,632.0 340,632.0" fill="none" stroke="#5A6570" stroke-width="1.25" opacity="0.75" marker-start="url(#crow)" marker-end="url(#one)"/>
+<path d="M400,629.5 C370.0,629.5 370.0,632.0 340,632.0" fill="none" stroke="#5A6570" stroke-width="1.25" opacity="0.75" marker-start="url(#crow)" marker-end="url(#one)"/>
+<path d="M700,777.5 C700.0,777.5 700.0,590.0 700,590.0" fill="none" stroke="#5A6570" stroke-width="1.25" opacity="0.75" marker-start="url(#crow)" marker-end="url(#one)"/>
+<path d="M400,758.5 C370.0,758.5 370.0,632.0 340,632.0" fill="none" stroke="#5A6570" stroke-width="1.25" opacity="0.75" marker-start="url(#crow)" marker-end="url(#one)"/>
+<path d="M1080,295.5 C1080.0,295.5 1080.0,89.0 1080,89.0" fill="none" stroke="#5A6570" stroke-width="1.25" opacity="0.75" marker-start="url(#crow)" marker-end="url(#one)"/>
+<path d="M780,314.5 C560.0,314.5 560.0,632.0 340,632.0" fill="none" stroke="#5A6570" stroke-width="1.25" opacity="0.75" marker-start="url(#crow)" marker-end="url(#one)"/>
+<path d="M1080,610.5 C1080.0,610.5 1080.0,461.0 1080,461.0" fill="none" stroke="#C0392B" stroke-width="1.25" opacity="0.75" marker-start="url(#crow)" marker-end="url(#one)"/>
+<path d="M780,629.5 C560.0,629.5 560.0,632.0 340,632.0" fill="none" stroke="#C0392B" stroke-width="1.25" opacity="0.75" marker-start="url(#crow)" marker-end="url(#one)"/>
+<path d="M1160,223.5 C1120.0,223.5 1120.0,256.0 1080,256.0" fill="none" stroke="#5A6570" stroke-width="1.25" opacity="0.75" marker-start="url(#crow)" marker-end="url(#one)"/>
+<path d="M1160,128.5 C1120.0,128.5 1120.0,461.0 1080,461.0" fill="none" stroke="#5A6570" stroke-width="1.25" opacity="0.75" marker-start="url(#crow)" marker-end="url(#one)"/>
+<path d="M1160,204.5 C930.0,204.5 930.0,461.0 700,461.0" fill="none" stroke="#5A6570" stroke-width="1.25" opacity="0.75" stroke-dasharray="5,4" marker-start="url(#crow)" marker-end="url(#one)"/>
+<path d="M1160,185.5 C930.0,185.5 930.0,89.0 700,89.0" fill="none" stroke="#5A6570" stroke-width="1.25" opacity="0.75" marker-start="url(#crow)" marker-end="url(#one)"/>
+<path d="M1160,242.5 C750.0,242.5 750.0,632.0 340,632.0" fill="none" stroke="#5A6570" stroke-width="1.25" opacity="0.75" marker-start="url(#crow)" marker-end="url(#one)"/>
+<path d="M1460,147.5 C1460.0,147.5 1460.0,575.0 1460,575.0" fill="none" stroke="#5A6570" stroke-width="1.25" opacity="0.75" marker-start="url(#crow)" marker-end="url(#one)"/>
+<path d="M1460,166.5 C1460.0,166.5 1460.0,89.0 1460,89.0" fill="none" stroke="#5A6570" stroke-width="1.25" opacity="0.75" marker-start="url(#crow)" marker-end="url(#one)"/>
+<path d="M1460,743.5 C1460.0,743.5 1460.0,89.0 1460,89.0" fill="none" stroke="#C0392B" stroke-width="1.25" opacity="0.75" marker-start="url(#crow)" marker-end="url(#one)"/>
+<path d="M1160,762.5 C930.0,762.5 930.0,89.0 700,89.0" fill="none" stroke="#C0392B" stroke-width="1.25" opacity="0.75" marker-start="url(#crow)" marker-end="url(#one)"/>
+<path d="M1460,466.5 C1460.0,466.5 1460.0,89.0 1460,89.0" fill="none" stroke="#C0392B" stroke-width="1.25" opacity="0.75" marker-start="url(#crow)" marker-end="url(#one)"/>
+<path d="M1160,485.5 C930.0,485.5 930.0,89.0 700,89.0" fill="none" stroke="#5A6570" stroke-width="1.25" opacity="0.75" marker-start="url(#crow)" marker-end="url(#one)"/>
+<path d="M1840,557.5 C1840.0,557.5 1840.0,351.0 1840,351.0" fill="none" stroke="#5A6570" stroke-width="1.25" opacity="0.75" marker-start="url(#crow)" marker-end="url(#one)"/>
+<path d="M1540,166.5 C1500.0,166.5 1500.0,89.0 1460,89.0" fill="none" stroke="#C0392B" stroke-width="1.25" opacity="0.75" marker-start="url(#crow)" marker-end="url(#one)"/>
+<path d="M1540,204.5 C1120.0,204.5 1120.0,89.0 700,89.0" fill="none" stroke="#5A6570" stroke-width="1.25" opacity="0.75" marker-start="url(#crow)" marker-end="url(#one)"/>
+<path d="M1540,128.5 C940.0,128.5 940.0,632.0 340,632.0" fill="none" stroke="#5A6570" stroke-width="1.25" opacity="0.75" marker-start="url(#crow)" marker-end="url(#one)"/>
+<path d="M1840,242.5 C1840.0,242.5 1840.0,351.0 1840,351.0" fill="none" stroke="#5A6570" stroke-width="1.25" opacity="0.75" marker-start="url(#crow)" marker-end="url(#one)"/>
+<path d="M1840,147.5 C1840.0,147.5 1840.0,518.0 1840,518.0" fill="none" stroke="#5A6570" stroke-width="1.25" opacity="0.75" marker-start="url(#crow)" marker-end="url(#one)"/>
+<path d="M1840,185.5 C1840.0,185.5 1840.0,89.0 1840,89.0" fill="none" stroke="#5A6570" stroke-width="1.25" opacity="0.75" marker-start="url(#crow)" marker-end="url(#one)"/>
+<path d="M1840,223.5 C1840.0,223.5 1840.0,89.0 1840,89.0" fill="none" stroke="#5A6570" stroke-width="1.25" opacity="0.75" marker-start="url(#crow)" marker-end="url(#one)"/>
+<path d="M1160,633.5 C750.0,633.5 750.0,632.0 340,632.0" fill="none" stroke="#5A6570" stroke-width="1.25" opacity="0.75" marker-start="url(#crow)" marker-end="url(#one)"/>
+<path d="M1160,614.5 C750.0,614.5 750.0,632.0 340,632.0" fill="none" stroke="#5A6570" stroke-width="1.25" opacity="0.75" marker-start="url(#crow)" marker-end="url(#one)"/>
+<path d="M1960,166.5 C1710.0,166.5 1710.0,89.0 1460,89.0" fill="none" stroke="#5A6570" stroke-width="1.25" opacity="0.75" marker-start="url(#crow)" marker-end="url(#one)"/>
+<path d="M2260,128.5 C2260.0,128.5 2260.0,313.0 2260,313.0" fill="none" stroke="#5A6570" stroke-width="1.25" opacity="0.75" marker-start="url(#crow)" marker-end="url(#one)"/>
+<path d="M1960,147.5 C1150.0,147.5 1150.0,632.0 340,632.0" fill="none" stroke="#5A6570" stroke-width="1.25" opacity="0.75" marker-start="url(#crow)" marker-end="url(#one)"/>
+<path d="M2260,352.5 C2260.0,352.5 2260.0,89.0 2260,89.0" fill="none" stroke="#C0392B" stroke-width="1.25" opacity="0.75" marker-start="url(#crow)" marker-end="url(#one)"/>
+<path d="M1960,371.5 C1710.0,371.5 1710.0,89.0 1460,89.0" fill="none" stroke="#5A6570" stroke-width="1.25" opacity="0.75" marker-start="url(#crow)" marker-end="url(#one)"/>
+<path d="M1960,390.5 C1330.0,390.5 1330.0,89.0 700,89.0" fill="none" stroke="#5A6570" stroke-width="1.25" opacity="0.75" marker-start="url(#crow)" marker-end="url(#one)"/>
+<path d="M2260,538.5 C2260.0,538.5 2260.0,89.0 2260,89.0" fill="none" stroke="#C0392B" stroke-width="1.25" opacity="0.75" marker-start="url(#crow)" marker-end="url(#one)"/>
+<path d="M1960,595.5 C1710.0,595.5 1710.0,89.0 1460,89.0" fill="none" stroke="#5A6570" stroke-width="1.25" opacity="0.75" marker-start="url(#crow)" marker-end="url(#one)"/>
+<path d="M2260,633.5 C2260.0,633.5 2260.0,313.0 2260,313.0" fill="none" stroke="#5A6570" stroke-width="1.25" opacity="0.75" marker-start="url(#crow)" marker-end="url(#one)"/>
+<path d="M1960,557.5 C1710.0,557.5 1710.0,89.0 1460,89.0" fill="none" stroke="#5A6570" stroke-width="1.25" opacity="0.75" marker-start="url(#crow)" marker-end="url(#one)"/>
+<path d="M1960,576.5 C1330.0,576.5 1330.0,89.0 700,89.0" fill="none" stroke="#5A6570" stroke-width="1.25" opacity="0.75" marker-start="url(#crow)" marker-end="url(#one)"/>
+<path d="M2260,614.5 C2260.0,614.5 2260.0,499.0 2260,499.0" fill="none" stroke="#5A6570" stroke-width="1.25" opacity="0.75" marker-start="url(#crow)" marker-end="url(#one)"/>
+<path d="M2260,1005.5 C2260.0,1005.5 2260.0,799.0 2260,799.0" fill="none" stroke="#5A6570" stroke-width="1.25" opacity="0.75" marker-start="url(#crow)" marker-end="url(#one)"/>
+<path d="M1960,986.5 C1710.0,986.5 1710.0,89.0 1460,89.0" fill="none" stroke="#5A6570" stroke-width="1.25" opacity="0.75" marker-start="url(#crow)" marker-end="url(#one)"/>
+<path d="M1960,1339.5 C1150.0,1339.5 1150.0,632.0 340,632.0" fill="none" stroke="#C0392B" stroke-width="1.25" opacity="0.75" marker-start="url(#crow)" marker-end="url(#one)"/>
+<path d="M2260,1153.5 C2260.0,1153.5 2260.0,89.0 2260,89.0" fill="none" stroke="#C0392B" stroke-width="1.25" opacity="0.75" marker-start="url(#crow)" marker-end="url(#one)"/>
+<path d="M1960,1191.5 C1150.0,1191.5 1150.0,632.0 340,632.0" fill="none" stroke="#C0392B" stroke-width="1.25" opacity="0.75" marker-start="url(#crow)" marker-end="url(#one)"/>
+<path d="M1960,1172.5 C1150.0,1172.5 1150.0,632.0 340,632.0" fill="none" stroke="#5A6570" stroke-width="1.25" opacity="0.75" marker-start="url(#crow)" marker-end="url(#one)"/>
+<rect x="40" y="70" width="300" height="209" rx="6" fill="#fff" stroke="#3D454C" stroke-width="1.4"/>
+<path d="M40,76 a6,6 0 0 1 6,-6 h288 a6,6 0 0 1 6,6 v24 h-300 z" fill="#5B6770"/>
+<text x="50" y="90" font-size="13" font-weight="700" fill="#fff">res_company</text>
+<rect x="41" y="100" width="298" height="19" fill="#EEF0F2" opacity="0.5"/>
+<text x="50" y="113" font-size="11" font-weight="600" fill="#8A6D1F">PK</text>
+<text x="74" y="113" font-size="11.5" font-weight="700" fill="#1B2733">id</text>
+<text x="330" y="113" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<text x="50" y="132" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="74" y="132" font-size="11.5" font-weight="400" fill="#1B2733">alias_domain_id</text>
+<text x="330" y="132" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<rect x="41" y="138" width="298" height="19" fill="#EEF0F2" opacity="0.5"/>
+<text x="50" y="151" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="74" y="151" font-size="11.5" font-weight="400" fill="#1B2733">currency_id</text>
+<text x="330" y="151" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<text x="50" y="170" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="74" y="170" font-size="11.5" font-weight="400" fill="#1B2733">external_report_layout_id</text>
+<text x="330" y="170" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<rect x="41" y="176" width="298" height="19" fill="#EEF0F2" opacity="0.5"/>
+<text x="50" y="189" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="74" y="189" font-size="11.5" font-weight="400" fill="#1B2733">paperformat_id</text>
+<text x="330" y="189" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<text x="50" y="208" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="74" y="208" font-size="11.5" font-weight="400" fill="#1B2733">parent_id</text>
+<text x="330" y="208" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<rect x="41" y="214" width="298" height="19" fill="#EEF0F2" opacity="0.5"/>
+<text x="50" y="227" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="74" y="227" font-size="11.5" font-weight="400" fill="#1B2733">partner_id</text>
+<text x="330" y="227" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<text x="50" y="246" font-size="11" font-weight="600" fill="#8A6D1F"></text>
+<text x="74" y="246" font-size="11.5" font-weight="400" fill="#1B2733">name</text>
+<text x="330" y="246" font-size="10.5" text-anchor="end" fill="#7C8894">varchar</text>
+<text x="74" y="265" font-size="10.5" font-style="italic" fill="#9AA5B1">+20 more columns</text>
+<rect x="40" y="313" width="300" height="266" rx="6" fill="#fff" stroke="#3D454C" stroke-width="1.4"/>
+<path d="M40,319 a6,6 0 0 1 6,-6 h288 a6,6 0 0 1 6,6 v24 h-300 z" fill="#5B6770"/>
+<text x="50" y="333" font-size="13" font-weight="700" fill="#fff">res_partner</text>
+<rect x="41" y="343" width="298" height="19" fill="#EEF0F2" opacity="0.5"/>
+<text x="50" y="356" font-size="11" font-weight="600" fill="#8A6D1F">PK</text>
+<text x="74" y="356" font-size="11.5" font-weight="700" fill="#1B2733">id</text>
+<text x="330" y="356" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<text x="50" y="375" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="74" y="375" font-size="11.5" font-weight="400" fill="#1B2733">commercial_partner_id</text>
+<text x="330" y="375" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<rect x="41" y="381" width="298" height="19" fill="#EEF0F2" opacity="0.5"/>
+<text x="50" y="394" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="74" y="394" font-size="11.5" font-weight="400" fill="#1B2733">company_id</text>
+<text x="330" y="394" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<text x="50" y="413" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="74" y="413" font-size="11.5" font-weight="400" fill="#1B2733">country_id</text>
+<text x="330" y="413" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<rect x="41" y="419" width="298" height="19" fill="#EEF0F2" opacity="0.5"/>
+<text x="50" y="432" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="74" y="432" font-size="11.5" font-weight="400" fill="#1B2733">industry_id</text>
+<text x="330" y="432" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<text x="50" y="451" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="74" y="451" font-size="11.5" font-weight="400" fill="#1B2733">parent_id</text>
+<text x="330" y="451" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<rect x="41" y="457" width="298" height="19" fill="#EEF0F2" opacity="0.5"/>
+<text x="50" y="470" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="74" y="470" font-size="11.5" font-weight="400" fill="#1B2733">state_id</text>
+<text x="330" y="470" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<text x="50" y="489" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="74" y="489" font-size="11.5" font-weight="400" fill="#1B2733">user_id</text>
+<text x="330" y="489" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<rect x="41" y="495" width="298" height="19" fill="#EEF0F2" opacity="0.5"/>
+<text x="50" y="508" font-size="11" font-weight="600" fill="#8A6D1F"></text>
+<text x="74" y="508" font-size="11.5" font-weight="400" fill="#1B2733">name</text>
+<text x="330" y="508" font-size="10.5" text-anchor="end" fill="#7C8894">varchar</text>
+<text x="50" y="527" font-size="11" font-weight="600" fill="#8A6D1F"></text>
+<text x="74" y="527" font-size="11.5" font-weight="400" fill="#1B2733">email</text>
+<text x="330" y="527" font-size="10.5" text-anchor="end" fill="#7C8894">varchar</text>
+<rect x="41" y="533" width="298" height="19" fill="#EEF0F2" opacity="0.5"/>
+<text x="50" y="546" font-size="11" font-weight="600" fill="#8A6D1F"></text>
+<text x="74" y="546" font-size="11.5" font-weight="400" fill="#1B2733">phone</text>
+<text x="330" y="546" font-size="10.5" text-anchor="end" fill="#7C8894">varchar</text>
+<text x="74" y="565" font-size="10.5" font-style="italic" fill="#9AA5B1">+29 more columns</text>
+<rect x="40" y="613" width="300" height="152" rx="6" fill="#fff" stroke="#3D454C" stroke-width="1.4"/>
+<path d="M40,619 a6,6 0 0 1 6,-6 h288 a6,6 0 0 1 6,6 v24 h-300 z" fill="#5B6770"/>
+<text x="50" y="633" font-size="13" font-weight="700" fill="#fff">res_users</text>
+<text x="330" y="633" font-size="10" text-anchor="end" fill="#ffffff" opacity="0.85">RM / manager</text>
+<rect x="41" y="643" width="298" height="19" fill="#EEF0F2" opacity="0.5"/>
+<text x="50" y="656" font-size="11" font-weight="600" fill="#8A6D1F">PK</text>
+<text x="74" y="656" font-size="11.5" font-weight="700" fill="#1B2733">id</text>
+<text x="330" y="656" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<text x="50" y="675" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="74" y="675" font-size="11.5" font-weight="400" fill="#1B2733">company_id</text>
+<text x="330" y="675" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<rect x="41" y="681" width="298" height="19" fill="#EEF0F2" opacity="0.5"/>
+<text x="50" y="694" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="74" y="694" font-size="11.5" font-weight="400" fill="#1B2733">partner_id</text>
+<text x="330" y="694" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<text x="50" y="713" font-size="11" font-weight="600" fill="#8A6D1F"></text>
+<text x="74" y="713" font-size="11.5" font-weight="400" fill="#1B2733">login</text>
+<text x="330" y="713" font-size="10.5" text-anchor="end" fill="#7C8894">varchar</text>
+<rect x="41" y="719" width="298" height="19" fill="#EEF0F2" opacity="0.5"/>
+<text x="50" y="732" font-size="11" font-weight="600" fill="#8A6D1F"></text>
+<text x="74" y="732" font-size="11.5" font-weight="400" fill="#1B2733">active</text>
+<text x="330" y="732" font-size="10.5" text-anchor="end" fill="#7C8894">bool</text>
+<text x="74" y="751" font-size="10.5" font-style="italic" fill="#9AA5B1">+14 more columns</text>
+<rect x="400" y="70" width="300" height="171" rx="6" fill="#fff" stroke="#154E7D" stroke-width="1.4"/>
+<path d="M400,76 a6,6 0 0 1 6,-6 h288 a6,6 0 0 1 6,6 v24 h-300 z" fill="#1F6FB2"/>
+<text x="410" y="90" font-size="13" font-weight="700" fill="#fff">property_base</text>
+<text x="690" y="90" font-size="10" text-anchor="end" fill="#ffffff" opacity="0.85">inventory master</text>
+<rect x="401" y="100" width="298" height="19" fill="#E8F1F9" opacity="0.5"/>
+<text x="410" y="113" font-size="11" font-weight="600" fill="#8A6D1F">PK</text>
+<text x="434" y="113" font-size="11.5" font-weight="700" fill="#1B2733">id</text>
+<text x="690" y="113" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<text x="410" y="132" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="434" y="132" font-size="11.5" font-weight="400" fill="#1B2733">rm_user_id</text>
+<text x="690" y="132" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<rect x="401" y="138" width="298" height="19" fill="#E8F1F9" opacity="0.5"/>
+<text x="410" y="151" font-size="11" font-weight="600" fill="#8A6D1F"></text>
+<text x="434" y="151" font-size="11.5" font-weight="400" fill="#1B2733">name</text>
+<text x="690" y="151" font-size="10.5" text-anchor="end" fill="#7C8894">varchar</text>
+<text x="410" y="170" font-size="11" font-weight="600" fill="#8A6D1F"></text>
+<text x="434" y="170" font-size="11.5" font-weight="400" fill="#1B2733">prop_id</text>
+<text x="690" y="170" font-size="10.5" text-anchor="end" fill="#7C8894">varchar</text>
+<rect x="401" y="176" width="298" height="19" fill="#E8F1F9" opacity="0.5"/>
+<text x="410" y="189" font-size="11" font-weight="600" fill="#8A6D1F"></text>
+<text x="434" y="189" font-size="11.5" font-weight="400" fill="#1B2733">city</text>
+<text x="690" y="189" font-size="10.5" text-anchor="end" fill="#7C8894">varchar</text>
+<text x="410" y="208" font-size="11" font-weight="600" fill="#8A6D1F"></text>
+<text x="434" y="208" font-size="11.5" font-weight="400" fill="#1B2733">is_active</text>
+<text x="690" y="208" font-size="10.5" text-anchor="end" fill="#7C8894">bool</text>
+<text x="434" y="227" font-size="10.5" font-style="italic" fill="#9AA5B1">+27 more columns</text>
+<rect x="400" y="275" width="300" height="133" rx="6" fill="#fff" stroke="#154E7D" stroke-width="1.4"/>
+<path d="M400,281 a6,6 0 0 1 6,-6 h288 a6,6 0 0 1 6,6 v24 h-300 z" fill="#1F6FB2"/>
+<text x="410" y="295" font-size="13" font-weight="700" fill="#fff">property_portal_listing</text>
+<rect x="401" y="305" width="298" height="19" fill="#E8F1F9" opacity="0.5"/>
+<text x="410" y="318" font-size="11" font-weight="600" fill="#8A6D1F">PK</text>
+<text x="434" y="318" font-size="11.5" font-weight="700" fill="#1B2733">id</text>
+<text x="690" y="318" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<text x="410" y="337" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="434" y="337" font-size="11.5" font-weight="400" fill="#1B2733">property_base_id</text>
+<text x="690" y="337" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<rect x="401" y="343" width="298" height="19" fill="#E8F1F9" opacity="0.5"/>
+<text x="410" y="356" font-size="11" font-weight="600" fill="#8A6D1F"></text>
+<text x="434" y="356" font-size="11.5" font-weight="400" fill="#1B2733">portal_name</text>
+<text x="690" y="356" font-size="10.5" text-anchor="end" fill="#7C8894">varchar</text>
+<text x="410" y="375" font-size="11" font-weight="600" fill="#8A6D1F"></text>
+<text x="434" y="375" font-size="11.5" font-weight="400" fill="#1B2733">portal_listing_id</text>
+<text x="690" y="375" font-size="10.5" text-anchor="end" fill="#7C8894">varchar</text>
+<text x="434" y="394" font-size="10.5" font-style="italic" fill="#9AA5B1">+2 more columns</text>
+<rect x="400" y="442" width="300" height="95" rx="6" fill="#fff" stroke="#5E5E5E" stroke-width="1.4"/>
+<path d="M400,448 a6,6 0 0 1 6,-6 h288 a6,6 0 0 1 6,6 v24 h-300 z" fill="#8A8A8A"/>
+<text x="410" y="462" font-size="13" font-weight="700" fill="#fff">property_inventory</text>
+<text x="690" y="462" font-size="10" text-anchor="end" fill="#ffffff" opacity="0.85">lead_suggestor (archived)</text>
+<rect x="401" y="472" width="298" height="19" fill="#F2F2F2" opacity="0.5"/>
+<text x="410" y="485" font-size="11" font-weight="600" fill="#8A6D1F">PK</text>
+<text x="434" y="485" font-size="11.5" font-weight="700" fill="#1B2733">id</text>
+<text x="690" y="485" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<text x="410" y="504" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="434" y="504" font-size="11.5" font-weight="400" fill="#1B2733">rm_user_id</text>
+<text x="690" y="504" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<text x="434" y="523" font-size="10.5" font-style="italic" fill="#9AA5B1">+16 more columns</text>
+<rect x="780" y="70" width="300" height="133" rx="6" fill="#fff" stroke="#1F5738" stroke-width="1.4"/>
+<path d="M780,76 a6,6 0 0 1 6,-6 h288 a6,6 0 0 1 6,6 v24 h-300 z" fill="#2E7D52"/>
+<text x="790" y="90" font-size="13" font-weight="700" fill="#fff">lead_source_category</text>
+<rect x="781" y="100" width="298" height="19" fill="#E9F4EE" opacity="0.5"/>
+<text x="790" y="113" font-size="11" font-weight="600" fill="#8A6D1F">PK</text>
+<text x="814" y="113" font-size="11.5" font-weight="700" fill="#1B2733">id</text>
+<text x="1070" y="113" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<text x="790" y="132" font-size="11" font-weight="600" fill="#8A6D1F"></text>
+<text x="814" y="132" font-size="11.5" font-weight="400" fill="#1B2733">name</text>
+<text x="1070" y="132" font-size="10.5" text-anchor="end" fill="#7C8894">varchar</text>
+<rect x="781" y="138" width="298" height="19" fill="#E9F4EE" opacity="0.5"/>
+<text x="790" y="151" font-size="11" font-weight="600" fill="#8A6D1F"></text>
+<text x="814" y="151" font-size="11.5" font-weight="400" fill="#1B2733">code</text>
+<text x="1070" y="151" font-size="10.5" text-anchor="end" fill="#7C8894">varchar</text>
+<text x="790" y="170" font-size="11" font-weight="600" fill="#8A6D1F"></text>
+<text x="814" y="170" font-size="11.5" font-weight="400" fill="#1B2733">source_type</text>
+<text x="1070" y="170" font-size="10.5" text-anchor="end" fill="#7C8894">varchar</text>
+<text x="814" y="189" font-size="10.5" font-style="italic" fill="#9AA5B1">+2 more columns</text>
+<rect x="780" y="237" width="300" height="171" rx="6" fill="#fff" stroke="#1F5738" stroke-width="1.4"/>
+<path d="M780,243 a6,6 0 0 1 6,-6 h288 a6,6 0 0 1 6,6 v24 h-300 z" fill="#2E7D52"/>
+<text x="790" y="257" font-size="13" font-weight="700" fill="#fff">lead_source</text>
+<rect x="781" y="267" width="298" height="19" fill="#E9F4EE" opacity="0.5"/>
+<text x="790" y="280" font-size="11" font-weight="600" fill="#8A6D1F">PK</text>
+<text x="814" y="280" font-size="11.5" font-weight="700" fill="#1B2733">id</text>
+<text x="1070" y="280" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<text x="790" y="299" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="814" y="299" font-size="11.5" font-weight="400" fill="#1B2733">category_id</text>
+<text x="1070" y="299" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<rect x="781" y="305" width="298" height="19" fill="#E9F4EE" opacity="0.5"/>
+<text x="790" y="318" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="814" y="318" font-size="11.5" font-weight="400" fill="#1B2733">default_rm_user_id</text>
+<text x="1070" y="318" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<text x="790" y="337" font-size="11" font-weight="600" fill="#8A6D1F"></text>
+<text x="814" y="337" font-size="11.5" font-weight="400" fill="#1B2733">name</text>
+<text x="1070" y="337" font-size="10.5" text-anchor="end" fill="#7C8894">varchar</text>
+<rect x="781" y="343" width="298" height="19" fill="#E9F4EE" opacity="0.5"/>
+<text x="790" y="356" font-size="11" font-weight="600" fill="#8A6D1F"></text>
+<text x="814" y="356" font-size="11.5" font-weight="400" fill="#1B2733">portal_code</text>
+<text x="1070" y="356" font-size="10.5" text-anchor="end" fill="#7C8894">varchar</text>
+<text x="790" y="375" font-size="11" font-weight="600" fill="#8A6D1F"></text>
+<text x="814" y="375" font-size="11.5" font-weight="400" fill="#1B2733">source_type</text>
+<text x="1070" y="375" font-size="10.5" text-anchor="end" fill="#7C8894">varchar</text>
+<text x="814" y="394" font-size="10.5" font-style="italic" fill="#9AA5B1">+2 more columns</text>
+<rect x="780" y="442" width="300" height="95" rx="6" fill="#fff" stroke="#1F5738" stroke-width="1.4"/>
+<path d="M780,448 a6,6 0 0 1 6,-6 h288 a6,6 0 0 1 6,6 v24 h-300 z" fill="#2E7D52"/>
+<text x="790" y="462" font-size="13" font-weight="700" fill="#fff">leads_bde</text>
+<text x="1070" y="462" font-size="10" text-anchor="end" fill="#ffffff" opacity="0.85">business dev exec</text>
+<rect x="781" y="472" width="298" height="19" fill="#E9F4EE" opacity="0.5"/>
+<text x="790" y="485" font-size="11" font-weight="600" fill="#8A6D1F">PK</text>
+<text x="814" y="485" font-size="11.5" font-weight="700" fill="#1B2733">id</text>
+<text x="1070" y="485" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<text x="790" y="504" font-size="11" font-weight="600" fill="#8A6D1F"></text>
+<text x="814" y="504" font-size="11.5" font-weight="400" fill="#1B2733">name</text>
+<text x="1070" y="504" font-size="10.5" text-anchor="end" fill="#7C8894">varchar</text>
+<text x="814" y="523" font-size="10.5" font-style="italic" fill="#9AA5B1">+3 more columns</text>
+<rect x="1160" y="70" width="300" height="304" rx="6" fill="#fff" stroke="#1F5738" stroke-width="1.4"/>
+<path d="M1160,76 a6,6 0 0 1 6,-6 h288 a6,6 0 0 1 6,6 v24 h-300 z" fill="#2E7D52"/>
+<text x="1170" y="90" font-size="13" font-weight="700" fill="#fff">leads_new</text>
+<text x="1450" y="90" font-size="10" text-anchor="end" fill="#ffffff" opacity="0.85">the enquiry</text>
+<rect x="1161" y="100" width="298" height="19" fill="#E9F4EE" opacity="0.5"/>
+<text x="1170" y="113" font-size="11" font-weight="600" fill="#8A6D1F">PK</text>
+<text x="1194" y="113" font-size="11.5" font-weight="700" fill="#1B2733">id</text>
+<text x="1450" y="113" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<text x="1170" y="132" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="1194" y="132" font-size="11.5" font-weight="400" fill="#1B2733">bde_id</text>
+<text x="1450" y="132" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<rect x="1161" y="138" width="298" height="19" fill="#E9F4EE" opacity="0.5"/>
+<text x="1170" y="151" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="1194" y="151" font-size="11.5" font-weight="400" fill="#1B2733">last_reassignment_batch_id</text>
+<text x="1450" y="151" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<text x="1170" y="170" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="1194" y="170" font-size="11.5" font-weight="400" fill="#1B2733">parent_inquiry_id</text>
+<text x="1450" y="170" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<rect x="1161" y="176" width="298" height="19" fill="#E9F4EE" opacity="0.5"/>
+<text x="1170" y="189" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="1194" y="189" font-size="11.5" font-weight="400" fill="#1B2733">property_base_id</text>
+<text x="1450" y="189" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<text x="1170" y="208" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="1194" y="208" font-size="11.5" font-weight="400" fill="#1B2733">property_id</text>
+<text x="1450" y="208" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<rect x="1161" y="214" width="298" height="19" fill="#E9F4EE" opacity="0.5"/>
+<text x="1170" y="227" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="1194" y="227" font-size="11.5" font-weight="400" fill="#1B2733">source_id</text>
+<text x="1450" y="227" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<text x="1170" y="246" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="1194" y="246" font-size="11.5" font-weight="400" fill="#1B2733">user_id</text>
+<text x="1450" y="246" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<rect x="1161" y="252" width="298" height="19" fill="#E9F4EE" opacity="0.5"/>
+<text x="1170" y="265" font-size="11" font-weight="600" fill="#8A6D1F"></text>
+<text x="1194" y="265" font-size="11.5" font-weight="400" fill="#1B2733">name</text>
+<text x="1450" y="265" font-size="10.5" text-anchor="end" fill="#7C8894">varchar</text>
+<text x="1170" y="284" font-size="11" font-weight="600" fill="#8A6D1F"></text>
+<text x="1194" y="284" font-size="11.5" font-weight="400" fill="#1B2733">phone</text>
+<text x="1450" y="284" font-size="10.5" text-anchor="end" fill="#7C8894">varchar</text>
+<rect x="1161" y="290" width="298" height="19" fill="#E9F4EE" opacity="0.5"/>
+<text x="1170" y="303" font-size="11" font-weight="600" fill="#8A6D1F"></text>
+<text x="1194" y="303" font-size="11.5" font-weight="400" fill="#1B2733">current_status</text>
+<text x="1450" y="303" font-size="10.5" text-anchor="end" fill="#7C8894">varchar</text>
+<text x="1170" y="322" font-size="11" font-weight="600" fill="#8A6D1F"></text>
+<text x="1194" y="322" font-size="11.5" font-weight="400" fill="#1B2733">inquiry_type</text>
+<text x="1450" y="322" font-size="10.5" text-anchor="end" fill="#7C8894">varchar</text>
+<rect x="1161" y="328" width="298" height="19" fill="#E9F4EE" opacity="0.5"/>
+<text x="1170" y="341" font-size="11" font-weight="600" fill="#8A6D1F"></text>
+<text x="1194" y="341" font-size="11.5" font-weight="400" fill="#1B2733">state</text>
+<text x="1450" y="341" font-size="10.5" text-anchor="end" fill="#7C8894">varchar</text>
+<text x="1194" y="360" font-size="10.5" font-style="italic" fill="#9AA5B1">+23 more columns</text>
+<rect x="1160" y="408" width="300" height="114" rx="6" fill="#fff" stroke="#1F5738" stroke-width="1.4"/>
+<path d="M1160,414 a6,6 0 0 1 6,-6 h288 a6,6 0 0 1 6,6 v24 h-300 z" fill="#2E7D52"/>
+<text x="1170" y="428" font-size="13" font-weight="700" fill="#fff">lead_property_interest</text>
+<rect x="1161" y="438" width="298" height="19" fill="#E9F4EE" opacity="0.5"/>
+<text x="1170" y="451" font-size="11" font-weight="600" fill="#8A6D1F">PK</text>
+<text x="1194" y="451" font-size="11.5" font-weight="700" fill="#1B2733">id</text>
+<text x="1450" y="451" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<text x="1170" y="470" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="1194" y="470" font-size="11.5" font-weight="400" fill="#1B2733">lead_id</text>
+<text x="1450" y="470" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<rect x="1161" y="476" width="298" height="19" fill="#E9F4EE" opacity="0.5"/>
+<text x="1170" y="489" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="1194" y="489" font-size="11.5" font-weight="400" fill="#1B2733">property_base_id</text>
+<text x="1450" y="489" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<text x="1194" y="508" font-size="10.5" font-style="italic" fill="#9AA5B1">+11 more columns</text>
+<rect x="1160" y="556" width="300" height="114" rx="6" fill="#fff" stroke="#1F5738" stroke-width="1.4"/>
+<path d="M1160,562 a6,6 0 0 1 6,-6 h288 a6,6 0 0 1 6,6 v24 h-300 z" fill="#2E7D52"/>
+<text x="1170" y="576" font-size="13" font-weight="700" fill="#fff">lead_reassignment_log</text>
+<text x="1450" y="576" font-size="10" text-anchor="end" fill="#ffffff" opacity="0.85">batch audit</text>
+<rect x="1161" y="586" width="298" height="19" fill="#E9F4EE" opacity="0.5"/>
+<text x="1170" y="599" font-size="11" font-weight="600" fill="#8A6D1F">PK</text>
+<text x="1194" y="599" font-size="11.5" font-weight="700" fill="#1B2733">id</text>
+<text x="1450" y="599" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<text x="1170" y="618" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="1194" y="618" font-size="11.5" font-weight="400" fill="#1B2733">new_rm_id</text>
+<text x="1450" y="618" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<rect x="1161" y="624" width="298" height="19" fill="#E9F4EE" opacity="0.5"/>
+<text x="1170" y="637" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="1194" y="637" font-size="11.5" font-weight="400" fill="#1B2733">reassigned_by_id</text>
+<text x="1450" y="637" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<text x="1194" y="656" font-size="10.5" font-style="italic" fill="#9AA5B1">+8 more columns</text>
+<rect x="1540" y="70" width="300" height="228" rx="6" fill="#fff" stroke="#7D4B00" stroke-width="1.4"/>
+<path d="M1540,76 a6,6 0 0 1 6,-6 h288 a6,6 0 0 1 6,6 v24 h-300 z" fill="#B26B00"/>
+<text x="1550" y="90" font-size="13" font-weight="700" fill="#fff">lead_site_visit</text>
+<rect x="1541" y="100" width="298" height="19" fill="#FBF1E3" opacity="0.5"/>
+<text x="1550" y="113" font-size="11" font-weight="600" fill="#8A6D1F">PK</text>
+<text x="1574" y="113" font-size="11.5" font-weight="700" fill="#1B2733">id</text>
+<text x="1830" y="113" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<text x="1550" y="132" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="1574" y="132" font-size="11.5" font-weight="400" fill="#1B2733">assigned_rm_id</text>
+<text x="1830" y="132" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<rect x="1541" y="138" width="298" height="19" fill="#FBF1E3" opacity="0.5"/>
+<text x="1550" y="151" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="1574" y="151" font-size="11.5" font-weight="400" fill="#1B2733">feedback_option_id</text>
+<text x="1830" y="151" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<text x="1550" y="170" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="1574" y="170" font-size="11.5" font-weight="400" fill="#1B2733">inquiry_id</text>
+<text x="1830" y="170" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<rect x="1541" y="176" width="298" height="19" fill="#FBF1E3" opacity="0.5"/>
+<text x="1550" y="189" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="1574" y="189" font-size="11.5" font-weight="400" fill="#1B2733">previous_visit_id</text>
+<text x="1830" y="189" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<text x="1550" y="208" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="1574" y="208" font-size="11.5" font-weight="400" fill="#1B2733">property_base_id</text>
+<text x="1830" y="208" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<rect x="1541" y="214" width="298" height="19" fill="#FBF1E3" opacity="0.5"/>
+<text x="1550" y="227" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="1574" y="227" font-size="11.5" font-weight="400" fill="#1B2733">root_visit_id</text>
+<text x="1830" y="227" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<text x="1550" y="246" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="1574" y="246" font-size="11.5" font-weight="400" fill="#1B2733">status_id</text>
+<text x="1830" y="246" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<rect x="1541" y="252" width="298" height="19" fill="#FBF1E3" opacity="0.5"/>
+<text x="1550" y="265" font-size="11" font-weight="600" fill="#8A6D1F"></text>
+<text x="1574" y="265" font-size="11.5" font-weight="400" fill="#1B2733">scheduled_date</text>
+<text x="1830" y="265" font-size="10.5" text-anchor="end" fill="#7C8894">date</text>
+<text x="1574" y="284" font-size="10.5" font-style="italic" fill="#9AA5B1">+8 more columns</text>
+<rect x="1540" y="332" width="300" height="133" rx="6" fill="#fff" stroke="#7D4B00" stroke-width="1.4"/>
+<path d="M1540,338 a6,6 0 0 1 6,-6 h288 a6,6 0 0 1 6,6 v24 h-300 z" fill="#B26B00"/>
+<text x="1550" y="352" font-size="13" font-weight="700" fill="#fff">lead_site_visit_status</text>
+<rect x="1541" y="362" width="298" height="19" fill="#FBF1E3" opacity="0.5"/>
+<text x="1550" y="375" font-size="11" font-weight="600" fill="#8A6D1F">PK</text>
+<text x="1574" y="375" font-size="11.5" font-weight="700" fill="#1B2733">id</text>
+<text x="1830" y="375" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<text x="1550" y="394" font-size="11" font-weight="600" fill="#8A6D1F"></text>
+<text x="1574" y="394" font-size="11.5" font-weight="400" fill="#1B2733">name</text>
+<text x="1830" y="394" font-size="10.5" text-anchor="end" fill="#7C8894">varchar</text>
+<rect x="1541" y="400" width="298" height="19" fill="#FBF1E3" opacity="0.5"/>
+<text x="1550" y="413" font-size="11" font-weight="600" fill="#8A6D1F"></text>
+<text x="1574" y="413" font-size="11.5" font-weight="400" fill="#1B2733">code</text>
+<text x="1830" y="413" font-size="10.5" text-anchor="end" fill="#7C8894">varchar</text>
+<text x="1550" y="432" font-size="11" font-weight="600" fill="#8A6D1F"></text>
+<text x="1574" y="432" font-size="11.5" font-weight="400" fill="#1B2733">active</text>
+<text x="1830" y="432" font-size="10.5" text-anchor="end" fill="#7C8894">bool</text>
+<text x="1574" y="451" font-size="10.5" font-style="italic" fill="#9AA5B1">+9 more columns</text>
+<rect x="1540" y="499" width="300" height="114" rx="6" fill="#fff" stroke="#7D4B00" stroke-width="1.4"/>
+<path d="M1540,505 a6,6 0 0 1 6,-6 h288 a6,6 0 0 1 6,6 v24 h-300 z" fill="#B26B00"/>
+<text x="1550" y="519" font-size="13" font-weight="700" fill="#fff">lead_site_visit_feedback_option</text>
+<rect x="1541" y="529" width="298" height="19" fill="#FBF1E3" opacity="0.5"/>
+<text x="1550" y="542" font-size="11" font-weight="600" fill="#8A6D1F">PK</text>
+<text x="1574" y="542" font-size="11.5" font-weight="700" fill="#1B2733">id</text>
+<text x="1830" y="542" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<text x="1550" y="561" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="1574" y="561" font-size="11.5" font-weight="400" fill="#1B2733">status_id</text>
+<text x="1830" y="561" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<rect x="1541" y="567" width="298" height="19" fill="#FBF1E3" opacity="0.5"/>
+<text x="1550" y="580" font-size="11" font-weight="600" fill="#8A6D1F"></text>
+<text x="1574" y="580" font-size="11.5" font-weight="400" fill="#1B2733">name</text>
+<text x="1830" y="580" font-size="10.5" text-anchor="end" fill="#7C8894">varchar</text>
+<text x="1574" y="599" font-size="10.5" font-style="italic" fill="#9AA5B1">+6 more columns</text>
+<rect x="400" y="571" width="300" height="95" rx="6" fill="#fff" stroke="#5E5E5E" stroke-width="1.4"/>
+<path d="M400,577 a6,6 0 0 1 6,-6 h288 a6,6 0 0 1 6,6 v24 h-300 z" fill="#8A8A8A"/>
+<text x="410" y="591" font-size="13" font-weight="700" fill="#fff">lead_score</text>
+<text x="690" y="591" font-size="10" text-anchor="end" fill="#ffffff" opacity="0.85">pre-leads_new</text>
+<rect x="401" y="601" width="298" height="19" fill="#F2F2F2" opacity="0.5"/>
+<text x="410" y="614" font-size="11" font-weight="600" fill="#8A6D1F">PK</text>
+<text x="434" y="614" font-size="11.5" font-weight="700" fill="#1B2733">id</text>
+<text x="690" y="614" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<text x="410" y="633" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="434" y="633" font-size="11.5" font-weight="400" fill="#1B2733">assigned_rm_id</text>
+<text x="690" y="633" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<text x="434" y="652" font-size="10.5" font-style="italic" fill="#9AA5B1">+29 more columns</text>
+<rect x="400" y="700" width="300" height="133" rx="6" fill="#fff" stroke="#5E5E5E" stroke-width="1.4"/>
+<path d="M400,706 a6,6 0 0 1 6,-6 h288 a6,6 0 0 1 6,6 v24 h-300 z" fill="#8A8A8A"/>
+<text x="410" y="720" font-size="13" font-weight="700" fill="#fff">whatsapp_response</text>
+<rect x="401" y="730" width="298" height="19" fill="#F2F2F2" opacity="0.5"/>
+<text x="410" y="743" font-size="11" font-weight="600" fill="#8A6D1F">PK</text>
+<text x="434" y="743" font-size="11.5" font-weight="700" fill="#1B2733">id</text>
+<text x="690" y="743" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<text x="410" y="762" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="434" y="762" font-size="11.5" font-weight="400" fill="#1B2733">assigned_rm_id</text>
+<text x="690" y="762" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<rect x="401" y="768" width="298" height="19" fill="#F2F2F2" opacity="0.5"/>
+<text x="410" y="781" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="434" y="781" font-size="11.5" font-weight="400" fill="#1B2733">lead_id</text>
+<text x="690" y="781" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<text x="410" y="800" font-size="11" font-weight="600" fill="#8A6D1F"></text>
+<text x="434" y="800" font-size="11.5" font-weight="400" fill="#1B2733">response</text>
+<text x="690" y="800" font-size="10.5" text-anchor="end" fill="#7C8894">varchar</text>
+<text x="434" y="819" font-size="10.5" font-style="italic" fill="#9AA5B1">+11 more columns</text>
+<rect x="1960" y="70" width="300" height="190" rx="6" fill="#fff" stroke="#0B6157" stroke-width="1.4"/>
+<path d="M1960,76 a6,6 0 0 1 6,-6 h288 a6,6 0 0 1 6,6 v24 h-300 z" fill="#128C7E"/>
+<text x="1970" y="90" font-size="13" font-weight="700" fill="#fff">wa_conversation</text>
+<text x="2250" y="90" font-size="10" text-anchor="end" fill="#ffffff" opacity="0.85">one per phone</text>
+<rect x="1961" y="100" width="298" height="19" fill="#E6F4F2" opacity="0.5"/>
+<text x="1970" y="113" font-size="11" font-weight="600" fill="#8A6D1F">PK</text>
+<text x="1994" y="113" font-size="11.5" font-weight="700" fill="#1B2733">id</text>
+<text x="2250" y="113" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<text x="1970" y="132" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="1994" y="132" font-size="11.5" font-weight="400" fill="#1B2733">active_segment_id</text>
+<text x="2250" y="132" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<rect x="1961" y="138" width="298" height="19" fill="#E6F4F2" opacity="0.5"/>
+<text x="1970" y="151" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="1994" y="151" font-size="11.5" font-weight="400" fill="#1B2733">assigned_user_id</text>
+<text x="2250" y="151" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<text x="1970" y="170" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="1994" y="170" font-size="11.5" font-weight="400" fill="#1B2733">lead_id</text>
+<text x="2250" y="170" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<rect x="1961" y="176" width="298" height="19" fill="#E6F4F2" opacity="0.5"/>
+<text x="1970" y="189" font-size="11" font-weight="600" fill="#8A6D1F"></text>
+<text x="1994" y="189" font-size="11.5" font-weight="400" fill="#1B2733">phone_number</text>
+<text x="2250" y="189" font-size="10.5" text-anchor="end" fill="#7C8894">varchar</text>
+<text x="1970" y="208" font-size="11" font-weight="600" fill="#8A6D1F"></text>
+<text x="1994" y="208" font-size="11.5" font-weight="400" fill="#1B2733">state</text>
+<text x="2250" y="208" font-size="10.5" text-anchor="end" fill="#7C8894">varchar</text>
+<rect x="1961" y="214" width="298" height="19" fill="#E6F4F2" opacity="0.5"/>
+<text x="1970" y="227" font-size="11" font-weight="600" fill="#8A6D1F"></text>
+<text x="1994" y="227" font-size="11.5" font-weight="400" fill="#1B2733">unread_count</text>
+<text x="2250" y="227" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<text x="1994" y="246" font-size="10.5" font-style="italic" fill="#9AA5B1">+5 more columns</text>
+<rect x="1960" y="294" width="300" height="152" rx="6" fill="#fff" stroke="#0B6157" stroke-width="1.4"/>
+<path d="M1960,300 a6,6 0 0 1 6,-6 h288 a6,6 0 0 1 6,6 v24 h-300 z" fill="#128C7E"/>
+<text x="1970" y="314" font-size="13" font-weight="700" fill="#fff">wa_conversation_segment</text>
+<text x="2250" y="314" font-size="10" text-anchor="end" fill="#ffffff" opacity="0.85">attribution</text>
+<rect x="1961" y="324" width="298" height="19" fill="#E6F4F2" opacity="0.5"/>
+<text x="1970" y="337" font-size="11" font-weight="600" fill="#8A6D1F">PK</text>
+<text x="1994" y="337" font-size="11.5" font-weight="700" fill="#1B2733">id</text>
+<text x="2250" y="337" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<text x="1970" y="356" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="1994" y="356" font-size="11.5" font-weight="400" fill="#1B2733">conversation_id</text>
+<text x="2250" y="356" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<rect x="1961" y="362" width="298" height="19" fill="#E6F4F2" opacity="0.5"/>
+<text x="1970" y="375" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="1994" y="375" font-size="11.5" font-weight="400" fill="#1B2733">inquiry_id</text>
+<text x="2250" y="375" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<text x="1970" y="394" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="1994" y="394" font-size="11.5" font-weight="400" fill="#1B2733">property_base_id</text>
+<text x="2250" y="394" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<rect x="1961" y="400" width="298" height="19" fill="#E6F4F2" opacity="0.5"/>
+<text x="1970" y="413" font-size="11" font-weight="600" fill="#8A6D1F"></text>
+<text x="1994" y="413" font-size="11.5" font-weight="400" fill="#1B2733">started_at</text>
+<text x="2250" y="413" font-size="10.5" text-anchor="end" fill="#7C8894">timestamp</text>
+<text x="1994" y="432" font-size="10.5" font-style="italic" fill="#9AA5B1">+3 more columns</text>
+<rect x="1960" y="480" width="300" height="266" rx="6" fill="#fff" stroke="#0B6157" stroke-width="1.4"/>
+<path d="M1960,486 a6,6 0 0 1 6,-6 h288 a6,6 0 0 1 6,6 v24 h-300 z" fill="#128C7E"/>
+<text x="1970" y="500" font-size="13" font-weight="700" fill="#fff">wa_message</text>
+<text x="2250" y="500" font-size="10" text-anchor="end" fill="#ffffff" opacity="0.85">append-only</text>
+<rect x="1961" y="510" width="298" height="19" fill="#E6F4F2" opacity="0.5"/>
+<text x="1970" y="523" font-size="11" font-weight="600" fill="#8A6D1F">PK</text>
+<text x="1994" y="523" font-size="11.5" font-weight="700" fill="#1B2733">id</text>
+<text x="2250" y="523" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<text x="1970" y="542" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="1994" y="542" font-size="11.5" font-weight="400" fill="#1B2733">conversation_id</text>
+<text x="2250" y="542" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<rect x="1961" y="548" width="298" height="19" fill="#E6F4F2" opacity="0.5"/>
+<text x="1970" y="561" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="1994" y="561" font-size="11.5" font-weight="400" fill="#1B2733">effective_inquiry_id</text>
+<text x="2250" y="561" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<text x="1970" y="580" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="1994" y="580" font-size="11.5" font-weight="400" fill="#1B2733">effective_property_id</text>
+<text x="2250" y="580" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<rect x="1961" y="586" width="298" height="19" fill="#E6F4F2" opacity="0.5"/>
+<text x="1970" y="599" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="1994" y="599" font-size="11.5" font-weight="400" fill="#1B2733">lead_id</text>
+<text x="2250" y="599" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<text x="1970" y="618" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="1994" y="618" font-size="11.5" font-weight="400" fill="#1B2733">quoted_message_id</text>
+<text x="2250" y="618" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<rect x="1961" y="624" width="298" height="19" fill="#E6F4F2" opacity="0.5"/>
+<text x="1970" y="637" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="1994" y="637" font-size="11.5" font-weight="400" fill="#1B2733">segment_id</text>
+<text x="2250" y="637" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<text x="1970" y="656" font-size="11" font-weight="600" fill="#8A6D1F"></text>
+<text x="1994" y="656" font-size="11.5" font-weight="400" fill="#1B2733">direction</text>
+<text x="2250" y="656" font-size="10.5" text-anchor="end" fill="#7C8894">varchar</text>
+<rect x="1961" y="662" width="298" height="19" fill="#E6F4F2" opacity="0.5"/>
+<text x="1970" y="675" font-size="11" font-weight="600" fill="#8A6D1F"></text>
+<text x="1994" y="675" font-size="11.5" font-weight="400" fill="#1B2733">kind</text>
+<text x="2250" y="675" font-size="10.5" text-anchor="end" fill="#7C8894">varchar</text>
+<text x="1970" y="694" font-size="11" font-weight="600" fill="#8A6D1F"></text>
+<text x="1994" y="694" font-size="11.5" font-weight="400" fill="#1B2733">status</text>
+<text x="2250" y="694" font-size="10.5" text-anchor="end" fill="#7C8894">varchar</text>
+<rect x="1961" y="700" width="298" height="19" fill="#E6F4F2" opacity="0.5"/>
+<text x="1970" y="713" font-size="11" font-weight="600" fill="#8A6D1F"></text>
+<text x="1994" y="713" font-size="11.5" font-weight="400" fill="#1B2733">occurred_at</text>
+<text x="2250" y="713" font-size="10.5" text-anchor="end" fill="#7C8894">timestamp</text>
+<text x="1994" y="732" font-size="10.5" font-style="italic" fill="#9AA5B1">+32 more columns</text>
+<rect x="1960" y="780" width="300" height="114" rx="6" fill="#fff" stroke="#0B6157" stroke-width="1.4"/>
+<path d="M1960,786 a6,6 0 0 1 6,-6 h288 a6,6 0 0 1 6,6 v24 h-300 z" fill="#128C7E"/>
+<text x="1970" y="800" font-size="13" font-weight="700" fill="#fff">wa_workflow</text>
+<rect x="1961" y="810" width="298" height="19" fill="#E6F4F2" opacity="0.5"/>
+<text x="1970" y="823" font-size="11" font-weight="600" fill="#8A6D1F">PK</text>
+<text x="1994" y="823" font-size="11.5" font-weight="700" fill="#1B2733">id</text>
+<text x="2250" y="823" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<text x="1970" y="842" font-size="11" font-weight="600" fill="#8A6D1F"></text>
+<text x="1994" y="842" font-size="11.5" font-weight="400" fill="#1B2733">name</text>
+<text x="2250" y="842" font-size="10.5" text-anchor="end" fill="#7C8894">varchar</text>
+<rect x="1961" y="848" width="298" height="19" fill="#E6F4F2" opacity="0.5"/>
+<text x="1970" y="861" font-size="11" font-weight="600" fill="#8A6D1F"></text>
+<text x="1994" y="861" font-size="11.5" font-weight="400" fill="#1B2733">slug</text>
+<text x="2250" y="861" font-size="10.5" text-anchor="end" fill="#7C8894">varchar</text>
+<text x="1994" y="880" font-size="10.5" font-style="italic" fill="#9AA5B1">+11 more columns</text>
+<rect x="1960" y="928" width="300" height="133" rx="6" fill="#fff" stroke="#0B6157" stroke-width="1.4"/>
+<path d="M1960,934 a6,6 0 0 1 6,-6 h288 a6,6 0 0 1 6,6 v24 h-300 z" fill="#128C7E"/>
+<text x="1970" y="948" font-size="13" font-weight="700" fill="#fff">wa_enrollment</text>
+<rect x="1961" y="958" width="298" height="19" fill="#E6F4F2" opacity="0.5"/>
+<text x="1970" y="971" font-size="11" font-weight="600" fill="#8A6D1F">PK</text>
+<text x="1994" y="971" font-size="11.5" font-weight="700" fill="#1B2733">id</text>
+<text x="2250" y="971" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<text x="1970" y="990" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="1994" y="990" font-size="11.5" font-weight="400" fill="#1B2733">lead_id</text>
+<text x="2250" y="990" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<rect x="1961" y="996" width="298" height="19" fill="#E6F4F2" opacity="0.5"/>
+<text x="1970" y="1009" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="1994" y="1009" font-size="11.5" font-weight="400" fill="#1B2733">workflow_id</text>
+<text x="2250" y="1009" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<text x="1970" y="1028" font-size="11" font-weight="600" fill="#8A6D1F"></text>
+<text x="1994" y="1028" font-size="11.5" font-weight="400" fill="#1B2733">state</text>
+<text x="2250" y="1028" font-size="10.5" text-anchor="end" fill="#7C8894">varchar</text>
+<text x="1994" y="1047" font-size="10.5" font-style="italic" fill="#9AA5B1">+6 more columns</text>
+<rect x="1960" y="1095" width="300" height="152" rx="6" fill="#fff" stroke="#0B6157" stroke-width="1.4"/>
+<path d="M1960,1101 a6,6 0 0 1 6,-6 h288 a6,6 0 0 1 6,6 v24 h-300 z" fill="#128C7E"/>
+<text x="1970" y="1115" font-size="13" font-weight="700" fill="#fff">wa_reassignment_request</text>
+<text x="2250" y="1115" font-size="10" text-anchor="end" fill="#ffffff" opacity="0.85">chat handover</text>
+<rect x="1961" y="1125" width="298" height="19" fill="#E6F4F2" opacity="0.5"/>
+<text x="1970" y="1138" font-size="11" font-weight="600" fill="#8A6D1F">PK</text>
+<text x="1994" y="1138" font-size="11.5" font-weight="700" fill="#1B2733">id</text>
+<text x="2250" y="1138" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<text x="1970" y="1157" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="1994" y="1157" font-size="11.5" font-weight="400" fill="#1B2733">conversation_id</text>
+<text x="2250" y="1157" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<rect x="1961" y="1163" width="298" height="19" fill="#E6F4F2" opacity="0.5"/>
+<text x="1970" y="1176" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="1994" y="1176" font-size="11.5" font-weight="400" fill="#1B2733">current_assignee_id</text>
+<text x="2250" y="1176" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<text x="1970" y="1195" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="1994" y="1195" font-size="11.5" font-weight="400" fill="#1B2733">requester_id</text>
+<text x="2250" y="1195" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<rect x="1961" y="1201" width="298" height="19" fill="#E6F4F2" opacity="0.5"/>
+<text x="1970" y="1214" font-size="11" font-weight="600" fill="#8A6D1F"></text>
+<text x="1994" y="1214" font-size="11.5" font-weight="400" fill="#1B2733">state</text>
+<text x="2250" y="1214" font-size="10.5" text-anchor="end" fill="#7C8894">varchar</text>
+<text x="1994" y="1233" font-size="10.5" font-style="italic" fill="#9AA5B1">+3 more columns</text>
+<rect x="1960" y="1281" width="300" height="133" rx="6" fill="#fff" stroke="#0B6157" stroke-width="1.4"/>
+<path d="M1960,1287 a6,6 0 0 1 6,-6 h288 a6,6 0 0 1 6,6 v24 h-300 z" fill="#128C7E"/>
+<text x="1970" y="1301" font-size="13" font-weight="700" fill="#fff">wa_quick_reply</text>
+<rect x="1961" y="1311" width="298" height="19" fill="#E6F4F2" opacity="0.5"/>
+<text x="1970" y="1324" font-size="11" font-weight="600" fill="#8A6D1F">PK</text>
+<text x="1994" y="1324" font-size="11.5" font-weight="700" fill="#1B2733">id</text>
+<text x="2250" y="1324" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<text x="1970" y="1343" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="1994" y="1343" font-size="11.5" font-weight="400" fill="#1B2733">user_id</text>
+<text x="2250" y="1343" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<rect x="1961" y="1349" width="298" height="19" fill="#E6F4F2" opacity="0.5"/>
+<text x="1970" y="1362" font-size="11" font-weight="600" fill="#8A6D1F"></text>
+<text x="1994" y="1362" font-size="11.5" font-weight="400" fill="#1B2733">title</text>
+<text x="2250" y="1362" font-size="10.5" text-anchor="end" fill="#7C8894">varchar</text>
+<text x="1970" y="1381" font-size="11" font-weight="600" fill="#8A6D1F"></text>
+<text x="1994" y="1381" font-size="11.5" font-weight="400" fill="#1B2733">is_shared</text>
+<text x="2250" y="1381" font-size="10.5" text-anchor="end" fill="#7C8894">bool</text>
+<text x="1994" y="1400" font-size="10.5" font-style="italic" fill="#9AA5B1">+6 more columns</text>
+<rect x="2360" y="70" width="300" height="152" rx="6" fill="#fff" stroke="#4A3567" stroke-width="1.4"/>
+<path d="M2360,76 a6,6 0 0 1 6,-6 h288 a6,6 0 0 1 6,6 v24 h-300 z" fill="#6A4C93"/>
+<text x="2370" y="90" font-size="13" font-weight="700" fill="#fff">cleardeals_notification</text>
+<rect x="2361" y="100" width="298" height="19" fill="#F0EBF6" opacity="0.5"/>
+<text x="2370" y="113" font-size="11" font-weight="600" fill="#8A6D1F">PK</text>
+<text x="2394" y="113" font-size="11.5" font-weight="700" fill="#1B2733">id</text>
+<text x="2650" y="113" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<text x="2370" y="132" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="2394" y="132" font-size="11.5" font-weight="400" fill="#1B2733">user_id</text>
+<text x="2650" y="132" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<rect x="2361" y="138" width="298" height="19" fill="#F0EBF6" opacity="0.5"/>
+<text x="2370" y="151" font-size="11" font-weight="600" fill="#8A6D1F"></text>
+<text x="2394" y="151" font-size="11.5" font-weight="400" fill="#1B2733">notif_type</text>
+<text x="2650" y="151" font-size="10.5" text-anchor="end" fill="#7C8894">varchar</text>
+<text x="2370" y="170" font-size="11" font-weight="600" fill="#8A6D1F"></text>
+<text x="2394" y="170" font-size="11.5" font-weight="400" fill="#1B2733">title</text>
+<text x="2650" y="170" font-size="10.5" text-anchor="end" fill="#7C8894">varchar</text>
+<rect x="2361" y="176" width="298" height="19" fill="#F0EBF6" opacity="0.5"/>
+<text x="2370" y="189" font-size="11" font-weight="600" fill="#8A6D1F"></text>
+<text x="2394" y="189" font-size="11.5" font-weight="400" fill="#1B2733">is_read</text>
+<text x="2650" y="189" font-size="10.5" text-anchor="end" fill="#7C8894">bool</text>
+<text x="2394" y="208" font-size="10.5" font-style="italic" fill="#9AA5B1">+4 more columns</text>
+<rect x="1160" y="704" width="300" height="76" rx="6" fill="#fff" stroke="#1F5738" stroke-width="1.4"/>
+<path d="M1160,710 a6,6 0 0 1 6,-6 h288 a6,6 0 0 1 6,6 v24 h-300 z" fill="#2E7D52"/>
+<text x="1170" y="724" font-size="13" font-weight="700" fill="#fff">leads_new_property_base_rel</text>
+<rect x="1161" y="734" width="298" height="19" fill="#E9F4EE" opacity="0.5"/>
+<text x="1170" y="747" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="1194" y="747" font-size="11.5" font-weight="400" fill="#1B2733">leads_new_id</text>
+<text x="1450" y="747" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<text x="1170" y="766" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="1194" y="766" font-size="11.5" font-weight="400" fill="#1B2733">property_base_id</text>
+<text x="1450" y="766" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<rect x="780" y="571" width="300" height="76" rx="6" fill="#fff" stroke="#1F5738" stroke-width="1.4"/>
+<path d="M780,577 a6,6 0 0 1 6,-6 h288 a6,6 0 0 1 6,6 v24 h-300 z" fill="#2E7D52"/>
+<text x="790" y="591" font-size="13" font-weight="700" fill="#fff">leads_bde_allowed_rm_rel</text>
+<rect x="781" y="601" width="298" height="19" fill="#E9F4EE" opacity="0.5"/>
+<text x="790" y="614" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="814" y="614" font-size="11.5" font-weight="400" fill="#1B2733">bde_id</text>
+<text x="1070" y="614" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<text x="790" y="633" font-size="11" font-weight="600" fill="#8A6D1F">FK</text>
+<text x="814" y="633" font-size="11.5" font-weight="400" fill="#1B2733">user_id</text>
+<text x="1070" y="633" font-size="10.5" text-anchor="end" fill="#7C8894">int</text>
+<rect x="40" y="1432" width="880" height="64" rx="6" fill="#F7F9FA" stroke="#D5DCE2"/>
+<text x="56" y="1450" font-size="12" font-weight="700" fill="#1B2733">Legend</text>
+<text x="56" y="1470" font-size="11" fill="#4A5560">PK primary key</text>
+<text x="346" y="1470" font-size="11" fill="#4A5560">FK foreign key</text>
+<text x="636" y="1470" font-size="11" fill="#4A5560">crow&#x27;s foot = many</text>
+<text x="56" y="1488" font-size="11" fill="#4A5560">bar = one</text>
+<text x="346" y="1488" font-size="11" fill="#4A5560">red edge = ON DELETE CASCADE</text>
+<text x="636" y="1488" font-size="11" fill="#4A5560">dashed = link into an archived module</text>
+<text x="2680" y="1510" font-size="10.5" text-anchor="end" fill="#9AA5B1">Generated from PostgreSQL foreign keys — Odoo 19. Audit columns omitted.</text>
+</svg>

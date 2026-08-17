@@ -1,0 +1,16 @@
+# SchemaSpy output is generated, ~21 MB, and fully reproducible from
+# generate/ (see SOP.md step 3). Regenerate locally when you need the
+# exhaustive per-table reference; do not commit it.
+schemaspy/
+
+# Local scratch from the PDF export step.
+_print.html
+_p.html
+_d.html
+schema.json
+
+# The repo-root .gitignore excludes *.sql (aimed at database dumps). These three
+# are SOURCE, not dumps — they derive the in-scope tables, export the schema, and
+# compute the drift fingerprint. The SOP is unusable without them, so un-ignore
+# them here (a deeper .gitignore overrides a shallower one).
+!generate/*.sql
