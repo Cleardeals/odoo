@@ -306,10 +306,58 @@ passes automated_lead_creation and stays exempt; ...
 > decision**. This is the same information the docstring carries, aimed at
 > someone reading `git log` instead of the file.
 
-### Branches
+### Branches — the flow is mandatory, in this order
 
-`19.0` is the main branch; `development_19` is the integration branch. CI runs on
-push and PR to both. Feature branches are named after the work.
+```mermaid
+flowchart LR
+    F["feature/xyz<br/>(cut from development_19)"] -->|"PR #1"| D["development_19<br/>the gate"]
+    D -->|"PR #2"| P["19.0<br/>PRODUCTION"]
+```
+
+| Branch | Role |
+|--------|------|
+| **`19.0`** | **production.** Deploys automatically (see [Chapter 16](16-debugging-and-ops.md)) |
+| **`development_19`** | **the gate.** Everything reaches `19.0` through here, never around it |
+| `feature/*`, `fix/*` | your work, named after the work |
+
+The rules, in order:
+
+1. **Cut every branch from `development_19`** — not from `19.0`, not from another
+   feature branch.
+2. **Open your PR against `development_19` first.** That is the only target.
+3. **Only once it is merged there** does a second PR go `development_19` → `19.0`.
+
+> **Never PR a feature branch straight to `19.0`.** `19.0` is production and
+> deploys on a green test run. The gate exists so that integration problems
+> surface on `development_19`, where they are cheap, instead of on the branch
+> that ships.
+
+CI (`.github/workflows/test.yml`) runs on push and PR to both branches, so both
+hops are test-gated.
+
+> **Trap — do not stack a branch on another feature branch.** If you cut
+> `feature/b` from `feature/a`, then PRing `feature/b` into `development_19`
+> drags all of `feature/a` in with it, and the diff is unreviewable. If you truly
+> depend on unmerged work, say so in the PR and wait for the dependency to land —
+> or cherry-pick your own commits onto a branch freshly cut from
+> `development_19`.
+
+> **Keep `development_19` fast-forwardable to `19.0`.** After a
+> `development_19` → `19.0` PR merges, `19.0` gains a merge commit that
+> `development_19` does not have. No *code* is missing, but the two diverge
+> topologically, and branches then get cut from a tip that is not what shipped.
+> Re-sync after every release:
+>
+> ```bash
+> git switch development_19 && git merge --ff-only origin/19.0 && git push origin development_19
+> ```
+>
+> If `--ff-only` refuses, something landed on `development_19` out of order —
+> stop and work out what before forcing anything.
+
+> **Rebase or merge `development_19` into a long-lived branch regularly.** A
+> branch sitting 60+ commits behind the gate is painful to land and the conflicts
+> are where bugs get introduced.
 
 ### The PR template — inherited, not ours
 
@@ -430,7 +478,9 @@ What a reviewer is actually looking for, in rough priority order:
 6. Commit bodies record old behaviour, new behaviour, and the reasoning for the
    scope.
 7. The PR template and `CONTRIBUTING.md` are upstream Odoo's and do not apply.
-8. Skills hold the accumulated procedure — and can drift. Verify facts.
+8. **Cut from `development_19`, PR to `development_19`, and only then PR to
+   `19.0`.** Never straight to production, never stacked on another feature branch.
+9. Skills hold the accumulated procedure — and can drift. Verify facts.
 
 ---
 
