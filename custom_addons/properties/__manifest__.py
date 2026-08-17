@@ -15,6 +15,7 @@
     """,
     "author": "Cleardeals Tech",
     "category": "Real Estate",
+    "license": "LGPL-3",
     "depends": [
         "base",
         "web",
