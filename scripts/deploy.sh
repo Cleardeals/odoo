@@ -108,6 +108,15 @@ log "rendering config"
 bash scripts/render_odoo_conf.sh || die "config render failed — refusing to start Odoo with no config"
 
 # ── Swap the image ────────────────────────────────────────────────────────────
+# Docker needs a credential helper to pull from Artifact Registry. Without it
+# the pull fails with "denied: Unauthenticated request" — the daemon does not
+# use the VM's service account by itself. This is configured here rather than
+# assumed as VM state, so a rebuilt or replaced VM works with no manual step.
+# Idempotent: it just rewrites root's docker config.
+log "configuring the Artifact Registry credential helper"
+gcloud auth configure-docker "${REGISTRY}" --quiet >/dev/null 2>&1 \
+  || die "could not configure the docker credential helper for ${REGISTRY}"
+
 log "pulling ${NEW}"
 docker compose pull odoo || die "cannot pull $NEW"
 

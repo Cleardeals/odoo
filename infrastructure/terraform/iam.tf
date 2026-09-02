@@ -117,6 +117,32 @@ resource "google_service_account" "bq_access" {
   description  = "Service account for Odoo VM to access BQ in cleardeals-459513"
 }
 
+# ── Grants on the CURRENT VM identity ──────────────────────────────────────────
+#
+# The roles above are on odoo-prod-vm@, which the VM will run as AFTER the
+# Phase 4 service-account swap. Until then it still runs as odoo-bq-access@, and
+# the pipeline needs these on the account actually attached to the instance.
+#
+# This gap cost two failed deploys. Granting a permission to the identity a
+# resource WILL have is not the same as granting it to the one it HAS.
+#
+# Both bindings become removable once Phase 4 attaches odoo-prod-vm@ — but
+# remove them in that same change, not before.
+resource "google_project_iam_member" "bq_access_artifact_reader" {
+  project = var.project_id
+  role    = "roles/artifactregistry.reader"
+  member  = "serviceAccount:${google_service_account.bq_access.email}"
+}
+
+# Required for `gcloud compute ssh` to reach an instance that has a service
+# account attached: the caller must be able to act as THAT account. OS Login
+# roles alone are not sufficient.
+resource "google_service_account_iam_member" "cloudbuild_actas_bq_access" {
+  service_account_id = google_service_account.bq_access.name
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:${google_service_account.cloudbuild.email}"
+}
+
 resource "google_service_account" "stage_vm" {
   account_id   = "odoo-stage-vm"
   project      = var.project_id
