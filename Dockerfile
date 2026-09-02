@@ -37,7 +37,16 @@ RUN /opt/odoo-venv/bin/pip install --no-cache-dir -r /tmp/requirements.txt
 #
 # Baking them in is what makes ":$SHORT_SHA" an honest answer to "what is in
 # production", and what makes the deploy script's rollback actually roll back.
-COPY --chown=odoo:odoo ./custom_addons /mnt/extra-addons/custom
+# NOT under /mnt/extra-addons. The odoo:19.0 base image declares
+#   VOLUME ["/mnt/extra-addons", "/var/lib/odoo"]
+# so at runtime Docker mounts an ANONYMOUS EMPTY VOLUME over that path and
+# silently hides anything baked beneath it. That took production down: the
+# addons vanished, the leads module never loaded, and the UI failed with
+# KeyNotFoundError on a view controller while crons died on KeyError 'leads.new'.
+#
+# Nothing here is wrong with COPY — the path was. /opt is not a declared volume,
+# so the baked code survives.
+COPY --chown=odoo:odoo ./custom_addons /opt/cleardeals-addons
 
 # Copy and set permissions for the custom entrypoint
 COPY ./entrypoint.sh /usr/local/bin/entrypoint.sh

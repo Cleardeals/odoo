@@ -41,6 +41,23 @@ HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-300}"   # 5 min: a migration deploy is slow
 
 cd "$APP_DIR" || die "app dir not found: $APP_DIR"
 
+# git refuses to operate on a repository owned by another user ("detected
+# dubious ownership"). This script runs as root; the checkout is owned by
+# cdgcphub. The inline bootstrap in cloudbuild.yaml passes -c safe.directory on
+# every call, but this script's own git commands did not — so all of them failed
+# and the deploy died after the checkout.
+#
+# Set once here, for every git invocation in the script, via environment rather
+# than `git config --global`: a deploy should not leave persistent config behind
+# on the host.
+#
+# The real fix is Phase 4 moving the application out of a personal home
+# directory to /opt/odoo owned by a deploy group. This is the third distinct
+# failure caused by that location.
+export GIT_CONFIG_COUNT=1
+export GIT_CONFIG_KEY_0=safe.directory
+export GIT_CONFIG_VALUE_0="$APP_DIR"
+
 # ── One deploy at a time ──────────────────────────────────────────────────────
 # Cloud Build does not serialise approved builds. Two people approving in quick
 # succession would otherwise interleave .env writes and leave an image running
