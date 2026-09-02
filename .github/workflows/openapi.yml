@@ -1,0 +1,50 @@
+name: Validate OpenAPI Specs
+
+# The specs are hand-written, so the thing that goes wrong is not a malformed
+# file — it is a controller changing without its spec changing with it. This
+# job catches the half of that drift a machine can see: a route added, renamed
+# or deleted. A changed field or status code still needs a human in review.
+on:
+  push:
+    branches: ['development_19', '19.0']
+    paths:
+      - 'custom_addons/**/controllers/**'
+      - 'docs/api/openapi/**'
+      - '.github/workflows/openapi.yml'
+  pull_request:
+    branches: ['development_19', '19.0']
+    paths:
+      - 'custom_addons/**/controllers/**'
+      - 'docs/api/openapi/**'
+      - '.github/workflows/openapi.yml'
+
+jobs:
+  validate:
+    name: Validate specs and check route coverage
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install validator dependencies
+        run: pip install pyyaml openapi-spec-validator
+
+      # Two linters, because neither alone is enough.
+      #
+      # Redocly enforces the OpenAPI structure strictly — it is what catches a
+      # description broken across an unquoted comma in a YAML flow mapping,
+      # which openapi-spec-validator accepts as an unknown keyword.
+      #
+      # validate_specs.py is the only one that knows about our controllers, so
+      # it is the only one that can catch a route added without a spec.
+      - name: Lint spec structure (Redocly)
+        run: npx --yes @redocly/cli@latest lint docs/api/openapi/*.yaml
+
+      - name: Check specs match the controllers
+        run: python docs/api/openapi/validate_specs.py

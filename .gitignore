@@ -58,6 +58,9 @@ package.json
 /share/
 /src/
 venv
+# Dependencies for `make openapi-validate` (see docs/api/openapi/README.md)
+.venv-openapi/
+
 # Database Backups
 *.sql
 *.zip

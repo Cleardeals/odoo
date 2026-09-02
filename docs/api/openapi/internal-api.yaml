@@ -1,0 +1,815 @@
+openapi: 3.1.0
+
+info:
+  title: Cleardeals Odoo Internal API
+  version: "1.0.0"
+  summary: >-
+    Endpoints consumed by Odoo's own web client and by the GCP WhatsApp
+    platform. Not for third-party integration.
+  description: |
+    Four endpoints that are not part of any partner-facing contract:
+
+    * two that back UI widgets inside Odoo, authenticated by the logged-in
+      user's Odoo session;
+    * one that accepts file uploads from the WhatsApp composer, likewise
+      session-authenticated;
+    * one that receives GCP Pub/Sub push deliveries, authenticated by a
+      Google-signed OIDC token.
+
+    **Audience** — the Odoo web client and the Cleardeals WhatsApp platform.
+    They are documented here for audit completeness and for the engineers who
+    maintain them. Do not build an external integration against them: they carry
+    no versioning promise and change with the UI they serve.
+
+    ## Three different authentication models
+
+    | Endpoint | Odoo `auth` | Credential |
+    |---|---|---|
+    | `POST /web/leads/property_activity/{property_id}` | `user` | Odoo session cookie |
+    | `GET /web/leads/property_activity/{property_id}/export.csv` | `user` | Odoo session cookie |
+    | `POST /wa/media/upload` | `user` | Odoo session cookie |
+    | `POST /wa/pubsub/push` | `none` | Google OIDC bearer token |
+
+    The three session-authenticated routes require a logged-in internal user and
+    are unreachable without a valid `session_id` cookie. None of them is
+    reachable with an API key.
+
+    ## `/wa/pubsub/push` answers 200 to almost everything, on purpose
+
+    Pub/Sub treats any non-2xx as "redeliver". An endpoint that returns `500` on
+    a payload it will never be able to process gets that payload redelivered
+    forever. So this route returns `200` for every outcome except a failed OIDC
+    check — including unparseable envelopes and handler exceptions, both of
+    which are logged to `wa.event.log` rather than surfaced to the caller.
+
+    The one deliberate exception is a Postgres serialization failure or
+    deadlock. Those mean "two workers touched the same row, retry in a fresh
+    transaction", so they are re-raised for Odoo's request-level retry to
+    handle. Swallowing them would silently lose that event's writes.
+
+  contact:
+    name: Cleardeals Engineering
+    email: tech@cleardeals.co.in
+  license:
+    name: LGPL-3
+    url: https://www.gnu.org/licenses/lgpl-3.0.html
+
+servers:
+  - url: https://{host}
+    description: Odoo deployment
+    variables:
+      host:
+        default: staging.cleardeals.example
+        description: >-
+          Hostname of the target Odoo deployment. Replace with the production or
+          staging host; no trailing slash.
+
+tags:
+  - name: Property dashboard
+    description: >-
+      Backs the enquiry-activity dashboard embedded in the property form view.
+  - name: WhatsApp
+    description: >-
+      The Odoo half of the WhatsApp integration. The other half lives in the
+      `cleardeals-whatsapp-platform` repository and is not documented here.
+
+paths:
+
+  /web/leads/property_activity/{property_id}:
+    post:
+      tags: [Property dashboard]
+      operationId: getPropertyActivityDashboard
+      summary: Property enquiry dashboard
+      security:
+        - OdooSession: []
+      description: |
+        Everything the property-activity dashboard widget renders, in one call:
+        KPI counts, a per-source breakdown, the full enquiry list, and site
+        visits bucketed for the tab strip.
+
+        This is an **Odoo JSON-RPC route** (`type="jsonrpc"`), not a plain REST
+        endpoint. The body must be a JSON-RPC 2.0 envelope and the payload comes
+        back inside `result` — with HTTP `200` even when the call fails. See the
+        request and response schemas.
+
+        Where the public seller endpoints identify a property indirectly, by the
+        owner's phone number plus an API key, this one takes the Odoo database
+        id and uses the caller's own session. That makes it safe to call
+        straight from a form-view widget.
+
+        **A missing property is not an HTTP error.** It comes back as HTTP `200`
+        with `result.error` set to a message string. Clients must check for that
+        key before reading `result.kpi`.
+
+        Two behaviours worth knowing when reading the numbers:
+
+        * The dashboard reads site visits from `lead.site.visit` rather than the
+          snapshot fields on the enquiry, because cancellations and no-shows are
+          never written back to the enquiry's `current_status`.
+        * An enquiry with a future-dated scheduled visit is counted under
+          `site_visit_scheduled` regardless of what its `current_status` says.
+          The KPI reflects where the enquiry is now, not the last status an RM
+          set by hand.
+      parameters:
+        - $ref: '#/components/parameters/PropertyDatabaseId'
+      requestBody:
+        required: true
+        description: >-
+          A JSON-RPC 2.0 envelope. The handler takes no arguments beyond the
+          path parameter, so `params` is empty.
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/JsonRpcRequest' }
+            example:
+              jsonrpc: "2.0"
+              method: call
+              params: {}
+              id: 1
+      responses:
+        '200':
+          description: >-
+            The JSON-RPC response. Carries the dashboard payload on success, a
+            `result.error` string when the property does not exist, or a
+            top-level `error` object when the handler raised.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    title: Success
+                    required: [jsonrpc, id, result]
+                    properties:
+                      jsonrpc: { type: string, const: "2.0" }
+                      id: { type: [integer, string, 'null'] }
+                      result:
+                        oneOf:
+                          - $ref: '#/components/schemas/PropertyDashboard'
+                          - $ref: '#/components/schemas/DashboardNotFound'
+                  - $ref: '#/components/schemas/JsonRpcError'
+              examples:
+                dashboard:
+                  summary: A populated dashboard
+                  value:
+                    jsonrpc: "2.0"
+                    id: 1
+                    result:
+                      property_id: 412
+                      property_tag: TAG1
+                      property_name: Aaryan City
+                      kpi:
+                        total: 12
+                        primary: 9
+                        recommended: 3
+                        contacted: 2
+                        details_shared: 3
+                        site_visit_scheduled: 4
+                        site_visit_done: 2
+                        not_interested: 1
+                      source_breakdown:
+                        MagicBricks: { primary: 6, recommended: 1 }
+                        Unknown: { primary: 3, recommended: 2 }
+                      activity:
+                        - type: primary
+                          lead_id: 123
+                          lead_name: Ravi Shah
+                          lead_phone: "9123456789"
+                          source: MagicBricks
+                          assigned_rm: Bhoomika Prajapati
+                          property_tag: TAG1
+                          property_bhk: 2 BHK
+                          property_location: Maninagar
+                          inquiry_date: "2026-08-01"
+                          inquiry_datetime: "2026-08-01T14:30:00"
+                          current_status: site_visit_scheduled
+                          site_visit_date: "2026-09-05"
+                          site_visit_datetime: "2026-09-05T11:00:00"
+                          feedback_general: null
+                          feedback_site_visit_done: null
+                          remarks: Interested in 2nd floor
+                      site_visits:
+                        all:
+                          - visit_id: 77
+                            inquiry_id: 123
+                            lead_name: Ravi Shah
+                            lead_phone: "9123456789"
+                            source: MagicBricks
+                            assigned_rm: Bhoomika Prajapati
+                            scheduled_datetime: "2026-09-05T11:00:00"
+                            scheduled_date: "2026-09-05"
+                            status_name: Scheduled
+                            status_type: scheduled
+                            reschedule_iteration: 0
+                            root_visit_id: 77
+                            previous_visit_id: null
+                            feedback: null
+                            feedback_note: null
+                            is_overdue: false
+                            sv_bucket: upcoming
+                        upcoming: []
+                        pending_feedback: []
+                        completed: []
+                        cancelled: []
+                        totals: { upcoming: 1, pending_feedback: 0, completed: 0, cancelled: 0 }
+                notFound:
+                  summary: The property id does not exist — still HTTP 200
+                  value:
+                    jsonrpc: "2.0"
+                    id: 1
+                    result:
+                      error: Property 99999 not found.
+        '401': { $ref: '#/components/responses/SessionRequired' }
+
+  /web/leads/property_activity/{property_id}/export.csv:
+    get:
+      tags: [Property dashboard]
+      operationId: exportPropertyActivityCsv
+      summary: Export enquiries as CSV
+      security:
+        - OdooSession: []
+      description: |
+        Downloads every enquiry on the property as a CSV attachment. Backs the
+        dashboard's Export button.
+
+        Not paginated and not filtered — the file always contains every enquiry,
+        primary rows first and recommended rows after, each group newest first.
+        The dashboard's own tab and date filters do not apply.
+
+        The file is encoded `utf-8-sig`. The byte-order mark is deliberate: it
+        is what makes Excel on Windows read Indian names and the `₹` sign
+        correctly instead of as mojibake.
+
+        The filename is `property_activity_<property_tag>.csv`, falling back to
+        the database id when the property has no tag.
+
+        Site-visit columns here come from the enquiry's snapshot fields, so a
+        cancellation logged only on the visit record will not appear. The
+        dashboard JSON endpoint reads the visit records directly and is the more
+        accurate of the two.
+      parameters:
+        - $ref: '#/components/parameters/PropertyDatabaseId'
+      responses:
+        '200':
+          description: |
+            The CSV file, as an attachment. Columns, in order:
+
+            `Type`, `Date`, `Buyer Name`, `Phone`, `Source`, `Assigned RM`,
+            `Status`, `Site Visit Date`, `Feedback (SV)`, `Feedback (General)`,
+            `Remarks`.
+          headers:
+            Content-Disposition:
+              description: >-
+                `attachment; filename="property_activity_<tag>.csv"`.
+              schema: { type: string }
+          content:
+            text/csv:
+              schema: { type: string }
+              example: |
+                Type,Date,Buyer Name,Phone,Source,Assigned RM,Status,Site Visit Date,Feedback (SV),Feedback (General),Remarks
+                primary,2026-08-01,Ravi Shah,9123456789,MagicBricks,Bhoomika Prajapati,site_visit_scheduled,2026-09-05,,,Interested in 2nd floor
+                recommended,2026-07-22,Priya Mehta,9333222111,99acres,Vivek Vaghela,site_visit_done,2026-07-14,buyer_liked_property,,
+        '401': { $ref: '#/components/responses/SessionRequired' }
+        '404':
+          description: >-
+            No property carries this database id. Odoo's standard not-found
+            page, not a JSON body.
+          content:
+            text/html:
+              schema: { type: string }
+
+  /wa/media/upload:
+    post:
+      tags: [WhatsApp]
+      operationId: uploadWhatsappMedia
+      summary: Upload media for a WhatsApp send
+      security:
+        - OdooSession: []
+      description: |
+        Stores a file as a **public** `ir.attachment` and returns an absolute URL
+        that Interakt's servers can fetch. Backs the attach button in the
+        WhatsApp composer.
+
+        The returned attachment is public and unauthenticated by design —
+        Interakt fetches it with no credentials. Anyone holding the URL can read
+        the file. Do not use this route for anything that should stay private.
+
+        ## `kind` travels in the query string, not the body
+
+        This is deliberate and load-bearing. The size cap depends on the media
+        kind, and the size check has to happen **before** the multipart body is
+        parsed — touching the parsed files at all makes werkzeug spool the whole
+        upload to disk. A body field could not be read in time, so `kind` is a
+        query parameter.
+
+        ## Size limits
+
+        Meta's own caps, enforced here rather than downstream. Interakt accepts
+        an oversized send and WhatsApp rejects it asynchronously with a failure
+        webhook that carries no reason, so the RM would otherwise just see
+        "Failed" with no explanation. Enforcing early also protects the Odoo
+        worker: every upload is base64-encoded in memory at roughly 3.5× the
+        file size, and an 80 MB video can recycle the worker mid-request.
+
+        | `kind` | Cap |
+        |---|---|
+        | `image` | 5 MB |
+        | `video` | 16 MB |
+        | `audio` | 16 MB |
+        | `document` | 100 MB |
+
+        The cap is checked twice — once against `Content-Length` before parsing,
+        and again by measuring the parsed stream, which covers an absent or
+        understated header.
+
+        ## Kind and mimetype must agree
+
+        WhatsApp refuses image, video and audio files sent as `document`. Such an
+        upload is rejected with `413` and a message naming the button the RM
+        should have used.
+
+        ## Filenames
+
+        Interakt rejects a send whose filename exceeds 100 characters, so long
+        names are truncated, preserving the extension — the extension is what
+        decides how WhatsApp renders the document. The returned `name` is the
+        truncated human-readable name; the URL uses a further-sanitised form
+        with everything outside `[A-Za-z0-9._-]` replaced by underscores.
+      parameters:
+        - name: kind
+          in: query
+          required: false
+          description: >-
+            The WhatsApp media kind, which selects the size cap. Defaults to
+            `document`, as does any unrecognised value. Must be a query
+            parameter — see the description.
+          schema:
+            type: string
+            enum: [image, video, audio, document]
+            default: document
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: The file to upload.
+            encoding:
+              file:
+                contentType: application/octet-stream
+      responses:
+        '200':
+          description: Stored. The URL is ready to hand to a send.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [url, id, name]
+                properties:
+                  url:
+                    type: string
+                    description: >-
+                      Absolute, publicly fetchable URL. Built from
+                      `wa_communication.media_public_base_url` when that system
+                      parameter is set, otherwise from `web.base.url`. The
+                      override exists so local development can point at a public
+                      tunnel without changing `web.base.url`, which would break
+                      login redirects.
+                  id: { type: integer, description: "`ir.attachment` database id." }
+                  name:
+                    type: string
+                    description: >-
+                      The human-readable filename as stored, after truncation to
+                      100 characters. Not the sanitised form used in the URL.
+              example:
+                url: https://staging.cleardeals.example/web/content/9182/site_plan.pdf
+                id: 9182
+                name: site_plan.pdf
+        '400':
+          description: No `file` part was present in the multipart body.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { error: { type: string } }
+              example: { error: no file }
+        '401': { $ref: '#/components/responses/SessionRequired' }
+        '413':
+          description: >-
+            The file exceeds the cap for its `kind`, or its mimetype cannot be
+            sent as the requested `kind`. The message is written for the RM to
+            read directly in the composer.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { error: { type: string } }
+              examples:
+                tooLarge:
+                  value:
+                    error: >-
+                      This image is 8.4 MB — WhatsApp allows at most 5.0 MB.
+                      Please compress it or share a link instead.
+                wrongKind:
+                  value:
+                    error: >-
+                      WhatsApp does not accept video/mp4 files as a Document.
+                      Use the Video button instead.
+
+  /wa/pubsub/push:
+    post:
+      tags: [WhatsApp]
+      operationId: receiveWhatsappPushEvent
+      summary: GCP Pub/Sub push receiver
+      security:
+        - GoogleOidc: []
+      description: |
+        Receives one GCP Pub/Sub push delivery carrying an inbound WhatsApp
+        event — a buyer's message, a delivery or read receipt, or a bridge
+        acknowledgement — and dispatches it to the conversation router.
+
+        Called only by Google's Pub/Sub push subscription. It is not part of any
+        client-facing API.
+
+        ## Authentication
+
+        Pub/Sub signs each delivery with an OIDC JWT in
+        `Authorization: Bearer <token>`. Verification checks the signature, the
+        `aud` claim against `wa_communication.inbound_push_audience`, and —
+        when `wa_communication.inbound_push_sa_email` is set — the signing
+        service account's email.
+
+        Verification is skipped entirely when the `PUBSUB_EMULATOR_HOST`
+        environment variable is set, since the local emulator issues no real
+        tokens. That variable must never be set in production.
+
+        ## Status codes
+
+        `401` is the only failure this endpoint reports. Everything else is
+        `200`, because Pub/Sub reads any non-2xx as "redeliver" and would retry
+        a permanently unprocessable payload indefinitely. Malformed envelopes
+        and handler exceptions are logged to `wa.event.log` and acknowledged.
+
+        A Postgres serialization failure or deadlock is the one case that is
+        re-raised rather than swallowed — those need a fresh transaction, which
+        Odoo's request-level retry provides. The event handlers are idempotent,
+        so if the retries are exhausted, Pub/Sub redelivering is safe.
+
+        ## Trace correlation
+
+        The platform puts a `trace_id` in the Pub/Sub message attributes. It is
+        bound for the whole dispatch, so every log line emitted while handling
+        the request carries a `[trace=<id>]` prefix and the resulting
+        `wa.event.log` row records the same id. That is how a WhatsApp event is
+        followed across the platform services and Odoo.
+
+        ## Route configuration note
+
+        In Odoo 19 an `auth="none"` route defaults to read-only. This one writes
+        — conversations, messages, event-log rows — so it declares
+        `readonly=False` explicitly. Without that it would run in a read-only
+        transaction and rely on the implicit readonly-to-readwrite retry, which
+        wastes a request in production and fails outright under `HttpCase`.
+      requestBody:
+        required: true
+        description: A standard GCP Pub/Sub push envelope.
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                message:
+                  type: object
+                  properties:
+                    messageId:
+                      type: string
+                      description: Pub/Sub's own message id, recorded for de-duplication.
+                    data:
+                      type: string
+                      contentEncoding: base64
+                      description: >-
+                        Base64-encoded JSON — the WhatsApp event payload. An
+                        absent value is treated as an empty object.
+                    attributes:
+                      type: object
+                      description: >-
+                        Pub/Sub message attributes. `trace_id` is read for log
+                        correlation; the rest is passed to the router.
+                      additionalProperties: { type: string }
+                    publishTime: { type: string, format: date-time }
+                subscription:
+                  type: string
+                  description: The push subscription's full resource name.
+            example:
+              message:
+                messageId: "11928374651029"
+                data: eyJraW5kIjogImluYm91bmRfbWVzc2FnZSJ9
+                attributes:
+                  trace_id: 7f3c2b18e4a94d6f
+                  event_kind: inbound_message
+                publishTime: "2026-08-20T09:14:22.481Z"
+              subscription: projects/cleardeals-wa-prod/subscriptions/odoo-inbound-push
+      responses:
+        '200':
+          description: |
+            Acknowledged. Returned for every outcome except a failed OIDC check:
+
+            * the event was processed;
+            * the envelope was unparseable and was logged and dropped;
+            * the router raised and the error was logged.
+
+            The body carries no outcome information by design — a client cannot
+            and should not distinguish these cases.
+          content:
+            text/plain:
+              schema: { type: string }
+              example: OK
+        '401':
+          description: >-
+            The `Authorization` header is absent or not a bearer token, or OIDC
+            verification failed — bad signature, wrong audience, or an
+            unexpected signing service account. Pub/Sub will retry.
+          content:
+            text/plain:
+              schema: { type: string }
+              example: Unauthorized
+
+components:
+
+  securitySchemes:
+
+    OdooSession:
+      type: apiKey
+      in: cookie
+      name: session_id
+      description: >-
+        A standard Odoo session cookie for a logged-in internal user, set by
+        `/web/login`. These routes declare `auth="user"`; there is no API-key
+        path to them.
+
+    GoogleOidc:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >-
+        A Google-signed OIDC identity token, attached by the Pub/Sub push
+        subscription. Validated for signature, for an `aud` claim matching
+        `wa_communication.inbound_push_audience`, and — when
+        `wa_communication.inbound_push_sa_email` is set — for the signing service
+        account's email. Bypassed entirely when `PUBSUB_EMULATOR_HOST` is set,
+        which must never be true in production.
+
+  parameters:
+
+    PropertyDatabaseId:
+      name: property_id
+      in: path
+      required: true
+      description: >-
+        The `property.base` Odoo database id. Not the `uuid`, the `prop_id` short
+        code, or the `property_tag`.
+      schema: { type: integer }
+      example: 412
+
+  responses:
+
+    SessionRequired:
+      description: >-
+        No valid Odoo session. In a browser Odoo redirects to the login page
+        rather than returning this status; a programmatic caller sees the
+        redirect or an authentication error depending on how it follows
+        redirects.
+      content:
+        text/html:
+          schema: { type: string }
+
+  schemas:
+
+    JsonRpcRequest:
+      type: object
+      description: An Odoo JSON-RPC 2.0 request envelope.
+      required: [jsonrpc, method, params]
+      properties:
+        jsonrpc: { type: string, const: "2.0" }
+        method: { type: string, const: call }
+        params:
+          type: object
+          description: >-
+            Handler arguments. This endpoint takes none — the property comes
+            from the URL path — so an empty object is correct.
+        id:
+          type: [integer, string, 'null']
+          description: Echoed back in the response.
+
+    JsonRpcError:
+      type: object
+      description: >-
+        A JSON-RPC failure, returned with HTTP 200. Raised for an authentication
+        or ORM error inside the handler — a *missing property* is reported
+        differently, inside `result`.
+      required: [jsonrpc, error]
+      properties:
+        jsonrpc: { type: string, const: "2.0" }
+        id: { type: [integer, string, 'null'] }
+        error:
+          type: object
+          properties:
+            code: { type: integer }
+            message: { type: string }
+            data:
+              type: object
+              description: Odoo's exception detail, including the server traceback.
+
+    DashboardNotFound:
+      type: object
+      description: >-
+        Returned inside `result` — with HTTP 200 and no JSON-RPC error — when no
+        property carries the given id. Check for this key before reading the
+        dashboard fields.
+      required: [error]
+      properties:
+        error: { type: string, examples: ["Property 99999 not found."] }
+
+    PropertyDashboard:
+      type: object
+      description: The dashboard payload.
+      required: [property_id, property_tag, property_name, kpi, source_breakdown, activity, site_visits]
+      properties:
+        property_id: { type: integer }
+        property_tag: { type: string, description: Empty string when the property has no tag. }
+        property_name: { type: string }
+        kpi:
+          type: object
+          description: |
+            Headline counts. `total` is every enquiry; the sub-buckets do not
+            sum to it, because an enquiry still in the initial `lead` status
+            belongs to no sub-bucket.
+
+            An enquiry with a future-dated scheduled visit is forced into
+            `site_visit_scheduled` regardless of its stored status.
+          properties:
+            total: { type: integer }
+            primary: { type: integer }
+            recommended: { type: integer }
+            contacted:
+              type: integer
+              description: >-
+                Statuses `busy`, `ringing`, `call_back_later`, `switched_off`,
+                `other`.
+            details_shared:
+              type: integer
+              description: >-
+                Statuses `details_shared_of_property`,
+                `detail_shared_and_interested_for_site_visit`.
+            site_visit_scheduled:
+              type: integer
+              description: >-
+                Statuses `site_visit_scheduled`, `rescheduled`, plus any enquiry
+                holding a future-dated scheduled visit.
+            site_visit_done: { type: integer }
+            not_interested:
+              type: integer
+              description: >-
+                Statuses `option_not_matching_requirements`, `no_requirements`,
+                `requirement_closed`, `property_sold_out`,
+                `budget_not_sufficient`, `number_not_in_use_wrong_number`.
+        source_breakdown:
+          type: object
+          description: >-
+            Counts keyed by lead source name. Keys are data, not a fixed enum.
+            Enquiries with no source are grouped under `Unknown`.
+          additionalProperties:
+            type: object
+            properties:
+              primary: { type: integer }
+              recommended: { type: integer }
+        activity:
+          type: array
+          description: Every enquiry, primary and recommended combined, newest first.
+          items: { $ref: '#/components/schemas/DashboardActivityRow' }
+        site_visits:
+          type: object
+          description: >-
+            Every site visit on the property, newest scheduled first, in `all`
+            and repeated in exactly one bucket.
+          required: [all, upcoming, pending_feedback, completed, cancelled, totals]
+          properties:
+            all:
+              type: array
+              items: { $ref: '#/components/schemas/DashboardSiteVisit' }
+            upcoming:
+              type: array
+              items: { $ref: '#/components/schemas/DashboardSiteVisit' }
+            pending_feedback:
+              type: array
+              items: { $ref: '#/components/schemas/DashboardSiteVisit' }
+            completed:
+              type: array
+              items: { $ref: '#/components/schemas/DashboardSiteVisit' }
+            cancelled:
+              type: array
+              items: { $ref: '#/components/schemas/DashboardSiteVisit' }
+            totals:
+              type: object
+              description: >-
+                Counts per bucket. `all` is excluded, so the four values sum to
+                the length of `all`.
+              properties:
+                upcoming: { type: integer }
+                pending_feedback: { type: integer }
+                completed: { type: integer }
+                cancelled: { type: integer }
+
+    DashboardActivityRow:
+      type: object
+      description: >-
+        One enquiry. Unlike the public Track API, empty values are returned as
+        empty strings rather than null, except where noted.
+      properties:
+        type:
+          type: string
+          enum: [primary, recommended]
+        lead_id: { type: [integer, 'null'] }
+        lead_name: { type: string }
+        lead_phone: { type: string }
+        assigned_rm: { type: string, description: The RM on the enquiry. Empty string when unassigned. }
+        source: { type: string, description: "Lead source name, or `Unknown`." }
+        property_tag: { type: string }
+        property_bhk: { type: string }
+        property_location: { type: string }
+        inquiry_date: { type: [string, 'null'], format: date }
+        inquiry_datetime: { type: [string, 'null'], description: "Naive UTC ISO-8601, no offset." }
+        current_status: { type: string, description: Falls back to `lead` when unset. }
+        site_visit_date: { type: [string, 'null'], format: date }
+        site_visit_datetime: { type: [string, 'null'] }
+        feedback_general:
+          type: [string, 'null']
+          description: >-
+            From the enquiry's snapshot field, which is not updated for visits
+            managed through the visit model. Often null even when the visit
+            record carries feedback; `site_visits` is the accurate source.
+        feedback_site_visit_done:
+          type: [string, 'null']
+          description: Snapshot field, with the same caveat as `feedback_general`.
+        remarks: { type: [string, 'null'], description: The enquiry's own remarks field. }
+
+    DashboardSiteVisit:
+      type: object
+      description: >-
+        One `lead.site.visit` record, read directly from the visit model rather
+        than from the enquiry snapshot.
+      properties:
+        visit_id: { type: integer }
+        inquiry_id: { type: [integer, 'null'] }
+        lead_name: { type: string }
+        lead_phone: { type: string }
+        source: { type: string, description: "Lead source name, or `Unknown`." }
+        assigned_rm:
+          type: string
+          description: >-
+            The RM on the visit, falling back to the RM on the enquiry when the
+            visit has none.
+        scheduled_datetime: { type: [string, 'null'], description: "Naive UTC ISO-8601, no offset." }
+        scheduled_date: { type: [string, 'null'], format: date }
+        status_name:
+          type: string
+          description: >-
+            The configurable status label. Statuses are user-editable records,
+            so this is not a fixed enum.
+        status_type:
+          type: string
+          description: >-
+            The status's coarse type. `custom` covers site-specific statuses that
+            do not map onto a built-in type.
+          enum: [scheduled, rescheduled, completed, cancelled, no_show, custom]
+        reschedule_iteration:
+          type: integer
+          description: >-
+            How many times this appointment has been rescheduled. `0` for a
+            first booking.
+        root_visit_id:
+          type: integer
+          description: >-
+            The first visit in the reschedule chain, for grouping a chain in a
+            timeline. Equals `visit_id` for an unrescheduled visit.
+        previous_visit_id:
+          type: [integer, 'null']
+          description: The immediately preceding visit in the chain, if any.
+        feedback: { type: [string, 'null'], description: "Feedback option label, not its code." }
+        feedback_note: { type: [string, 'null'], description: The RM's free-text note. }
+        is_overdue: { type: boolean, description: The visit is still open and its scheduled time has passed. }
+        sv_bucket:
+          type: string
+          description: |
+            The bucket this visit belongs to, computed server-side so the browser
+            never has to derive it from status strings — which would misplace a
+            custom status such as "Cancelling" that carries the cancelled flag
+            but a `custom` type.
+
+            Reschedule is resolved before cancellation: some configurations mark
+            the superseded slot as cancelled to close it, but it is an
+            intermediate step in a chain and must never appear as cancelled.
+          enum: [upcoming, pending_feedback, completed, cancelled, custom]

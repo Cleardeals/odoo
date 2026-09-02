@@ -18,7 +18,7 @@ DB_NAME = cleardeals_19_dev
         logs logs-odoo logs-db \
         shell odoo-shell psql \
         update migrate-db wipe \
-        wa-tunnel wa-media-url
+        wa-tunnel wa-media-url openapi-validate
 
 # ── Default target ─────────────────────────────────────────────────────────────
 help:
@@ -49,6 +49,8 @@ help:
 	@echo "────────────────────────────────────────────────────────────────────"
 	@echo "  make wa-tunnel                      (public cloudflared tunnel for WA media)"
 	@echo "  make wa-media-url URL=https://…     (set/clear WA media base URL)"
+	@echo "────────────────────────────────────────────────────────────────────"
+	@echo "  make openapi-validate               (check API specs match the code)"
 	@echo "════════════════════════════════════════════════════════════════════"
 	@echo "  Windows one-time setup:"
 	@echo "    Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser"
@@ -166,3 +168,27 @@ wipe:
 	$(DC) down
 	rm -rf odoo-dev-db-data odoo-dev-web-data
 	@echo "✓ Dev data wiped."
+
+# ── API documentation ──────────────────────────────────────────────────────────
+# Two checks, because neither alone is enough:
+#   Redocly        — strict OpenAPI structure. Catches malformed YAML that a
+#                    lenient validator accepts as an unknown keyword. Skipped
+#                    with a warning when npx is absent; CI always runs it.
+#   validate_specs — the only check that knows about our controllers, so the
+#                    only one that catches a route added without a spec.
+#
+# Dependencies live in a repo-local venv rather than the system Python, which
+# Homebrew and other managed installs refuse to let pip write to (PEP 668).
+# Built on first run; .venv-openapi/ is gitignored.
+OPENAPI_VENV := .venv-openapi
+
+openapi-validate:
+	@command -v npx >/dev/null 2>&1 \
+		&& npx --yes @redocly/cli@latest lint docs/api/openapi/*.yaml \
+		|| echo "⚠  npx not found — skipping Redocly lint (CI will still run it)."
+	@test -x $(OPENAPI_VENV)/bin/python || { \
+		echo "Creating $(OPENAPI_VENV) for the spec validator…"; \
+		python3 -m venv $(OPENAPI_VENV) && \
+		$(OPENAPI_VENV)/bin/pip install --quiet --upgrade pip && \
+		$(OPENAPI_VENV)/bin/pip install --quiet pyyaml openapi-spec-validator; }
+	@$(OPENAPI_VENV)/bin/python docs/api/openapi/validate_specs.py
