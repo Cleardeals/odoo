@@ -27,6 +27,18 @@ RUN /opt/odoo-venv/bin/pip install --upgrade pip
 COPY ./requirements.txt /tmp/requirements.txt
 RUN /opt/odoo-venv/bin/pip install --no-cache-dir -r /tmp/requirements.txt
 
+# ── Bake the application code INTO the image ──────────────────────────────────
+#
+# custom_addons used to reach the container as a bind mount from the VM's git
+# checkout. That made an image tag meaningless: two containers running the same
+# image SHA could be running different application code, depending on what the
+# VM had checked out. It also made rollback a fiction — re-pinning the previous
+# image left the new addons sitting on disk, still mounted.
+#
+# Baking them in is what makes ":$SHORT_SHA" an honest answer to "what is in
+# production", and what makes the deploy script's rollback actually roll back.
+COPY --chown=odoo:odoo ./custom_addons /mnt/extra-addons/custom
+
 # Copy and set permissions for the custom entrypoint
 COPY ./entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh

@@ -1,0 +1,162 @@
+# cloudbuild.yaml — the production deploy pipeline.
+#
+# Trigger: push to 19.0, with approval_required. A merge QUEUES this build; it
+# waits for a human before anything is pushed or deployed.
+#
+# It replaces a GitHub Actions workflow that ran `docker compose build` on the
+# production VM — competing with Odoo for the CPU and a disk that is 82% full —
+# and then reported success whether or not Odoo came back up.
+#
+# The gates below are the same ones cloudbuild.ci.yaml runs on pull requests.
+# They are repeated rather than assumed: a merge can contain something no PR
+# ever tested.
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: E2_HIGHCPU_8
+
+serviceAccount: "projects/$PROJECT_ID/serviceAccounts/odoo-cloudbuild@$PROJECT_ID.iam.gserviceaccount.com"
+
+substitutions:
+  _ZONE: us-central1-f
+  _INSTANCE: odoo-19-prod
+  _REGION: us-central1
+
+steps:
+  # ── Gate: build the image that will actually ship ────────────────────────────
+  - id: build
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -t
+      - "${_REGION}-docker.pkg.dev/$PROJECT_ID/odoo/odoo:$SHORT_SHA"
+      - -t
+      - "${_REGION}-docker.pkg.dev/$PROJECT_ID/odoo/odoo:$COMMIT_SHA"
+      - .
+
+  # ── Gate: the image contains exactly the repository's modules ────────────────
+  - id: image-contents
+    name: gcr.io/cloud-builders/docker
+    waitFor: [build]
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        baked=$(docker run --rm --entrypoint /bin/ls \
+                  "${_REGION}-docker.pkg.dev/$PROJECT_ID/odoo/odoo:$SHORT_SHA" \
+                  /mnt/extra-addons/custom | sort)
+        tracked=$(ls custom_addons | sort)
+        [ "$baked" = "$tracked" ] || {
+          echo "image contents do not match the repository" >&2
+          diff <(echo "$tracked") <(echo "$baked") >&2 || true
+          exit 1
+        }
+        echo "image contents verified"
+
+  # ── Gate: config is sane and carries no secrets ──────────────────────────────
+  - id: config-check
+    name: python:3.12-slim
+    waitFor: ["-"]
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        python3 - <<'PY'
+        import configparser, sys
+        c = configparser.ConfigParser(); c.read("odoo.prod.conf")
+        o = c["options"]; fail = []
+        if o.get("list_db", "True").strip() != "False":
+            fail.append("list_db must be False — otherwise the database manager "
+                        "is served to unauthenticated requests on the internet")
+        if not o.get("dbfilter", "").strip():
+            fail.append("dbfilter must be set")
+        for k in ("admin_passwd", "db_password"):
+            if "__" not in o.get(k, ""):
+                fail.append(f"{k} must remain a placeholder — never commit a secret")
+        if fail:
+            print("odoo.prod.conf FAILED:"); [print("  -", f) for f in fail]; sys.exit(1)
+        print("odoo.prod.conf OK")
+        PY
+
+  # ── Gate: the test suite, against the image being shipped ────────────────────
+  - id: test-db
+    name: gcr.io/cloud-builders/docker
+    waitFor: ["-"]
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        docker network create odoo-cd-net 2>/dev/null || true
+        docker run -d --name odoo-cd-db --network odoo-cd-net \
+          -e POSTGRES_USER=odoo -e POSTGRES_PASSWORD=odoo \
+          -e POSTGRES_DB=odoo_test_db postgres:17
+        for i in $(seq 1 60); do
+          docker exec odoo-cd-db pg_isready -U odoo >/dev/null 2>&1 && exit 0
+          sleep 1
+        done
+        echo "postgres never became ready" >&2; exit 1
+
+  - id: test
+    name: gcr.io/cloud-builders/docker
+    waitFor: [build, test-db]
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        docker run --rm --network odoo-cd-net \
+          "${_REGION}-docker.pkg.dev/$PROJECT_ID/odoo/odoo:$SHORT_SHA" \
+          odoo -d odoo_test_db \
+            --db_host=odoo-cd-db --db_port=5432 \
+            --db_user=odoo --db_password=odoo \
+            --addons-path=/mnt/extra-addons/custom,/usr/lib/python3/dist-packages/odoo/addons \
+            -i leads,lead_suggestor,cleardeals_dashboards,properties \
+            --test-enable \
+            --test-tags /leads,/lead_suggestor,/cleardeals_dashboards,/properties \
+            --stop-after-init --log-level=test
+
+  # ── Push only after every gate is green ──────────────────────────────────────
+  # Nothing reaches the registry until the image has been proven. A registry
+  # full of images that never passed a test makes rollback a guess.
+  - id: push
+    name: gcr.io/cloud-builders/docker
+    waitFor: [image-contents, config-check, test]
+    args: ["push", "--all-tags", "${_REGION}-docker.pkg.dev/$PROJECT_ID/odoo/odoo"]
+
+  # ── Deploy ───────────────────────────────────────────────────────────────────
+  # All the logic lives in scripts/deploy.sh on the VM: image swap, health gate
+  # and rollback. Keeping it out of this YAML avoids passing a shell script
+  # through Cloud Build substitution, then bash, then ssh.
+  - id: deploy
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    waitFor: [push]
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        # gcloud mints an ephemeral OS Login key per invocation and needs a
+        # writable HOME to put it in.
+        export HOME=/workspace
+        # The first connection after an IAM change can race OS Login key
+        # propagation. Retry briefly rather than failing a deploy over it.
+        for attempt in 1 2 3; do
+          if gcloud compute ssh "${_INSTANCE}" \
+               --zone="${_ZONE}" --tunnel-through-iap --quiet \
+               --command="sudo /home/cdgcphub/odoo-project/scripts/deploy.sh $COMMIT_SHA"; then
+            exit 0
+          fi
+          echo "ssh attempt ${attempt} failed; retrying in 15s" >&2
+          sleep 15
+        done
+        echo "could not reach ${_INSTANCE} after 3 attempts" >&2
+        exit 1
+
+images:
+  - "${_REGION}-docker.pkg.dev/$PROJECT_ID/odoo/odoo:$SHORT_SHA"
+  - "${_REGION}-docker.pkg.dev/$PROJECT_ID/odoo/odoo:$COMMIT_SHA"
+
+timeout: 3600s

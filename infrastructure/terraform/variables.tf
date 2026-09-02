@@ -56,3 +56,35 @@ variable "prod_boot_disk_size_gb" {
   EOT
   default     = 30
 }
+
+# ── Cloud Build ────────────────────────────────────────────────────────────────
+
+variable "github_repo" {
+  type        = string
+  description = "owner/repo that Cloud Build connects to (set up via the GitHub App)"
+  # No default — supplied via terraform.tfvars, kept out of this public repo.
+}
+
+variable "cloudbuild_github_connected" {
+  type        = bool
+  description = <<-EOT
+    Whether the Cloud Build GitHub App has been installed and granted access to
+    var.github_repo. Terraform cannot do this itself — it is a one-time console
+    step by a GitHub org admin.
+
+    False skips the trigger resources; the rest of the module still applies.
+  EOT
+  default     = false
+}
+
+variable "cloudbuild_cd_enabled" {
+  type        = bool
+  description = <<-EOT
+    Whether the push-to-19.0 DEPLOY trigger exists. Separate from
+    cloudbuild_github_connected because the two carry very different risk: the
+    CI trigger runs gates only, this one deploys to production.
+
+    Enable it only after a green cloudbuild.ci.yaml run on a real pull request.
+  EOT
+  default     = false
+}

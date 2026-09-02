@@ -41,7 +41,13 @@ services:
 
   # 3. Your Odoo 19 Service
   odoo:
-    build: .
+    # Pinned by commit SHA, written into .env by scripts/deploy.sh. NEVER
+    # :latest — a floating tag makes "what is in production" unanswerable and
+    # rollback impossible.
+    #
+    # The fallback keeps a local `docker compose up` working for development;
+    # in production .env always sets it explicitly.
+    image: ${ODOO_IMAGE:-odoo-project-odoo}
     depends_on:
       - db
     volumes:
@@ -57,7 +63,10 @@ services:
       # include list_db = True. Never let the render step fail silently.
       - /dev/shm/odoo.conf:/etc/odoo/odoo.conf:ro
       - ./odoo-web-data:/var/lib/odoo
-      - ./custom_addons:/mnt/extra-addons/custom
+      # custom_addons is NO LONGER bind-mounted — it is baked into the image so
+      # the SHA tag identifies the running application code. Re-adding this mount
+      # would silently shadow the baked-in copy with whatever the VM has checked
+      # out, and quietly break rollback.
     networks:
       - web
     environment:
