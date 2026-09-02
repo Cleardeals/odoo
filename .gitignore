@@ -3,6 +3,13 @@ _build/
 
 # dotfiles
 .*
+
+# The blanket ".*" above hides dotfiles that MUST be committed.
+# .dockerignore controls what enters the Docker build context, and
+# .gcloudignore what Cloud Build uploads. If either is missing from the
+# repo, CI silently builds a different image from the one built locally.
+!.dockerignore
+!.gcloudignore
 !.gitignore
 !.gitattributes
 !.gitkeep
