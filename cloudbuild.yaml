@@ -21,6 +21,9 @@ substitutions:
   _ZONE: us-central1-f
   _INSTANCE: odoo-19-prod
   _REGION: us-central1
+  # Phase 4 moves the application to /opt/odoo; this is the only place the
+  # pipeline needs to learn about it.
+  _APP_DIR: /home/cdgcphub/odoo-project
 
 steps:
   # ── Gate: build the image that will actually ship ────────────────────────────
@@ -144,9 +147,24 @@ steps:
         # The first connection after an IAM change can race OS Login key
         # propagation. Retry briefly rather than failing a deploy over it.
         for attempt in 1 2 3; do
+          # The remote command brings the checkout to the target commit BEFORE
+          # invoking the deploy script. That ordering is not cosmetic: on the
+          # first run scripts/deploy.sh does not yet exist on the VM, so calling
+          # it directly is a chicken-and-egg failure. Fetching first means the
+          # pipeline bootstraps itself and never depends on someone having
+          # hand-placed a file.
+          #
+          # safe.directory is passed with -c rather than written to global git
+          # config: the checkout is owned by another user, and a deploy should
+          # not leave persistent config changes behind on the host.
+          REMOTE="set -euo pipefail
+            cd ${_APP_DIR}
+            git -c safe.directory=${_APP_DIR} fetch --quiet origin
+            git -c safe.directory=${_APP_DIR} reset --hard --quiet $COMMIT_SHA
+            exec bash scripts/deploy.sh $COMMIT_SHA"
           if gcloud compute ssh "${_INSTANCE}" \
                --zone="${_ZONE}" --tunnel-through-iap --quiet \
-               --command="sudo /home/cdgcphub/odoo-project/scripts/deploy.sh $COMMIT_SHA"; then
+               --command="sudo bash -c '"'"'$REMOTE'"'"'"; then
             exit 0
           fi
           echo "ssh attempt ${attempt} failed; retrying in 15s" >&2

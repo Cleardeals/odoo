@@ -54,7 +54,7 @@ variable "prod_boot_disk_size_gb" {
     Growing a disk is safe and online. SHRINKING IS IMPOSSIBLE — lowering this
     number produces an apply error, not a smaller disk.
   EOT
-  default     = 30
+  default     = 60
 }
 
 # ── Cloud Build ────────────────────────────────────────────────────────────────
