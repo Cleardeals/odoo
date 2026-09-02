@@ -48,7 +48,7 @@ steps:
         set -euo pipefail
         baked=$(docker run --rm --entrypoint /bin/ls \
                   "${_REGION}-docker.pkg.dev/$PROJECT_ID/odoo/odoo:$SHORT_SHA" \
-                  /mnt/extra-addons/custom | sort)
+                  /opt/cleardeals-addons | sort)
         tracked=$(ls custom_addons | sort)
         [ "$baked" = "$tracked" ] || {
           echo "image contents do not match the repository" >&2
@@ -115,7 +115,7 @@ steps:
           odoo -d odoo_test_db \
             --db_host=odoo-cd-db --db_port=5432 \
             --db_user=odoo --db_password=odoo \
-            --addons-path=/mnt/extra-addons/custom,/usr/lib/python3/dist-packages/odoo/addons \
+            --addons-path=/opt/cleardeals-addons,/usr/lib/python3/dist-packages/odoo/addons \
             -i leads,lead_suggestor,cleardeals_dashboards,properties \
             --test-enable \
             --test-tags /leads,/lead_suggestor,/cleardeals_dashboards,/properties \
