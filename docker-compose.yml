@@ -45,8 +45,17 @@ services:
     depends_on:
       - db
     volumes:
-      # CHANGED: Mapping single config file from root to the default Odoo location
-      - ./odoo.conf:/etc/odoo/odoo.conf
+      # Rendered by scripts/render_odoo_conf.sh from the COMMITTED odoo.prod.conf
+      # plus the two secrets in Secret Manager. /dev/shm is tmpfs, so the only
+      # file that contains both the config and the secrets is memory-backed and
+      # never lands on the persistent disk — and therefore never in one of the
+      # daily disk snapshots.
+      #
+      # Read-only: the container has no reason to write its own config.
+      #
+      # If this mount is missing, Odoo starts with its built-in defaults, which
+      # include list_db = True. Never let the render step fail silently.
+      - /dev/shm/odoo.conf:/etc/odoo/odoo.conf:ro
       - ./odoo-web-data:/var/lib/odoo
       - ./custom_addons:/mnt/extra-addons/custom
     networks:
