@@ -1,0 +1,1180 @@
+openapi: 3.1.0
+
+info:
+  title: Cleardeals Properties API
+  version: "1.0.0"
+  summary: Property inventory CRUD and website change webhooks.
+  description: |
+    REST API over the `property.base` model, plus the two inbound webhooks the
+    Cleardeals website calls when a property is created or updated in its admin
+    panel.
+
+    **Audience** — the Cleardeals website backend and trusted partner
+    integrations. Not a public/anonymous API despite `auth="public"` on the Odoo
+    routes: `auth="public"` only means "no Odoo session required"; every request
+    is authenticated by the `X-API-Key` header.
+
+    ## Two families of endpoints, two payload vocabularies
+
+    This is the single most common source of integration errors, so read it
+    before writing a client:
+
+    | Family | Paths | Field names |
+    |---|---|---|
+    | REST CRUD | `/api/v1/properties…` | **Flat Odoo field names** — `name`, `owner_phone`, `prop_type`, `bedroom_count` |
+    | Webhooks | `/api/v1/properties/webhook/…` | **Nested website field names** — `property_name`, `owner_contact_no`, `state.name`, `details.bedroom_count` |
+
+    They are deliberately not interchangeable. The webhooks reuse the same
+    payload mapper as the polling sync cron, so the website can send the exact
+    JSON its own API already returns.
+
+    ## Response envelope
+
+    Every response — success or failure — is a JSON object.
+
+    Success: `{"success": true, "data": <payload>}`
+
+    Failure: `{"success": false, "error": {"status": <int>, "message": <str>}}`
+
+    Note the error key is `status`. The Track API (a separate spec) uses `code`
+    for the same field. The two APIs were written by different tracks of work
+    and the envelopes were never unified; do not assume one shape across both.
+
+    ## Authentication
+
+    Send the shared secret in the `X-API-Key` header. The expected value lives
+    in the Odoo system parameter `properties.api_key`
+    (Settings → Technical → System Parameters), so it can be rotated without a
+    deploy. Comparison is constant-time (`hmac.compare_digest`).
+
+    | Condition | Status |
+    |---|---|
+    | `properties.api_key` not set on the server | `503` |
+    | `X-API-Key` header absent | `401` |
+    | `X-API-Key` present but wrong | `403` |
+
+    ## Idempotency and retries
+
+    The webhooks are idempotent and keyed on the website `id` (stored as
+    `uuid`). A "create" for an existing uuid updates it; an "update" for an
+    unknown uuid creates it. Both are therefore safe to retry and safe to
+    deliver out of order.
+
+    The REST `PUT` (create) endpoint is **not** idempotent — retrying it creates
+    a second record unless a database uniqueness constraint on `uuid` or
+    `prop_id` rejects it.
+
+  contact:
+    name: Cleardeals Engineering
+    email: tech@cleardeals.co.in
+  license:
+    name: LGPL-3
+    url: https://www.gnu.org/licenses/lgpl-3.0.html
+
+servers:
+  - url: https://{host}
+    description: Odoo deployment
+    variables:
+      host:
+        default: staging.cleardeals.example
+        description: >-
+          Hostname of the target Odoo deployment. Replace with the production
+          or staging host; no trailing slash.
+
+security:
+  - ApiKeyAuth: []
+
+tags:
+  - name: Properties
+    description: CRUD over the `property.base` model.
+  - name: Property webhooks
+    description: >-
+      Inbound real-time notifications from the Cleardeals website, replacing the
+      previous three-hourly polling cron.
+
+paths:
+
+  /api/v1/properties:
+
+    get:
+      tags: [Properties]
+      operationId: listProperties
+      summary: List properties
+      description: |
+        Paginated, filterable list of properties, ordered by
+        `reg_date desc, id desc`.
+
+        All filters combine with AND. Boolean filters (`is_active`, `for_sell`)
+        treat the literal strings `false`, `0`, `no` and the empty string as
+        false and **anything else** as true — `is_active=maybe` filters for
+        active properties. Omit the parameter entirely to not filter on it.
+
+        `owner_phone` matches with SQL `LIKE`, not equality, because a single
+        `owner_phone` field may hold several space-separated numbers
+        (e.g. `"9033870424 8735999816"`). A search for one of them matches the
+        record.
+      parameters:
+        - name: page
+          in: query
+          description: 1-based page number. Values below 1 are clamped to 1.
+          required: false
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: page_size
+          in: query
+          description: Records per page. Clamped to the range 1–200.
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 200, default: 20 }
+        - name: is_active
+          in: query
+          description: Filter on the `is_active` flag.
+          required: false
+          schema: { $ref: '#/components/schemas/LooseBoolean' }
+        - name: for_sell
+          in: query
+          description: >-
+            `true` returns sale listings, `false` returns rentals.
+          required: false
+          schema: { $ref: '#/components/schemas/LooseBoolean' }
+        - name: city
+          in: query
+          description: Exact city match (case-sensitive).
+          required: false
+          schema: { type: string }
+          example: Ahmedabad
+        - name: state
+          in: query
+          description: Exact state match (case-sensitive).
+          required: false
+          schema: { type: string }
+          example: Gujarat
+        - name: prop_type
+          in: query
+          description: Exact property-type match, e.g. `residential`, `commercial`.
+          required: false
+          schema: { type: string }
+        - name: prop_id
+          in: query
+          description: Exact short-code match.
+          required: false
+          schema: { type: string }
+          example: GBH75X0K
+        - name: form_no
+          in: query
+          description: Exact form-number match.
+          required: false
+          schema: { type: string }
+        - name: owner_phone
+          in: query
+          description: >-
+            Substring (`LIKE`) match against the stored owner phone string.
+          required: false
+          schema: { type: string }
+          example: "9033870424"
+        - name: portal_name
+          in: query
+          description: >-
+            Restrict to properties carrying a listing on this portal. The value
+            is normalised case-insensitively, so `squareyards`, `Square Yards`
+            and `SquareYards` are equivalent. An unrecognised portal is a `400`,
+            not an empty result.
+          required: false
+          schema: { $ref: '#/components/schemas/PortalNameInput' }
+        - name: portal_listing_id
+          in: query
+          description: Exact portal listing ID across any portal.
+          required: false
+          schema: { type: string }
+        - name: search
+          in: query
+          description: Case-insensitive substring match on the property name.
+          required: false
+          schema: { type: string }
+      responses:
+        '200':
+          description: A page of properties. An empty `results` array is a valid response.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success: { type: boolean, const: true }
+                  data:
+                    type: object
+                    required: [total, page, page_size, pages, results]
+                    properties:
+                      total:
+                        type: integer
+                        description: Total matching records across all pages.
+                      page: { type: integer }
+                      page_size: { type: integer }
+                      pages:
+                        type: integer
+                        description: >-
+                          Total number of pages, as the ceiling of
+                          `total / page_size`. This is **0** when nothing
+                          matched — unlike the Track API's `total_pages`, which
+                          reports 1 for an empty result. Do not assume at least
+                          one page.
+                      results:
+                        type: array
+                        items: { $ref: '#/components/schemas/Property' }
+              examples:
+                firstPage:
+                  summary: First page of two
+                  value:
+                    success: true
+                    data:
+                      total: 23
+                      page: 1
+                      page_size: 20
+                      pages: 2
+                      results:
+                        - id: 412
+                          uuid: 3f2a91c4-0d6e-4a71-9a2b-1f8c7d5e0b33
+                          prop_id: GBH75X0K
+                          form_no: "CD-2024-0412"
+                          name: Aaryan City
+                          reg_date: "2025-11-04"
+                          prop_type: residential
+                          prop_sub_type: Apartment
+                          for_sell: true
+                          state: Gujarat
+                          city: Ahmedabad
+                          location: Maninagar
+                          pricing: 48.0
+                          pricing_unit: lakh
+                          pricing_display: 48 Lakh
+                          owner_name: Ravi Shah
+                          owner_phone: "9033870424"
+                          owner_email: ravi@example.com
+                          rm_user: { id: 17, name: Bhoomika Prajapati }
+                          bedroom_count: 2
+                          bhk: 2 BHK
+                          property_link: https://cleardeals.co.in/property/aaryan-city-GBH75X0K
+                          gmaps_url: https://maps.google.com/?q=23.0,72.5
+                          property_tag: TAG1
+                          portal_listings:
+                            - id: 88
+                              portal_name: SquareYards
+                              portal_listing_id: SY-99123
+                              listing_label: 2BHK Maninagar
+                              active: true
+                          service_expiry_date: "2026-03-31"
+                          welcome_call_date: "2025-11-06"
+                          is_active: true
+                          inventory_migrated: false
+                          listing_type: Sell
+                          prop_type_display: Residential
+                          is_new: false
+        '400':
+          description: >-
+            `page` or `page_size` is not an integer, or `portal_name` is not a
+            recognised portal.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              examples:
+                badPage:
+                  value:
+                    success: false
+                    error: { status: 400, message: "'page' must be an integer." }
+                badPortal:
+                  value:
+                    success: false
+                    error: { status: 400, message: "Invalid 'portal_name' filter value." }
+        '401': { $ref: '#/components/responses/MissingApiKey' }
+        '403': { $ref: '#/components/responses/InvalidApiKey' }
+        '503': { $ref: '#/components/responses/ApiKeyNotConfigured' }
+
+    put:
+      tags: [Properties]
+      operationId: createProperty
+      summary: Create a property
+      description: |
+        Creates one `property.base` record and returns it fully serialised.
+
+        `PUT` rather than `POST` is a deliberate choice made when this API was
+        built; it is not REST-idiomatic for creation, and it does **not** imply
+        idempotency here. Each successful call creates a new record.
+
+        Only the fields in `PropertyWriteFields` are accepted. Any other key in
+        the body is silently dropped and echoed back in `data._ignored_fields`
+        so a client can detect typos without the request failing.
+
+        `portal_listings` is handled separately from the flat fields: supplying
+        it **replaces** the property's entire set of portal listings. Supplying
+        an empty array removes them all; omitting the key leaves them untouched.
+      requestBody:
+        required: true
+        description: >-
+          Must be sent with `Content-Type: application/json`. Any other content
+          type is rejected with `415` before the body is parsed.
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PropertyWriteFields' }
+            examples:
+              minimal:
+                summary: Only the required field
+                value:
+                  name: Aaryan City
+              full:
+                summary: A fully populated create
+                value:
+                  uuid: 3f2a91c4-0d6e-4a71-9a2b-1f8c7d5e0b33
+                  prop_id: GBH75X0K
+                  form_no: "CD-2024-0412"
+                  name: Aaryan City
+                  reg_date: "2025-11-04"
+                  prop_type: residential
+                  prop_sub_type: Apartment
+                  for_sell: true
+                  state: Gujarat
+                  city: Ahmedabad
+                  location: Maninagar
+                  pricing: 48.0
+                  pricing_unit: lakh
+                  owner_name: Ravi Shah
+                  owner_phone: "9033870424"
+                  owner_email: ravi@example.com
+                  rm_user_id: 17
+                  bedroom_count: 2
+                  gmaps_url: https://maps.google.com/?q=23.0,72.5
+                  property_tag: TAG1
+                  portal_listings:
+                    - portal_name: SquareYards
+                      portal_listing_id: SY-99123
+                      listing_label: 2BHK Maninagar
+                      active: true
+                  service_expiry_date: "2026-03-31"
+                  welcome_call_date: "2025-11-06"
+                  is_active: true
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success: { type: boolean, const: true }
+                  data: { $ref: '#/components/schemas/PropertyWithIgnoredFields' }
+        '400': { $ref: '#/components/responses/MalformedJson' }
+        '401': { $ref: '#/components/responses/MissingApiKey' }
+        '403': { $ref: '#/components/responses/InvalidApiKey' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422':
+          description: |
+            The body parsed but is not usable:
+
+            * no recognised field was supplied
+            * `name` is missing (it is the only required field)
+            * `portal_listings` is malformed — not an array, an entry that is not
+              an object, an unrecognised `portal_name`, or a blank
+              `portal_listing_id`
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              examples:
+                nameMissing:
+                  value:
+                    success: false
+                    error: { status: 422, message: "Field 'name' is required." }
+                badPortalListing:
+                  value:
+                    success: false
+                    error: { status: 422, message: "portal_listings[1].portal_name is invalid." }
+        '500': { $ref: '#/components/responses/WriteFailed' }
+        '503': { $ref: '#/components/responses/ApiKeyNotConfigured' }
+
+  /api/v1/properties/{identifier}:
+
+    parameters:
+      - $ref: '#/components/parameters/Identifier'
+
+    get:
+      tags: [Properties]
+      operationId: getProperty
+      summary: Get one property
+      description: Retrieve a single property. See `identifier` for how it is resolved.
+      responses:
+        '200':
+          description: The property.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success: { type: boolean, const: true }
+                  data: { $ref: '#/components/schemas/Property' }
+        '401': { $ref: '#/components/responses/MissingApiKey' }
+        '403': { $ref: '#/components/responses/InvalidApiKey' }
+        '404': { $ref: '#/components/responses/PropertyNotFound' }
+        '503': { $ref: '#/components/responses/ApiKeyNotConfigured' }
+
+    patch:
+      tags: [Properties]
+      operationId: updateProperty
+      summary: Update a property
+      description: |
+        Partial update. Only the keys present in the body are written; absent
+        keys are left alone. Unrecognised keys are dropped and echoed in
+        `data._ignored_fields`.
+
+        As with create, supplying `portal_listings` **replaces** the whole set.
+
+        A request whose body contains neither a recognised flat field nor
+        `portal_listings` is a `422`, not a no-op success.
+      requestBody:
+        required: true
+        description: >-
+          Must be sent with `Content-Type: application/json`.
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PropertyWriteFields' }
+            examples:
+              priceChange:
+                summary: Change the price only
+                value:
+                  pricing: 52.5
+                  pricing_unit: lakh
+              deactivate:
+                summary: Deactivate the listing
+                value:
+                  is_active: false
+              replaceListings:
+                summary: Replace every portal listing
+                value:
+                  portal_listings:
+                    - portal_name: "99acres"
+                      portal_listing_id: "A55512"
+              clearListings:
+                summary: Remove every portal listing
+                value:
+                  portal_listings: []
+      responses:
+        '200':
+          description: Updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success: { type: boolean, const: true }
+                  data: { $ref: '#/components/schemas/PropertyWithIgnoredFields' }
+        '400': { $ref: '#/components/responses/MalformedJson' }
+        '401': { $ref: '#/components/responses/MissingApiKey' }
+        '403': { $ref: '#/components/responses/InvalidApiKey' }
+        '404': { $ref: '#/components/responses/PropertyNotFound' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422':
+          description: >-
+            No writable field was supplied, or `portal_listings` is malformed.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500': { $ref: '#/components/responses/WriteFailed' }
+        '503': { $ref: '#/components/responses/ApiKeyNotConfigured' }
+
+    delete:
+      tags: [Properties]
+      operationId: deleteProperty
+      summary: Delete a property
+      description: |
+        **Irreversible.** This is a hard `unlink()`, not an archive — the row is
+        removed from the database and is not recoverable through the API. To
+        take a property out of circulation while keeping its history, `PATCH`
+        `is_active: false` instead.
+
+        Deletion fails with `500` if the record is still referenced by rows that
+        forbid it (for example leads pointing at it via `property_base_id`).
+      responses:
+        '200':
+          description: Deleted. The response echoes the identifiers of the removed record.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success: { type: boolean, const: true }
+                  data:
+                    type: object
+                    required: [message, deleted]
+                    properties:
+                      message: { type: string }
+                      deleted:
+                        type: object
+                        properties:
+                          id: { type: integer }
+                          uuid: { type: [string, 'null'] }
+                          prop_id: { type: [string, 'null'] }
+                          name: { type: [string, 'null'] }
+              example:
+                success: true
+                data:
+                  message: Property permanently deleted.
+                  deleted:
+                    id: 412
+                    uuid: 3f2a91c4-0d6e-4a71-9a2b-1f8c7d5e0b33
+                    prop_id: GBH75X0K
+                    name: Aaryan City
+        '401': { $ref: '#/components/responses/MissingApiKey' }
+        '403': { $ref: '#/components/responses/InvalidApiKey' }
+        '404': { $ref: '#/components/responses/PropertyNotFound' }
+        '500':
+          description: >-
+            The delete raised — most often because another record still
+            references this property.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '503': { $ref: '#/components/responses/ApiKeyNotConfigured' }
+
+  /api/v1/properties/webhook/create:
+    post:
+      tags: [Property webhooks]
+      operationId: propertyWebhookCreate
+      summary: Website "property created" event
+      description: |
+        Called by the Cleardeals website when a property is created in its admin
+        panel.
+
+        The handler performs an **upsert** keyed on the website `id` (stored as
+        `uuid`), so despite the name it will update an existing property if one
+        already carries that uuid. The `create` and `update` routes run
+        identical logic; they are kept separate only so the website's two-event
+        design maps cleanly and so create-vs-update intent is visible in the
+        access logs.
+
+        Only `property.base` fields the website owns are written. Manager-owned
+        fields (`property_tag`, `service_expiry_date`, `welcome_call_date`) are
+        never touched by a webhook.
+
+        `media` is accepted and logged, but only the primary image URL is
+        persisted; the rest of the array is discarded.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WebhookBody' }
+            examples:
+              enveloped:
+                summary: The website's standard envelope
+                value:
+                  success: true
+                  property:
+                    id: 3f2a91c4-0d6e-4a71-9a2b-1f8c7d5e0b33
+                    property_name: Aaryan City
+                    prop_id: GBH75X0K
+                    form_no: "CD-2024-0412"
+                    reg_date: "2026-03-02T00:00:00.000Z"
+                    prop_type: residential
+                    prop_sub_type: Apartment
+                    for_sell: true
+                    exec_name: Bhoomika Prajapati
+                    owner_name: Ravi Shah
+                    owner_contact_no: "+91 90338 70424"
+                    owner_email: ravi@example.com
+                    gmaps_url: https://maps.google.com/?q=23.0,72.5
+                    tour_360_url: https://tours.example/aaryan
+                    state: { name: Gujarat }
+                    city: { name: Ahmedabad }
+                    location_area: { name: Maninagar }
+                    details:
+                      bedroom_count: 2 BHK
+                      furnishing_type: Semi-Furnished
+                    sell_pricing: { offer_price: 4800000 }
+                    media:
+                      - url: https://cdn.example/aaryan-1.jpg
+                        is_primary: true
+              bare:
+                summary: A bare property object (also accepted)
+                value:
+                  id: 3f2a91c4-0d6e-4a71-9a2b-1f8c7d5e0b33
+                  property_name: Aaryan City
+                  prop_id: GBH75X0K
+                  for_sell: true
+                  state: { name: Gujarat }
+                  city: { name: Ahmedabad }
+      responses:
+        '200': { $ref: '#/components/responses/WebhookUpdated' }
+        '201': { $ref: '#/components/responses/WebhookCreated' }
+        '400': { $ref: '#/components/responses/WebhookMalformed' }
+        '401': { $ref: '#/components/responses/MissingApiKey' }
+        '403': { $ref: '#/components/responses/InvalidApiKey' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/WebhookMissingUuid' }
+        '500': { $ref: '#/components/responses/WriteFailed' }
+        '503': { $ref: '#/components/responses/ApiKeyNotConfigured' }
+
+  /api/v1/properties/webhook/update:
+    post:
+      tags: [Property webhooks]
+      operationId: propertyWebhookUpdate
+      summary: Website "property updated" event
+      description: |
+        Called by the Cleardeals website when a property is edited in its admin
+        panel.
+
+        Identical in behaviour to `/api/v1/properties/webhook/create` — the same
+        idempotent upsert keyed on `uuid`. An update for a uuid Odoo has never
+        seen creates the property and returns `201`.
+
+        When the payload matches what Odoo already holds, the record is left
+        untouched and `_webhook_action` is `unchanged`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WebhookBody' }
+            examples:
+              priceChanged:
+                summary: The website changed the asking price
+                value:
+                  success: true
+                  property:
+                    id: 3f2a91c4-0d6e-4a71-9a2b-1f8c7d5e0b33
+                    property_name: Aaryan City
+                    prop_id: GBH75X0K
+                    for_sell: true
+                    state: { name: Gujarat }
+                    city: { name: Ahmedabad }
+                    location_area: { name: Maninagar }
+                    sell_pricing: { offer_price: 5250000 }
+      responses:
+        '200': { $ref: '#/components/responses/WebhookUpdated' }
+        '201': { $ref: '#/components/responses/WebhookCreated' }
+        '400': { $ref: '#/components/responses/WebhookMalformed' }
+        '401': { $ref: '#/components/responses/MissingApiKey' }
+        '403': { $ref: '#/components/responses/InvalidApiKey' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/WebhookMissingUuid' }
+        '500': { $ref: '#/components/responses/WriteFailed' }
+        '503': { $ref: '#/components/responses/ApiKeyNotConfigured' }
+
+components:
+
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: >-
+        Shared secret, compared in constant time against the Odoo system
+        parameter `properties.api_key`. Rotate by changing that parameter; no
+        deploy is needed.
+
+  parameters:
+    Identifier:
+      name: identifier
+      in: path
+      required: true
+      description: |
+        Resolved by trying four strategies in order and taking the first hit:
+
+        1. **Odoo database id** — only when the value is all digits.
+        2. **`uuid`** — the website's property id.
+        3. **`prop_id`** — the 6–8 character short code, e.g. `GBH75X0K`.
+        4. **`owner_phone`** — substring match, and only when the value has at
+           least 10 digits after stripping `+`, `-` and spaces. The length guard
+           exists so a short numeric id such as `398` is treated as a database
+           id and cannot accidentally match a phone number containing `398`.
+
+        Because a phone number can match several properties, a phone-resolved
+        identifier returns whichever record the search hits first. Prefer `uuid`
+        or `prop_id` for anything that mutates state.
+      schema: { type: string }
+      examples:
+        byDatabaseId: { value: "412" }
+        byUuid: { value: 3f2a91c4-0d6e-4a71-9a2b-1f8c7d5e0b33 }
+        byShortCode: { value: GBH75X0K }
+        byOwnerPhone: { value: "9033870424" }
+
+  responses:
+
+    MissingApiKey:
+      description: The `X-API-Key` header was not sent.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example:
+            success: false
+            error: { status: 401, message: "Missing 'X-API-Key' header." }
+
+    InvalidApiKey:
+      description: The `X-API-Key` header does not match the configured key.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example:
+            success: false
+            error: { status: 403, message: Invalid API key. }
+
+    ApiKeyNotConfigured:
+      description: >-
+        The server has no `properties.api_key` system parameter set, so it
+        cannot authenticate anyone. This is a server misconfiguration, not a bad
+        credential — a client should alert rather than retry indefinitely.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example:
+            success: false
+            error:
+              status: 503
+              message: >-
+                API authentication is not configured on this server. Set the
+                'properties.api_key' system parameter to enable the API.
+
+    UnsupportedMediaType:
+      description: >-
+        `Content-Type` was not `application/json`. Checked before the body is
+        read.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example:
+            success: false
+            error: { status: 415, message: "Content-Type must be 'application/json'." }
+
+    MalformedJson:
+      description: The body is not valid JSON, or is valid JSON but not an object.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          examples:
+            notJson:
+              value:
+                success: false
+                error: { status: 400, message: "Invalid JSON payload: Expecting value: line 1 column 1 (char 0)" }
+            notAnObject:
+              value:
+                success: false
+                error: { status: 400, message: Request body must be a JSON object. }
+
+    PropertyNotFound:
+      description: No property matched the identifier under any of the four strategies.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example:
+            success: false
+            error: { status: 404, message: "No property found for identifier 'GBH75X0K'." }
+
+    WriteFailed:
+      description: >-
+        The ORM raised while writing. The exception text is included in the
+        message to make integration debugging possible; treat it as diagnostic
+        detail, not a stable contract.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+    WebhookCreated:
+      description: >-
+        The uuid was new, so a property was created. `_webhook_action` is
+        `created`.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [success, data]
+            properties:
+              success: { type: boolean, const: true }
+              data: { $ref: '#/components/schemas/PropertyWithWebhookAction' }
+
+    WebhookUpdated:
+      description: >-
+        The uuid already existed. `_webhook_action` is `updated` when at least
+        one website-owned field changed, or `unchanged` when the payload matched
+        what Odoo already held.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [success, data]
+            properties:
+              success: { type: boolean, const: true }
+              data: { $ref: '#/components/schemas/PropertyWithWebhookAction' }
+
+    WebhookMalformed:
+      description: >-
+        The body is not valid JSON, is not an object, or its `property` key is
+        present but is not an object.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example:
+            success: false
+            error: { status: 400, message: "Request body must contain a 'property' object." }
+
+    WebhookMissingUuid:
+      description: >-
+        The property object has no `id`. That field is the upsert key, so
+        without it the event cannot be applied idempotently and is rejected
+        rather than guessed at.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example:
+            success: false
+            error: { status: 422, message: "Property payload is missing the required 'id' (uuid)." }
+
+  schemas:
+
+    Error:
+      type: object
+      description: >-
+        The failure envelope for this API. Note the inner key is `status`; the
+        Track API uses `code` for the equivalent field.
+      required: [success, error]
+      properties:
+        success: { type: boolean, const: false }
+        error:
+          type: object
+          required: [status, message]
+          properties:
+            status:
+              type: integer
+              description: Repeats the HTTP status code.
+            message:
+              type: string
+              description: Human-readable description. Not a stable machine-readable code.
+
+    LooseBoolean:
+      type: string
+      description: >-
+        A permissive boolean. `false`, `0`, `no` and the empty string mean
+        false; every other value — including `maybe` — means true.
+      examples: ["true", "false", "1", "0"]
+
+    PortalNameInput:
+      type: string
+      description: |
+        A portal name in any accepted spelling. The value is trimmed and
+        lower-cased before lookup, so casing never matters — `SquareYards`,
+        `squareyards` and `SQUAREYARDS` are all the same portal.
+
+        These are deliberately **not** an `enum`: an enum would be validated
+        case-sensitively by generated clients and would reject the canonical
+        spellings this API returns, which are themselves valid input.
+
+        | Canonical portal | Accepted spellings (any casing) |
+        |---|---|
+        | `99acres` | `99acres` |
+        | `Housing.com` | `housing`, `housing.com` |
+        | `MagicBricks` | `magicbricks`, `magicbricks.com` |
+        | `OLX` | `olx` |
+        | `SquareYards` | `squareyards`, `square yards`, `square_yards` |
+
+        Anything else is rejected — with `400` as a query filter, `422` inside
+        `portal_listings`.
+      examples: ["SquareYards", "square yards", "99acres", "MagicBricks"]
+
+    CanonicalPortalName:
+      type: string
+      description: The canonical portal name as stored and returned.
+      enum: ["99acres", Housing.com, MagicBricks, OLX, SquareYards]
+
+    PortalListingInput:
+      type: object
+      description: One portal listing to attach to the property.
+      required: [portal_name, portal_listing_id]
+      properties:
+        portal_name:
+          $ref: '#/components/schemas/PortalNameInput'
+        portal_listing_id:
+          type: string
+          minLength: 1
+          description: >-
+            The portal's own identifier for this listing. Whitespace is
+            stripped; a blank value after stripping is rejected with `422`.
+        listing_label:
+          type: [string, 'null']
+          description: Optional free-text label shown to staff.
+        active:
+          type: boolean
+          default: true
+
+    PortalListing:
+      type: object
+      description: A stored portal listing as returned by the API.
+      properties:
+        id: { type: integer }
+        portal_name: { $ref: '#/components/schemas/CanonicalPortalName' }
+        portal_listing_id: { type: [string, 'null'] }
+        listing_label: { type: [string, 'null'] }
+        active: { type: boolean }
+
+    UserRef:
+      type: [object, 'null']
+      description: An expanded many2one reference to an Odoo user.
+      properties:
+        id: { type: integer }
+        name: { type: string }
+
+    Property:
+      type: object
+      description: |
+        A serialised `property.base` record.
+
+        Every field is nullable: Odoo stores unset character and relational
+        fields as `false`, which the serialiser normalises to `null`. Only `id`
+        is guaranteed non-null.
+
+        The heavy computed field `gmaps_embed_html` is deliberately excluded to
+        keep payloads small.
+      required: [id]
+      properties:
+        id:
+          type: integer
+          description: Odoo database id. Stable within a deployment, not across them.
+        uuid:
+          type: [string, 'null']
+          description: >-
+            Identifier assigned by the Cleardeals website. The cross-system key,
+            and what the webhooks upsert on.
+        prop_id:
+          type: [string, 'null']
+          description: Short alphanumeric code used by the website and portals, e.g. `GBH75X0K`.
+        form_no:
+          type: [string, 'null']
+          description: >-
+            Website form number. Matches `Form_Number` in the BigQuery
+            `Customer_Data` table and is the stable key used when migrating from
+            the legacy `property.inventory` model.
+        name: { type: [string, 'null'], description: Marketing name shown on the website. }
+        reg_date:
+          type: [string, 'null']
+          format: date
+          description: Date the property was onboarded, `YYYY-MM-DD`.
+        prop_type: { type: [string, 'null'], description: "Broad class, e.g. `residential`, `commercial`." }
+        prop_sub_type: { type: [string, 'null'], description: "Detailed class, e.g. `Apartment`, `Villa`, `Office`." }
+        for_sell:
+          type: boolean
+          description: "`true` = for sale, `false` = for rent."
+        state: { type: [string, 'null'], description: "Plain text, not a relational record." }
+        city: { type: [string, 'null'] }
+        location: { type: [string, 'null'], description: Micro-location or locality within the city. }
+        pricing:
+          type: [number, 'null']
+          description: >-
+            Sale price when `for_sell` is true, rent otherwise. Interpreted
+            together with `pricing_unit` — the raw number alone is not a rupee
+            amount.
+        pricing_unit: { type: [string, 'null'], description: "Unit for `pricing`, e.g. `lakh`, `crore`, `thousand`." }
+        pricing_display: { type: [string, 'null'], description: "Pre-formatted price, e.g. `48 Lakh`." }
+        owner_name: { type: [string, 'null'] }
+        owner_phone:
+          type: [string, 'null']
+          description: >-
+            May contain more than one number in a single space-separated string.
+            Do not assume this parses as one phone number.
+        owner_email: { type: [string, 'null'] }
+        rm_user:
+          $ref: '#/components/schemas/UserRef'
+          description: The assigned Relationship Manager.
+        bedroom_count: { type: [integer, 'null'] }
+        bhk: { type: [string, 'null'], description: "Human-readable bedroom label derived from `bedroom_count`, e.g. `2 BHK`." }
+        property_link: { type: [string, 'null'], description: Canonical Cleardeals URL built from the name and short code. }
+        gmaps_url: { type: [string, 'null'] }
+        property_tag:
+          type: [string, 'null']
+          description: >-
+            Short display tag used by the lead-suggestor pipeline and by the
+            Track API as the property key. Manager-editable; never written by a
+            webhook or the sync cron.
+        portal_listings:
+          type: array
+          description: >-
+            Portal listings attached to this property, sorted by portal name then
+            listing id.
+          items: { $ref: '#/components/schemas/PortalListing' }
+        service_expiry_date:
+          type: [string, 'null']
+          format: date
+          description: >-
+            Contract expiry. A nightly cron sets `is_active` to false once this
+            date passes. Manager-editable.
+        welcome_call_date:
+          type: [string, 'null']
+          format: date
+          description: Manager-editable; never sourced from the website.
+        is_active: { type: boolean }
+        inventory_migrated:
+          type: boolean
+          description: >-
+            Internal flag marking that manager-editable fields were back-filled
+            from the legacy `property.inventory` model. Read-only.
+        listing_type: { type: [string, 'null'], description: "`Sell` or `Rent`, derived from `for_sell`." }
+        prop_type_display: { type: [string, 'null'], description: Capitalised `prop_type`. }
+        is_new: { type: boolean, description: True when `reg_date` is within the last three days. }
+
+    PropertyWithIgnoredFields:
+      allOf:
+        - $ref: '#/components/schemas/Property'
+        - type: object
+          properties:
+            _ignored_fields:
+              type: array
+              description: >-
+                Keys sent in the request body that this API does not accept.
+                Present only when at least one key was dropped. Use it to catch
+                typos — a misspelled field never causes a `4xx`.
+              items: { type: string }
+
+    PropertyWithWebhookAction:
+      allOf:
+        - $ref: '#/components/schemas/Property'
+        - type: object
+          required: [_webhook_action]
+          properties:
+            _webhook_action:
+              type: string
+              description: What the upsert actually did, regardless of which route was called.
+              enum: [created, updated, unchanged]
+
+    PropertyWriteFields:
+      type: object
+      description: |
+        The fields accepted on create and update. The two allow-lists are
+        identical.
+
+        Anything not listed here is ignored — including `id`, `bhk`,
+        `pricing_display`, `property_link`, `listing_type` and the other computed
+        fields, which cannot be set directly.
+      properties:
+        uuid: { type: string, description: Website property id. }
+        prop_id: { type: string }
+        form_no: { type: string }
+        name:
+          type: string
+          description: Required on create; optional on update.
+        reg_date: { type: string, format: date }
+        prop_type: { type: string }
+        prop_sub_type: { type: string }
+        for_sell: { type: boolean }
+        state: { type: string }
+        city: { type: string }
+        location: { type: string }
+        pricing: { type: number }
+        pricing_unit: { type: string }
+        owner_name: { type: string }
+        owner_phone: { type: string }
+        owner_email: { type: string }
+        rm_user_id:
+          type: integer
+          description: >-
+            `res.users` database id of the assigned RM — an integer, not a name.
+            An id that does not exist surfaces as a `500`.
+        bedroom_count: { type: integer }
+        gmaps_url: { type: string }
+        property_tag: { type: string }
+        portal_listings:
+          type: array
+          description: >-
+            Replaces the property's entire set of portal listings. Omit to leave
+            them untouched; send `[]` to clear them.
+          items: { $ref: '#/components/schemas/PortalListingInput' }
+        service_expiry_date: { type: string, format: date }
+        welcome_call_date: { type: string, format: date }
+        is_active: { type: boolean }
+
+    WebsiteProperty:
+      type: object
+      description: |
+        A property in the **website's** field vocabulary — nested, and named
+        differently from the flat Odoo fields used by the REST CRUD endpoints.
+
+        Unlisted keys are accepted and ignored, so the website can add fields
+        without breaking the webhook.
+      required: [id]
+      properties:
+        id:
+          type: string
+          description: >-
+            The website's property identifier, stored in Odoo as `uuid`. This is
+            the upsert key — a payload without it is rejected with `422`.
+        property_name: { type: string, description: Maps to Odoo `name`. }
+        prop_id: { type: string }
+        form_no: { type: string }
+        reg_date:
+          type: string
+          description: >-
+            ISO-8601 datetime, e.g. `2026-03-02T00:00:00.000Z`. Only the date
+            part is stored.
+        prop_type: { type: string, examples: [residential, commercial] }
+        prop_sub_type: { type: string }
+        for_sell: { type: boolean }
+        exec_name:
+          type: string
+          description: >-
+            RM name as spelled on the website. Odoo resolves it to a `res.users`
+            record by normalising hyphens and spacing, applying a known-alias
+            table, then matching exactly and finally in Title Case. An
+            unresolvable name leaves the RM unset rather than failing the
+            request.
+        owner_name: { type: string }
+        owner_contact_no:
+          type: string
+          description: >-
+            Maps to Odoo `owner_phone`. Normalised on the way in; may legitimately
+            contain several numbers.
+        owner_email: { type: string }
+        gmaps_url: { type: [string, 'null'] }
+        tour_360_url: { type: string }
+        state:
+          type: object
+          description: Nested object; only `name` is read.
+          properties: { name: { type: string } }
+        city:
+          type: object
+          properties: { name: { type: string } }
+        location_area:
+          type: object
+          description: Maps to Odoo `location`.
+          properties: { name: { type: string } }
+        details:
+          type: object
+          properties:
+            bedroom_count:
+              type: [string, integer, 'null']
+              description: "Parsed from strings such as `3 BHK` into the integer `bedroom_count`."
+            furnishing_type: { type: string, examples: [Unfurnished, Semi-Furnished, Furnished] }
+        sell_pricing:
+          type: [object, 'null']
+          description: Read when `for_sell` is true.
+          properties: { offer_price: { type: number } }
+        rent_pricing:
+          type: [object, 'null']
+          description: Read when `for_sell` is false.
+          properties: { rent_price: { type: number } }
+        media:
+          type: array
+          description: >-
+            Accepted and logged, but only the entry flagged `is_primary` is
+            persisted, as `primary_image_url`. The rest is discarded.
+          items:
+            type: object
+            properties:
+              url: { type: string }
+              is_primary: { type: boolean }
+
+    WebhookBody:
+      description: >-
+        Either the website's `{"success": …, "property": {…}}` envelope, or a
+        bare property object. Both are accepted; the handler reads the
+        `property` key when present and otherwise treats the whole body as the
+        property.
+      oneOf:
+        - type: object
+          title: Enveloped
+          required: [property]
+          properties:
+            success: { type: boolean }
+            property: { $ref: '#/components/schemas/WebsiteProperty' }
+        - $ref: '#/components/schemas/WebsiteProperty'

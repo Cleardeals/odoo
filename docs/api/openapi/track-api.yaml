@@ -1,0 +1,1392 @@
+openapi: 3.1.0
+
+info:
+  title: Cleardeals Track API
+  version: "1.0.0"
+  summary: Read-only enquiry and site-visit tracking for property sellers and buyers.
+  description: |
+    Eight read-only endpoints that power the "track your property" and "track
+    your enquiry" experiences on the Cleardeals website and mobile app.
+
+    **Audience** — the Cleardeals website and mobile app backends. Nothing here
+    writes; every endpoint is a `GET`.
+
+    ## Two audiences, one API
+
+    | Prefix | Caller | Identified by | Answers |
+    |---|---|---|---|
+    | `/api/track/property/…` | Property **owner** (seller) | `phone` → their properties | "Who is enquiring about my listings?" |
+    | `/api/track/lead/…` | **Buyer** | `phone` → their enquiries | "What is happening with the properties I enquired about?" |
+
+    ## The phone number is the only credential
+
+    Every endpoint identifies its subject solely by the `phone` query parameter.
+    The API key authenticates the *calling application*, not the person whose
+    data is returned — anyone holding the key can read any seller's or buyer's
+    enquiry history by supplying their number. Callers are responsible for
+    verifying that the phone number belongs to the session they are serving
+    before proxying a response to an end user, and for never exposing the API
+    key to a browser or mobile client.
+
+    Phone numbers are accepted in any common Indian format and normalised to ten
+    digits: `9876543210`, `919876543210`, `+919876543210`, `09876543210`, and
+    with embedded spaces. Anything that cannot be reduced to ten digits is a
+    `400`.
+
+    ## Response envelope
+
+    Success: `{"success": true, "data": {…}, "error": null}`
+
+    Failure: `{"success": false, "data": null, "error": {"code": <int>, "message": <str>}}`
+
+    Note the error key is `code`. The Properties API (a separate spec) uses
+    `status` for the same field and omits `data` on failure. The two envelopes
+    were never unified; do not write a shared client parser that assumes one
+    shape.
+
+    ## `404` means "no data", not "wrong request"
+
+    A seller with no properties, or a buyer with no enquiries, gets a `404` — not
+    a `200` with empty collections. Clients rendering a dashboard must treat
+    `404` as the empty state rather than as an error. The same applies when a
+    `property_tag` filter matches none of the caller's properties.
+
+    ## Primary and recommended enquiries
+
+    An enquiry is one of two kinds, and every endpoint reports both:
+
+    * **primary** — the buyer enquired about this property directly.
+    * **recommended** — an RM proposed this property to a buyer who had enquired
+      about a different one. Created through the Recommend Property wizard.
+
+    Both are rows in the same `leads.new` model, distinguished by
+    `inquiry_type`. A recommended enquiry links back to the buyer's original
+    enquiry, which is where its name, phone and source come from.
+
+    ## Site-visit classification
+
+    Four endpoints bucket site visits identically. Buckets are derived from the
+    visit's configurable status flags, never from string matching, so custom
+    statuses land correctly:
+
+    | Bucket | Rule |
+    |---|---|
+    | `completed` | The status is flagged as a completed status. |
+    | `cancelled` | The status is flagged as cancelled or no-show. |
+    | `upcoming` | Scheduled or rescheduled, and the datetime is in the future. |
+    | `pending_feedback` | Scheduled or rescheduled, the datetime has passed, and no outcome was logged. This is the RM's to-do list. |
+
+    Visits marked `superseded` — the closed leg of a reschedule chain — are
+    excluded everywhere, so a rescheduled appointment is never counted twice. A
+    single enquiry can legitimately hold several active visits, for example one
+    completed visit followed by a newly scheduled one.
+
+    ## A note on timestamps
+
+    Datetime fields are ISO-8601 strings **without a timezone offset**. They are
+    Odoo-stored naive UTC values. Site-visit classification compares them
+    against the server's local `datetime.now()`, so around the boundary an
+    "upcoming" visit may flip to "pending_feedback" earlier or later than a
+    client computing the same thing in IST would expect. Render these values;
+    do not re-derive buckets from them.
+
+  contact:
+    name: Cleardeals Engineering
+    email: tech@cleardeals.co.in
+  license:
+    name: LGPL-3
+    url: https://www.gnu.org/licenses/lgpl-3.0.html
+
+servers:
+  - url: https://{host}
+    description: Odoo deployment
+    variables:
+      host:
+        default: staging.cleardeals.example
+        description: >-
+          Hostname of the target Odoo deployment. Replace with the production or
+          staging host; no trailing slash.
+
+security:
+  - TrackApiKey: []
+
+tags:
+  - name: Seller
+    description: >-
+      What is happening on a property owner's listings. Keyed on the owner's
+      phone number.
+  - name: Buyer
+    description: >-
+      What is happening with a buyer's own enquiries. Keyed on the buyer's phone
+      number.
+
+paths:
+
+  /api/track/property/summary:
+    get:
+      tags: [Seller]
+      operationId: getSellerSummary
+      summary: Seller headline counts
+      description: |
+        Headline enquiry counts across the owner's properties, plus the contact
+        details of each property's assigned RM.
+
+        The lightest of the seller endpoints — use it for the dashboard header
+        and fetch the detailed endpoints lazily.
+      parameters:
+        - $ref: '#/components/parameters/OwnerPhone'
+        - $ref: '#/components/parameters/PropertyTag'
+      responses:
+        '200':
+          description: Summary counts.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [owner_phone, properties, tag_filter, inquiries]
+                        properties:
+                          owner_phone: { $ref: '#/components/schemas/NormalisedPhone' }
+                          properties:
+                            type: array
+                            description: >-
+                              One entry per matched property, including the
+                              assigned RM. This is the only seller endpoint that
+                              returns RM contact details.
+                            items:
+                              type: object
+                              properties:
+                                property_tag: { type: [string, 'null'] }
+                                name: { type: [string, 'null'], description: Property name. }
+                                rm_name: { type: [string, 'null'], description: Assigned Relationship Manager. }
+                                phone:
+                                  type: [string, 'null']
+                                  description: >-
+                                    The **RM's** phone number, not the owner's.
+                                    The key is easy to misread.
+                          tag_filter: { $ref: '#/components/schemas/TagFilterEcho' }
+                          inquiries:
+                            type: object
+                            required: [total, primary, recommended, source_breakdown]
+                            properties:
+                              total: { type: integer, description: primary + recommended. }
+                              primary: { type: integer }
+                              recommended: { type: integer }
+                              source_breakdown:
+                                type: object
+                                description: >-
+                                  Counts keyed by lead source name. Keys are data,
+                                  not a fixed enum — new portals appear here
+                                  without a spec change. Enquiries with no source
+                                  are grouped under `Unknown`. Sources with no
+                                  enquiries are absent rather than zero.
+                                additionalProperties:
+                                  type: object
+                                  properties:
+                                    primary: { type: integer }
+                                    recommended: { type: integer }
+                      error: { type: 'null' }
+              example:
+                success: true
+                data:
+                  owner_phone: "9876543210"
+                  properties:
+                    - property_tag: TAG1
+                      name: Aaryan City
+                      rm_name: Bhoomika Prajapati
+                      phone: "9012345678"
+                  tag_filter: null
+                  inquiries:
+                    total: 42
+                    primary: 35
+                    recommended: 7
+                    source_breakdown:
+                      MagicBricks: { primary: 10, recommended: 3 }
+                      "99acres": { primary: 15, recommended: 2 }
+                      Housing.com: { primary: 8, recommended: 2 }
+                      Unknown: { primary: 2, recommended: 0 }
+                error: null
+        '400': { $ref: '#/components/responses/BadPhone' }
+        '401': { $ref: '#/components/responses/MissingApiKey' }
+        '403': { $ref: '#/components/responses/InvalidApiKey' }
+        '404': { $ref: '#/components/responses/NoPropertiesForPhone' }
+        '500': { $ref: '#/components/responses/ApiKeyNotConfigured' }
+
+  /api/track/property/funnel:
+    get:
+      tags: [Seller]
+      operationId: getSellerFunnel
+      summary: Seller conversion funnel
+      description: |
+        Every enquiry on the owner's properties bucketed by its current status,
+        with percentages of the total.
+
+        All seventeen statuses are **always present**, including those with a
+        count of zero, so a client can render a fixed-shape funnel chart without
+        null-checking. Percentages are rounded to one decimal place and are
+        `0.0` across the board when there are no enquiries.
+
+        Statuses are not ordered stages — an enquiry sits in exactly one of them
+        at a time, and they are not strictly sequential. `key_metrics` provides
+        the rollups worth showing as headline numbers.
+      parameters:
+        - $ref: '#/components/parameters/OwnerPhone'
+        - $ref: '#/components/parameters/PropertyTag'
+      responses:
+        '200':
+          description: The funnel.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [owner_phone, properties, tag_filter, funnel]
+                        properties:
+                          owner_phone: { $ref: '#/components/schemas/NormalisedPhone' }
+                          properties: { $ref: '#/components/schemas/PropertyTagList' }
+                          tag_filter: { $ref: '#/components/schemas/TagFilterEcho' }
+                          funnel:
+                            type: object
+                            required: [total_inquiries, stages, key_metrics]
+                            properties:
+                              total_inquiries: { type: integer }
+                              stages:
+                                type: object
+                                description: >-
+                                  One key per status in `EnquiryStatus`, always
+                                  all seventeen.
+                                additionalProperties:
+                                  type: object
+                                  properties:
+                                    count: { type: integer }
+                                    pct_of_total:
+                                      type: number
+                                      description: Percentage of `total_inquiries`, one decimal place.
+                              key_metrics:
+                                type: object
+                                description: Rollups over the status counts.
+                                properties:
+                                  contacted:
+                                    type: integer
+                                    description: >-
+                                      Every enquiry that has moved past the
+                                      initial `lead` status — that is, all
+                                      statuses except `lead`,
+                                      `number_not_in_use_wrong_number` and
+                                      `other`.
+                                  site_visit_scheduled:
+                                    type: integer
+                                    description: >-
+                                      The `site_visit_scheduled` status count
+                                      alone. Does not include `rescheduled`.
+                                  site_visit_done: { type: integer }
+                                  closed_or_lost:
+                                    type: integer
+                                    description: >-
+                                      `requirement_closed` + `no_requirements` +
+                                      `property_sold_out` +
+                                      `budget_not_sufficient`.
+                      error: { type: 'null' }
+              example:
+                success: true
+                data:
+                  owner_phone: "9876543210"
+                  properties: [TAG1, TAG2]
+                  tag_filter: null
+                  funnel:
+                    total_inquiries: 42
+                    stages:
+                      lead: { count: 10, pct_of_total: 23.8 }
+                      busy: { count: 3, pct_of_total: 7.1 }
+                      ringing: { count: 2, pct_of_total: 4.8 }
+                      call_back_later: { count: 1, pct_of_total: 2.4 }
+                      details_shared_of_property: { count: 5, pct_of_total: 11.9 }
+                      detail_shared_and_interested_for_site_visit: { count: 4, pct_of_total: 9.5 }
+                      option_not_matching_requirements: { count: 0, pct_of_total: 0.0 }
+                      site_visit_scheduled: { count: 6, pct_of_total: 14.3 }
+                      rescheduled: { count: 1, pct_of_total: 2.4 }
+                      site_visit_done: { count: 4, pct_of_total: 9.5 }
+                      requirement_closed: { count: 3, pct_of_total: 7.1 }
+                      no_requirements: { count: 2, pct_of_total: 4.8 }
+                      property_sold_out: { count: 0, pct_of_total: 0.0 }
+                      budget_not_sufficient: { count: 0, pct_of_total: 0.0 }
+                      switched_off: { count: 1, pct_of_total: 2.4 }
+                      number_not_in_use_wrong_number: { count: 0, pct_of_total: 0.0 }
+                      other: { count: 0, pct_of_total: 0.0 }
+                    key_metrics:
+                      contacted: 32
+                      site_visit_scheduled: 6
+                      site_visit_done: 4
+                      closed_or_lost: 5
+                error: null
+        '400': { $ref: '#/components/responses/BadPhone' }
+        '401': { $ref: '#/components/responses/MissingApiKey' }
+        '403': { $ref: '#/components/responses/InvalidApiKey' }
+        '404': { $ref: '#/components/responses/NoPropertiesForPhone' }
+        '500': { $ref: '#/components/responses/ApiKeyNotConfigured' }
+
+  /api/track/property/activity:
+    get:
+      tags: [Seller]
+      operationId: getSellerActivity
+      summary: Seller enquiry feed
+      description: |
+        The raw enquiry feed — one record per enquiry on the owner's properties,
+        primary and recommended combined, newest first.
+
+        **Pagination is applied in memory, after every matching enquiry has been
+        loaded and serialised.** It bounds the response size, not the work the
+        server does. Requesting page 40 costs the same as page 1.
+
+        Each record carries the outcome of that enquiry's most recent active
+        site visit, so `remarks` and the two feedback fields describe the visit,
+        not the enquiry as a whole.
+      parameters:
+        - $ref: '#/components/parameters/OwnerPhone'
+        - $ref: '#/components/parameters/PropertyTag'
+        - $ref: '#/components/parameters/Page'
+        - name: page_size
+          in: query
+          required: false
+          description: Records per page. Clamped to 1–200.
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+      responses:
+        '200':
+          description: A page of enquiries.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [owner_phone, properties, tag_filter, items, pagination]
+                        properties:
+                          owner_phone: { $ref: '#/components/schemas/NormalisedPhone' }
+                          properties: { $ref: '#/components/schemas/PropertyTagList' }
+                          tag_filter: { $ref: '#/components/schemas/TagFilterEcho' }
+                          items:
+                            type: array
+                            items: { $ref: '#/components/schemas/SellerActivityRecord' }
+                          pagination: { $ref: '#/components/schemas/Pagination' }
+                      error: { type: 'null' }
+              example:
+                success: true
+                data:
+                  owner_phone: "9876543210"
+                  properties: [TAG1]
+                  tag_filter: null
+                  items:
+                    - type: primary
+                      lead_id: 123
+                      lead_name: Ravi Shah
+                      lead_phone: "9123456789"
+                      source: MagicBricks
+                      property_tag: TAG1
+                      property_bhk: 2 BHK
+                      property_location: Maninagar
+                      inquiry_datetime: "2025-12-01T14:30:00"
+                      current_status: site_visit_scheduled
+                      first_contacted_on: "2025-12-02T10:00:00"
+                      site_visit_datetime: "2025-12-05T11:00:00"
+                      site_visit_date: "2025-12-05"
+                      remarks: Interested in 2nd floor
+                      feedback_general: null
+                      feedback_site_visit_done: null
+                  pagination: { page: 1, page_size: 50, total: 1, total_pages: 1 }
+                error: null
+        '400': { $ref: '#/components/responses/BadPhoneOrPaging' }
+        '401': { $ref: '#/components/responses/MissingApiKey' }
+        '403': { $ref: '#/components/responses/InvalidApiKey' }
+        '404': { $ref: '#/components/responses/NoPropertiesForPhone' }
+        '500': { $ref: '#/components/responses/ApiKeyNotConfigured' }
+
+  /api/track/property/site-visits:
+    get:
+      tags: [Seller]
+      operationId: getSellerSiteVisits
+      summary: Seller site visits
+      description: |
+        Every active site visit across the owner's properties, pre-sorted into
+        four buckets. Not paginated.
+
+        Sort order differs per bucket, chosen so the most actionable row is
+        first:
+
+        * `upcoming` — soonest first
+        * `pending_feedback` — most overdue first
+        * `cancelled` — most recent first
+        * `completed` — most recent first
+
+        **Read the `source` field carefully.** Here it holds the enquiry kind
+        (`primary` or `recommended`), *not* the lead source. The buyer-facing
+        equivalent of this endpoint uses `inquiry_type` for that value and
+        reserves `source` for the portal name. The inconsistency is real; do not
+        share a record parser between the two.
+
+        Extra keys appear depending on the bucket — `note` on `pending_feedback`
+        and `cancelled`, feedback codes and labels on `cancelled` and
+        `completed`. Fields absent from a bucket are absent from the object, not
+        null.
+      parameters:
+        - $ref: '#/components/parameters/OwnerPhone'
+        - $ref: '#/components/parameters/PropertyTag'
+      responses:
+        '200':
+          description: Site visits, bucketed.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [owner_phone, properties, tag_filter, upcoming, pending_feedback, cancelled, completed, totals]
+                        properties:
+                          owner_phone: { $ref: '#/components/schemas/NormalisedPhone' }
+                          properties: { $ref: '#/components/schemas/PropertyTagList' }
+                          tag_filter: { $ref: '#/components/schemas/TagFilterEcho' }
+                          upcoming:
+                            type: array
+                            items: { $ref: '#/components/schemas/SellerSiteVisit' }
+                          pending_feedback:
+                            type: array
+                            items: { $ref: '#/components/schemas/SellerSiteVisit' }
+                          cancelled:
+                            type: array
+                            items: { $ref: '#/components/schemas/SellerSiteVisit' }
+                          completed:
+                            type: array
+                            items: { $ref: '#/components/schemas/SellerSiteVisit' }
+                          totals: { $ref: '#/components/schemas/VisitTotals' }
+                      error: { type: 'null' }
+              example:
+                success: true
+                data:
+                  owner_phone: "9876543210"
+                  properties: [TAG1]
+                  tag_filter: null
+                  upcoming:
+                    - source: primary
+                      lead_name: Ravi Shah
+                      lead_phone: "9123456789"
+                      property_tag: TAG1
+                      property_bhk: 2 BHK
+                      property_location: Maninagar
+                      site_visit_datetime: "2026-09-20T11:00:00"
+                      site_visit_date: "2026-09-20"
+                      current_status: site_visit_scheduled
+                      status_name: Scheduled
+                      remarks: Wants to see the terrace
+                  pending_feedback: []
+                  cancelled: []
+                  completed:
+                    - source: recommended
+                      lead_name: Priya Mehta
+                      lead_phone: "9333222111"
+                      property_tag: TAG1
+                      property_bhk: 2 BHK
+                      property_location: Maninagar
+                      site_visit_datetime: "2026-07-14T16:00:00"
+                      site_visit_date: "2026-07-14"
+                      current_status: site_visit_done
+                      status_name: Completed
+                      remarks: null
+                      feedback_site_visit_done: buyer_liked_property
+                      feedback_site_visit_done_label: Buyer liked the property
+                  totals: { upcoming: 1, pending_feedback: 0, cancelled: 0, completed: 1 }
+                error: null
+        '400': { $ref: '#/components/responses/BadPhone' }
+        '401': { $ref: '#/components/responses/MissingApiKey' }
+        '403': { $ref: '#/components/responses/InvalidApiKey' }
+        '404': { $ref: '#/components/responses/NoPropertiesForPhone' }
+        '500': { $ref: '#/components/responses/ApiKeyNotConfigured' }
+
+  /api/track/property/portal-performance:
+    get:
+      tags: [Seller]
+      operationId: getSellerPortalPerformance
+      summary: Seller per-source breakdown
+      description: |
+        Answers "which portal is actually producing quality enquiries?" by
+        breaking enquiry counts and statuses down per lead source.
+
+        A recommended enquiry is attributed to the source of the buyer's
+        original enquiry, so recommendations do not vanish from the attribution
+        or get credited to no one.
+
+        `statuses` inside each source contains **only the statuses that occurred**
+        — unlike the funnel endpoint, absent statuses are not filled in as zero.
+        Treat a missing key as zero.
+      parameters:
+        - $ref: '#/components/parameters/OwnerPhone'
+        - $ref: '#/components/parameters/PropertyTag'
+      responses:
+        '200':
+          description: Per-source breakdown.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [owner_phone, properties, tag_filter, sources]
+                        properties:
+                          owner_phone: { $ref: '#/components/schemas/NormalisedPhone' }
+                          properties: { $ref: '#/components/schemas/PropertyTagList' }
+                          tag_filter: { $ref: '#/components/schemas/TagFilterEcho' }
+                          sources:
+                            type: object
+                            description: >-
+                              Keyed by lead source name. Keys are data, not a
+                              fixed enum. Enquiries with no source are grouped
+                              under `Unknown`. Sources that produced no enquiries
+                              are absent.
+                            additionalProperties:
+                              type: object
+                              properties:
+                                total_leads: { type: integer }
+                                primary_leads: { type: integer }
+                                recommended_leads: { type: integer }
+                                statuses:
+                                  type: object
+                                  description: >-
+                                    Counts keyed by status. Only statuses that
+                                    occurred are present.
+                                  additionalProperties: { type: integer }
+                                key_metrics:
+                                  type: object
+                                  properties:
+                                    site_visit_scheduled: { type: integer }
+                                    site_visit_done: { type: integer }
+                      error: { type: 'null' }
+              example:
+                success: true
+                data:
+                  owner_phone: "9876543210"
+                  properties: [TAG1]
+                  tag_filter: null
+                  sources:
+                    MagicBricks:
+                      total_leads: 15
+                      primary_leads: 12
+                      recommended_leads: 3
+                      statuses:
+                        lead: 3
+                        busy: 1
+                        details_shared_of_property: 2
+                        site_visit_scheduled: 4
+                        site_visit_done: 3
+                        requirement_closed: 1
+                        other: 1
+                      key_metrics: { site_visit_scheduled: 4, site_visit_done: 3 }
+                error: null
+        '400': { $ref: '#/components/responses/BadPhone' }
+        '401': { $ref: '#/components/responses/MissingApiKey' }
+        '403': { $ref: '#/components/responses/InvalidApiKey' }
+        '404': { $ref: '#/components/responses/NoPropertiesForPhone' }
+        '500': { $ref: '#/components/responses/ApiKeyNotConfigured' }
+
+  /api/track/property/ai-suggestions:
+    get:
+      tags: [Seller]
+      operationId: getSellerAiSuggestions
+      summary: Seller AI lead suggestions
+      description: |
+        Machine-generated suggestions of past buyers who might be interested in
+        the owner's properties, produced by the property-matching model in
+        BigQuery and synced into Odoo.
+
+        **An empty `items` array is a normal, successful response.** Most
+        properties have no suggestions at any given time. Only a seller with no
+        properties at all yields `404`.
+
+        Each suggestion names the property the buyer *originally* enquired about
+        (`original_property_tag`) alongside the property being suggested to them
+        (`property_tag`), and carries whatever the RM has logged since
+        (`rm_status`, `rm_feedback`).
+
+        Ordered by generation date, newest first. Paginated in memory, as with
+        the activity endpoint.
+      parameters:
+        - $ref: '#/components/parameters/OwnerPhone'
+        - $ref: '#/components/parameters/PropertyTag'
+        - $ref: '#/components/parameters/Page'
+        - name: page_size
+          in: query
+          required: false
+          description: >-
+            Records per page. Clamped to 1–200 — the shared paginator's cap, not
+            the 100 this endpoint's inline docstring mentions.
+          schema: { type: integer, minimum: 1, maximum: 200, default: 20 }
+      responses:
+        '200':
+          description: A page of suggestions, possibly empty.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [owner_phone, properties, tag_filter, items, pagination]
+                        properties:
+                          owner_phone: { $ref: '#/components/schemas/NormalisedPhone' }
+                          properties: { $ref: '#/components/schemas/PropertyTagList' }
+                          tag_filter: { $ref: '#/components/schemas/TagFilterEcho' }
+                          items:
+                            type: array
+                            items: { $ref: '#/components/schemas/AiSuggestion' }
+                          pagination: { $ref: '#/components/schemas/Pagination' }
+                      error: { type: 'null' }
+              examples:
+                withSuggestions:
+                  value:
+                    success: true
+                    data:
+                      owner_phone: "9876543210"
+                      properties: [TAG1]
+                      tag_filter: null
+                      items:
+                        - property_tag: TAG1
+                          suggested_lead_name: Amit Patel
+                          suggested_lead_phone: "9123456789"
+                          original_property_tag: TAG0
+                          suggested_on: "2026-01-10"
+                          contact_type: site_visit_done
+                          rm_status: contacted
+                          rm_feedback: Interested, will call back tomorrow
+                      pagination: { page: 1, page_size: 20, total: 1, total_pages: 1 }
+                    error: null
+                empty:
+                  summary: No suggestions — a normal result, not an error
+                  value:
+                    success: true
+                    data:
+                      owner_phone: "9876543210"
+                      properties: [TAG1]
+                      tag_filter: null
+                      items: []
+                      pagination: { page: 1, page_size: 20, total: 0, total_pages: 1 }
+                    error: null
+        '400': { $ref: '#/components/responses/BadPhoneOrPaging' }
+        '401': { $ref: '#/components/responses/MissingApiKey' }
+        '403': { $ref: '#/components/responses/InvalidApiKey' }
+        '404': { $ref: '#/components/responses/NoPropertiesForPhone' }
+        '500': { $ref: '#/components/responses/ApiKeyNotConfigured' }
+
+  /api/track/lead/activity:
+    get:
+      tags: [Buyer]
+      operationId: getBuyerActivity
+      summary: Buyer enquiry history
+      description: |
+        Everything a buyer has enquired about, nested: each of their primary
+        enquiries, with the properties an RM subsequently recommended to them
+        listed underneath.
+
+        Only primary enquiries appear at the top level. Recommended enquiries
+        are never top-level; they appear inside `recommended_properties` of the
+        enquiry that produced them.
+
+        `has_property` exists because a portal enquiry can arrive before its
+        listing id has been matched to a Cleardeals property. When it is
+        `false`, `property` is `null` — the enquiry is real but not yet linked
+        to anything the buyer can be shown.
+
+        The buyer's own phone is not repeated on each record; it is the
+        `buyer_phone` at the top of `data`.
+      parameters:
+        - $ref: '#/components/parameters/BuyerPhone'
+      responses:
+        '200':
+          description: The buyer's enquiries.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [buyer_phone, summary, primary_inquiries]
+                        properties:
+                          buyer_phone: { $ref: '#/components/schemas/NormalisedPhone' }
+                          summary:
+                            type: object
+                            properties:
+                              total_inquiries:
+                                type: integer
+                                description: Number of primary enquiries.
+                              total_properties:
+                                type: integer
+                                description: >-
+                                  Linked primary properties plus every
+                                  recommended property. An enquiry with no
+                                  matched property contributes nothing.
+                              site_visits_scheduled:
+                                type: integer
+                                description: >-
+                                  Counts only the single most recent active visit
+                                  per enquiry, so an enquiry with two scheduled
+                                  visits counts once.
+                              site_visits_done: { type: integer }
+                          primary_inquiries:
+                            type: array
+                            items: { $ref: '#/components/schemas/BuyerPrimaryInquiry' }
+                      error: { type: 'null' }
+              example:
+                success: true
+                data:
+                  buyer_phone: "9876543210"
+                  summary:
+                    total_inquiries: 1
+                    total_properties: 2
+                    site_visits_scheduled: 1
+                    site_visits_done: 0
+                  primary_inquiries:
+                    - lead_id: 101
+                      lead_name: Ravi Shah
+                      source: MagicBricks
+                      inquiry_datetime: "2026-01-10T09:00:00"
+                      current_status: site_visit_scheduled
+                      first_contacted_on: "2026-01-11T10:00:00"
+                      remarks: Wants east-facing flat
+                      feedback_general: null
+                      feedback_site_visit_done: null
+                      has_property: true
+                      property:
+                        property_tag: TAG1
+                        bhk: 2 BHK
+                        location: Maninagar
+                        city: Ahmedabad
+                        property_link: https://cleardeals.co.in/property/aaryan-city-GBH75X0K
+                      site_visit_datetime: "2026-02-20T11:00:00"
+                      site_visit_date: "2026-02-20"
+                      recommended_properties:
+                        - interest_id: 55
+                          property_tag: TAG2
+                          bhk: 2 BHK
+                          location: Navrangpura
+                          city: Ahmedabad
+                          property_link: https://cleardeals.co.in/property/shivalik-QQ21A0B
+                          current_status: details_shared_of_property
+                          site_visit_datetime: null
+                          site_visit_date: null
+                          remarks: null
+                error: null
+        '400': { $ref: '#/components/responses/BadPhone' }
+        '401': { $ref: '#/components/responses/MissingApiKey' }
+        '403': { $ref: '#/components/responses/InvalidApiKey' }
+        '404': { $ref: '#/components/responses/NoInquiriesForPhone' }
+        '500': { $ref: '#/components/responses/ApiKeyNotConfigured' }
+
+  /api/track/lead/site-visits:
+    get:
+      tags: [Buyer]
+      operationId: getBuyerSiteVisits
+      summary: Buyer site visits
+      description: |
+        Every active site visit across all of the buyer's enquiries, primary and
+        recommended alike, in the same four buckets and the same per-bucket sort
+        order as the seller endpoint.
+
+        Unlike the buyer activity endpoint, recommended enquiries appear here as
+        top-level rows, flagged by `inquiry_type`.
+
+        **Field naming differs from the seller equivalent.** Here `inquiry_type`
+        holds `primary`/`recommended` and `source` holds the portal name; on the
+        seller endpoint `source` holds `primary`/`recommended` and there is no
+        portal field at all. Records also carry `lead_id` and `property_city`,
+        which the seller records omit.
+      parameters:
+        - $ref: '#/components/parameters/BuyerPhone'
+      responses:
+        '200':
+          description: Site visits, bucketed.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [buyer_phone, upcoming, pending_feedback, cancelled, completed, totals]
+                        properties:
+                          buyer_phone: { $ref: '#/components/schemas/NormalisedPhone' }
+                          upcoming:
+                            type: array
+                            items: { $ref: '#/components/schemas/BuyerSiteVisit' }
+                          pending_feedback:
+                            type: array
+                            items: { $ref: '#/components/schemas/BuyerSiteVisit' }
+                          cancelled:
+                            type: array
+                            items: { $ref: '#/components/schemas/BuyerSiteVisit' }
+                          completed:
+                            type: array
+                            items: { $ref: '#/components/schemas/BuyerSiteVisit' }
+                          totals: { $ref: '#/components/schemas/VisitTotals' }
+                      error: { type: 'null' }
+              example:
+                success: true
+                data:
+                  buyer_phone: "9876543210"
+                  upcoming:
+                    - inquiry_type: primary
+                      lead_id: 101
+                      lead_name: Ravi Shah
+                      source: MagicBricks
+                      property_tag: TAG1
+                      property_bhk: 2 BHK
+                      property_location: Maninagar
+                      property_city: Ahmedabad
+                      site_visit_datetime: "2026-09-20T11:00:00"
+                      site_visit_date: "2026-09-20"
+                      current_status: site_visit_scheduled
+                      status_name: Scheduled
+                      remarks: Ask for key from owner
+                  pending_feedback: []
+                  cancelled: []
+                  completed: []
+                  totals: { upcoming: 1, pending_feedback: 0, cancelled: 0, completed: 0 }
+                error: null
+        '400': { $ref: '#/components/responses/BadPhone' }
+        '401': { $ref: '#/components/responses/MissingApiKey' }
+        '403': { $ref: '#/components/responses/InvalidApiKey' }
+        '404': { $ref: '#/components/responses/NoInquiriesForPhone' }
+        '500': { $ref: '#/components/responses/ApiKeyNotConfigured' }
+
+components:
+
+  securitySchemes:
+    TrackApiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: |
+        Shared secret, compared in constant time against the Odoo system
+        parameter `track_api.secret_key`. Rotate by changing that parameter; no
+        deploy is needed.
+
+        This authenticates the calling application only. It grants access to
+        **every** seller's and buyer's data, gated purely by the `phone`
+        parameter — so it must never reach a browser or mobile client.
+
+  parameters:
+
+    OwnerPhone:
+      name: phone
+      in: query
+      required: true
+      description: |
+        The property owner's phone number.
+
+        Owner phone numbers are stored as free text and a single field may hold
+        several numbers separated by spaces or commas. Matching narrows with a
+        SQL `LIKE` and then confirms in Python that one whole token normalises
+        to the supplied number, so a ten-digit string embedded inside a longer
+        number does not produce a false match.
+      schema: { $ref: '#/components/schemas/PhoneInput' }
+      example: "9876543210"
+
+    BuyerPhone:
+      name: phone
+      in: query
+      required: true
+      description: >-
+        The buyer's phone number. Matched exactly against the normalised
+        ten-digit `phone` on their enquiries.
+      schema: { $ref: '#/components/schemas/PhoneInput' }
+      example: "9876543210"
+
+    PropertyTag:
+      name: property_tag
+      in: query
+      required: false
+      description: >-
+        Narrow the response to a single property, by its tag. Omit to aggregate
+        across every property the owner holds. A tag that is not one of the
+        owner's properties yields `404`, not an empty result.
+      schema: { type: string }
+      example: TAG1
+
+    Page:
+      name: page
+      in: query
+      required: false
+      description: 1-based page number. Values below 1 are clamped to 1.
+      schema: { type: integer, minimum: 1, default: 1 }
+
+  responses:
+
+    MissingApiKey:
+      description: The `X-API-Key` header was not sent.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example:
+            success: false
+            data: null
+            error: { code: 401, message: Missing API key in X-API-Key header. }
+
+    InvalidApiKey:
+      description: The `X-API-Key` header does not match the configured key.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example:
+            success: false
+            data: null
+            error: { code: 403, message: Invalid API key. }
+
+    ApiKeyNotConfigured:
+      description: >-
+        `track_api.secret_key` is not set on the server, or reading it raised.
+        The server cannot authenticate anyone. Note this is a `500` here, where
+        the equivalent condition on the Properties API is a `503`.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          examples:
+            notConfigured:
+              value:
+                success: false
+                data: null
+                error: { code: 500, message: API key not configured on server. }
+            readFailed:
+              value:
+                success: false
+                data: null
+                error: { code: 500, message: Authentication configuration error. }
+
+    BadPhone:
+      description: >-
+        `phone` was absent, empty, or could not be normalised to ten digits.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example:
+            success: false
+            data: null
+            error: { code: 400, message: "Valid 'phone' query parameter is required." }
+
+    BadPhoneOrPaging:
+      description: >-
+        `phone` was absent or unparseable, or `page` / `page_size` was not an
+        integer.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          examples:
+            badPhone:
+              value:
+                success: false
+                data: null
+                error: { code: 400, message: "Valid 'phone' query parameter is required." }
+            badPaging:
+              value:
+                success: false
+                data: null
+                error: { code: 400, message: "'page' and 'page_size' must be integers." }
+
+    NoPropertiesForPhone:
+      description: >-
+        No property is registered against this phone number, or the
+        `property_tag` filter matched none of the owner's properties. This is the
+        empty state, not a failure.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          examples:
+            noProperties:
+              value:
+                success: false
+                data: null
+                error: { code: 404, message: No properties found for phone number 9876543210. }
+            tagNotOwned:
+              value:
+                success: false
+                data: null
+                error: { code: 404, message: "No properties found for phone number 9876543210 with tag 'TAG9'." }
+
+    NoInquiriesForPhone:
+      description: >-
+        This phone number has no enquiries on record. The empty state, not a
+        failure.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example:
+            success: false
+            data: null
+            error: { code: 404, message: No Inquiries found for phone number 9876543210. }
+
+  schemas:
+
+    SuccessEnvelope:
+      type: object
+      required: [success, data, error]
+      properties:
+        success: { type: boolean, const: true }
+        data: { type: object }
+        error: { type: 'null' }
+
+    Error:
+      type: object
+      description: >-
+        The failure envelope for this API. `data` is always present and null.
+        Note the inner key is `code`; the Properties API uses `status`.
+      required: [success, data, error]
+      properties:
+        success: { type: boolean, const: false }
+        data: { type: 'null' }
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: integer
+              description: Repeats the HTTP status code.
+            message:
+              type: string
+              description: Human-readable description. Not a stable machine-readable code.
+
+    PhoneInput:
+      type: string
+      description: >-
+        An Indian phone number in any common format — bare ten digits, `91`- or
+        `+91`-prefixed, a leading `0`, or with embedded spaces. Normalised to ten
+        digits server-side. Anything that cannot be reduced to ten digits is
+        rejected with `400`.
+      examples: ["9876543210", "919876543210", "+919876543210", "09876543210"]
+
+    NormalisedPhone:
+      type: string
+      description: The ten-digit form of the phone number that was queried.
+      pattern: '^[0-9]{10}$'
+
+    TagFilterEcho:
+      type: [string, 'null']
+      description: >-
+        Echoes the `property_tag` filter that was applied, or `null` when the
+        response aggregates every property.
+
+    PropertyTagList:
+      type: array
+      description: Tags of the properties covered by this response.
+      items: { type: [string, 'null'] }
+
+    Pagination:
+      type: object
+      required: [page, page_size, total, total_pages]
+      properties:
+        page: { type: integer }
+        page_size: { type: integer }
+        total: { type: integer, description: Total records across all pages. }
+        total_pages:
+          type: integer
+          minimum: 1
+          description: >-
+            At least 1 even when `total` is 0, so an empty result reports one
+            empty page rather than zero pages.
+
+    EnquiryStatus:
+      type: string
+      description: |
+        The current status of an enquiry. Seventeen values, not strictly ordered
+        stages — an enquiry sits in exactly one at a time.
+
+        `other` is both a real selectable status and the fallback used when an
+        enquiry has no status set.
+      enum:
+        - lead
+        - busy
+        - ringing
+        - call_back_later
+        - details_shared_of_property
+        - detail_shared_and_interested_for_site_visit
+        - option_not_matching_requirements
+        - site_visit_scheduled
+        - rescheduled
+        - site_visit_done
+        - requirement_closed
+        - no_requirements
+        - property_sold_out
+        - budget_not_sufficient
+        - switched_off
+        - number_not_in_use_wrong_number
+        - other
+
+    InquiryType:
+      type: string
+      description: >-
+        `primary` — the buyer enquired about this property directly.
+        `recommended` — an RM proposed it to a buyer who enquired about a
+        different property.
+      enum: [primary, recommended]
+
+    VisitTotals:
+      type: object
+      description: Row counts per bucket, matching the array lengths above.
+      required: [upcoming, pending_feedback, cancelled, completed]
+      properties:
+        upcoming: { type: integer }
+        pending_feedback: { type: integer }
+        cancelled: { type: integer }
+        completed: { type: integer }
+
+    SellerActivityRecord:
+      type: object
+      description: >-
+        One enquiry on the owner's property. Visit-related fields describe that
+        enquiry's most recent active site visit.
+      properties:
+        type: { $ref: '#/components/schemas/InquiryType' }
+        lead_id:
+          type: integer
+          description: >-
+            `leads.new` database id. For a recommended enquiry this is the
+            recommended row's own id, while the name, phone and source come from
+            the buyer's original enquiry.
+        lead_name: { type: [string, 'null'], description: Buyer's name. }
+        lead_phone: { type: [string, 'null'], description: Buyer's phone. }
+        source: { type: [string, 'null'], description: "Lead source name, e.g. `MagicBricks`." }
+        property_tag: { type: [string, 'null'] }
+        property_bhk: { type: [string, 'null'] }
+        property_location: { type: [string, 'null'] }
+        inquiry_datetime:
+          type: [string, 'null']
+          description: When the enquiry was created. Naive UTC ISO-8601, no offset.
+        current_status: { $ref: '#/components/schemas/EnquiryStatus' }
+        first_contacted_on:
+          type: [string, 'null']
+          description: When an RM first made contact. Null if never contacted.
+        site_visit_datetime: { type: [string, 'null'] }
+        site_visit_date: { type: [string, 'null'], format: date }
+        remarks:
+          type: [string, 'null']
+          description: Free-text note from the latest active site visit, not from the enquiry.
+        feedback_general:
+          type: [string, 'null']
+          description: >-
+            Outcome code, populated only when the latest visit was cancelled or
+            a no-show. Null otherwise.
+        feedback_site_visit_done:
+          type: [string, 'null']
+          description: >-
+            Outcome code, populated only when the latest visit completed. Null
+            otherwise.
+
+    SellerSiteVisit:
+      type: object
+      description: |
+        One site visit on the owner's property.
+
+        Bucket-specific keys are **absent**, not null, when they do not apply:
+        `note` appears on `pending_feedback` and `cancelled`; the
+        `feedback_general*` pair on `cancelled`; the `feedback_site_visit_done*`
+        pair on `completed`.
+      properties:
+        source:
+          $ref: '#/components/schemas/InquiryType'
+          description: >-
+            The enquiry kind — **not** the lead source, despite the name. The
+            buyer endpoint calls this `inquiry_type`.
+        lead_name: { type: [string, 'null'] }
+        lead_phone: { type: [string, 'null'] }
+        property_tag: { type: [string, 'null'] }
+        property_bhk: { type: [string, 'null'] }
+        property_location: { type: [string, 'null'] }
+        site_visit_datetime: { type: [string, 'null'], description: "Naive UTC ISO-8601, no offset." }
+        site_visit_date: { type: [string, 'null'], format: date }
+        current_status:
+          type: string
+          description: >-
+            Collapsed to one of two legacy values for display compatibility:
+            `site_visit_done` when the visit completed, `site_visit_scheduled` in
+            every other bucket — including cancelled visits. Route on the bucket
+            the record arrived in, not on this field.
+          enum: [site_visit_scheduled, site_visit_done]
+        status_name:
+          type: [string, 'null']
+          description: >-
+            The real, configurable status label, e.g. `Cancelled by buyer`. Use
+            this for display; unlike `current_status` it is not collapsed.
+        remarks: { type: [string, 'null'], description: The RM's free-text note on the visit. }
+        note:
+          type: string
+          description: >-
+            A fixed explanatory sentence. Present only on `pending_feedback` and
+            `cancelled`.
+        feedback_general:
+          type: [string, 'null']
+          description: Cancellation or no-show reason code. Present only on `cancelled`.
+        feedback_general_label:
+          type: [string, 'null']
+          description: Human-readable label for `feedback_general`.
+        feedback_site_visit_done:
+          type: [string, 'null']
+          description: Visit outcome code. Present only on `completed`.
+        feedback_site_visit_done_label:
+          type: [string, 'null']
+          description: Human-readable label for `feedback_site_visit_done`.
+
+    BuyerSiteVisit:
+      type: object
+      description: >-
+        One site visit on one of the buyer's enquiries. Same buckets and same
+        bucket-specific keys as `SellerSiteVisit`, but note the differing field
+        names for enquiry kind and lead source.
+      properties:
+        inquiry_type:
+          $ref: '#/components/schemas/InquiryType'
+          description: >-
+            The enquiry kind. The seller endpoint carries this same value under
+            the key `source`.
+        lead_id: { type: integer, description: "`leads.new` database id." }
+        lead_name: { type: [string, 'null'] }
+        source:
+          type: [string, 'null']
+          description: >-
+            Lead source name, e.g. `MagicBricks`. On the seller endpoint the key
+            `source` means something entirely different.
+        property_tag: { type: [string, 'null'] }
+        property_bhk: { type: [string, 'null'] }
+        property_location: { type: [string, 'null'] }
+        property_city: { type: [string, 'null'] }
+        site_visit_datetime: { type: [string, 'null'], description: "Naive UTC ISO-8601, no offset." }
+        site_visit_date: { type: [string, 'null'], format: date }
+        current_status:
+          type: string
+          description: >-
+            Collapsed to two legacy values, exactly as on the seller endpoint.
+            Route on the bucket, not on this field.
+          enum: [site_visit_scheduled, site_visit_done]
+        status_name: { type: [string, 'null'], description: The real configurable status label. }
+        remarks: { type: [string, 'null'] }
+        note:
+          type: string
+          description: Present only on `pending_feedback` and `cancelled`.
+        feedback_general:
+          type: [string, 'null']
+          description: Present only on `cancelled`.
+        feedback_general_label: { type: [string, 'null'] }
+        feedback_site_visit_done:
+          type: [string, 'null']
+          description: Present only on `completed`.
+        feedback_site_visit_done_label: { type: [string, 'null'] }
+
+    BuyerProperty:
+      type: [object, 'null']
+      description: >-
+        The property an enquiry refers to. `null` when the enquiry's portal
+        listing id has not been matched to a Cleardeals property.
+      properties:
+        property_tag: { type: [string, 'null'] }
+        bhk: { type: [string, 'null'] }
+        location: { type: [string, 'null'] }
+        city: { type: [string, 'null'] }
+        property_link: { type: [string, 'null'], description: Canonical Cleardeals URL for the property. }
+
+    BuyerRecommendedProperty:
+      type: object
+      description: A property an RM recommended off the back of a primary enquiry.
+      properties:
+        interest_id:
+          type: integer
+          description: >-
+            The recommended enquiry's own `leads.new` database id. Named
+            `interest_id` for backward compatibility with the model this data
+            used to live in.
+        property_tag: { type: [string, 'null'] }
+        bhk: { type: [string, 'null'] }
+        location: { type: [string, 'null'] }
+        city: { type: [string, 'null'] }
+        property_link: { type: [string, 'null'] }
+        current_status: { $ref: '#/components/schemas/EnquiryStatus' }
+        site_visit_datetime: { type: [string, 'null'] }
+        site_visit_date: { type: [string, 'null'], format: date }
+        remarks: { type: [string, 'null'], description: Note from the latest active site visit. }
+
+    BuyerPrimaryInquiry:
+      type: object
+      description: >-
+        One primary enquiry, with any recommendations that followed from it
+        nested underneath.
+      properties:
+        lead_id: { type: integer }
+        lead_name: { type: [string, 'null'] }
+        source: { type: [string, 'null'], description: "Lead source name, e.g. `MagicBricks`." }
+        inquiry_datetime: { type: [string, 'null'], description: "Naive UTC ISO-8601, no offset." }
+        current_status: { $ref: '#/components/schemas/EnquiryStatus' }
+        first_contacted_on: { type: [string, 'null'] }
+        remarks: { type: [string, 'null'], description: Note from the latest active site visit. }
+        feedback_general:
+          type: [string, 'null']
+          description: Set only when the latest visit was cancelled or a no-show.
+        feedback_site_visit_done:
+          type: [string, 'null']
+          description: Set only when the latest visit completed.
+        has_property:
+          type: boolean
+          description: >-
+            False when the enquiry's listing id has not been matched to a
+            property. `property` is then null.
+        property: { $ref: '#/components/schemas/BuyerProperty' }
+        site_visit_datetime: { type: [string, 'null'] }
+        site_visit_date: { type: [string, 'null'], format: date }
+        recommended_properties:
+          type: array
+          description: Properties recommended to this buyer off the back of this enquiry.
+          items: { $ref: '#/components/schemas/BuyerRecommendedProperty' }
+
+    AiSuggestion:
+      type: object
+      description: >-
+        One machine-generated suggestion that a past buyer may suit one of the
+        owner's properties.
+      properties:
+        property_tag:
+          type: [string, 'null']
+          description: The owner's property being suggested to this buyer.
+        suggested_lead_name: { type: [string, 'null'] }
+        suggested_lead_phone: { type: [string, 'null'] }
+        original_property_tag:
+          type: [string, 'null']
+          description: The property this buyer originally enquired about.
+        suggested_on:
+          type: [string, 'null']
+          format: date
+          description: When the model generated the suggestion. Sort key, newest first.
+        contact_type:
+          type: [string, 'null']
+          description: >-
+            How far the buyer got on their original enquiry, e.g.
+            `site_visit_done`.
+        rm_status:
+          type: [string, 'null']
+          description: What the RM has done with this suggestion so far.
+        rm_feedback:
+          type: [string, 'null']
+          description: The RM's free-text note on the suggestion.

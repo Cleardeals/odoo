@@ -1,0 +1,521 @@
+openapi: 3.1.0
+
+info:
+  title: Cleardeals Lead Intake API
+  version: "1.0.0"
+  summary: Inbound lead webhooks from property portals and first-party channels.
+  description: |
+    Four "fast lane" webhooks that push a buyer enquiry straight into the
+    `leads.new` model. One route per source, because every source sends a
+    different field vocabulary and holds a different shared secret.
+
+    **Audience** — external lead vendors (MagicBricks, 99acres, Square Yards) and
+    the Cleardeals website and mobile app.
+
+    ## These endpoints do not return JSON
+
+    Every response body is `text/plain`. There is no envelope, no lead id, and
+    no structured error code — the portals that consume these routes only check
+    the HTTP status. Clients must key their logic on the status code and treat
+    the body as a human-readable hint.
+
+    This is a deliberate difference from the Properties API and the Track API,
+    both of which return JSON envelopes.
+
+    ## What "200 OK" actually means
+
+    `200` means **the enquiry was accepted**, not that a lead row was created.
+    Three distinct outcomes all return `200`:
+
+    | Outcome | What happened |
+    |---|---|
+    | Lead created and processed | The normal path. |
+    | Lead created, processing failed | The row exists; RM assignment or enrichment raised and was logged. A human retries it. |
+    | Duplicate suppressed | The same phone + property arrived inside the suppression window. No second lead. |
+
+    A sender therefore cannot distinguish "new lead" from "duplicate" from the
+    response, and must not retry a `200` hoping to force creation.
+
+    ## Property matching
+
+    Each webhook carries the portal's own listing id. Odoo resolves it to a
+    `property.base` record differently per source:
+
+    * **MagicBricks / 99acres / Square Yards** — the id is looked up against the
+      `property.portal.listing` table for that portal.
+    * **Cleardeals** — the id is our own short code and maps directly to
+      `property.base.prop_id`; no portal-listing lookup is involved.
+
+    An unmatched id is **not an error**. The lead is still created, is left
+    without a property link, and falls through to the fallback RM assignment.
+
+    ## Duplicate suppression
+
+    A repeat enquiry from the same phone number for the same property within the
+    suppression window is silently dropped. Senders may safely retry on network
+    failure; the cost of a duplicate delivery is nothing, and the cost of not
+    retrying is a lost lead.
+
+    ## Authentication differs per route
+
+    There is no single intake credential. Each route validates its own key
+    against its own Odoo system parameter, and two of them behave differently
+    when things go wrong — see each operation's description and the table below.
+
+    | Route | Header | System parameter | Comparison | Key unset on server |
+    |---|---|---|---|---|
+    | `/api/v1/magicbricks_webhook` | `X-API-KEY` | `magicbricks.api.key` | direct | `401` |
+    | `/api/v1/99acres_webhook` | `X-API-KEY` | `99acres.webhook.api.key` | direct | `401` |
+    | `/api/v1/cleardeals_lead` | `X-API-KEY` | `cleardeals.lead.api.key` | direct | `401` |
+    | `/api/v1/squareyards_webhook` | `apikey` (or `X-API-KEY`) | `squareyards.webhook.api.key` | constant-time | `503` |
+
+    Only the Square Yards route compares in constant time and distinguishes
+    "not configured yet" (`503`, retry later) from "wrong credential" (`401`,
+    do not retry). The three older routes collapse both into `401`.
+
+  contact:
+    name: Cleardeals Engineering
+    email: tech@cleardeals.co.in
+  license:
+    name: LGPL-3
+    url: https://www.gnu.org/licenses/lgpl-3.0.html
+
+servers:
+  - url: https://{host}
+    description: Odoo deployment
+    variables:
+      host:
+        default: staging.cleardeals.example
+        description: >-
+          Hostname of the target Odoo deployment. Replace with the production or
+          staging host; no trailing slash.
+
+tags:
+  - name: Portal webhooks
+    description: Third-party property portals pushing buyer enquiries.
+  - name: First-party webhooks
+    description: The Cleardeals website and mobile app.
+
+paths:
+
+  /api/v1/magicbricks_webhook:
+    post:
+      tags: [Portal webhooks]
+      operationId: magicbricksLeadWebhook
+      summary: MagicBricks lead
+      security:
+        - MagicBricksApiKey: []
+      description: |
+        Accepts a buyer enquiry from MagicBricks.
+
+        `property_id` is MagicBricks' own listing id and is matched against the
+        `property.portal.listing` rows registered for the MagicBricks portal.
+        The lead's `source` is set to MagicBricks, creating that source record if
+        it does not yet exist.
+
+        The whole request body is stored verbatim on the lead as `raw_data`, so
+        fields this spec does not list are preserved even though they are not
+        mapped onto model fields.
+
+        **Malformed JSON returns Odoo's generic `500` HTML error page**, not the
+        `text/plain` body documented below — the body is parsed before the
+        handler's error handling begins. Send valid JSON. (The Square Yards
+        route, written later, handles this correctly and returns `400`.)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, mobile, email, property_id]
+              properties:
+                name:
+                  type: string
+                  description: Buyer's name.
+                mobile:
+                  type: string
+                  description: >-
+                    Buyer's phone. Accepted with or without the `91` country
+                    code or a `+` prefix; normalised to 10 digits on storage.
+                email:
+                  type: string
+                  description: >-
+                    Buyer's email. Required by this route even though the model
+                    does not require it.
+                property_id:
+                  type: string
+                  description: MagicBricks listing id, matched via `property.portal.listing`.
+                project:
+                  type: string
+                  description: Optional project name, stored as `project_name`.
+              additionalProperties:
+                description: Preserved in `raw_data` but not mapped to a field.
+            examples:
+              standard:
+                value:
+                  name: Ravi Shah
+                  mobile: "9876543210"
+                  email: ravi@example.com
+                  property_id: MB-778812
+                  project: Aaryan City
+      responses:
+        '200': { $ref: '#/components/responses/LeadAccepted' }
+        '400': { $ref: '#/components/responses/MissingRequiredFields' }
+        '401': { $ref: '#/components/responses/InvalidApiKeyPlain' }
+        '500': { $ref: '#/components/responses/IntakeFailed' }
+
+  /api/v1/99acres_webhook:
+    post:
+      tags: [Portal webhooks]
+      operationId: acres99LeadWebhook
+      summary: 99acres lead
+      security:
+        - Acres99ApiKey: []
+      description: |
+        Accepts a buyer enquiry from 99acres.
+
+        Note the **capitalised field names** — `Name`, `Phone`, `ProdId`,
+        `EmailId`, `Project`. This is 99acres' own vocabulary and differs from
+        every other route in this spec. `ProdId` is their listing id, matched
+        via `property.portal.listing`.
+
+        Unlike the MagicBricks route, email is optional here.
+
+        The full body is stored as `raw_data`.
+
+        As with MagicBricks, **malformed JSON produces Odoo's generic `500` HTML
+        page** rather than the documented `text/plain` response.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [Name, Phone, ProdId]
+              properties:
+                Name:
+                  type: string
+                  description: Buyer's name.
+                Phone:
+                  type: string
+                  description: >-
+                    Buyer's phone. Accepted with or without the `91` country
+                    code; normalised to 10 digits on storage.
+                ProdId:
+                  type: string
+                  description: 99acres listing id, matched via `property.portal.listing`.
+                EmailId:
+                  type: string
+                  description: Optional buyer email.
+                Project:
+                  type: string
+                  description: Optional project name, stored as `project_name`.
+              additionalProperties:
+                description: Preserved in `raw_data` but not mapped to a field.
+            examples:
+              standard:
+                value:
+                  Name: Ravi Shah
+                  Phone: "9876543210"
+                  EmailId: ravi@example.com
+                  ProdId: "A55512"
+                  Project: Aaryan City
+      responses:
+        '200': { $ref: '#/components/responses/LeadAccepted' }
+        '400': { $ref: '#/components/responses/MissingRequiredFields' }
+        '401': { $ref: '#/components/responses/InvalidApiKeyPlain' }
+        '500': { $ref: '#/components/responses/IntakeFailed' }
+
+  /api/v1/squareyards_webhook:
+    post:
+      tags: [Portal webhooks]
+      operationId: squareyardsLeadWebhook
+      summary: Square Yards lead
+      security:
+        - SquareYardsApiKey: []
+        - SquareYardsApiKeyFallback: []
+      description: |
+        Accepts a buyer enquiry from Square Yards. This is the most recently
+        written of the four routes and the best-behaved: constant-time key
+        comparison, a real `400` for malformed JSON, and a `503` that tells the
+        sender to retry when the integration has not been configured yet.
+
+        **Two lead shapes arrive on this route.** Square Yards sends both
+        standard form enquiries and WhatsApp-button enquiries, and the latter
+        carry no name or email at all. Only `mobile` and `propertyId` are
+        therefore required; a missing name is replaced with the literal
+        `"SquareYards Lead"` because the model requires one.
+
+        `propertyId` is the single property-match key. Square Yards also sends a
+        "Unique PID" in some payloads — it is deliberately ignored.
+
+        `mobile` and `propertyId` are coerced to strings, so an integer in the
+        payload is handled rather than breaking phone normalisation.
+
+        **Authentication** — the secret arrives in the literal `apikey` header.
+        `X-API-KEY` is also accepted, for parity with the older portal routes.
+        Comparison is constant-time against `squareyards.webhook.api.key`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mobile, propertyId]
+              properties:
+                mobile:
+                  type: [string, integer]
+                  description: >-
+                    Buyer's phone, the only universally present contact field.
+                    Coerced to a string, then normalised to 10 digits.
+                propertyId:
+                  type: [string, integer]
+                  description: >-
+                    Square Yards listing id, matched via
+                    `property.portal.listing`. The "Unique PID" is not used.
+                name:
+                  type: string
+                  description: >-
+                    Absent on WhatsApp-button leads. Defaults to
+                    `"SquareYards Lead"`.
+                email:
+                  type: string
+                  description: Optional; absent on WhatsApp-button leads.
+                projectName:
+                  type: string
+                  description: Optional project name, stored as `project_name`.
+              additionalProperties:
+                description: Preserved in `raw_data` but not mapped to a field.
+            examples:
+              formLead:
+                summary: Standard form enquiry
+                value:
+                  name: Ravi Shah
+                  mobile: "9876543210"
+                  email: ravi@example.com
+                  propertyId: SY-99123
+                  projectName: Aaryan City
+              whatsappLead:
+                summary: WhatsApp-button enquiry — no name, no email
+                value:
+                  mobile: "9876543210"
+                  propertyId: SY-99123
+              numericFields:
+                summary: Numeric mobile and listing id, both accepted
+                value:
+                  mobile: 9876543210
+                  propertyId: 99123
+      responses:
+        '200': { $ref: '#/components/responses/LeadAccepted' }
+        '400':
+          description: |
+            Either the body is not a valid JSON object, or `mobile` or
+            `propertyId` is missing.
+          content:
+            text/plain:
+              schema: { type: string }
+              examples:
+                malformed:
+                  value: "Failed to push lead: Malformed JSON body."
+                missing:
+                  value: "Failed to push lead: Missing required fields."
+        '401': { $ref: '#/components/responses/InvalidApiKeyPlain' }
+        '500': { $ref: '#/components/responses/IntakeFailed' }
+        '503':
+          description: >-
+            `squareyards.webhook.api.key` is not set on the server, so no
+            credential can be validated. The integration is not configured yet —
+            this is a retryable server state, not a bad credential.
+          content:
+            text/plain:
+              schema: { type: string }
+              example: "Failed to Push Lead: Integration not configured."
+
+  /api/v1/cleardeals_lead:
+    post:
+      tags: [First-party webhooks]
+      operationId: cleardealsLeadWebhook
+      summary: Cleardeals website or app lead
+      security:
+        - CleardealsLeadApiKey: []
+      description: |
+        Accepts a first-party enquiry from the Cleardeals website or mobile app.
+
+        Unlike the portal routes, `property_id` here is **our own short code**
+        (`property.base.prop_id`, e.g. `GBH75X0K`), resolved directly with no
+        portal-listing lookup. Because the property is resolved before the
+        duplicate check runs, de-duplication uses phone + property — the same
+        criteria as a matched portal lead.
+
+        **Source bifurcation.** `inquiry_source` decides which lead source is
+        recorded:
+
+        * `"mobile_app"` → source `App Inquiry`
+        * anything else, or absent → source `Website Inquiry`
+
+        Both sources share the portal code `Cleardeals`, so a website enquiry and
+        an app enquiry from the same buyer for the same property are treated as
+        one lead by de-duplication, not two.
+
+        **Malformed JSON produces Odoo's generic `500` HTML page** rather than
+        the documented `text/plain` response.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, phone, property_id]
+              properties:
+                name:
+                  type: string
+                  description: Buyer's name.
+                phone:
+                  type: string
+                  description: >-
+                    Buyer's phone. Accepted with or without the `91` country
+                    code; normalised to 10 digits on storage.
+                property_id:
+                  type: string
+                  description: >-
+                    Cleardeals short code, matched directly against
+                    `property.base.prop_id`. Not a portal listing id.
+                email:
+                  type: string
+                  description: Optional buyer email.
+                message:
+                  type: string
+                  description: Optional free-text enquiry, stored as `remarks`.
+                inquiry_source:
+                  type: string
+                  description: >-
+                    `mobile_app` records the lead against the App Inquiry
+                    source; any other value, or omitting the field, records it
+                    against Website Inquiry. Compared case-insensitively.
+                  examples: [mobile_app, website]
+                inquiry_type:
+                  type: string
+                  description: >-
+                    Whether the buyer enquired about this property directly, or
+                    it was recommended to them. Any value other than the two
+                    listed — including an absent field — is coerced to `primary`.
+                  enum: [primary, recommended]
+                  default: primary
+              additionalProperties:
+                description: Preserved in `raw_data` but not mapped to a field.
+            examples:
+              website:
+                summary: Website enquiry
+                value:
+                  name: Ravi Shah
+                  phone: "9876543210"
+                  email: ravi@example.com
+                  property_id: GBH75X0K
+                  message: Is the 2nd floor unit still available?
+              app:
+                summary: Mobile app enquiry
+                value:
+                  name: Ravi Shah
+                  phone: "+919876543210"
+                  property_id: GBH75X0K
+                  inquiry_source: mobile_app
+      responses:
+        '200': { $ref: '#/components/responses/LeadAccepted' }
+        '400': { $ref: '#/components/responses/MissingRequiredFields' }
+        '401': { $ref: '#/components/responses/InvalidApiKeyPlain' }
+        '500': { $ref: '#/components/responses/IntakeFailed' }
+
+components:
+
+  securitySchemes:
+
+    MagicBricksApiKey:
+      type: apiKey
+      in: header
+      name: X-API-KEY
+      description: >-
+        Compared directly (not in constant time) against the Odoo system
+        parameter `magicbricks.api.key`. An unset parameter rejects every
+        request with `401`.
+
+    Acres99ApiKey:
+      type: apiKey
+      in: header
+      name: X-API-KEY
+      description: >-
+        Compared directly (not in constant time) against the Odoo system
+        parameter `99acres.webhook.api.key`. An unset parameter rejects every
+        request with `401`.
+
+    CleardealsLeadApiKey:
+      type: apiKey
+      in: header
+      name: X-API-KEY
+      description: >-
+        Compared directly (not in constant time) against the Odoo system
+        parameter `cleardeals.lead.api.key`. An unset parameter rejects every
+        request with `401`.
+
+    SquareYardsApiKey:
+      type: apiKey
+      in: header
+      name: apikey
+      description: >-
+        The header Square Yards actually sends. Compared in constant time
+        against the Odoo system parameter `squareyards.webhook.api.key`.
+
+    SquareYardsApiKeyFallback:
+      type: apiKey
+      in: header
+      name: X-API-KEY
+      description: >-
+        Accepted as an alternative to `apikey`, for parity with the older portal
+        routes. Same secret, same constant-time comparison.
+
+  responses:
+
+    LeadAccepted:
+      description: |
+        The enquiry was accepted. This covers three different outcomes — lead
+        created and processed, lead created but post-processing failed, and
+        duplicate suppressed — which the response does not distinguish. Do not
+        retry a `200`.
+      content:
+        text/plain:
+          schema: { type: string }
+          example: "Success: Lead punched in the CRM"
+
+    MissingRequiredFields:
+      description: >-
+        One or more required fields were absent or empty. The response does not
+        name which ones; the rejected field list is written to the Odoo log.
+      content:
+        text/plain:
+          schema: { type: string }
+          example: "Failed to push lead: Missing required fields."
+
+    InvalidApiKeyPlain:
+      description: >-
+        The supplied key did not match, or no key was sent. For the three older
+        routes this status is also returned when the server has no key
+        configured at all, so a `401` does not by itself prove the sender's
+        credential is wrong.
+      content:
+        text/plain:
+          schema: { type: string }
+          example: "Failed to Push Lead: Invalid API Key"
+
+    IntakeFailed:
+      description: >-
+        Lead creation raised, or the credential check itself raised. The
+        exception text is appended to the body for debugging; treat it as
+        diagnostic detail, not a stable contract. Safe to retry — de-duplication
+        prevents a double lead if the first attempt in fact succeeded.
+      content:
+        text/plain:
+          schema: { type: string }
+          examples:
+            creationFailed:
+              value: "Failed to Push Lead: <exception text>"
+            authCheckFailed:
+              value: "Failed to Push Lead: Internal Server Error"
