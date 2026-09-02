@@ -74,3 +74,8 @@ docker-compose.override.yml
 letsencrypt/
 
 hrms_addons/
+# UI mockups (HTML) — design references, not shipped code
+docs/ml_matching/mockups/
+
+# Local session handoff — never commit (repo is public)
+CHECKPOINT.md
