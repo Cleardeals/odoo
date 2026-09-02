@@ -1,3 +1,7 @@
+from datetime import date, datetime
+
+import pytz
+
 from odoo.tests import tagged
 from odoo.exceptions import ValidationError
 from odoo.tools import mute_logger
@@ -58,12 +62,54 @@ class TestPortalLeadCRUD(PortalLeadTestCase):
 
     
     def test_05_compute_create_date_only(self):
-        """Test that create_date_only is computed correctly."""
+        """
+        create_date_only is the IST calendar date of create_date, NOT the UTC one.
+
+        The field exists precisely so that a lead created at 02:00 IST is
+        recorded as today rather than yesterday — see
+        _compute_create_date_only in new_portal_leads.py.
+
+        This previously asserted equality with create_date.date(), the UTC date.
+        That contradicts what the field is for, and it only passed by
+        coincidence: UTC and IST fall on the same calendar day for 18.5 hours
+        out of 24, so the suite was red every day between 18:30 and 00:00 UTC
+        (00:00-05:30 IST) and nobody noticed, because CI only ever ran during
+        working hours. It surfaced when a production deploy was gated on the
+        tests at 18:31 UTC.
+        """
         lead = self.create_portal_lead()
-        
+
         self.assertIsNotNone(lead.create_date_only)
-        self.assertIsInstance(lead.create_date_only,  type(lead.create_date.date()))
-        self.assertEqual(lead.create_date_only, lead.create_date.date())
+        self.assertIsInstance(lead.create_date_only, date)
+
+        expected = (
+            pytz.utc.localize(lead.create_date)
+            .astimezone(pytz.timezone("Asia/Kolkata"))
+            .date()
+        )
+        self.assertEqual(lead.create_date_only, expected)
+
+    def test_05b_create_date_only_uses_ist_across_the_utc_midnight_boundary(self):
+        """
+        Pin the case that made test_05 time-dependent, deterministically.
+
+        20:00 UTC is 01:30 IST the FOLLOWING day, so the correct value differs
+        from the UTC date. Asserting it here means the boundary is covered at
+        every hour of the day, not only when CI happens to run inside it.
+        """
+        lead = self.create_portal_lead()
+
+        # create_date is readonly, so write it through sudo and let the stored
+        # compute retrigger via its @api.depends("create_date").
+        lead.sudo().write({"create_date": datetime(2026, 9, 2, 20, 0, 0)})
+        lead.invalidate_recordset(["create_date_only"])
+
+        self.assertEqual(lead.create_date_only, date(2026, 9, 3))
+        self.assertNotEqual(
+            lead.create_date_only,
+            lead.create_date.date(),
+            "the UTC date is 2026-09-02; if these are equal the IST conversion was lost",
+        )
 
     
     def test_06_compute_site_visit_date_only(self):
