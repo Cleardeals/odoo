@@ -146,34 +146,29 @@ steps:
         export HOME=/workspace
         # The first connection after an IAM change can race OS Login key
         # propagation. Retry briefly rather than failing a deploy over it.
+        # The remote command is written INLINE, with no intermediate shell
+        # variable. Deliberate, after two failures on exactly that:
+        #
+        #   1. A variable named REMOTE was parsed by Cloud Build as a
+        #      substitution ("not a valid built-in substitution"), and the build
+        #      was rejected at approval.
+        #   2. Escaping it as a doubled dollar fixed the REFERENCE but also
+        #      rewrote the ASSIGNMENT, which bash then read as expanding an
+        #      unset variable rather than assigning one — so the deploy step
+        #      died with "REMOTE: unbound variable".
+        #
+        # Cloud Build substitution and shell expansion both act on the same
+        # dollar sign, and a variable that must survive both is fragile in a way
+        # no gate here can see. Having none is simpler than escaping correctly.
+        #
+        # COMMIT_SHA and _APP_DIR are real substitutions, resolved before the
+        # shell sees them. The fetch+reset runs BEFORE deploy.sh because on a
+        # first run that script is not yet on the VM — the pipeline bootstraps
+        # itself instead of depending on a hand-placed file.
         for attempt in 1 2 3; do
-          # The remote command brings the checkout to the target commit BEFORE
-          # invoking the deploy script. That ordering is not cosmetic: on the
-          # first run scripts/deploy.sh does not yet exist on the VM, so calling
-          # it directly is a chicken-and-egg failure. Fetching first means the
-          # pipeline bootstraps itself and never depends on someone having
-          # hand-placed a file.
-          #
-          # safe.directory is passed with -c rather than written to global git
-          # config: the checkout is owned by another user, and a deploy should
-          # not leave persistent config changes behind on the host.
-          # NOTE the $$ escaping below. Cloud Build parses a dollar-prefixed name
-          # in a build config as a SUBSTITUTION, and an uppercase name without a
-          # leading underscore is read as a built-in — so a shell variable REMOTE is
-          # rejected with "not a valid built-in substitution". $$ escapes it
-          # through to the shell. Lowercase shell variables elsewhere in this file
-          # are not affected, which is why only this one broke.
-          #
-          # This was caught at approval time, before the build ran: the config is
-          # validated when the build starts, not when the trigger is created.
-          $$REMOTE="set -euo pipefail
-            cd ${_APP_DIR}
-            git -c safe.directory=${_APP_DIR} fetch --quiet origin
-            git -c safe.directory=${_APP_DIR} reset --hard --quiet $COMMIT_SHA
-            exec bash scripts/deploy.sh $COMMIT_SHA"
           if gcloud compute ssh "${_INSTANCE}" \
                --zone="${_ZONE}" --tunnel-through-iap --quiet \
-               --command="sudo bash -c '"'"'$$REMOTE'"'"'"; then
+               --command="sudo bash -c 'set -euo pipefail; cd ${_APP_DIR}; git -c safe.directory=${_APP_DIR} remote set-url origin ${_REPO_URL}; git -c safe.directory=${_APP_DIR} fetch --depth 1 --quiet origin $BRANCH_NAME; git -c safe.directory=${_APP_DIR} reset --hard --quiet FETCH_HEAD; exec bash scripts/deploy.sh $COMMIT_SHA'"; then
             exit 0
           fi
           echo "ssh attempt ${attempt} failed; retrying in 15s" >&2
