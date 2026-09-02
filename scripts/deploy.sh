@@ -67,8 +67,27 @@ NEW="${IMAGE_BASE}:${SHA}"
 # compose file, odoo.prod.conf and this script must match the image. The
 # application code itself is IN the image, not here.
 log "checking out ${SHA}"
-git fetch --quiet origin
+# HTTPS rather than the git@github.com remote the VM was set up with. This
+# script runs under sudo; root has no GitHub key, so an SSH fetch fails with
+# "Host key verification failed". The repository is public, so HTTPS needs no
+# credentials — and the VM no longer needs a GitHub deploy key at all.
+# Idempotent, so a hand-run deploy self-heals a remote someone changed back.
+git remote set-url origin "${REPO_URL:-https://github.com/Cleardeals/odoo.git}"
+
+# --depth 1 is REQUIRED, not an optimisation. The checkout on the VM is a
+# shallow clone, and a plain `git fetch` on a shallow repo unshallows it,
+# pulling the whole history of a vendored Odoo fork. Measured live: .git grew
+# from 980MB to 5.3GB before the fetch was killed, and it had not finished.
+git fetch --depth 1 --quiet origin "$SHA"
 git reset --hard --quiet "$SHA" || die "commit $SHA not found after fetch"
+
+# The checkout must be EXACTLY the commit that was built and tested. The
+# pipeline fetches a branch tip (GitHub will not serve an arbitrary SHA to
+# fetch), so if someone pushed to the branch between the build starting and the
+# deploy running, the tip is no longer what was tested. Refuse rather than ship
+# an untested tree alongside a tested image.
+ACTUAL="$(git rev-parse HEAD)"
+[[ "$ACTUAL" == "$SHA" ]] || die "checkout is $ACTUAL but the built commit is $SHA — the branch moved mid-build; refusing to deploy"
 
 # ── Config from Secret Manager into tmpfs ─────────────────────────────────────
 log "rendering config"
