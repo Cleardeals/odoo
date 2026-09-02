@@ -72,15 +72,29 @@ log "checking out ${SHA}"
 # "Host key verification failed". The repository is public, so HTTPS needs no
 # credentials — and the VM no longer needs a GitHub deploy key at all.
 # Idempotent, so a hand-run deploy self-heals a remote someone changed back.
-git remote set-url origin "${REPO_URL:-https://github.com/Cleardeals/odoo.git}"
+# When invoked by the pipeline the tree is ALREADY at the target commit — the
+# build step checks it out before calling this script, because on a first run
+# this file does not yet exist on the VM. So only fetch when the tree is not
+# already where it needs to be. That makes the script idempotent and keeps it
+# runnable by hand.
+if [[ "$(git rev-parse HEAD)" != "$SHA" ]]; then
+  # HTTPS rather than the git@github.com remote the VM was set up with. This
+  # runs under sudo; root has no GitHub key, so an SSH fetch fails with "Host
+  # key verification failed". The repo is public, so HTTPS needs no credentials
+  # — and the VM no longer needs a GitHub deploy key at all.
+  git remote set-url origin "${REPO_URL:-https://github.com/Cleardeals/odoo.git}"
 
-# --depth 1 is REQUIRED, not an optimisation. The checkout on the VM is a
-# shallow clone, and a plain `git fetch` on a shallow repo unshallows it,
-# pulling the whole history of a vendored Odoo fork. Measured live: .git grew
-# from 980MB to 5.3GB before the fetch was killed, and it had not finished.
-git fetch --depth 1 --quiet origin "$SHA"
-git reset --hard --quiet "$SHA" || die "commit $SHA not found after fetch"
-
+  # --depth 1 is REQUIRED, not an optimisation. The checkout is a shallow clone,
+  # and a plain `git fetch` on a shallow repo unshallows it, pulling the whole
+  # history of a vendored Odoo fork. Measured live: .git grew from 980MB to
+  # 5.3GB before the fetch was killed, and it had not finished.
+  #
+  # The BRANCH is fetched, not the commit: GitHub refuses to serve an arbitrary
+  # SHA here ("couldn't find remote ref"). The assertion below then confirms the
+  # tree really is the commit that was built.
+  git fetch --depth 1 --quiet origin "${DEPLOY_BRANCH:-19.0}"
+  git reset --hard --quiet FETCH_HEAD
+fi
 # The checkout must be EXACTLY the commit that was built and tested. The
 # pipeline fetches a branch tip (GitHub will not serve an arbitrary SHA to
 # fetch), so if someone pushed to the branch between the build starting and the
