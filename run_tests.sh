@@ -102,11 +102,11 @@ cleanup() {
     if [[ "${KEEP_DB:-0}" == "1" ]]; then
         warn "KEEP_DB=1 — leaving Postgres container '${CONTAINER_NAME}' running."
         warn "Inspect it with: docker exec -it ${CONTAINER_NAME} psql -U ${DB_USER} ${DB_NAME}"
-        warn "Stop it with:    docker rm -f ${CONTAINER_NAME}"
+        warn "Stop it with:    docker rm -fv ${CONTAINER_NAME}"
         warn "(Network '${NETWORK_NAME}' is left in place; remove with: docker network rm ${NETWORK_NAME})"
     else
         log "Stopping and removing Postgres container…"
-        docker rm -f "${CONTAINER_NAME}" 2>/dev/null || true
+        docker rm -fv "${CONTAINER_NAME}" 2>/dev/null || true
         # Remove the network only after its attached container is gone.
         docker network rm "${NETWORK_NAME}" 2>/dev/null || true
     fi
@@ -130,8 +130,10 @@ fi
 # ── 3. Start Postgres ────────────────────────────────────────────────────────
 log "Starting Postgres container…"
 
-# Remove any stale container with the same name
-docker rm -f "${CONTAINER_NAME}" 2>/dev/null || true
+# Remove any stale container with the same name, along with its anonymous
+# volume — postgres:17 declares VOLUME /var/lib/postgresql/data, so omitting
+# -v here orphans a ~110MB volume on every run.
+docker rm -fv "${CONTAINER_NAME}" 2>/dev/null || true
 
 # Ensure the user-defined bridge network exists (idempotent).
 docker network create "${NETWORK_NAME}" > /dev/null 2>&1 || true
