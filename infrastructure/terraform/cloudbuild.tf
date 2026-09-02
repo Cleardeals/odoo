@@ -94,3 +94,18 @@ resource "google_cloudbuild_trigger" "cd" {
   # Deliberately NO included_files filter. A deploy trigger that skips files is
   # a deploy trigger that silently does not deploy something.
 }
+
+# ── Who may release a queued production deploy ─────────────────────────────────
+# The CD trigger holds every run until a human approves. That gate deadlocks
+# unless somebody actually holds the permission — and roles/editor does not
+# include it.
+#
+# Currently tech@ only, matching the WhatsApp platform. Note the consequence:
+# production deploys depend on one person's availability. Pointing this at a
+# group removes that single point of failure without widening who can approve.
+resource "google_project_iam_member" "cloudbuild_approvers" {
+  for_each = toset(var.cloudbuild_approvers)
+  project  = var.project_id
+  role     = "roles/cloudbuild.builds.approver"
+  member   = each.value
+}

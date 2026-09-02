@@ -88,3 +88,19 @@ variable "cloudbuild_cd_enabled" {
   EOT
   default     = false
 }
+
+variable "cloudbuild_approvers" {
+  type        = list(string)
+  description = <<-EOT
+    IAM members who may release a queued production deploy, as fully-qualified
+    principals (e.g. "user:someone@example.com", "group:oncall@example.com").
+
+    roles/editor does NOT include cloudbuild.builds.approve, so without an
+    explicit grant only project Owners can approve — which would mean the person
+    watching the alerts can see a deploy queue up and be unable to release it.
+
+    Prefer a group over individuals: an approver list is a rota, not
+    architecture, and it should change without a Terraform apply.
+  EOT
+  default     = []
+}
