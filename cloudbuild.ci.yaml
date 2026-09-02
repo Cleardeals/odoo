@@ -145,6 +145,73 @@ steps:
         echo "image contains exactly the repository's modules:"
         echo "$baked" | sed 's/^/  /'
 
+  # ── Gate: the DEPLOY config is well-formed ──────────────────────────────────
+  #
+  # This gate exists because CI could not see the deploy pipeline at all, and
+  # three production deploy attempts died on defects in cloudbuild.yaml that
+  # every gate here had passed:
+  #
+  #   1. A shell variable named REMOTE was parsed as a Cloud Build substitution,
+  #      and the build was rejected at approval. CI never noticed because
+  #      cloudbuild.ci.yaml only uses LOWERCASE shell variables, which are not
+  #      matched as substitutions. The two files differed invisibly.
+  #   2. Escaping it as a doubled dollar fixed the reference but broke the
+  #      assignment: "REMOTE: unbound variable".
+  #   3. A repo-URL substitution was used but never defined, so Cloud Build
+  #      rendered it EMPTY rather than failing, and `git remote set-url origin`
+  #      ran with a missing argument.
+  #
+  # Each was a one-line mistake that cost a full build, an approval, and a
+  # round trip. All three are statically detectable.
+  - id: deploy-config-check
+    name: python:3.12-slim
+    waitFor: ["-"]
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        pip install --quiet pyyaml
+        python3 - <<'PY'
+        import re, sys, yaml
+
+        BUILTINS = {"PROJECT_ID","BUILD_ID","PROJECT_NUMBER","LOCATION",
+                    "TRIGGER_NAME","COMMIT_SHA","SHORT_SHA","REVISION_ID",
+                    "REPO_NAME","REPO_FULL_NAME","BRANCH_NAME","TAG_NAME",
+                    "SERVICE_ACCOUNT","SERVICE_ACCOUNT_EMAIL"}
+        fail = []
+
+        for path in ("cloudbuild.yaml", "cloudbuild.ci.yaml"):
+            txt = open(path).read()
+            yaml.safe_load(txt)          # must parse at all
+
+            # Undefined _SUBSTITUTIONS render as EMPTY STRING, not an error.
+            defined = set()
+            if "substitutions:" in txt:
+                blk = txt.split("substitutions:", 1)[1].split("\n\n", 1)[0]
+                defined = set(re.findall(r"^\s+(_[A-Z0-9_]+):", blk, re.M))
+            used = set(re.findall(r"\$\{(_[A-Z0-9_]+)\}", txt))
+            for name in sorted(used - defined):
+                fail.append(f"{path}: ${{{name}}} is used but never defined — "
+                            f"Cloud Build renders it as an empty string")
+
+            # An uppercase dollar-prefixed name without a leading underscore is
+            # read as a built-in substitution and rejects the build at approval.
+            for m in re.finditer(r"(?<!\$)\$\{?([A-Z][A-Z0-9_]*)\}?", txt):
+                if m.group(1) not in BUILTINS and not m.group(1).startswith("_"):
+                    fail.append(f"{path}: dollar-{m.group(1)} is neither a "
+                                f"built-in substitution nor an underscore-"
+                                f"prefixed one. A shell variable here breaks "
+                                f"the build — inline it or use lowercase")
+
+        if fail:
+            print("DEPLOY CONFIG INVALID:")
+            for f in sorted(set(fail)):
+                print("  -", f)
+            sys.exit(1)
+        print("deploy config OK: substitutions defined, no stray shell variables")
+        PY
+
   # TODO(openapi): the route-coverage gate that fails CI when a controller route
   # has no OpenAPI spec lives only on feature/ml-matching-integration — it is not
   # on 19.0 or development_19 (verified: docs/api/openapi is absent from both).

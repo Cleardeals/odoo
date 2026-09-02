@@ -116,6 +116,28 @@ resource "google_compute_instance" "prod" {
     # Set by the Ops Agent policy. Omitting it plans its REMOVAL, which would
     # quietly detach the VM from that policy.
     enable-osconfig = "TRUE"
+
+    # ── OS Login ────────────────────────────────────────────────────────────
+    # Enabled at the INSTANCE level, not project-wide, so the blast radius is
+    # one VM.
+    #
+    # This is a HARD CUTOVER. The moment it is on, the six never-expiring SSH
+    # keys in project metadata stop working on this machine. Anyone relying on
+    # them loses access until granted roles/compute.osLogin or osAdminLogin.
+    #
+    # It was brought forward from Phase 4 because the deploy pipeline needs it.
+    # Without OS Login, `gcloud compute ssh` falls back to writing an ephemeral
+    # key into instance metadata, which needs compute.instances.setMetadata —
+    # a permission the build service account does not have, and must not be
+    # given: setMetadata permits writing `startup-script`, which runs as ROOT
+    # at next boot. Granting it would hand permanent root on production to
+    # anything that can trigger a build. OS Login is both the correct fix and
+    # the more restrictive one.
+    #
+    # Verified before enabling: tech@ holds compute.instances.osAdminLogin and
+    # osLogin (tested via testIamPermissions, not assumed), so administrative
+    # access survives the flip. Serial console remains as a backstop.
+    enable-oslogin = "TRUE"
   }
 
   boot_disk {

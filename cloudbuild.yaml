@@ -168,7 +168,7 @@ steps:
         for attempt in 1 2 3; do
           if gcloud compute ssh "${_INSTANCE}" \
                --zone="${_ZONE}" --tunnel-through-iap --quiet \
-               --command="sudo bash -c 'set -euo pipefail; cd ${_APP_DIR}; git -c safe.directory=${_APP_DIR} remote set-url origin ${_REPO_URL}; git -c safe.directory=${_APP_DIR} fetch --depth 1 --quiet origin $BRANCH_NAME; git -c safe.directory=${_APP_DIR} reset --hard --quiet FETCH_HEAD; exec bash scripts/deploy.sh $COMMIT_SHA'"; then
+               --command="sudo bash -c 'set -euo pipefail; cd ${_APP_DIR}; git -c safe.directory=${_APP_DIR} remote set-url origin https://github.com/Cleardeals/odoo.git; git -c safe.directory=${_APP_DIR} fetch --depth 1 --quiet origin $BRANCH_NAME; git -c safe.directory=${_APP_DIR} reset --hard --quiet FETCH_HEAD; exec bash scripts/deploy.sh $COMMIT_SHA'"; then
             exit 0
           fi
           echo "ssh attempt ${attempt} failed; retrying in 15s" >&2
