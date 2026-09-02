@@ -157,14 +157,23 @@ steps:
           # safe.directory is passed with -c rather than written to global git
           # config: the checkout is owned by another user, and a deploy should
           # not leave persistent config changes behind on the host.
-          REMOTE="set -euo pipefail
+          # NOTE the $$ escaping below. Cloud Build parses a dollar-prefixed name
+          # in a build config as a SUBSTITUTION, and an uppercase name without a
+          # leading underscore is read as a built-in — so a shell variable REMOTE is
+          # rejected with "not a valid built-in substitution". $$ escapes it
+          # through to the shell. Lowercase shell variables elsewhere in this file
+          # are not affected, which is why only this one broke.
+          #
+          # This was caught at approval time, before the build ran: the config is
+          # validated when the build starts, not when the trigger is created.
+          $$REMOTE="set -euo pipefail
             cd ${_APP_DIR}
             git -c safe.directory=${_APP_DIR} fetch --quiet origin
             git -c safe.directory=${_APP_DIR} reset --hard --quiet $COMMIT_SHA
             exec bash scripts/deploy.sh $COMMIT_SHA"
           if gcloud compute ssh "${_INSTANCE}" \
                --zone="${_ZONE}" --tunnel-through-iap --quiet \
-               --command="sudo bash -c '"'"'$REMOTE'"'"'"; then
+               --command="sudo bash -c '"'"'$$REMOTE'"'"'"; then
             exit 0
           fi
           echo "ssh attempt ${attempt} failed; retrying in 15s" >&2
