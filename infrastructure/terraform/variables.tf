@@ -39,7 +39,7 @@ variable "prod_machine_type" {
     change it, and start it again, so never apply a change to this value outside
     an agreed maintenance window.
   EOT
-  default     = "e2-medium"
+  default     = "e2-standard-2"
 }
 
 variable "prod_boot_disk_size_gb" {
