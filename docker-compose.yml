@@ -45,7 +45,33 @@ services:
     ports:
       - "80:80"
       - "443:443"
-      - "8080:8080"
+      # The dashboard/API binds to LOOPBACK ONLY. It was previously published as
+      # "8080:8080", which means 0.0.0.0 — and combined with --api.insecure=true
+      # above, that is an unauthenticated admin API of the production reverse
+      # proxy listening on every interface.
+      #
+      # It was never reachable from the internet: no firewall rule has ever
+      # allowed 8069 or 8080 inbound. But the VPC's default-allow-internal rule
+      # permits ALL TCP between instances, so any other VM in the project could
+      # read it. That was confirmed rather than assumed — a request from the
+      # staging instance to this port on production returned 200 with the full
+      # routing configuration.
+      #
+      # Traefik v2's insecure API is read-only, so this was topology disclosure
+      # (routers, services, internal URLs, certificate state) rather than a way
+      # to change anything. Not an emergency; still not something to leave open
+      # after a hardening pass.
+      #
+      # Deliberately narrowed rather than removed. The dashboard is genuinely
+      # useful — when the provider died on the v2.10/Docker-29 API mismatch,
+      # Traefik served 404 for everything while Odoo was perfectly healthy
+      # behind it, and this endpoint would have shown an empty router table
+      # immediately. Keeping it on loopback keeps that diagnostic, reachable
+      # over the IAP SSH tunnel by whoever is already on the box:
+      #
+      #   gcloud compute ssh <instance> --zone=<zone> --tunnel-through-iap \
+      #     -- -L 8080:localhost:8080
+      - "127.0.0.1:8080:8080"
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
       - "./letsencrypt:/letsencrypt"
