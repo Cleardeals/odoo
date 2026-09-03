@@ -52,19 +52,51 @@ services:
     networks:
       - web
     restart: unless-stopped
+    # Docker's default json-file driver has NO size limit, and there was no
+    # /etc/docker/daemon.json on this host — so container logs grew without
+    # bound until something else noticed the disk. Capping here rather than in
+    # the daemon config keeps it in git and needs no daemon restart; it applies
+    # as each container is recreated by a deploy.
+    # 50MB x 5 = 250MB ceiling per container.
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
 
   # 2. Your Database Service
   db:
     image: postgres:17
     environment:
       - POSTGRES_DB=postgres
-      - POSTGRES_PASSWORD=odoo
+      # POSTGRES_PASSWORD is deliberately ABSENT.
+      #
+      # It was `odoo`, hardcoded, in a PUBLIC repository — and it is in git
+      # history forever, so deleting the line was never the fix. The credential
+      # itself has been rotated to a 40-character value held in Secret Manager
+      # (see infrastructure/rotate_db_password.sh), which is what made the
+      # committed value worthless.
+      #
+      # It is not replaced with a variable because it is not needed: the
+      # variable is read only by initdb, on an EMPTY data directory. Verified
+      # against postgres:17 — a container restarted on an existing data dir with
+      # no POSTGRES_PASSWORD starts cleanly and authenticates fine. The password
+      # lives in the database, not the environment.
+      #
+      # If this volume is ever lost, Postgres will refuse to initialise without
+      # it. That is the correct failure: better a loud stop than silently
+      # recreating a database with whatever default was lying around.
       - POSTGRES_USER=odoo
     volumes:
       - ./odoo-db-data:/var/lib/postgresql/data
     networks:
       - web
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
 
   # 3. Your Odoo 19 Service
   odoo:
@@ -123,6 +155,11 @@ services:
       - "traefik.http.routers.odoo-chat.service=odoo-chat-service"
       - "traefik.http.services.odoo-chat-service.loadbalancer.server.port=8072"
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
 
 networks:
   web:
