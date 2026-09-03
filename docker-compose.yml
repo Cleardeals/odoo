@@ -12,7 +12,24 @@ name: odoo-project
 services:
   # 1. The Traefik Reverse Proxy
   traefik:
-    image: traefik:v2.10
+    # v2.11, not v2.10. Traefik v2.10's Docker client speaks API 1.24, and
+    # Docker Engine 29 requires a minimum of 1.44:
+    #
+    #   Failed to retrieve information of the docker client and server host:
+    #   client version 1.24 is too old. Minimum supported API version is 1.44
+    #
+    # With the provider dead, Traefik saw no containers and served 404 for
+    # everything — Odoo was healthy and loading modules behind it the whole time.
+    #
+    # This was LATENT, not caused by any change here. The VM had not rebooted in
+    # months, so a Docker upgrade sat installed but inactive; the Phase 4c
+    # machine-type change was simply the first restart since. Any reboot would
+    # have done it, including an unplanned one — which is the worse version of
+    # this, at 3am with nobody expecting it.
+    #
+    # v2.11 is the final v2 release, so the configuration syntax below is
+    # unchanged. Moving to v3 is a real migration and belongs in its own change.
+    image: traefik:v2.11
     container_name: traefik
     command:
       - "--api.insecure=true"
