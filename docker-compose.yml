@@ -82,7 +82,15 @@ services:
       - "traefik.http.routers.odoo.service=odoo-service"
       - "traefik.http.services.odoo-service.loadbalancer.server.port=8069"
       # --- Longpolling Router ---
-      - "traefik.http.routers.odoo-chat.rule=Host(`odoo.cleardeals.xyz`) && PathPrefix(`/longpolling`)"
+      # /websocket is the Odoo 17+ bus path; /longpolling is the Odoo 8-era one
+      # kept for any old client. BOTH must reach the gevent process on :8072.
+      #
+      # This is added BEFORE prefork is enabled, deliberately. With workers = 0
+      # Odoo serves the bus in-process on :8069 and this route is simply unused,
+      # so it is safe to ship now. The moment workers > 0 the bus moves to :8072
+      # and, without this, every realtime update in the UI stops — silently, with
+      # no error anywhere in the logs.
+      - "traefik.http.routers.odoo-chat.rule=Host(`odoo.cleardeals.xyz`) && (PathPrefix(`/websocket`) || PathPrefix(`/longpolling`))"
       - "traefik.http.routers.odoo-chat.entrypoints=websecure"
       - "traefik.http.routers.odoo-chat.tls.certresolver=myresolver"
       - "traefik.http.routers.odoo-chat.service=odoo-chat-service"
