@@ -296,5 +296,63 @@ if [[ "$edge_ok" != true ]]; then
 fi
 
 log "HEALTHY on ${SHA} (odoo + edge)"
-docker image prune -f >/dev/null 2>&1 || true
+
+# ── Reclaim disk ──────────────────────────────────────────────────────────────
+# `docker image prune -f` removes DANGLING images only, and an image this
+# pipeline pushed is never dangling: every build tags it twice, with the short
+# and the full commit SHA. So each deploy left another ~1GB tagged image behind
+# forever, and nothing ever removed it.
+#
+# That is not a tidiness problem. The disk was at 82% when Phase 4 began and was
+# grown 30GB -> 60GB to relieve it; within weeks of deploys it was back to 64%,
+# with thirteen images resident totalling ~14GB. A full disk on this host is not
+# a degraded service but a stopped one — Postgres cannot write, Odoo cannot
+# write, and the deploy that would fix it cannot pull an image.
+#
+# ── WHY NOT `docker image prune -a --filter until=...` ───────────────────────
+#
+# Because it would delete the rollback target. That command removes every image
+# not currently used by a container, and the moment the new image is running,
+# PREV is used by nothing. An age filter does not save it either: the previous
+# image is exactly as old as whenever it was built, which on a quiet month is
+# older than any sensible window. The obvious one-liner silently destroys the
+# ability to roll back, and does it on the deploy where nothing appeared wrong.
+#
+# So retention is by COUNT, not age. `docker images` lists newest first; keep
+# that many distinct image IDs and delete the rest. The default of 5 keeps the
+# running image, the rollback target, and three older ones to fall further back
+# to. Deduplication is on the image ID rather than the tag, because the two tags
+# per build point at ONE image and counting tags would silently halve the depth.
+#
+# Docker refuses to delete an image that a RUNNING container uses, even with -f,
+# so the live image is protected by the daemon regardless of what this computes.
+IMAGE_KEEP="${IMAGE_KEEP:-5}"
+prune_images() {
+  local ids=() id
+  # Dedupe while preserving docker's newest-first ordering.
+  while read -r id; do
+    [[ -n "$id" ]] && ! printf '%s\n' "${ids[@]:-}" | grep -qx "$id" && ids+=("$id")
+  done < <(docker images "${IMAGE_BASE}" --format '{{.ID}}' 2>/dev/null)
+
+  (( ${#ids[@]} > IMAGE_KEEP )) || { log "images: ${#ids[@]} resident, keeping ${IMAGE_KEEP} — nothing to prune"; return 0; }
+
+  local removed=0
+  for id in "${ids[@]:$IMAGE_KEEP}"; do
+    if docker rmi -f "$id" >/dev/null 2>&1; then
+      removed=$((removed + 1))
+    else
+      # Almost always "image is being used by running container", which is the
+      # daemon protecting something this should not have selected. Worth a line
+      # in the log rather than silence.
+      log "images: could not remove ${id} (in use?) — left in place"
+    fi
+  done
+  log "images: ${#ids[@]} resident, kept ${IMAGE_KEEP}, removed ${removed}"
+}
+
+prune_images || true
+docker image prune -f >/dev/null 2>&1 || true      # dangling leftovers
+docker builder prune -f --filter "until=168h" >/dev/null 2>&1 || true
+log "disk: $(df -h / | awk 'NR==2 {print $5" used, "$4" free"}')"
+
 exit 0
