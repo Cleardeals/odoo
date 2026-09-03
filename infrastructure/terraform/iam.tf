@@ -148,3 +148,48 @@ resource "google_service_account" "stage_vm" {
   project      = var.project_id
   display_name = "Odoo staging VM (Pub/Sub publisher)"
 }
+
+# ── BigQuery: what the Phase 4 service-account swap would have broken ──────────
+#
+# The pre-flight audit for Phase 4 found that BigQuery is NOT dead. It is used
+# by 22 files across lead_suggestor and leads/models/lead_score.py — both
+# installed in production. The data lives in a DIFFERENT project,
+# cleardeals-459513, where odoo-bq-access@ holds four roles.
+#
+# odoo-prod-vm@ had none of them. Attaching it to the VM as originally planned
+# would have silently broken lead scoring and property suggestions: no startup
+# error, no failed health check, just queries failing at runtime — the same
+# shape of failure as the addons-volume outage.
+#
+# These grants make odoo-prod-vm@ a strict SUPERSET of odoo-bq-access@ in both
+# projects, verified role-by-role before the swap. Permission-neutral is the
+# property that makes the swap safe.
+#
+# dataEditor is replicated rather than reduced. The code appears read-only
+# (only .query() calls, no insert_rows or load_table), so this is probably
+# reducible to dataViewer + jobUser — but tightening it is a separate change
+# that deserves its own verification, not a rider on a migration.
+locals {
+  bigquery_roles = [
+    "roles/bigquery.dataEditor",
+    "roles/bigquery.dataViewer",
+    "roles/bigquery.jobUser",
+    "roles/bigquery.user",
+  ]
+}
+
+resource "google_project_iam_member" "prod_vm_bigquery" {
+  for_each = toset(local.bigquery_roles)
+  project  = var.project_id
+  role     = each.value
+  member   = "serviceAccount:${google_service_account.prod_vm.email}"
+}
+
+# The warehouse project. Declared here because the Odoo VM's identity is what
+# needs access to it; the project itself is not managed by this module.
+resource "google_project_iam_member" "prod_vm_bigquery_warehouse" {
+  for_each = toset(local.bigquery_roles)
+  project  = var.bigquery_project_id
+  role     = each.value
+  member   = "serviceAccount:${google_service_account.prod_vm.email}"
+}

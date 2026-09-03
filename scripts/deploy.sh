@@ -23,8 +23,25 @@ die() { echo "[deploy] FATAL: $*" >&2; exit 1; }
 
 SHA="${1:?usage: deploy.sh <commit-sha>}"
 
-# Phase 4 moves the application to /opt/odoo. Until then this is the live path.
-APP_DIR="${APP_DIR:-/home/cdgcphub/odoo-project}"
+# Resolved, not hardcoded, so the Phase 4 move to /opt/odoo needs no flag day.
+#
+# The pipeline and this script must both keep working on BOTH sides of that
+# move. Pinning either path means the deploy breaks for the window between the
+# directory moving and the code that knows about it being deployed — and the
+# only way to deploy that code is the deploy that is broken.
+#
+# /opt/odoo wins when it exists. Once the move is done and settled, the
+# fallback can be deleted.
+if [[ -n "${APP_DIR:-}" ]]; then
+  :                                   # explicit override always wins
+elif [[ -d /opt/odoo/.git ]]; then
+  APP_DIR=/opt/odoo
+elif [[ -d /home/cdgcphub/odoo-project/.git ]]; then
+  APP_DIR=/home/cdgcphub/odoo-project
+else
+  echo "[deploy] FATAL: no checkout at /opt/odoo or /home/cdgcphub/odoo-project" >&2
+  exit 1
+fi
 REGISTRY="${REGISTRY:-us-central1-docker.pkg.dev}"
 
 # Project id is read from the instance metadata server rather than hard-coded.

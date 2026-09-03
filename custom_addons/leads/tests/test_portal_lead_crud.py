@@ -91,27 +91,46 @@ class TestPortalLeadCRUD(PortalLeadTestCase):
 
     def test_05b_create_date_only_uses_ist_across_the_utc_midnight_boundary(self):
         """
-        Pin the case that made test_05 time-dependent, deterministically.
+        Pin the IST conversion deterministically, at any hour of the day.
 
-        20:00 UTC is 01:30 IST the FOLLOWING day, so the correct value differs
-        from the UTC date. Asserting it here means the boundary is covered at
-        every hour of the day, not only when CI happens to run inside it.
+        20:00 UTC is 01:30 IST the FOLLOWING day, so a correct conversion gives
+        a different calendar date from the UTC one. That is the whole behaviour
+        the field exists for.
+
+        create_date is set with SQL, not `write()`. It is a readonly ORM field,
+        so `sudo().write({"create_date": ...})` is silently IGNORED — the record
+        keeps "now". The first version of this test did exactly that, and passed
+        only between 18:30 and 00:00 UTC, when "now" happens to have different
+        UTC and IST dates. It was a time-dependent test written to remove a
+        time-dependent test, and CI caught it at 03:43 UTC.
         """
         lead = self.create_portal_lead()
 
-        # create_date is readonly, so write it through sudo and let the stored
-        # compute retrigger via its @api.depends("create_date").
-        lead.sudo().write({"create_date": datetime(2026, 9, 2, 20, 0, 0)})
-        lead.invalidate_recordset(["create_date_only"])
+        forced = datetime(2026, 9, 2, 20, 0, 0)          # 01:30 IST on the 3rd
+        self.env.cr.execute(
+            "UPDATE leads_new SET create_date = %s WHERE id = %s",
+            (forced, lead.id),
+        )
+        lead.invalidate_recordset()
 
-        self.assertEqual(lead.create_date_only, date(2026, 9, 3))
+        # Confirm SQL actually took effect, so a silently-ignored write can
+        # never let the real assertions pass by coincidence again.
+        self.assertEqual(lead.create_date, forced)
+        self.assertEqual(lead.create_date.date(), date(2026, 9, 2))
+
+        lead._compute_create_date_only()
+
+        self.assertEqual(
+            lead.create_date_only,
+            date(2026, 9, 3),
+            "20:00 UTC is 01:30 IST the next day, so the IST date must be the 3rd",
+        )
         self.assertNotEqual(
             lead.create_date_only,
             lead.create_date.date(),
-            "the UTC date is 2026-09-02; if these are equal the IST conversion was lost",
+            "the UTC date is the 2nd; equality here means the IST conversion was lost",
         )
 
-    
     def test_06_compute_site_visit_date_only(self):
         """
         Verify that site_visit_date_only (Date) is computed from site_visit_date (Datetime).
