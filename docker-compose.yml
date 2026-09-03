@@ -1,4 +1,14 @@
-version: '3.8'
+# Compose derives the project name from the DIRECTORY unless it is pinned here.
+# Pinning it means the Phase 4 move from /home/cdgcphub/odoo-project to
+# /opt/odoo does not rename a single container: without this, odoo-project-db-1
+# becomes odoo-db-1 mid-migration, the old and new projects each own a separate
+# network and set of anonymous volumes, and a rollback has to reason about two
+# identities instead of one.
+#
+# Set to the CURRENT name so applying this is a no-op today and the move changes
+# nothing about container identity.
+name: odoo-project
+
 services:
   # 1. The Traefik Reverse Proxy
   traefik:
