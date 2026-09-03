@@ -69,7 +69,23 @@ services:
     image: postgres:17
     environment:
       - POSTGRES_DB=postgres
-      - POSTGRES_PASSWORD=odoo
+      # POSTGRES_PASSWORD is deliberately ABSENT.
+      #
+      # It was `odoo`, hardcoded, in a PUBLIC repository — and it is in git
+      # history forever, so deleting the line was never the fix. The credential
+      # itself has been rotated to a 40-character value held in Secret Manager
+      # (see infrastructure/rotate_db_password.sh), which is what made the
+      # committed value worthless.
+      #
+      # It is not replaced with a variable because it is not needed: the
+      # variable is read only by initdb, on an EMPTY data directory. Verified
+      # against postgres:17 — a container restarted on an existing data dir with
+      # no POSTGRES_PASSWORD starts cleanly and authenticates fine. The password
+      # lives in the database, not the environment.
+      #
+      # If this volume is ever lost, Postgres will refuse to initialise without
+      # it. That is the correct failure: better a loud stop than silently
+      # recreating a database with whatever default was lying around.
       - POSTGRES_USER=odoo
     volumes:
       - ./odoo-db-data:/var/lib/postgresql/data
