@@ -178,7 +178,30 @@ resource "google_compute_instance" "prod" {
   # maintenance window, bundled with the machine type change so the VM stops once
   # rather than twice.
   service_account {
-    email  = "odoo-bq-access@${var.project_id}.iam.gserviceaccount.com"
+    # SWAPPED IN PHASE 4C. Previously odoo-bq-access@.
+    #
+    # Verified permission-neutral BEFORE the swap, role by role, in BOTH
+    # projects — odoo-prod-vm@ holds a strict superset:
+    #   odoo-472708:       old 5 roles, new 7 — missing: none
+    #   cleardeals-459513: old 4 roles, new 4 — missing: none
+    #
+    # That mattered more than the plan assumed. BigQuery is not dead: 22 files
+    # across lead_suggestor and leads/models/lead_score.py use it, and the data
+    # lives in cleardeals-459513, a different project, where odoo-prod-vm@ had
+    # no access at all. Attaching it without those grants would have broken lead
+    # scoring at runtime with no startup error and no failed health check.
+    #
+    # What this account adds over the old one: logging.logWriter and
+    # monitoring.metricWriter. The Ops Agent has been installed and running on
+    # this VM for months, silently dropping every metric and log because
+    # odoo-bq-access@ cannot call monitoring.timeSeries.create. This swap is
+    # what finally makes VM memory and DISK metrics exist — and therefore what
+    # makes a disk-full alert possible at all.
+    #
+    # CHANGING THIS FIELD REQUIRES A STOPPED INSTANCE. Terraform will stop,
+    # change and restart the VM, so only ever apply it inside an agreed window,
+    # bundled with the machine type so the VM stops once rather than twice.
+    email  = google_service_account.prod_vm.email
     scopes = ["https://www.googleapis.com/auth/cloud-platform"]
   }
 
