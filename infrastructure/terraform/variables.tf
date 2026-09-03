@@ -104,3 +104,16 @@ variable "cloudbuild_approvers" {
   EOT
   default     = []
 }
+
+variable "bigquery_project_id" {
+  type        = string
+  description = <<-EOT
+    Project holding the BigQuery datasets the Odoo lead-scoring and property
+    suggestion modules query. It is NOT the Odoo project — the code hardcodes it
+    as PROJECT_ID in lead_suggestor/models/property_inventory.py.
+
+    The VM's service account needs BigQuery roles here as well as in the Odoo
+    project, which is what the Phase 4 service-account swap would otherwise have
+    broken.
+  EOT
+}

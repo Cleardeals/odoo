@@ -21,9 +21,17 @@ substitutions:
   _ZONE: us-central1-f
   _INSTANCE: odoo-19-prod
   _REGION: us-central1
-  # Phase 4 moves the application to /opt/odoo; this is the only place the
-  # pipeline needs to learn about it.
-  _APP_DIR: /home/cdgcphub/odoo-project
+  # _APP_DIR is gone deliberately. The bootstrap below tries /opt/odoo and
+  # falls back to the old path, so the Phase 4 move needs no flag day: the
+  # pipeline works on BOTH sides of it. Pinning either path would break the
+  # deploy for the window between the directory moving and the code that knows
+  # about it being deployed — and the only way to deploy that code is the deploy
+  # that is broken.
+  #
+  # It uses no shell variables at all. `cd A || cd B` and a literal
+  # safe.directory=* wildcard keep the command free of any dollar sign that
+  # Cloud Build substitution and two nested shells would otherwise fight over.
+  # Three deploys have already failed on exactly that.
 
 steps:
   # ── Gate: build the image that will actually ship ────────────────────────────
@@ -168,7 +176,7 @@ steps:
         for attempt in 1 2 3; do
           if gcloud compute ssh "${_INSTANCE}" \
                --zone="${_ZONE}" --tunnel-through-iap --quiet \
-               --command="sudo bash -c 'set -euo pipefail; cd ${_APP_DIR}; git -c safe.directory=${_APP_DIR} remote set-url origin https://github.com/Cleardeals/odoo.git; git -c safe.directory=${_APP_DIR} fetch --depth 1 --quiet origin $BRANCH_NAME; git -c safe.directory=${_APP_DIR} reset --hard --quiet FETCH_HEAD; exec bash scripts/deploy.sh $COMMIT_SHA'"; then
+               --command="sudo bash -c 'set -euo pipefail; cd /opt/odoo 2>/dev/null || cd /home/cdgcphub/odoo-project; git -c safe.directory=* remote set-url origin https://github.com/Cleardeals/odoo.git; git -c safe.directory=* fetch --depth 1 --quiet origin $BRANCH_NAME; git -c safe.directory=* reset --hard --quiet FETCH_HEAD; exec bash scripts/deploy.sh $COMMIT_SHA'"; then
             exit 0
           fi
           echo "ssh attempt ${attempt} failed; retrying in 15s" >&2
