@@ -405,12 +405,12 @@ class TestDetailsSharedStatus(WaTransactionCase):
         """New template names get approved constantly; no deploy to track them."""
         self.env['ir.config_parameter'].sudo().set_param(
             'wa_communication.details_shared_templates',
-            '%s, quick_details_share_odoo_w8' % TEMPLATE)
+            '%s, details_shared_v4' % TEMPLATE)
         lead, conv = self._lead_conv()
 
         self.Conv._process_odoo_wa_event(
             self._delivered_event(
-                conv, lead, template_name='quick_details_share_odoo_w8'),
+                conv, lead, template_name='details_shared_v4'),
             self._uniq('psm_'))
 
         lead.invalidate_recordset()

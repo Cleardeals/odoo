@@ -21,10 +21,18 @@ moved on keeps working normally.
 
 What counts as an attempt
 -------------------------
-Any outbound ``wa.message`` on **that inquiry** — including ``queued``,
-``failed`` and ``meta_blocked``.  The bar is deliberately "attempted", not
-"delivered": Meta blocks messages and templates get rejected for reasons the RM
-cannot control, and they did their part either way.
+Any outbound ``wa.message`` on **that inquiry** that was actually addressed to
+the buyer — including ``queued``, ``failed`` and ``meta_blocked``.  The bar is
+deliberately "attempted", not "delivered": Meta blocks messages and templates
+get rejected for reasons the RM cannot control, and they did their part either
+way.
+
+``kind='system'`` rows are excluded.  Those are internal timeline pills —
+"Chat assigned to X", workflow enrolment — that the inbound path writes as
+*outbound* messages so they render on the right side of the thread.  Nothing is
+sent to the buyer, and one is written automatically the moment a buyer texts in
+and the chat is auto-assigned, so counting them let every inquiry that ever
+received an inbound message walk off "Lead" with no outreach at all.
 
 Why there is no bypass
 ----------------------
@@ -50,6 +58,11 @@ _logger = logging.getLogger(__name__)
 
 # The one status the gate guards the exit from.
 _GATED_STATUS = 'lead'
+
+# Outbound kinds that are not a message to the buyer — internal timeline
+# pills only (assignment notices, workflow enrolment).  See the module
+# docstring; these must never satisfy the gate.
+_NON_SEND_KINDS = ('system',)
 
 _RM_GROUP = 'leads.group_lead_score_rm'
 _MANAGER_GROUP = 'leads.group_lead_score_manager'
@@ -109,11 +122,13 @@ class WaLeadStatusGate(models.Model):
         three properties), and crediting one message across all of them would
         let a single send unlock every inquiry that buyer has.
 
-        Message status is not filtered — see the module docstring.
+        Message status is not filtered, but ``kind='system'`` rows are — see
+        the module docstring.
         """
         self.ensure_one()
         return bool(self.env['wa.message'].sudo().search_count([
             ('direction', '=', 'outbound'),
+            ('kind', 'not in', list(_NON_SEND_KINDS)),
             ('effective_inquiry_id', '=', self.id),
         ]))
 
@@ -142,6 +157,7 @@ class WaLeadStatusGate(models.Model):
 
         groups = self.env['wa.message'].sudo()._read_group(
             [('direction', '=', 'outbound'),
+             ('kind', 'not in', list(_NON_SEND_KINDS)),
              ('effective_inquiry_id', 'in', pending.ids)],
             groupby=['effective_inquiry_id'],
         )

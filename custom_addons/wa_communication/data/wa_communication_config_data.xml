@@ -122,13 +122,12 @@
          parameter edit, not a code change.
 
          Any replacement MUST keep the same variable contract: an image header
-         plus 7 body variables in the order project name, locality, type, size,
-         furnishing, property link, 360° tour link.  That order is bound in
-         QUICK_SHARE_BODY_VARS (models/wa_conversation_outbound.py) and mirrors
-         the workflow's msg_2, so the manual and automatic cards match. -->
+         plus 2 body variables — {{1}} "<project name>, <locality>" and {{2}}
+         the property's website link.  That contract is bound in
+         QUICK_SHARE_BODY_VARS (models/wa_conversation_outbound.py). -->
     <record id="param_quick_share_template" model="ir.config_parameter">
         <field name="key">wa_communication.quick_share_template</field>
-        <field name="value">quick_details_share_odoo_w8</field>
+        <field name="value">details_shared_v4</field>
     </record>
     <record id="param_quick_share_template_language" model="ir.config_parameter">
         <field name="key">wa_communication.quick_share_template_language</field>

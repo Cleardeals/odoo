@@ -1,10 +1,10 @@
-"""Quick property-details share — the RM-triggered twin of the workflow's msg_2.
+"""Quick property-details share — the "Share Property Details" button.
 
 The contract that matters most here is the **variable order**, pinned by
-:meth:`test_body_values_match_the_workflow_slot_order`.  If the manual card and
-the automatic one ever disagree about which slot holds the locality, the same
-property renders two different ways to the same buyer and nothing else in the
-system would notice.
+:meth:`test_body_values_match_the_template_slot_order`.  ``details_shared_v4``
+takes two body variables — "<project name>, <locality>" and the website link —
+and if the composition or the order drifts, the buyer is sent a card with the
+wrong text in the wrong slot and nothing else in the system would notice.
 """
 
 from odoo.exceptions import UserError
@@ -13,6 +13,7 @@ from odoo.tests import tagged
 from odoo.addons.wa_communication.models.wa_conversation_outbound import (
     QUICK_SHARE_BODY_VARS,
     QUICK_SHARE_IMAGE_FALLBACK,
+    QUICK_SHARE_VAR_SEPARATOR,
 )
 
 from .common import WaTransactionCase
@@ -50,28 +51,29 @@ class TestQuickDetailsShare(WaTransactionCase):
 
     # ── Variable contract ────────────────────────────────────────────────────
 
-    def test_body_values_match_the_workflow_slot_order(self):
-        """Slot order must mirror initial_nudge_property.yaml's msg_2 exactly."""
+    def test_body_values_match_the_template_slot_order(self):
+        """Slot order and composition must mirror details_shared_v4 exactly."""
         lead, prop = self._lead_with_property()
         body, header = self.Conv._quick_share_values(lead)
 
-        self.assertEqual(len(body), 7)
-        self.assertEqual(body[0], 'Sunrise Heights')     # name, tag stripped
-        self.assertEqual(body[1], 'Bopal')               # locality
-        self.assertEqual(body[2], '3 BHK Apartment')     # composed type_label
-        self.assertEqual(body[3], '1450 sqft')           # size
-        self.assertEqual(body[4], 'Semi Furnished')      # furnishing
-        self.assertEqual(body[5], prop.property_link)    # computed link
-        self.assertEqual(body[6], 'https://tour.example.com/sunrise')
+        self.assertEqual(len(body), 2)
+        # {{1}} — project name (tag stripped) and locality, in one variable.
+        self.assertEqual(body[0], 'Sunrise Heights, Bopal')
+        # {{2}} — the property's page on the website.
+        self.assertEqual(body[1], prop.property_link)
         self.assertEqual(header, ['https://img.example.com/sunrise.jpg'])
 
     def test_values_come_from_the_same_snapshot_the_workflow_uses(self):
-        """Reusing _wa_actor_snapshot is what keeps the two cards identical."""
+        """Reusing _wa_actor_snapshot is what keeps the wording rules in one place."""
         lead, _prop = self._lead_with_property()
         snapshot = lead._wa_actor_snapshot()['property']
         body, header = self.Conv._quick_share_values(lead)
 
-        expected = [snapshot[key] for key, _label, _fb in QUICK_SHARE_BODY_VARS]
+        expected = [
+            QUICK_SHARE_VAR_SEPARATOR.join(
+                snapshot[key] for key, _label, _fb in parts)
+            for parts in QUICK_SHARE_BODY_VARS
+        ]
         self.assertEqual(body, expected)
         self.assertEqual(header, [snapshot['image_url']])
 
@@ -81,10 +83,12 @@ class TestQuickDetailsShare(WaTransactionCase):
         _body, header = self.Conv._quick_share_values(lead)
         self.assertEqual(header, [QUICK_SHARE_IMAGE_FALLBACK])
 
-    def test_missing_tour_falls_back_to_the_buy_page(self):
-        lead, _prop = self._lead_with_property(tour_360_url=False)
+    def test_fields_the_template_no_longer_uses_do_not_block_the_send(self):
+        """v4 dropped type/size/furnishing/360 — a blank one must not refuse."""
+        lead, prop = self._lead_with_property(
+            tour_360_url=False, property_size=False, furnishing_type=False)
         body, _header = self.Conv._quick_share_values(lead)
-        self.assertEqual(body[6], 'https://www.cleardeals.in/buy')
+        self.assertEqual(body, ['Sunrise Heights, Bopal', prop.property_link])
 
     # ── Guards ───────────────────────────────────────────────────────────────
 
@@ -94,6 +98,14 @@ class TestQuickDetailsShare(WaTransactionCase):
         with self.assertRaises(UserError) as ctx:
             self.Conv._quick_share_values(lead)
         self.assertIn('Locality', str(ctx.exception))
+
+    def test_blank_link_is_refused(self):
+        """The website link is the whole point of the card's second variable."""
+        lead, prop = self._lead_with_property()
+        prop.sudo().write({'property_link': False})
+        with self.assertRaises(UserError) as ctx:
+            self.Conv._quick_share_values(lead)
+        self.assertIn('Property link', str(ctx.exception))
 
     def test_lead_without_property_is_refused(self):
         lead = self.make_lead(phone=self._uniq_phone()[2:])
@@ -141,7 +153,7 @@ class TestQuickDetailsShare(WaTransactionCase):
     def test_deleting_the_config_falls_back_to_the_shipped_default(self):
         self.Param.set_param('wa_communication.quick_share_template', '')
         name, lang = self.Conv._quick_share_template()
-        self.assertEqual(name, 'quick_details_share_odoo_w8')
+        self.assertEqual(name, 'details_shared_v4')
         self.assertEqual(lang, 'hi')
 
     # ── The send ─────────────────────────────────────────────────────────────
@@ -161,20 +173,20 @@ class TestQuickDetailsShare(WaTransactionCase):
         payload = published[-1].payload
         self.assertEqual(payload['request_type'], 'send')
         self.assertEqual(payload['kind'], 'template')
-        self.assertEqual(len(payload['body_values']), 7)
+        self.assertEqual(len(payload['body_values']), 2)
         self.assertEqual(
             payload['header_values'], ['https://img.example.com/sunrise.jpg'])
 
     def test_send_uses_the_configured_template(self):
         self.Param.set_param(
-            'wa_communication.quick_share_template', 'quick_details_share_odoo_w8')
+            'wa_communication.quick_share_template', 'details_shared_v4')
         lead, _prop = self._lead_with_property()
         conv = self.make_conversation(
             phone_number='91%s' % lead.phone, lead_id=lead.id)
         with self.mock_pubsub() as published:
             conv.send_property_details()
         self.assertEqual(
-            published[-1].payload['template_name'], 'quick_details_share_odoo_w8')
+            published[-1].payload['template_name'], 'details_shared_v4')
 
     def test_send_for_lead_creates_the_conversation_when_there_is_none(self):
         """First outreach: no conversation exists yet, so make one and claim it."""

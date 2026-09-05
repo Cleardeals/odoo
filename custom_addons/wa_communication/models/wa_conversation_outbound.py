@@ -46,18 +46,12 @@ WA_MEDIA_MAX_BYTES = {
 # this lets an RM send the same card on demand — on a recommended lead, or after
 # a call.
 #
-# The variable contract below MUST stay in step with the workflow's msg_2, or
-# the manual card and the automatic one render differently for the same
-# property.  Source of truth:
-#   cleardeals-whatsapp-platform/services/workflow-engine/configs/
-#       initial_nudge_property.yaml  (step msg_2, vars block)
-#
 # Template name and language are config parameters, not constants: Meta keeps
 # reclassifying this copy as Marketing, so the wording gets reworked and
 # resubmitted under a new name.  Swapping templates must not need a redeploy.
 _PARAM_QUICK_SHARE_TEMPLATE = 'wa_communication.quick_share_template'
 _PARAM_QUICK_SHARE_LANGUAGE = 'wa_communication.quick_share_template_language'
-_DEFAULT_QUICK_SHARE_TEMPLATE = 'quick_details_share_odoo_w8'
+_DEFAULT_QUICK_SHARE_TEMPLATE = 'details_shared_v4'
 _DEFAULT_QUICK_SHARE_LANGUAGE = 'hi'
 
 # Header var 1 — the property's primary image. Same GCS asset the workflow falls
@@ -67,19 +61,24 @@ QUICK_SHARE_IMAGE_FALLBACK = (
     'initial_nudge_unassigned/fallback_media_property.jpeg'
 )
 
-# Body vars 1-7, in template order.  Each entry is
-# (key in the actor snapshot's ``property`` dict, human label, fallback).
-# An empty fallback means the value is required — Interakt rejects a blank
+# Body variables, in template order.  ``details_shared_v4`` takes two:
+#
+#   {{1}}  "<project name>, <locality>"   e.g. "Sunrise Heights, Bopal"
+#   {{2}}  the property's page on the website
+#
+# Each entry is one template variable, described as the sequence of snapshot
+# parts that compose it: (key in the actor snapshot's ``property`` dict, human
+# label, fallback).  Several parts are joined with QUICK_SHARE_VAR_SEPARATOR.
+# An empty fallback means the part is required — Interakt rejects a blank
 # variable outright, so we catch it here and tell the RM which field to fill.
 QUICK_SHARE_BODY_VARS = (
-    ('name',         'Project name',   ''),
-    ('locality',     'Locality',       ''),
-    ('type_label',   'Property type',  ''),
-    ('size',         'Size',           ''),
-    ('furnishing',   'Furnishing',     ''),
-    ('link',         'Property link',  ''),
-    ('tour_360_url', '360° tour link', 'https://www.cleardeals.in/buy'),
+    (('name',     'Project name', ''),
+     ('locality', 'Locality',     '')),
+    (('link',     'Property link', ''),),
 )
+
+# What joins the parts of a multi-part variable — "Name, Location".
+QUICK_SHARE_VAR_SEPARATOR = ', '
 
 # Mime prefixes WhatsApp refuses for the Document type ("mp4 is not supported
 # for Document media") — these must be sent as their own media kind.
@@ -526,10 +525,9 @@ class WaConversation(models.Model):
 
         Reuses ``leads.new._wa_actor_snapshot()`` — the very same helper that
         fills the workflow's event payload — rather than reading
-        ``property.base`` again.  That is what guarantees the manual card and
-        the automatic one show identical text: the snapshot already composes
-        ``type_label`` ("3 BHK Apartment") and strips the "[tag]" suffix from
-        the project name, and neither rule has to be restated here.
+        ``property.base`` again, so the wording rules live in one place: the
+        snapshot already strips the "[tag]" suffix from the project name, and
+        that rule does not have to be restated here.
 
         :raises UserError: if the lead has no property, or a required field on
                            that property is blank.  Interakt rejects a template
@@ -548,13 +546,15 @@ class WaConversation(models.Model):
         prop = lead.sudo()._wa_actor_snapshot()['property']
 
         body_values, missing = [], []
-        for key, label, fallback in QUICK_SHARE_BODY_VARS:
-            value = (prop.get(key) or '').strip()
-            if not value:
-                value = fallback
-            if not value:
-                missing.append(label)
-            body_values.append(value)
+        for parts in QUICK_SHARE_BODY_VARS:
+            values = []
+            for key, label, fallback in parts:
+                value = (prop.get(key) or '').strip() or fallback
+                if not value:
+                    missing.append(label)
+                    continue
+                values.append(value)
+            body_values.append(QUICK_SHARE_VAR_SEPARATOR.join(values))
 
         if missing:
             raise UserError(

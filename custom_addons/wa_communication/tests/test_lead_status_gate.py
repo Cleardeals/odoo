@@ -113,6 +113,57 @@ class TestLeadStatusGate(WaTransactionCase):
         with self.assertRaises(UserError):
             lead.with_user(self.rm).write({'current_status': 'busy'})
 
+    def test_assignment_pill_does_not_count_as_an_attempt(self):
+        """The auto-assignment notice is not outreach — it is an internal pill.
+
+        The regression this pins: "Chat assigned to X" is written as an
+        *outbound* wa.message (kind='system') so it renders on the right side
+        of the thread, and the inbound path writes one automatically the moment
+        a buyer texts in.  Counting it let every inquiry that ever received an
+        inbound message leave "Lead" without anyone contacting the buyer.
+        """
+        lead = self._lead()
+        conv = self.make_conversation(
+            phone_number='91%s' % lead.phone, lead_id=lead.id)
+        conv.sudo()._owa_log_system_event('Chat assigned to Someone')
+
+        pill = self.env['wa.message'].sudo().search(
+            [('conversation_id', '=', conv.id), ('kind', '=', 'system')])
+        self.assertTrue(pill, "the system pill must exist for this to prove anything")
+        self.assertEqual(pill.direction, 'outbound')
+        self.assertEqual(pill.effective_inquiry_id, lead)
+
+        with self.assertRaises(UserError):
+            lead.with_user(self.rm).write({'current_status': 'busy'})
+        self.assertEqual(lead.current_status, 'lead')
+
+    def test_workflow_enrolment_pill_does_not_count_as_an_attempt(self):
+        """Being enrolled in a workflow is not a message having gone out."""
+        lead = self._lead()
+        conv = self.make_conversation(
+            phone_number='91%s' % lead.phone, lead_id=lead.id)
+        self.make_message(
+            conv, direction='outbound', initiator='system', kind='system',
+            status='enrolled', lead_id=lead.id,
+            body='Enrolled in workflow: initial_nudge_property')
+
+        with self.assertRaises(UserError):
+            lead.with_user(self.rm).write({'current_status': 'busy'})
+        self.assertEqual(lead.current_status, 'lead')
+
+    def test_a_real_send_still_unlocks_a_lead_that_has_pills(self):
+        """The exclusion must not swallow the send that sits beside the pills."""
+        lead = self._lead()
+        conv = self.make_conversation(
+            phone_number='91%s' % lead.phone, lead_id=lead.id)
+        conv.sudo()._owa_log_system_event('Chat assigned to Someone')
+        self.make_message(
+            conv, direction='outbound', initiator='rm', kind='template',
+            status='sent', lead_id=lead.id)
+
+        lead.with_user(self.rm).write({'current_status': 'busy'})
+        self.assertEqual(lead.current_status, 'busy')
+
     def test_change_between_non_lead_statuses_is_never_gated(self):
         """Only the exit from "Lead" is guarded — everything after is free.
 
@@ -226,6 +277,17 @@ class TestLeadStatusGate(WaTransactionCase):
         self._attempt(lead)
         as_rm.invalidate_recordset()
         self.assertTrue(as_rm.wa_status_change_allowed)
+
+    def test_status_change_allowed_ignores_system_pills(self):
+        """The readonly hint must agree with write() — pills unlock neither."""
+        lead = self._lead()
+        conv = self.make_conversation(
+            phone_number='91%s' % lead.phone, lead_id=lead.id)
+        conv.sudo()._owa_log_system_event('Chat assigned to Someone')
+
+        as_rm = lead.with_user(self.rm)
+        as_rm.invalidate_recordset()
+        self.assertFalse(as_rm.wa_status_change_allowed)
 
     def test_status_change_allowed_is_true_for_managers(self):
         lead = self._lead()
