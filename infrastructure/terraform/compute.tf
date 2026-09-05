@@ -100,11 +100,26 @@ resource "google_compute_resource_policy" "prod_4h" {
   region  = var.region
 
   snapshot_schedule_policy {
-    snapshot_properties {
-      guest_flush       = false
-      labels            = {}
-      storage_locations = []
-    }
+    # NO snapshot_properties block here, deliberately — and note that the older
+    # daily policy below DOES have one. They are not inconsistent.
+    #
+    # That policy was IMPORTED, and the live resource carried an empty
+    # snapshot_properties block, so omitting it there plans a change forever.
+    # This policy was CREATED by Terraform, and GCP does not persist the block at
+    # all when every value inside it is the default — so declaring it here plans
+    # a change forever in the opposite direction. The first plan after creating
+    # this caught exactly that: a permanent one-line diff adding
+    # `guest_flush = false` back.
+    #
+    # guest_flush defaults to false regardless, so nothing is lost. Snapshots
+    # stay crash-consistent, which is gap G3 in the DR plan and is addressed
+    # there by application-consistent logical dumps, not by this flag — enabling
+    # guest_flush requires a VSS-style guest agent that this Linux host does not
+    # run.
+    #
+    # A plan that is never empty is worse than a cosmetic annoyance: it trains
+    # whoever runs it to skim, and the empty-plan gate is the only thing that
+    # caught three unintended production destroys during the Phase 1 import.
 
     schedule {
       hourly_schedule {
