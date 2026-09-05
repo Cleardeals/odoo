@@ -401,3 +401,128 @@ resource "google_monitoring_alert_policy" "ssl_expiring" {
     auto_close = "86400s"
   }
 }
+
+# ── P2b: automated snapshots have stopped ─────────────────────────────────────
+#
+# Everything above watches whether the system is RUNNING. Nothing watched
+# whether it is RECOVERABLE. If the snapshot schedule silently stops, the first
+# anyone learns of it is during a restore — which is the single worst moment to
+# discover it, and precisely the failure mode this closes.
+#
+# ── THE OBVIOUS IMPLEMENTATION DOES NOT WORK ─────────────────────────────────
+#
+# The natural approach is a log-based metric on the `createSnapshot` audit log.
+# It would never fire, and it took looking to find that out:
+#
+#   * The ONLY v1.compute.disks.createSnapshot audit entries in this project
+#     were manual snapshots taken by a human during the migration.
+#   * The daily scheduled snapshots — which demonstrably exist, one per day —
+#     produce NO createSnapshot audit entry at all.
+#
+# A metric built on that filter would sit permanently at zero while snapshots
+# ran perfectly, so an absence alert on it would fire forever and be muted
+# within a week. Scheduled snapshots are logged instead as a SYSTEM EVENT with
+# methodName "ScheduledSnapshots", which is what this matches.
+#
+# There is no built-in snapshot-age metric to use instead. The only
+# snapshot-related metrics Cloud Monitoring exposes for Compute are quota
+# counters, which say nothing about whether a snapshot was actually taken.
+resource "google_logging_metric" "scheduled_snapshot" {
+  project     = var.project_id
+  name        = "odoo/scheduled_snapshot_taken"
+  description = "Counts scheduled snapshot events on the production disk. Drives the snapshot-stopped alert."
+
+  # Scoped by ZONE rather than by disk id, deliberately. A disk id changes when
+  # the disk is recreated — which is exactly what a whole-VM recovery does — so
+  # a filter pinned to the current id would go silent immediately after a
+  # restore and alert about the machine that had just been rescued.
+  #
+  # It is scoped at all, rather than matching any disk, because staging lives in
+  # a different zone. Without this, a snapshot on some other disk would satisfy
+  # the alert while production's schedule was dead.
+  filter = join(" AND ", [
+    "logName=\"projects/${var.project_id}/logs/cloudaudit.googleapis.com%2Fsystem_event\"",
+    "resource.type=\"gce_disk\"",
+    "resource.labels.zone=\"${var.prod_zone}\"",
+    "protoPayload.methodName=\"ScheduledSnapshots\"",
+    "severity=\"INFO\"",
+  ])
+
+  metric_descriptor {
+    metric_kind = "DELTA"
+    value_type  = "INT64"
+    unit        = "1"
+  }
+}
+
+resource "google_monitoring_alert_policy" "snapshots_stopped" {
+  project      = var.project_id
+  display_name = "${local.alert_prefix} P2b Automated snapshots have stopped (>5h)"
+  combiner     = "OR"
+
+  documentation {
+    content   = <<-EOT
+      No scheduled snapshot has been recorded on the production disk for over a
+      day. Backups have stopped, and nothing else here would have told you.
+
+      Check, in order:
+
+        1. Is the schedule still attached to the disk?
+             gcloud compute disks describe odoo-19-prod --zone <zone> \
+               --format="value(resourcePolicies)"
+        2. Do the snapshots actually exist?
+             gcloud compute snapshots list --filter="sourceDisk~odoo-19-prod" \
+               --sort-by=~creationTimestamp --limit=5
+        3. Has the schedule itself been changed or deleted?
+             gcloud compute resource-policies list
+
+      A detached policy is the common cause, and it is silent: the disk keeps
+      working perfectly and simply stops being backed up.
+
+      NOTE ON THE WINDOW: snapshots run every 4 hours, so this fires after
+      roughly one missed run plus an hour of slack. A single late run should not
+      trip it; two consecutive misses will.
+    EOT
+    mime_type = "text/markdown"
+  }
+
+  conditions {
+    display_name = "no scheduled snapshot event in over 5 hours"
+
+    # ABSENCE, not a threshold. A log-based counter metric emits nothing at all
+    # when no matching log arrives — it does not emit a zero. A threshold
+    # condition like "count < 1" therefore has no data to evaluate and would
+    # stay silent through the very outage it was written for.
+    condition_absent {
+      filter = join(" AND ", [
+        "metric.type=\"logging.googleapis.com/user/${google_logging_metric.scheduled_snapshot.name}\"",
+        "resource.type=\"gce_disk\"",
+      ])
+
+      aggregations {
+        alignment_period   = "3600s"
+        per_series_aligner = "ALIGN_COUNT"
+      }
+
+      # 5 h — the 4-hourly schedule (compute.tf) plus an hour of slack.
+      #
+      # This number is why that schedule changed. Cloud Monitoring refuses an
+      # absence duration above 23h30m, so against the previous DAILY schedule
+      # there was no usable window at all: consecutive snapshots were 24 h apart
+      # to within a second, and any window short enough to be accepted also
+      # fired shortly before every healthy snapshot. The API rejected 26 h
+      # outright, which is what surfaced it.
+      duration = "18000s"
+
+      trigger {
+        count = 1
+      }
+    }
+  }
+
+  notification_channels = local.alert_channels
+
+  alert_strategy {
+    auto_close = "86400s"
+  }
+}

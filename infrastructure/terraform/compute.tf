@@ -53,16 +53,82 @@ resource "google_compute_disk" "prod" {
 # disk. google_compute_disk has no resource_policies argument — attaching one
 # inline fails validation.
 resource "google_compute_disk_resource_policy_attachment" "prod_snapshot" {
-  name    = google_compute_resource_policy.daily_snapshot.name
+  name    = google_compute_resource_policy.prod_4h.name
   disk    = google_compute_disk.prod.name
   project = var.project_id
   zone    = var.prod_zone
 }
 
-# ── Snapshot schedule ──────────────────────────────────────────────────────────
-# Pre-existing, and the reason a month of dated snapshots exists. Imported rather
-# than recreated: recreating it would detach and reattach the policy on a live
-# production disk for no gain.
+# ── Snapshot schedule — 4-hourly ───────────────────────────────────────────────
+#
+# This is M1 from the DR plan, and it is the single change that moves the
+# recovery point: worst-case data loss goes from 24 hours to 4. Everything else
+# delivered in 2026 improved recovery TIME; none of it touched this, because
+# recovery point is set purely by how often data leaves the machine.
+#
+# Snapshots are incremental — only changed blocks are stored — so six per day
+# costs far less than six times the storage. Retention also rises 14 -> 30 days,
+# which closes G11.
+#
+# ── IT IS ALSO WHAT MAKES BACKUP ALERTING POSSIBLE ───────────────────────────
+#
+# Cloud Monitoring refuses an absence condition longer than 23h30m. Against a
+# DAILY schedule that is unusable: consecutive snapshots are already 24h apart,
+# so any alert able to detect a stopped schedule also fires shortly before every
+# healthy one. Verified the hard way — the API rejected a 26h window outright,
+# and the four most recent daily snapshots were spaced 24h apart to within a
+# second, so there was no slack to exploit.
+#
+# At four-hourly the gap is 4h, an absence window of ~5h is comfortable, and
+# `google_monitoring_alert_policy.snapshots_stopped` in monitoring.tf becomes a
+# real control rather than a daily false alarm.
+#
+# ── WHY A NEW POLICY RATHER THAN AN EDIT ─────────────────────────────────────
+#
+# A resource policy's schedule cannot be changed in place; Terraform must
+# destroy and recreate it. A disk also accepts only ONE snapshot schedule, so
+# the attachment has to be swapped rather than doubled up.
+#
+# The old policy is therefore left DEFINED and simply detached, instead of being
+# deleted in the same change. If anything about the new schedule misbehaves,
+# re-attaching the previous one is a one-line revert against a policy that still
+# exists, rather than a rebuild under pressure. It is removed in a follow-up once
+# the new schedule has been observed producing snapshots.
+resource "google_compute_resource_policy" "prod_4h" {
+  name    = "odoo-prod-4h"
+  project = var.project_id
+  region  = var.region
+
+  snapshot_schedule_policy {
+    snapshot_properties {
+      guest_flush       = false
+      labels            = {}
+      storage_locations = []
+    }
+
+    schedule {
+      hourly_schedule {
+        hours_in_cycle = 4
+        # 01:00 UTC, deliberately offset from the old 13:00 slot so the first
+        # new snapshot is visibly distinguishable from the last old one.
+        start_time = "01:00"
+      }
+    }
+
+    retention_policy {
+      max_retention_days    = 30
+      on_source_disk_delete = "KEEP_AUTO_SNAPSHOTS"
+    }
+  }
+}
+
+# ── Previous daily schedule — RETAINED, DETACHED ───────────────────────────────
+# Superseded by prod_4h above. Kept defined but no longer attached to any disk,
+# as the rollback path described there. Delete once the 4-hourly schedule has
+# been confirmed producing snapshots on its own cadence.
+#
+# The snapshots it already took are unaffected: on_source_disk_delete is
+# KEEP_AUTO_SNAPSHOTS, and detaching a policy never deletes existing snapshots.
 
 resource "google_compute_resource_policy" "daily_snapshot" {
   name    = "default-schedule-1"
