@@ -117,3 +117,30 @@ variable "bigquery_project_id" {
     broken.
   EOT
 }
+
+# ── Monitoring / alerting ──────────────────────────────────────────────────────
+
+variable "alert_email" {
+  type        = string
+  description = <<-EOT
+    Address the alert notification channel delivers to.
+
+    No default, and supplied via terraform.tfvars (gitignored) rather than
+    committed: this repository is PUBLIC, and an address in it is an address
+    that gets scraped.
+
+    GCP sends a verification email when the channel is created and DELIVERS
+    NOTHING until the link in it is clicked. A policy attached to an unverified
+    channel looks perfectly healthy in the console and pages nobody.
+  EOT
+}
+
+variable "public_host" {
+  type        = string
+  description = <<-EOT
+    Public hostname the uptime check probes. Must match the Host() rule on the
+    odoo router in docker-compose.yml and EDGE_HOST in scripts/deploy.sh —
+    Traefik routes on it, so a value that matches no router returns 404.
+  EOT
+  default     = "odoo.cleardeals.xyz"
+}
