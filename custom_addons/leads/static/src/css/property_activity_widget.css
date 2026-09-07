@@ -343,6 +343,7 @@
 .cd-badge-green  { background: #dcfce7; color: #15803d; }
 .cd-badge-red    { background: #fee2e2; color: #b91c1c; }
 .cd-badge-orange { background: #ffedd5; color: #c2410c; }
+.cd-badge-yellow { background: #fef9c3; color: #a16207; }
 
 /* Overdue inline badge — compact, shown next to the date */
 .cd-overdue-badge {

@@ -152,7 +152,8 @@ These values appear in `current_status` fields across all endpoints.
 | `busy`                                           | Line was busy                                |
 | `ringing`                                        | Called, no answer                            |
 | `call_back_later`                                | Requested callback Later                     |
-| `details_shared_of_property`                     | Property details sent to buyer               |
+| `contact_initiated`                              | Details delivered automatically over WhatsApp; **no RM has spoken to the buyer yet** |
+| `details_shared_of_property`                     | Property details shared by an RM (typically on a call) |
 | `detail_shared_and_interested_for_site_visit`    | Interested, site visit being arranged        |
 | `option_not_matching_requirements`               | Property doesn't match buyer's needs         |
 | `site_visit_scheduled`                           | Site visit confirmed                         |
@@ -774,6 +775,7 @@ Aggregated conversion funnel across all of a seller's properties. Shows how many
       "busy":                                        { "count":  3, "pct_of_total":  7.1 },
       "ringing":                                     { "count":  2, "pct_of_total":  4.8 },
       "call_back_later":                             { "count":  1, "pct_of_total":  2.4 },
+      "contact_initiated":                           { "count":  7, "pct_of_total": 16.7 },
       "details_shared_of_property":                  { "count":  5, "pct_of_total": 11.9 },
       "detail_shared_and_interested_for_site_visit": { "count":  4, "pct_of_total":  9.5 },
       "option_not_matching_requirements":            { "count":  0, "pct_of_total":  0.0 },

@@ -27,6 +27,7 @@ Response shape
         "statuses": {
           "lead":                           3,
           "busy":                           1,
+          "contact_initiated":              3,
           "details_shared_of_property":     2,
           "site_visit_scheduled":           4,
           "site_visit_done":                3,

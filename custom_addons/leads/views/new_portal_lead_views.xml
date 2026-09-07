@@ -49,6 +49,10 @@
                         name="unassigned"
                         domain="[('user_id', '=', False)]"
                         help="Leads with no RM assigned"/>
+                <filter string="Contact Initiated"
+                        name="contact_initiated"
+                        domain="[('current_status', '=', 'contact_initiated')]"
+                        help="Details went out automatically — nobody has called them yet"/>
                 <filter string="Details Shared"
                         name="details_shared"
                         domain="[('current_status', 'in', ['details_shared_of_property', 'detail_shared_and_interested_for_site_visit'])]"
@@ -177,7 +181,7 @@
             <form string="Recommended Property Status">
                 <header>
                     <field name="current_status" widget="statusbar"
-                           statusbar_visible="lead,details_shared_of_property,site_visit_scheduled,site_visit_done,requirement_closed"/>
+                           statusbar_visible="lead,contact_initiated,details_shared_of_property,site_visit_scheduled,site_visit_done,requirement_closed"/>
                 </header>
                 <sheet>
                     <group>
@@ -217,7 +221,7 @@
                            groups="leads.group_lead_score_manager"/>
 
                     <field name="current_status" widget="statusbar"
-                              statusbar_visible="lead,details_shared_of_property,requirement_closed"
+                              statusbar_visible="lead,contact_initiated,details_shared_of_property,requirement_closed"
                            groups="leads.group_lead_score_rm"/>
 
                     <button name="action_open_add_site_visit_wizard"

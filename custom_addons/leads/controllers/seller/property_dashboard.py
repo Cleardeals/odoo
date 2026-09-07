@@ -38,6 +38,10 @@ _STATUS_BUCKET = {
     "call_back_later":                              "contacted",
     "switched_off":                                 "contacted",
     "other":                                        "contacted",
+    # Same bucket as the manual status: the automation delivering the card is
+    # the event that used to set details_shared_of_property, so seller-facing
+    # KPI numbers are unchanged by the split.
+    "contact_initiated":                            "details_shared",
     "details_shared_of_property":                   "details_shared",
     "detail_shared_and_interested_for_site_visit":  "details_shared",
     "site_visit_scheduled":                         "site_visit_scheduled",

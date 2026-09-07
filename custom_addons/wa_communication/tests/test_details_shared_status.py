@@ -1,4 +1,4 @@
-"""Auto "Details Shared of Property" when the property card is delivered.
+"""Auto "Contact Initiated" when the property card is delivered.
 
 This is the highest-risk piece of the three, because it writes to the funnel
 without a human in the loop.  The tests are therefore weighted towards the ways
@@ -13,7 +13,11 @@ from odoo.tests import tagged
 from .common import WaTransactionCase
 
 TEMPLATE = 'initial_nudge_v1_msg_2_xc'
-SHARED = 'details_shared_of_property'
+# The automation's target status. NOT details_shared_of_property: RMs set that
+# one by hand after sharing details on a call, and an RM reading it assumes a
+# human has handled the inquiry. See _DETAILS_SHARED_STATUS in
+# wa_conversation_events.py.
+SHARED = 'contact_initiated'
 
 
 @tagged('post_install', '-at_install', 'wa_communication')
@@ -50,7 +54,7 @@ class TestDetailsSharedStatus(WaTransactionCase):
 
     # ── Happy path ───────────────────────────────────────────────────────────
 
-    def test_delivery_moves_the_inquiry_to_details_shared(self):
+    def test_delivery_moves_the_inquiry_to_contact_initiated(self):
         lead, conv = self._lead_conv()
         self.assertEqual(lead.current_status, 'lead')
 
@@ -59,6 +63,28 @@ class TestDetailsSharedStatus(WaTransactionCase):
 
         lead.invalidate_recordset()
         self.assertEqual(lead.current_status, SHARED)
+
+    def test_the_automation_never_sets_the_manual_details_shared_status(self):
+        """The reason this status exists, pinned so it cannot regress.
+
+        ``details_shared_of_property`` is what an RM sets by hand after sharing
+        details on a call — a human spoke to the buyer. A delivered template
+        means the opposite: the buyer has the details and nobody has called
+        them. When the automation used the manual status, RMs read it as
+        "handled" and dropped these inquiries out of the follow-up queue.
+
+        A future edit that repoints the automation back at the manual status
+        would reintroduce that silently, so assert on the literal value rather
+        than on the SHARED constant.
+        """
+        lead, conv = self._lead_conv()
+
+        self.Conv._process_odoo_wa_event(
+            self._delivered_event(conv, lead), self._uniq('psm_'))
+
+        lead.invalidate_recordset()
+        self.assertEqual(lead.current_status, 'contact_initiated')
+        self.assertNotEqual(lead.current_status, 'details_shared_of_property')
 
     def test_read_also_moves_it_when_delivered_was_lost(self):
         """read implies delivered; receipts do go missing."""
@@ -93,7 +119,11 @@ class TestDetailsSharedStatus(WaTransactionCase):
         lead.invalidate_recordset()
         notes = lead.message_ids[:len(lead.message_ids) - before]
         body = ' '.join(notes.mapped('body'))
-        self.assertIn('status updated', body.lower())
+        self.assertIn('contact initiated', body.lower(),
+                      "names the status it set, so the RM can find it")
+        self.assertIn('still need a call', body.lower(),
+                      "the whole point of the new status: nobody has spoken to "
+                      "this buyer yet, and the note has to say so")
         self.assertIn(TEMPLATE, body, "names the evidence it acted on")
         self.assertIn('never overwritten', body,
                       "states the rule that protects the RM's own edits")
@@ -110,7 +140,7 @@ class TestDetailsSharedStatus(WaTransactionCase):
 
         lead.invalidate_recordset()
         note = lead.message_ids.filtered(
-            lambda m: 'status updated' in (m.body or '').lower())[:1]
+            lambda m: 'contact initiated' in (m.body or '').lower())[:1]
         self.assertTrue(note)
         self.assertNotIn('&lt;p&gt;', note.body)
         self.assertNotIn('&lt;b&gt;', note.body)
@@ -381,9 +411,9 @@ class TestDetailsSharedStatus(WaTransactionCase):
     def test_the_status_write_publishes_no_actor_event(self):
         """The engine must not react to a status the engine itself caused.
 
-        ``details_shared_of_property`` is deliberately in neither
-        ``_ACTOR_STATUS_SET`` nor ``_VISIT_STATUS_MAP``; adding it to either
-        would create the loop silently, so pin it here.
+        ``contact_initiated`` is deliberately in neither ``_ACTOR_STATUS_SET``
+        nor ``_VISIT_STATUS_MAP``; adding it to either would create the loop
+        silently, so pin it here.
         """
         lead, conv = self._lead_conv()
         with self.mock_pubsub() as published:

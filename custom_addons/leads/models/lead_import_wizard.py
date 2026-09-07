@@ -69,6 +69,7 @@ class LeadImportWizard(models.TransientModel):
             "call back later": "call_back_later",
             "site visit scheduled": "site_visit_scheduled",
             "option not matching requirements": "option_not_matching_requirements",
+            "contact initiated": "contact_initiated",
             "details shared of property": "details_shared_of_property",
             "no requiremnets": "no_requirements",
             "details shared and interested for site visit": "details_shared_and_interested_for_site_visit",

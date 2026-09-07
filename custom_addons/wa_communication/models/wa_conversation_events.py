@@ -44,7 +44,14 @@ _DEFAULT_DETAILS_SHARED_TEMPLATES = 'initial_nudge_v1_msg_2_xc'
 # The status the inquiry moves to, and the only status it may move *from*.
 # Anything else means a human has already judged this inquiry, and automation
 # does not overrule a human.
-_DETAILS_SHARED_STATUS = 'details_shared_of_property'
+# The status the automation moves an inquiry to when the details card is
+# DELIVERED. Deliberately NOT 'details_shared_of_property': RMs set that one by
+# hand after sharing details on a call, and an RM scanning their queue reads it
+# as "a human has handled this". A delivered template means the opposite — the
+# buyer has the details and nobody has spoken to them yet, so the inquiry still
+# needs a call. Conflating the two is how automated sends silently removed leads
+# from the follow-up queue.
+_DETAILS_SHARED_STATUS = 'contact_initiated'
 _DETAILS_SHARED_FROM = 'lead'
 
 
@@ -444,11 +451,13 @@ class WaConversation(models.Model):
             # the first version of this note rendered its own tags as text.
             body = Markup(
                 '<div style="margin:4px 0">'
-                '<p style="margin:0 0 6px"><b>🏠 Details shared — status updated '
-                'automatically</b></p>'
+                '<p style="margin:0 0 6px"><b>🏠 Details delivered — status set to '
+                '&quot;Contact Initiated&quot;</b></p>'
                 '<p style="margin:0 0 6px">The property card was '
                 '<b>delivered to the buyer\'s WhatsApp</b> on %(when)s.</p>'
                 '<ul style="margin:0 0 6px; padding-left:18px">'
+                '<li><b>They still need a call.</b> Nobody has spoken to this '
+                'buyer — the card went out automatically.</li>'
                 '<li>Delivery is the trigger — a card that never arrives '
                 'changes nothing.</li>'
                 '<li>Only inquiries still at <b>Lead</b> are updated. A status '
@@ -475,7 +484,7 @@ class WaConversation(models.Model):
             )
 
     def _owa_maybe_mark_details_shared(self, msg) -> None:
-        """Move the inquiry to "Details Shared of Property" once the card lands.
+        """Move the inquiry to "Contact Initiated" once the card lands.
 
         Called from the ``delivered`` **and** ``read`` handlers: ``read`` implies
         ``delivered``, and a delivered receipt does get lost, so keying on only
@@ -555,7 +564,7 @@ class WaConversation(models.Model):
             'details_shared',
             title='Property details delivered to %s' % (lead.name or 'the buyer'),
             body=('The details reached them on WhatsApp, so this inquiry is now '
-                  'marked "Details Shared of Property".'),
+                  'marked "Contact Initiated". They still need a call.'),
             payload={
                 'lead_id': lead.id,
                 'lead_name': lead.name or '',
