@@ -1,0 +1,447 @@
+"""Auto "Contact Initiated" when the property card is delivered.
+
+This is the highest-risk piece of the three, because it writes to the funnel
+without a human in the loop.  The tests are therefore weighted towards the ways
+it could write the *wrong* thing rather than the happy path: out-of-order
+receipts, a lost ``delivered``, duplicate deliveries, an inquiry an RM has
+already judged, and — most importantly — a phone number carrying more than one
+inquiry.
+"""
+
+from odoo.tests import tagged
+
+from .common import WaTransactionCase
+
+TEMPLATE = 'initial_nudge_v1_msg_2_xc'
+# The automation's target status. NOT details_shared_of_property: RMs set that
+# one by hand after sharing details on a call, and an RM reading it assumes a
+# human has handled the inquiry. See _DETAILS_SHARED_STATUS in
+# wa_conversation_events.py.
+SHARED = 'contact_initiated'
+
+
+@tagged('post_install', '-at_install', 'wa_communication')
+class TestDetailsSharedStatus(WaTransactionCase):
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.env['ir.config_parameter'].sudo().set_param(
+            'wa_communication.details_shared_templates', TEMPLATE)
+
+    def _lead_conv(self):
+        lead = self.make_lead(phone=self._uniq_phone()[2:])
+        conv = self.make_conversation(
+            phone_number='91%s' % lead.phone, lead_id=lead.id)
+        return lead, conv
+
+    def _delivered_event(self, conv, lead, **over):
+        """A message_delivered OdooWaEvent for a workflow-sent card."""
+        event = {
+            'event_type': 'message_delivered',
+            'phone': conv.phone_number,
+            'actor_id': lead.id,
+            'actor_type': 'buyer_inquiry',
+            'wa_message_id': self._uniq('wamid_'),
+            'template_name': TEMPLATE,
+            'workflow_slug': 'initial_nudge_property_v1',
+            'step_id': 'msg_2',
+            'enrollment_id': self._uniq('enr_'),
+            'occurred_at': '2026-01-01T10:00:00Z',
+        }
+        event.update(over)
+        return event
+
+    # ── Happy path ───────────────────────────────────────────────────────────
+
+    def test_delivery_moves_the_inquiry_to_contact_initiated(self):
+        lead, conv = self._lead_conv()
+        self.assertEqual(lead.current_status, 'lead')
+
+        self.Conv._process_odoo_wa_event(
+            self._delivered_event(conv, lead), self._uniq('psm_'))
+
+        lead.invalidate_recordset()
+        self.assertEqual(lead.current_status, SHARED)
+
+    def test_the_automation_never_sets_the_manual_details_shared_status(self):
+        """The reason this status exists, pinned so it cannot regress.
+
+        ``details_shared_of_property`` is what an RM sets by hand after sharing
+        details on a call — a human spoke to the buyer. A delivered template
+        means the opposite: the buyer has the details and nobody has called
+        them. When the automation used the manual status, RMs read it as
+        "handled" and dropped these inquiries out of the follow-up queue.
+
+        A future edit that repoints the automation back at the manual status
+        would reintroduce that silently, so assert on the literal value rather
+        than on the SHARED constant.
+        """
+        lead, conv = self._lead_conv()
+
+        self.Conv._process_odoo_wa_event(
+            self._delivered_event(conv, lead), self._uniq('psm_'))
+
+        lead.invalidate_recordset()
+        self.assertEqual(lead.current_status, 'contact_initiated')
+        self.assertNotEqual(lead.current_status, 'details_shared_of_property')
+
+    def test_read_also_moves_it_when_delivered_was_lost(self):
+        """read implies delivered; receipts do go missing."""
+        lead, conv = self._lead_conv()
+        self.Conv._process_odoo_wa_event(
+            self._delivered_event(conv, lead, event_type='message_read'),
+            self._uniq('psm_'))
+        lead.invalidate_recordset()
+        self.assertEqual(lead.current_status, SHARED)
+
+    def test_delivery_notifies_the_owning_rm(self):
+        lead, conv = self._lead_conv()
+        rm = self.make_user()
+        lead.write({'user_id': rm.id})
+
+        before = self.env['cleardeals.notification'].sudo().search_count(
+            [('user_id', '=', rm.id), ('notif_type', '=', 'details_shared')])
+        self.Conv._process_odoo_wa_event(
+            self._delivered_event(conv, lead), self._uniq('psm_'))
+        after = self.env['cleardeals.notification'].sudo().search_count(
+            [('user_id', '=', rm.id), ('notif_type', '=', 'details_shared')])
+        self.assertEqual(after, before + 1)
+
+    def test_delivery_explains_itself_in_the_chatter(self):
+        """An RM finding a status they didn't set must be able to see why."""
+        lead, conv = self._lead_conv()
+        before = len(lead.message_ids)
+
+        self.Conv._process_odoo_wa_event(
+            self._delivered_event(conv, lead), self._uniq('psm_'))
+
+        lead.invalidate_recordset()
+        notes = lead.message_ids[:len(lead.message_ids) - before]
+        body = ' '.join(notes.mapped('body'))
+        self.assertIn('contact initiated', body.lower(),
+                      "names the status it set, so the RM can find it")
+        self.assertIn('still need a call', body.lower(),
+                      "the whole point of the new status: nobody has spoken to "
+                      "this buyer yet, and the note has to say so")
+        self.assertIn(TEMPLATE, body, "names the evidence it acted on")
+        self.assertIn('never overwritten', body,
+                      "states the rule that protects the RM's own edits")
+
+    def test_the_note_renders_as_html_not_as_escaped_tags(self):
+        """message_post escapes plain strings — the body must be Markup.
+
+        The first version printed its own tags at the reader, which is worse
+        than no note at all.
+        """
+        lead, conv = self._lead_conv()
+        self.Conv._process_odoo_wa_event(
+            self._delivered_event(conv, lead), self._uniq('psm_'))
+
+        lead.invalidate_recordset()
+        note = lead.message_ids.filtered(
+            lambda m: 'contact initiated' in (m.body or '').lower())[:1]
+        self.assertTrue(note)
+        self.assertNotIn('&lt;p&gt;', note.body)
+        self.assertNotIn('&lt;b&gt;', note.body)
+        self.assertIn('<b>', note.body)
+
+    def test_every_chatter_entry_has_a_real_author(self):
+        """No acting user meant the tracking entry rendered as "Unnamed".
+
+        The status write now acts as OdooBot so the change is attributable —
+        both the tracking row Odoo posts and the explanatory note.
+        """
+        lead, conv = self._lead_conv()
+        before = lead.message_ids.ids
+
+        self.Conv._process_odoo_wa_event(
+            self._delivered_event(conv, lead), self._uniq('psm_'))
+
+        lead.invalidate_recordset()
+        new = lead.message_ids.filtered(lambda m: m.id not in before)
+        self.assertTrue(new)
+        for m in new:
+            self.assertTrue(
+                m.author_id,
+                "chatter entry %s has no author and renders as 'Unnamed'" % m.id)
+
+    def test_a_broken_note_never_undoes_the_status_change(self):
+        """The note explains the outcome; it must not be able to prevent it."""
+        from unittest.mock import patch
+        lead, conv = self._lead_conv()
+
+        with patch.object(type(lead), 'message_post',
+                          side_effect=ValueError('chatter down')):
+            self.Conv._process_odoo_wa_event(
+                self._delivered_event(conv, lead), self._uniq('psm_'))
+
+        lead.invalidate_recordset()
+        self.assertEqual(lead.current_status, SHARED)
+
+    # ── Idempotency and ordering ─────────────────────────────────────────────
+
+    def test_duplicate_delivery_does_not_notify_twice(self):
+        """A redelivered receipt is a no-op — the status guard makes it so."""
+        lead, conv = self._lead_conv()
+        rm = self.make_user()
+        lead.write({'user_id': rm.id})
+        event = self._delivered_event(conv, lead)
+
+        self.Conv._process_odoo_wa_event(event, self._uniq('psm_'))
+        count = self.env['cleardeals.notification'].sudo().search_count(
+            [('user_id', '=', rm.id), ('notif_type', '=', 'details_shared')])
+
+        self.Conv._process_odoo_wa_event(event, self._uniq('psm_'))
+        self.assertEqual(
+            self.env['cleardeals.notification'].sudo().search_count(
+                [('user_id', '=', rm.id), ('notif_type', '=', 'details_shared')]),
+            count)
+
+    def test_delivered_before_sent_still_moves_the_status(self):
+        """The out-of-order stub path must trigger the update too."""
+        lead, conv = self._lead_conv()
+        # No prior wa.message exists: the delivered receipt creates the stub.
+        self.assertFalse(self.Msg.sudo().search_count(
+            [('conversation_id', '=', conv.id), ('direction', '=', 'outbound')]))
+
+        self.Conv._process_odoo_wa_event(
+            self._delivered_event(conv, lead), self._uniq('psm_'))
+
+        lead.invalidate_recordset()
+        self.assertEqual(lead.current_status, SHARED)
+
+    # ── Refusals ─────────────────────────────────────────────────────────────
+
+    def test_status_already_advanced_is_left_alone(self):
+        """Automation never overrules a human's judgement."""
+        lead, conv = self._lead_conv()
+        lead.sudo().write({'current_status': 'site_visit_done'})
+
+        self.Conv._process_odoo_wa_event(
+            self._delivered_event(conv, lead), self._uniq('psm_'))
+
+        lead.invalidate_recordset()
+        self.assertEqual(lead.current_status, 'site_visit_done')
+
+    def test_advanced_status_sends_no_notification(self):
+        """A notification about a status we didn't set is noise."""
+        lead, conv = self._lead_conv()
+        rm = self.make_user()
+        lead.write({'user_id': rm.id})
+        lead.sudo().write({'current_status': 'requirement_closed'})
+
+        self.Conv._process_odoo_wa_event(
+            self._delivered_event(conv, lead), self._uniq('psm_'))
+
+        self.assertFalse(self.env['cleardeals.notification'].sudo().search_count(
+            [('user_id', '=', rm.id), ('notif_type', '=', 'details_shared')]))
+
+    def test_other_template_does_not_move_the_status(self):
+        lead, conv = self._lead_conv()
+        self.Conv._process_odoo_wa_event(
+            self._delivered_event(conv, lead, template_name='some_other_tpl'),
+            self._uniq('psm_'))
+        lead.invalidate_recordset()
+        self.assertEqual(lead.current_status, 'lead')
+
+    def test_phone_guessed_inquiry_is_attributed_but_not_judged(self):
+        """The single most dangerous case: an inquiry nobody actually named.
+
+        When the platform sends no ``actor_id``, ``_owa_resolve_lead`` falls
+        back to "newest lead on this phone".  That guess is fine for filing the
+        message into a thread, and the message *is* still attributed — but it
+        must not move a funnel status, because the buyer may well have three
+        inquiries and the newest need not be the one the card was about.
+        """
+        lead, conv = self._lead_conv()
+        event = self._delivered_event(conv, lead)
+        event['actor_id'] = 0        # platform could not name the inquiry
+        conv.sudo().write({'lead_id': False})
+
+        self.Conv._process_odoo_wa_event(event, self._uniq('psm_'))
+
+        # Attributed…
+        msg = self.Msg.sudo().search(
+            [('wa_message_id', '=', event['wa_message_id'])], limit=1)
+        self.assertEqual(msg.effective_inquiry_id, lead)
+        # …but not judged.
+        lead.invalidate_recordset()
+        self.assertEqual(lead.current_status, 'lead')
+
+    def test_rm_repointed_segment_is_trusted(self):
+        """A human attribution is authoritative even without an actor id."""
+        lead, conv = self._lead_conv()
+        seg = self.env['wa.conversation.segment'].sudo().create({
+            'conversation_id': conv.id,
+            'inquiry_id': lead.id,
+            'started_by': 'rm',
+        })
+        msg = self.make_message(
+            conv, direction='outbound', initiator='workflow', kind='template',
+            status='sent', template_name=TEMPLATE, segment_id=seg.id)
+
+        self.Conv._owa_maybe_mark_details_shared(msg)
+
+        lead.invalidate_recordset()
+        self.assertEqual(lead.current_status, SHARED)
+
+    def test_auto_suggested_segment_is_not_trusted(self):
+        """An auto-opened segment carries the same guess — don't launder it."""
+        lead, conv = self._lead_conv()
+        seg = self.env['wa.conversation.segment'].sudo().create({
+            'conversation_id': conv.id,
+            'inquiry_id': lead.id,
+            'started_by': 'auto_suggested',
+        })
+        msg = self.make_message(
+            conv, direction='outbound', initiator='workflow', kind='template',
+            status='sent', template_name=TEMPLATE, segment_id=seg.id)
+
+        self.Conv._owa_maybe_mark_details_shared(msg)
+
+        lead.invalidate_recordset()
+        self.assertEqual(lead.current_status, 'lead')
+
+    def test_only_the_addressed_inquiry_moves(self):
+        """Same buyer, two properties: the card is about exactly one of them."""
+        phone = self._uniq_phone()[2:]
+        lead_a = self.make_lead(phone=phone)
+        lead_b = self.make_lead(phone=phone)
+        conv = self.make_conversation(
+            phone_number='91%s' % phone, lead_id=lead_a.id)
+
+        self.Conv._process_odoo_wa_event(
+            self._delivered_event(conv, lead_a), self._uniq('psm_'))
+
+        lead_a.invalidate_recordset()
+        lead_b.invalidate_recordset()
+        self.assertEqual(lead_a.current_status, SHARED)
+        self.assertEqual(lead_b.current_status, 'lead')
+
+    # ── Healing a failure that delivery disproved ────────────────────────────
+
+    def test_delivery_clears_a_stale_failure(self):
+        """Interakt reported failed, then delivered 88ms later. Believe delivery.
+
+        Leaving failure_code on a message that demonstrably arrived makes any
+        report keyed on "has a failure code" count it as failed.
+        """
+        lead, conv = self._lead_conv()
+        msg = self.make_message(
+            conv, direction='outbound', initiator='workflow', kind='template',
+            status='meta_blocked', template_name=TEMPLATE,
+            wa_message_id=self._uniq('wamid_'), lead_id=lead.id,
+            failure_code='131026', failure_reason='Message undeliverable')
+
+        self.Conv._process_odoo_wa_event(
+            self._delivered_event(conv, lead, wa_message_id=msg.wa_message_id),
+            self._uniq('psm_'))
+
+        msg.invalidate_recordset()
+        self.assertFalse(msg.failure_code)
+        self.assertFalse(msg.failure_reason)
+        self.assertEqual(msg.status, 'delivered')
+
+    def test_delivery_retracts_the_false_failure_alert(self):
+        """The RM was told it didn't go through, four seconds before it did."""
+        rm = self.make_user()
+        lead, conv = self._lead_conv()
+        lead.write({'user_id': rm.id})
+        msg = self.make_message(
+            conv, direction='outbound', initiator='workflow', kind='template',
+            status='meta_blocked', template_name=TEMPLATE,
+            wa_message_id=self._uniq('wamid_'), lead_id=lead.id,
+            failure_code='131026', failure_reason='Message undeliverable')
+
+        alert = self.env['cleardeals.notification'].sudo().create({
+            'user_id': rm.id, 'notif_type': 'permanent_failure',
+            'title': "Your message didn't go through",
+            'payload': {'phone': conv.phone_number},
+        })
+        self.assertFalse(alert.is_read)
+
+        self.Conv._process_odoo_wa_event(
+            self._delivered_event(conv, lead, wa_message_id=msg.wa_message_id),
+            self._uniq('psm_'))
+
+        alert.invalidate_recordset()
+        self.assertTrue(alert.is_read, "the false alarm must not survive")
+
+    def test_healing_leaves_other_chats_alone(self):
+        """Only the alert for THIS number is retracted."""
+        rm = self.make_user()
+        lead, conv = self._lead_conv()
+        msg = self.make_message(
+            conv, direction='outbound', initiator='workflow', kind='template',
+            status='meta_blocked', template_name=TEMPLATE,
+            wa_message_id=self._uniq('wamid_'), lead_id=lead.id,
+            failure_code='131026', failure_reason='undeliverable')
+        other = self.env['cleardeals.notification'].sudo().create({
+            'user_id': rm.id, 'notif_type': 'permanent_failure',
+            'title': 'A genuinely failed message',
+            'payload': {'phone': '910000000999'},
+        })
+
+        self.Conv._process_odoo_wa_event(
+            self._delivered_event(conv, lead, wa_message_id=msg.wa_message_id),
+            self._uniq('psm_'))
+
+        other.invalidate_recordset()
+        self.assertFalse(other.is_read)
+
+    def test_a_message_that_never_failed_is_untouched(self):
+        """Healing must never fabricate work on the happy path."""
+        lead, conv = self._lead_conv()
+        msg = self.make_message(
+            conv, direction='outbound', initiator='workflow', kind='template',
+            status='sent', template_name=TEMPLATE,
+            wa_message_id=self._uniq('wamid_'), lead_id=lead.id)
+
+        self.Conv._process_odoo_wa_event(
+            self._delivered_event(conv, lead, wa_message_id=msg.wa_message_id),
+            self._uniq('psm_'))
+
+        msg.invalidate_recordset()
+        self.assertEqual(msg.status, 'delivered')
+        self.assertFalse(msg.failure_code)
+
+    # ── No feedback loop ─────────────────────────────────────────────────────
+
+    def test_the_status_write_publishes_no_actor_event(self):
+        """The engine must not react to a status the engine itself caused.
+
+        ``contact_initiated`` is deliberately in neither ``_ACTOR_STATUS_SET``
+        nor ``_VISIT_STATUS_MAP``; adding it to either would create the loop
+        silently, so pin it here.
+        """
+        lead, conv = self._lead_conv()
+        with self.mock_pubsub() as published:
+            self.Conv._process_odoo_wa_event(
+                self._delivered_event(conv, lead), self._uniq('psm_'))
+
+        lead.invalidate_recordset()
+        self.assertEqual(lead.current_status, SHARED)
+        self.assertFalse([
+            p for p in published
+            if p.payload.get('event_type') in (
+                'actor.status_changed', 'visit.scheduled', 'visit.done',
+                'visit.rescheduled')
+        ])
+
+    # ── Configuration ────────────────────────────────────────────────────────
+
+    def test_template_list_is_configurable(self):
+        """New template names get approved constantly; no deploy to track them."""
+        self.env['ir.config_parameter'].sudo().set_param(
+            'wa_communication.details_shared_templates',
+            '%s, details_shared_v4' % TEMPLATE)
+        lead, conv = self._lead_conv()
+
+        self.Conv._process_odoo_wa_event(
+            self._delivered_event(
+                conv, lead, template_name='details_shared_v4'),
+            self._uniq('psm_'))
+
+        lead.invalidate_recordset()
+        self.assertEqual(lead.current_status, SHARED)

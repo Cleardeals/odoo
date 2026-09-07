@@ -38,7 +38,12 @@ class LeadImportWizard(models.TransientModel):
         # Cache properties to avoid repeated DB lookups across files
         property_cache = {}
 
-        LeadsNew = self.env["leads.new"].with_context(automated_lead_creation=True)
+        # lead_manual_origin: a human uploaded this file.  These leads must not
+        # get the initial-nudge workflow — see leads.new.create().
+        LeadsNew = self.env["leads.new"].with_context(
+            automated_lead_creation=True,
+            lead_manual_origin=True,
+        )
         olx_source = LeadsNew._get_or_create_source("OLX", source_type="portal")
 
         COLUMN_MAPPING = {

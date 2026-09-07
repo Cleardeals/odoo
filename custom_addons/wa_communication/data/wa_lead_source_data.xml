@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+        <!-- Category + source for leads that originate from an inbound WhatsApp
+             message from a number we don't yet have a lead for. Lets the RM
+             convert an orphan (phone-only) conversation into a tracked lead via
+             the Inbox "Create lead" action. -->
+        <record id="lead_source_category_whatsapp" model="lead.source.category">
+            <field name="name">WhatsApp</field>
+            <field name="code">whatsapp</field>
+            <field name="source_type">manual</field>
+            <field name="sequence">80</field>
+        </record>
+
+        <record id="lead_source_whatsapp_inbound" model="lead.source">
+            <field name="name">WhatsApp Inbound</field>
+            <field name="category_id" ref="lead_source_category_whatsapp"/>
+            <field name="sequence">10</field>
+        </record>
+    </data>
+</odoo>

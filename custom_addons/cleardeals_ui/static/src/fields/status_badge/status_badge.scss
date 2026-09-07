@@ -1,0 +1,43 @@
+/**
+ * status_badge.scss
+ * ─────────────────
+ * Styles for the CdStatusBadge field widget.
+ *
+ * Colour slots 0–11 mirror Odoo's integer colour field convention so that any
+ * model using a `color` integer field (0–11) can drive badge colours without
+ * extra configuration.
+ *
+ * Base sizing/shape is delegated to Bootstrap's .badge + .rounded-pill so
+ * the component automatically inherits the host theme.
+ */
+
+.cd-status-badge {
+    font-weight: 500;
+    letter-spacing: 0.025em;
+
+    // ── 12-step Cleardeals colour palette (light bg / dark fg pairs) ───────
+    // Slot 0  — blue       (default / new)
+    &.cd-status-badge--color-0  { background-color: #e8f4fd; color: #1565a8; }
+    // Slot 1  — orange     (warm / pending)
+    &.cd-status-badge--color-1  { background-color: #fdf3e8; color: #a05a15; }
+    // Slot 2  — green      (done / confirmed)
+    &.cd-status-badge--color-2  { background-color: #e8fde8; color: #1a6a1a; }
+    // Slot 3  — red        (failed / cancelled)
+    &.cd-status-badge--color-3  { background-color: #fde8e8; color: #9a1a1a; }
+    // Slot 4  — purple     (premium / special)
+    &.cd-status-badge--color-4  { background-color: #f3e8fd; color: #6a1a9a; }
+    // Slot 5  — pink       (hot lead)
+    &.cd-status-badge--color-5  { background-color: #fde8f3; color: #9a1a6a; }
+    // Slot 6  — teal       (in-progress)
+    &.cd-status-badge--color-6  { background-color: #e8fdfd; color: #1a6a6a; }
+    // Slot 7  — yellow     (caution / review)
+    &.cd-status-badge--color-7  { background-color: #fdfde8; color: #6a6a1a; }
+    // Slot 8  — grey       (inactive / archived)
+    &.cd-status-badge--color-8  { background-color: #f0f0f0; color: #404040; }
+    // Slot 9  — indigo     (scheduled)
+    &.cd-status-badge--color-9  { background-color: #e8f0fd; color: #1a3a9a; }
+    // Slot 10 — magenta    (flagged)
+    &.cd-status-badge--color-10 { background-color: #fde8fd; color: #9a1a9a; }
+    // Slot 11 — emerald    (closed-won)
+    &.cd-status-badge--color-11 { background-color: #e8fdf3; color: #1a9a5a; }
+}

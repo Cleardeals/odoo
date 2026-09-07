@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="cleardeals_ui.WindowBadge">
+        <span t-attf-class="cd-window-badge cd-window-badge--{{ props.state }}">
+            <i t-attf-class="fa {{ isOpen ? 'fa-unlock' : 'fa-lock' }}" aria-hidden="true"/>
+            <span t-esc="label"/>
+        </span>
+    </t>
+</templates>

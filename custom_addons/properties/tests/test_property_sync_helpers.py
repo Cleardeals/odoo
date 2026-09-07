@@ -22,7 +22,9 @@ from odoo.addons.properties.models.property_sync import (
     _parse_bedroom_count,
     _parse_pricing,
     _parse_pricing_unit,
+    _parse_primary_image,
     _parse_reg_date,
+    _parse_size,
 )
 
 
@@ -136,8 +138,17 @@ class TestPropertySyncHelpers(TransactionCase):
             "state": {"name": "Maharashtra"},
             "city": {"name": "Mumbai"},
             "location_area": {"name": "Andheri"},
-            "details": {"bedroom_count": "3 BHK"},
+            "details": {"bedroom_count": "3 BHK", "furnishing_type": "Semi-Furnished"},
             "sell_pricing": {"offer_price": 48.0, "offer_price_unit": "lakh"},
+            "tour_360_url": "http://tour",
+            "areas": {
+                "super_built_up_plot_area": "187",
+                "super_built_up_plot_area_unit": "sq. yard",
+            },
+            "media": [
+                {"is_primary": False, "file_path": "http://img/other.jpg"},
+                {"is_primary": True, "file_path": "http://img/main.jpg"},
+            ],
         }
         vals = _map_api_record(item)
 
@@ -152,6 +163,11 @@ class TestPropertySyncHelpers(TransactionCase):
         self.assertEqual(vals["pricing"], 48.0)
         self.assertEqual(vals["pricing_unit"], "lakh")
         self.assertEqual(vals["_exec_name"], "Vivek Vaghela")
+        # WhatsApp initial-nudge media / attributes
+        self.assertEqual(vals["primary_image_url"], "http://img/main.jpg")
+        self.assertEqual(vals["property_size"], "187 sq. yard")
+        self.assertEqual(vals["furnishing_type"], "Semi-Furnished")
+        self.assertEqual(vals["tour_360_url"], "http://tour")
         # Manager-editable fields must never be produced by the API mapper.
         for forbidden in (
             "property_tag",
@@ -170,3 +186,78 @@ class TestPropertySyncHelpers(TransactionCase):
         self.assertEqual(vals["bedroom_count"], 0)
         self.assertEqual(vals["pricing"], 0.0)
         self.assertEqual(vals["owner_phone"], "")
+        # New WA fields degrade to empty strings, never raise.
+        self.assertEqual(vals["primary_image_url"], "")
+        self.assertEqual(vals["property_size"], "")
+        self.assertEqual(vals["furnishing_type"], "")
+        self.assertEqual(vals["tour_360_url"], "")
+
+    # ------------------------------------------------------------------ #
+    # _parse_primary_image                                                 #
+    # ------------------------------------------------------------------ #
+
+    def test_parse_primary_image_picks_primary(self):
+        item = {
+            "media": [
+                {"is_primary": False, "file_path": "a"},
+                {"is_primary": True, "file_path": "b"},
+                {"is_primary": True, "file_path": "c"},
+            ]
+        }
+        self.assertEqual(_parse_primary_image(item), "b")  # first primary wins
+
+    def test_parse_primary_image_edge_cases(self):
+        self.assertEqual(_parse_primary_image({}), "")
+        self.assertEqual(_parse_primary_image({"media": None}), "")
+        self.assertEqual(_parse_primary_image({"media": []}), "")
+        self.assertEqual(
+            _parse_primary_image({"media": [{"is_primary": False, "file_path": "a"}]}),
+            "",
+        )
+        # primary flagged but no file_path -> empty string, no crash
+        self.assertEqual(_parse_primary_image({"media": [{"is_primary": True}]}), "")
+
+    # ------------------------------------------------------------------ #
+    # _parse_size                                                          #
+    # ------------------------------------------------------------------ #
+
+    def test_parse_size_prefers_super_built_up(self):
+        item = {
+            "areas": {
+                "super_built_up_plot_area": "187",
+                "super_built_up_plot_area_unit": "sq. yard",
+                "carpet_plot_area": "150",
+                "carpet_plot_area_unit": "sq. yard",
+            }
+        }
+        self.assertEqual(_parse_size(item), "187 sq. yard")
+
+    def test_parse_size_falls_back_to_carpet(self):
+        item = {
+            "areas": {
+                "super_built_up_construction_area": None,
+                "carpet_construction_area": "370",
+                "carpet_construction_area_unit": "sq. yard",
+            }
+        }
+        self.assertEqual(_parse_size(item), "370 sq. yard")
+
+    def test_parse_size_joins_plot_and_construction(self):
+        item = {
+            "areas": {
+                "super_built_up_plot_area": "187",
+                "super_built_up_plot_area_unit": "sq. yard",
+                "super_built_up_construction_area": "1200",
+                "super_built_up_construction_area_unit": "sq. feet",
+            }
+        }
+        self.assertEqual(_parse_size(item), "187 sq. yard | 1200 sq. feet")
+
+    def test_parse_size_edge_cases(self):
+        self.assertEqual(_parse_size({}), "")
+        self.assertEqual(_parse_size({"areas": None}), "")
+        self.assertEqual(_parse_size({"areas": {}}), "")
+        # value present, unit missing -> value only
+        self.assertEqual(
+            _parse_size({"areas": {"super_built_up_plot_area": "90"}}), "90"
+        )

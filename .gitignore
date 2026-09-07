@@ -81,3 +81,9 @@ docker-compose.override.yml
 letsencrypt/
 
 hrms_addons/
+
+# Claude Code: team-share skills only; keep the rest of .claude local
+!.claude/
+.claude/*
+!.claude/skills/
+.claude/skills/product-brainstorm-workspace/

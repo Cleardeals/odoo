@@ -9,6 +9,7 @@ class SuggestionFeedbackWizard(models.TransientModel):
         ('new', 'New'),
         ('whatsapp_done', 'WhatsApp Done'),
         ('contacted', 'Contacted'),
+        ('contact_initiated', 'Contact Initiated'),
         ('details_shared_of_property', 'Details Shared of Property'),
         ('not_interested', 'Not Interested'),
         ('interested', 'Interested'), 

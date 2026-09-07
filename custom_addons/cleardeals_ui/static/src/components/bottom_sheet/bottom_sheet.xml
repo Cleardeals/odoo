@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="cleardeals_ui.BottomSheet">
+        <div class="cd-sheet__backdrop"
+             t-on-click="() => props.onClose()"
+             t-on-keydown="(ev) => this.onKeydown(ev)">
+            <div t-attf-class="cd-sheet {{ props.tall ? 'cd-sheet--tall' : '' }}"
+                 role="dialog"
+                 aria-modal="true"
+                 t-on-click.stop="() => {}">
+
+                <!-- Grip: the affordance that says "this came from the bottom". -->
+                <div class="cd-sheet__grip" aria-hidden="true"/>
+
+                <div class="cd-sheet__head" t-if="props.title">
+                    <span class="cd-sheet__title" t-esc="props.title"/>
+                    <button class="cd-sheet__close"
+                            aria-label="Close"
+                            t-on-click="() => props.onClose()">
+                        <i class="fa fa-times" aria-hidden="true"/>
+                    </button>
+                </div>
+
+                <div class="cd-sheet__body">
+                    <t t-slot="default"/>
+                </div>
+
+                <div class="cd-sheet__foot" t-if="props.slots and props.slots.footer">
+                    <t t-slot="footer"/>
+                </div>
+            </div>
+        </div>
+    </t>
+</templates>
