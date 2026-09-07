@@ -118,10 +118,15 @@ steps:
   # Modules marked `installable: False` are skipped — they are deprecated, must
   # never be installed in production, and `-i` on one fails the build outright.
   #
-  # Shell variables are lowercase ON PURPOSE. Cloud Build substitutes anything
-  # matching $UPPERCASE before bash ever sees it, and rejects the build when the
-  # name is not a known substitution — the deploy step below carries two scars
-  # from exactly that. Lowercase names pass through untouched.
+  # Shell variables are lowercase ON PURPOSE. A dollar sign followed by capitals
+  # is read as a Cloud Build substitution and the build is rejected when the name
+  # is not a known one — the deploy step below carries two scars from exactly
+  # that. Lowercase names pass through untouched.
+  #
+  # This applies inside the step's script string as well, comments included: the
+  # first build of this change failed because a comment in cloudbuild.ci.yaml
+  # spelled the pattern out literally. YAML comments like this one are stripped
+  # by the parser and are safe; anything inside `args` is not.
   - id: test
     name: gcr.io/cloud-builders/docker
     waitFor: [build, test-db]

@@ -61,7 +61,10 @@ steps:
 
         # Module list DERIVED from the tree, not hand-written — see the long note
         # on the same step in cloudbuild.yaml. Lowercase shell variables only:
-        # Cloud Build substitutes $UPPERCASE before bash sees it.
+        # a dollar sign followed by capitals is read as a Cloud Build
+        # substitution and rejected before bash ever runs. That applies inside
+        # THIS string too, comments included — writing the pattern out literally
+        # here is what failed the first build of this change.
         modules=""
         for dir in custom_addons/*/; do
           name="$(basename "$dir")"
