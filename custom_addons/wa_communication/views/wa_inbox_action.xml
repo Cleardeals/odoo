@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- WhatsApp Inbox client action -->
+    <record id="action_wa_inbox" model="ir.actions.client">
+        <field name="name">WhatsApp Inbox</field>
+        <field name="tag">wa_inbox</field>
+    </record>
+</odoo>

@@ -1,0 +1,261 @@
+.cd-chat-thread-wrap {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+
+    // ── Floating date pill ─────────────────────────────────────────────────
+    // Overlays the top-centre of the thread; visible only while scrolling, then
+    // fades out (WhatsApp-style).  Sits in the wrap (not the scroll container)
+    // so it stays pinned regardless of scroll position.
+    .cd-chat-thread__floating-date {
+        position: absolute;
+        top: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 5;
+        opacity: 0;
+        transition: opacity 0.25s ease;
+        pointer-events: none;
+
+        &--visible { opacity: 1; }
+    }
+
+    .cd-chat-thread__floating-date-chip {
+        display: inline-block;
+        background: #ffffff;
+        color: #54656f;
+        font-size: 12px;
+        font-weight: 500;
+        padding: 4px 12px;
+        border-radius: 8px;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+    }
+
+    // Floating "search in chat" button (top-right of the thread).
+    .cd-chat-thread__search-toggle {
+        position: absolute;
+        top: 8px;
+        right: 12px;
+        z-index: 6;
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        border: none;
+        background: rgba(255, 255, 255, 0.92);
+        color: #54656f;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+        cursor: pointer;
+        &:hover { background: #fff; color: #7c3aed; }
+    }
+}
+
+// ── In-chat search bar ─────────────────────────────────────────────────────
+.cd-chat-search {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: #f0f2f5;
+    border-bottom: 1px solid #d9dde1;
+
+    &__icon { color: #8696a0; font-size: 14px; }
+
+    &__input {
+        flex: 1;
+        border: none;
+        outline: none;
+        background: transparent;
+        font-size: 14px;
+        color: #1a1a1a;
+    }
+
+    &__count {
+        font-size: 12px;
+        color: #667781;
+        white-space: nowrap;
+        min-width: 48px;
+        text-align: right;
+    }
+
+    &__nav,
+    &__close {
+        border: none;
+        background: none;
+        color: #54656f;
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        cursor: pointer;
+        &:hover:not(:disabled) { background: #e2e6ea; color: #7c3aed; }
+        &:disabled { opacity: 0.4; cursor: default; }
+    }
+}
+
+.cd-chat-thread {
+    flex: 1 1 auto;
+    // `flex: 1` alone leaves min-height at `auto`, so a long thread refuses to
+    // shrink below its content and pushes the composer out of a fixed-height
+    // panel instead of scrolling inside it.
+    min-height: 0;
+    overflow-y: auto;
+    // A flick at the end of the thread must not drag the page behind it.
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    display: flex;
+    flex-direction: column;
+    padding: 12px 16px;
+    background: #ece5dd;
+    gap: 2px;
+    position: relative;
+
+    // ── Date separators (WhatsApp-style centred chip) ──────────────────────
+    // NOT sticky: each separator is its own flex sibling, so making them all
+    // `position: sticky; top: 6px` pins EVERY chip to the same offset.  Near a
+    // day boundary two chips overlap — the wider "6 June 2026" peeks out on both
+    // sides of a centred "Today" (you literally see "6 … 6").  Inline chips that
+    // scroll with their day's messages never collide.
+    &__date-sep {
+        display: flex;
+        justify-content: center;
+        margin: 10px 0 6px;
+        pointer-events: none;
+    }
+
+    &__date-chip {
+        background: #ffffff;
+        color: #54656f;
+        font-size: 12px;
+        font-weight: 500;
+        padding: 4px 12px;
+        border-radius: 8px;
+        box-shadow: 0 1px 1px rgba(0, 0, 0, 0.12);
+    }
+
+    // Inquiry-segment divider — marks where the conversation switches the
+    // property/inquiry it is about. Visually distinct from the date chip
+    // (tinted "tag" pill) so attribution boundaries are obvious.
+    &__segment-sep {
+        display: flex;
+        justify-content: center;
+        margin: 12px 0 8px;
+        pointer-events: none;
+    }
+
+    &__segment-chip {
+        background: #fff3d6;
+        color: #8a6d3b;
+        font-size: 11.5px;
+        font-weight: 600;
+        padding: 4px 12px;
+        border-radius: 10px;
+        box-shadow: 0 1px 1px rgba(0, 0, 0, 0.10);
+
+        .fa { margin-right: 4px; opacity: 0.8; }
+    }
+
+    &__empty {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        color: #aaa;
+        gap: 8px;
+
+        .fa { font-size: 40px; }
+        p   { font-size: 14px; }
+    }
+}
+
+// ── In-tab media lightbox ──────────────────────────────────────────────────
+// position:fixed so the overlay covers the viewport regardless of scroll
+// position — position:absolute inside an overflow:auto container is clipped
+// to the scroll origin and invisible when the thread is scrolled down.
+.cd-lightbox {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: rgba(0, 0, 0, 0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    padding: 32px;
+
+    &__close {
+        position: absolute;
+        top: 12px;
+        right: 16px;
+        border: none;
+        background: rgba(255, 255, 255, 0.12);
+        color: #fff;
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        font-size: 18px;
+        cursor: pointer;
+        &:hover { background: rgba(255, 255, 255, 0.25); }
+    }
+
+    &__stage {
+        max-width: 100%;
+        max-height: calc(100% - 48px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    &__img {
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+        border-radius: 4px;
+    }
+
+    &__video {
+        max-width: 90vw;
+        max-height: 80vh;
+        border-radius: 4px;
+        outline: none;
+    }
+
+    &__frame {
+        width: 85vw;
+        max-width: 900px;
+        height: 80vh;
+        border: none;
+        background: #fff;
+        border-radius: 4px;
+    }
+
+    &__fallback {
+        background: #fff;
+        border-radius: 8px;
+        padding: 28px 32px;
+        text-align: center;
+        color: #333;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+        .fa { font-size: 48px; color: #7c3aed; }
+        p { margin: 0; font-weight: 600; word-break: break-all; }
+    }
+
+    &__open-new {
+        margin-top: 14px;
+        color: #cfcfcf;
+        font-size: 13px;
+        text-decoration: none;
+        &:hover { color: #fff; text-decoration: underline; }
+    }
+}
+
+// ── Phone ────────────────────────────────────────────────────────────────────
+@media (max-width: 767.98px) {
+    .cd-chat-thread {
+        padding: 10px 10px;
+    }
+}

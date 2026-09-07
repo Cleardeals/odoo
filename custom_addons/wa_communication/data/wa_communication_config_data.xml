@@ -1,0 +1,152 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!--
+        Default system parameters for wa_communication.
+
+        IMPORTANT: override all values in each environment's server config or
+        via Settings → Technical → System Parameters before activating Pub/Sub
+        push subscriptions.
+
+        Topic names follow the convention:
+            cd-{env}-{topic-alias}
+        e.g. cd-prod-odoo-wa-requests, cd-staging-actor-events, …
+
+        Inbound OIDC:
+            wa_communication.inbound_push_audience   — full push endpoint URL
+            wa_communication.inbound_push_sa_email   — optional SA email assertion
+
+        Outbound topics:
+            wa_communication.topic_odoo_wa_requests  — WA send requests
+            wa_communication.topic_actor_events      — lead / RM events
+            wa_communication.topic_visit_events      — site-visit events
+            wa_communication.topic_property_events   — property events
+            wa_communication.topic_customer_events   — customer data events
+    -->
+
+    <!--
+        noupdate="1": these records are created on first install only.
+        Module upgrades (-u) do NOT overwrite environment-specific values
+        that have been customised via the Settings UI or direct SQL.
+    -->
+    <data noupdate="1">
+
+    <!-- Inbound push verification -->
+    <record id="param_inbound_push_audience" model="ir.config_parameter">
+        <field name="key">wa_communication.inbound_push_audience</field>
+        <field name="value">https://odoo.cleardeals.xyz/wa/pubsub/push</field>
+    </record>
+
+    <record id="param_inbound_push_sa_email" model="ir.config_parameter">
+        <field name="key">wa_communication.inbound_push_sa_email</field>
+        <field name="value"></field>
+    </record>
+
+    <!-- Outbound — WA send requests -->
+    <record id="param_topic_odoo_wa_requests" model="ir.config_parameter">
+        <field name="key">wa_communication.topic_odoo_wa_requests</field>
+        <field name="value">cd-prod-odoo-wa-requests</field>
+    </record>
+
+    <!-- Outbound — lead / actor events -->
+    <record id="param_topic_actor_events" model="ir.config_parameter">
+        <field name="key">wa_communication.topic_actor_events</field>
+        <field name="value">cd-prod-actor-events</field>
+    </record>
+
+    <!-- Outbound — site-visit events -->
+    <record id="param_topic_visit_events" model="ir.config_parameter">
+        <field name="key">wa_communication.topic_visit_events</field>
+        <field name="value">cd-prod-visit-events</field>
+    </record>
+
+    <!-- Outbound — property events -->
+    <record id="param_topic_property_events" model="ir.config_parameter">
+        <field name="key">wa_communication.topic_property_events</field>
+        <field name="value">cd-prod-property-events</field>
+    </record>
+
+    <!-- Outbound — customer events -->
+    <record id="param_topic_customer_events" model="ir.config_parameter">
+        <field name="key">wa_communication.topic_customer_events</field>
+        <field name="value">cd-prod-customer-events</field>
+    </record>
+
+    <!-- Outbound — initial-nudge trigger (settled lead, has_property flag) -->
+    <record id="param_topic_nudge_events" model="ir.config_parameter">
+        <field name="key">wa_communication.topic_nudge_events</field>
+        <field name="value">cd-prod-nudge-events</field>
+    </record>
+
+    <!-- Interakt direct API (template catalogue fetch).
+         Set the API key (Interakt > Developer Settings) per environment. -->
+    <record id="param_interakt_api_key" model="ir.config_parameter">
+        <field name="key">wa_communication.interakt_api_key</field>
+        <field name="value"></field>
+    </record>
+
+    <record id="param_interakt_base_url" model="ir.config_parameter">
+        <field name="key">wa_communication.interakt_base_url</field>
+        <field name="value">https://api.interakt.ai</field>
+    </record>
+
+    </data>
+
+    <!-- noupdate="0": code constants that must always be applied on upgrade. -->
+    <data noupdate="0">
+
+    <!-- Outbound — workflow control (manager toggle: pause / resume a workflow)
+         Value: topic alias WITHOUT environment prefix. The code adds cd-{env}- at
+         runtime based on GCP_ENV (local / staging / production). -->
+    <record id="param_topic_workflow_control" model="ir.config_parameter">
+        <field name="key">wa_communication.topic_workflow_control</field>
+        <field name="value">workflow-control</field>
+    </record>
+
+    <!-- Inquiry segments — the "Discussing: <property>" attribution chip.
+         Shipped ON. This began as an opt-in flag while the feature was proven
+         out; it is now standard behaviour, so it lives in the noupdate="0"
+         block and is re-asserted on every upgrade rather than being set by hand
+         per database. Without it _owa_segments_enabled() returns False, no
+         segment is ever created or attached, and the inbox/lead tab silently
+         drop the attribution bar — which is how a fresh install looks like a
+         regression. -->
+    <record id="param_segments_enabled" model="ir.config_parameter">
+        <field name="key">wa_communication.segments_enabled</field>
+        <field name="value">1</field>
+    </record>
+
+    <!-- Quick property-details share — the template the "Share Property
+         Details" button sends.  Meta keeps reclassifying this copy as Marketing
+         rather than Utility, so the wording gets reworked and resubmitted under
+         a new name; keeping the name here means swapping templates is a system
+         parameter edit, not a code change.
+
+         Any replacement MUST keep the same variable contract: an image header
+         plus 2 body variables — {{1}} "<project name>, <locality>" and {{2}}
+         the property's website link.  That contract is bound in
+         QUICK_SHARE_BODY_VARS (models/wa_conversation_outbound.py). -->
+    <record id="param_quick_share_template" model="ir.config_parameter">
+        <field name="key">wa_communication.quick_share_template</field>
+        <field name="value">details_shared_v4</field>
+    </record>
+    <record id="param_quick_share_template_language" model="ir.config_parameter">
+        <field name="key">wa_communication.quick_share_template_language</field>
+        <field name="value">hi</field>
+    </record>
+
+    <!-- Templates whose delivery means "the buyer has been sent the property
+         details", which moves the inquiry to "Details Shared of Property".
+         Comma-separated, matched on wa.message.template_name.
+
+         Keyed on template name rather than workflow step id so it survives YAML
+         step renames, and so a newly-approved template can be added here
+         without a deploy.  Add the quick-share template name too if you want
+         the manual send to move the status as well — today it deliberately
+         does not. -->
+    <record id="param_details_shared_templates" model="ir.config_parameter">
+        <field name="key">wa_communication.details_shared_templates</field>
+        <field name="value">initial_nudge_v1_msg_2_xc</field>
+    </record>
+
+    </data>
+</odoo>

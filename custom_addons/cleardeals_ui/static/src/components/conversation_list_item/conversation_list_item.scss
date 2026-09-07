@@ -1,0 +1,135 @@
+.cd-conv-item {
+    padding: 10px 14px;
+    border-bottom: 1px solid #f0f0f0;
+    cursor: pointer;
+    transition: background 0.1s;
+
+    &:hover            { background: #f5f5f5; }
+    &--selected        { background: #ede7f6; border-left: 3px solid #7c3aed; }
+    &--unread &__name  { font-weight: 700; }
+    &--unread          { background: #fafafa; }
+
+    &__header {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        margin-bottom: 2px;
+    }
+
+    &__name {
+        font-size: 14px;
+        font-weight: 500;
+        color: #212529;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 160px;
+    }
+
+    &__time {
+        font-size: 11px;
+        color: #999;
+        flex-shrink: 0;
+    }
+
+    &__preview {
+        font-size: 13px;
+        color: #6c757d;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        margin-bottom: 4px;
+    }
+
+    &__footer {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+    }
+
+    &__badge {
+        background: #7c3aed;
+        color: #fff;
+        border-radius: 50%;
+        min-width: 18px;
+        height: 18px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 11px;
+        padding: 0 4px;
+        margin-left: auto;
+    }
+
+    &__actions {
+        display: flex;
+        gap: 2px;
+        margin-left: auto;
+    }
+
+    &__action-btn {
+        padding: 2px 5px;
+        font-size: 12px;
+        color: #6c757d;
+        background: none;
+        border: none;
+        &:hover { color: #495057; background: #e9ecef; border-radius: 4px; }
+
+        &--claim {
+            color: #7c3aed;
+            font-weight: 600;
+            font-size: 11px;
+            .fa { margin-right: 2px; }
+            &:hover { color: #5b21b6; background: #ede7f6; }
+        }
+    }
+
+    // Urgency chip — how long a buyer has been waiting (needs-reply chats).
+    &__waiting {
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        font-size: 11px;
+        font-weight: 600;
+        padding: 1px 7px;
+        border-radius: 10px;
+        font-variant-numeric: tabular-nums;
+        .fa { font-size: 10px; }
+
+        &--ok   { background: #f1f5f9; color: #64748b; }
+        &--warn { background: #fef3c7; color: #b45309; }
+        &--bad  { background: #fee2e2; color: #dc2626; }
+    }
+
+    &__rm {
+        font-size: 11px;
+        color: #888;
+        display: flex;
+        align-items: center;
+        gap: 3px;
+        margin-top: 2px;
+    }
+}
+
+// ── Phone ────────────────────────────────────────────────────────────────────
+// A 40px row is a coin-toss with a thumb. Taller rows, a larger name, and a
+// name column that uses the width a phone actually has — the 160px cap was
+// sized for a 380px list pane, not a full-width screen.
+@media (max-width: 767.98px) {
+    .cd-conv-item {
+        min-height: 72px;
+        padding: 12px 12px;
+        // Removes the 300ms tap delay and the grey flash on Android.
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+
+        &:hover { background: inherit; }
+        &:active { background: #f1f3f5; }
+
+        &__name { font-size: 15px; max-width: none; }
+        &__preview { font-size: 13.5px; }
+        &__time { font-size: 12px; }
+    }
+}
+

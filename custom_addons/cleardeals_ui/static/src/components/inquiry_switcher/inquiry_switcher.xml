@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="cleardeals_ui.InquirySwitcher">
+        <t t-if="props.segmentsEnabled">
+            <div class="cd-inq" t-ref="root">
+                <div class="cd-inq__bar">
+                    <span class="cd-inq__lead">
+                        <i class="fa fa-tag" aria-hidden="true"/>
+                        <span class="cd-inq__lead-text">Discussing</span>
+                    </span>
+
+                    <div class="cd-inq__picker">
+                        <button class="cd-inq__pill"
+                                t-att-class="{ 'cd-inq__pill--open': ui.menuOpen }"
+                                t-on-click="() => this.toggleMenu()">
+                            <span class="cd-inq__pill-label" t-esc="displayLabel"/>
+                            <i class="fa fa-angle-down cd-inq__pill-caret" aria-hidden="true"/>
+                        </button>
+
+                        <t t-if="ui.menuOpen">
+                            <div class="cd-inq__menu">
+                                <div class="cd-inq__menu-head">Switch inquiry</div>
+                                <div class="cd-inq__menu-list">
+                                    <t t-if="props.inquiries.length">
+                                        <button t-foreach="props.inquiries" t-as="inq" t-key="inq.id"
+                                                class="cd-inq__opt"
+                                                t-att-class="{ 'cd-inq__opt--active': isActive(inq) }"
+                                                t-on-click="() => this.pick(inq)">
+                                            <span class="cd-inq__opt-main">
+                                                <span class="cd-inq__opt-prop" t-esc="inq.property || inq.name"/>
+                                                <span class="cd-inq__opt-sub" t-if="inq.property" t-esc="inq.name"/>
+                                            </span>
+                                            <i t-if="isActive(inq)"
+                                               class="fa fa-check cd-inq__opt-check" aria-hidden="true"/>
+                                        </button>
+                                    </t>
+                                    <t t-else="">
+                                        <div class="cd-inq__empty">No other inquiries on this number</div>
+                                    </t>
+                                </div>
+                                <div class="cd-inq__menu-sep"/>
+                                <button class="cd-inq__opt cd-inq__opt--new"
+                                        t-on-click="() => this.openTopic()">
+                                    <i class="fa fa-plus" aria-hidden="true"/>
+                                    <span>New topic…</span>
+                                </button>
+                            </div>
+                        </t>
+                    </div>
+
+                    <t t-if="ui.topicOpen">
+                        <div class="cd-inq__topic">
+                            <t t-if="!ui.labelMode">
+                                <div class="cd-inq__topic-search">
+                                    <input type="text" class="cd-inq__topic-input"
+                                           placeholder="Search property…"
+                                           t-att-value="ui.query"
+                                           t-on-input="(ev) => this.onQueryInput(ev)"
+                                           autofocus="autofocus"/>
+                                    <button class="btn btn-sm btn-link cd-inq__topic-cancel"
+                                            t-on-click="() => this.cancelTopic()">Cancel</button>
+                                </div>
+                                <div class="cd-inq__results" t-if="ui.query">
+                                    <t t-if="ui.results.length">
+                                        <button t-foreach="ui.results" t-as="prop" t-key="prop.id"
+                                                class="cd-inq__result"
+                                                t-on-click="() => this.pickProperty(prop)">
+                                            <span class="cd-inq__result-tag" t-esc="prop.tag || prop.name"/>
+                                            <span class="cd-inq__result-name" t-if="prop.tag" t-esc="prop.name"/>
+                                        </button>
+                                    </t>
+                                    <t t-else="">
+                                        <div class="cd-inq__empty">
+                                            <t t-if="ui.searching">Searching…</t>
+                                            <t t-else="">No matching property</t>
+                                        </div>
+                                    </t>
+                                </div>
+                                <button t-if="props.onStartTopic"
+                                        class="btn btn-sm btn-link cd-inq__label-toggle"
+                                        t-on-click="() => this.useLabelMode()">
+                                    Use a plain label instead
+                                </button>
+                            </t>
+                            <t t-else="">
+                                <input type="text" class="cd-inq__topic-input"
+                                       placeholder="Topic label — e.g. Green Acres 2BHK"
+                                       t-att-value="ui.topicLabel"
+                                       t-on-input="(ev) => this.onTopicInput(ev)"
+                                       t-on-keydown="(ev) => ev.key === 'Enter' and this.addLabelTopic()"
+                                       autofocus="autofocus"/>
+                                <button class="btn btn-sm btn-primary"
+                                        t-on-click="() => this.addLabelTopic()">Add</button>
+                                <button class="btn btn-sm btn-link cd-inq__topic-cancel"
+                                        t-on-click="() => this.cancelTopic()">Cancel</button>
+                            </t>
+                        </div>
+                    </t>
+                </div>
+
+                <t t-if="showCreateInquiry">
+                    <div class="cd-inq__create">
+                        <span class="cd-inq__create-text">
+                            <i class="fa fa-info-circle" aria-hidden="true"/>
+                            No inquiry yet for <b t-esc="displayLabel"/>
+                        </span>
+                        <button class="cd-inq__create-btn"
+                                t-on-click="() => props.onCreateInquiry()">
+                            <i class="fa fa-plus" aria-hidden="true"/> Create inquiry
+                        </button>
+                    </div>
+                </t>
+
+                <t t-if="props.suggestion">
+                    <div class="cd-inq__suggest">
+                        <span class="cd-inq__suggest-text">
+                            <i class="fa fa-lightbulb-o" aria-hidden="true"/>
+                            Lead replied about <b t-esc="props.suggestion.label"/>
+                        </span>
+                        <span class="cd-inq__suggest-actions">
+                            <button class="cd-inq__suggest-switch"
+                                    t-on-click="() => props.onAcceptSuggestion(props.suggestion.segment_id)">
+                                Switch
+                            </button>
+                            <button class="cd-inq__suggest-x" title="Dismiss"
+                                    t-on-click="() => props.onDismissSuggestion(props.suggestion.segment_id)">
+                                <i class="fa fa-times" aria-hidden="true"/>
+                            </button>
+                        </span>
+                    </div>
+                </t>
+            </div>
+        </t>
+    </t>
+</templates>

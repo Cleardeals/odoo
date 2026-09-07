@@ -1,0 +1,575 @@
+/** @odoo-module */
+
+import { Component, useState, onMounted, onWillUpdateProps, onWillUnmount } from "@odoo/owl";
+import { registry }   from "@web/core/registry";
+import { useService } from "@web/core/utils/hooks";
+import { user } from "@web/core/user";
+import { standardWidgetProps } from "@web/views/widgets/standard_widget_props";
+import { CdChatThread }   from "@cleardeals_ui/index";
+import { CdChatComposer } from "@cleardeals_ui/index";
+import { CdWindowBadge }  from "@cleardeals_ui/index";
+import { CdTemplatePickerModal } from "@cleardeals_ui/index";
+import { CdInquirySwitcher } from "@cleardeals_ui/index";
+import { CdBottomSheet } from "@cleardeals_ui/index";
+import { useKeyboardInset } from "@cleardeals_ui/index";
+
+const WF_STATUS_MAP = {
+    active:   { label: "Active",   key: "active" },
+    waiting:  { label: "Active",   key: "active" },
+    paused:   { label: "Paused",   key: "paused" },
+    pending:  { label: "Pending",  key: "pending" },
+    done:     { label: "Done",     key: "done" },
+    opted_out:{ label: "Done",     key: "done" },
+};
+
+export class WaLeadTab extends Component {
+    static template   = "wa_communication.WaLeadTab";
+    static props      = { ...standardWidgetProps };
+    static components = { CdChatThread, CdChatComposer, CdWindowBadge, CdTemplatePickerModal, CdInquirySwitcher, CdBottomSheet };
+
+    setup() {
+        this.orm        = useService("orm");
+        this.action     = useService("action");
+        this.busService = useService("bus_service");
+        this.notification = useService("notification");
+        this.cdNotif    = useService("cd_notification");
+
+        this.state = useState({
+            convId:    null,
+            thread:    null,
+            loading:   true,
+            error:     null,
+            sendError: null,
+            quickReplies: [],
+            // Inline pickers
+            showAssignPicker: false,
+            assignUsers:      [],
+            // Template picker
+            showTemplatePicker: false,
+            templates:          [],
+            tplLoading:         false,
+            tplError:           "",
+            // Share Property Details — in flight (guards double-send)
+            sharingDetails:     false,
+            // Inquiry segment: suggestion the RM dismissed this session
+            dismissedSegmentId: null,
+            // Phone: the sidebar's actions move into a sheet, and the 2x2 stats
+            // grid collapses to one line that expands on demand.
+            showActionSheet: false,
+            statsExpanded:   false,
+        });
+
+        // Reactive, so rotating the phone re-renders into the other layout.
+        this.ui = useState(useService("ui"));
+        // Publishes --cd-kb so the panel can shrink out from under the
+        // on-screen keyboard instead of hiding the composer behind it.
+        useKeyboardInset();
+
+        onMounted(() => {
+            this._load();
+            this._loadQuickReplies();
+            this._subscribeBus();
+        });
+
+        onWillUpdateProps((nextProps) => {
+            const newPhone = this._phone(nextProps);
+            if (newPhone !== this._phone(this.props)) this._load(newPhone);
+        });
+
+        // Suppress popups for THIS chat only while its Activity tab is mounted
+        // (form notebook pages mount lazily, so this ≈ "viewing this chat").
+        onWillUnmount(() => this.cdNotif.clearActiveSuppressKey());
+    }
+
+    _phone(props) { return props.record?.data?.phone || ""; }
+    get phone()   { return this._phone(this.props); }
+    // resId, not data.id: a form record's id lives on the record itself, and
+    // `data.id` is undefined.  This read null for every lead, which was silent
+    // while its only consumer (send_first_message) treated lead_id as optional —
+    // so first messages sent from this tab created a conversation that was never
+    // linked back to the inquiry.
+    get leadId()  { return this.props.record?.resId || null; }
+
+    _subscribeBus() {
+        this.busService.addChannel("wa_message_log");
+        this.busService.subscribe("wa_message_update", () => {
+            if (this.state.convId) this._loadThread(this.state.convId);
+        });
+        // Refresh the thread (gating / approval banner) on central notifications.
+        const uid = user.userId || null;
+        if (uid) {
+            this.busService.addChannel(`cleardeals_notification_${uid}`);
+            this.busService.subscribe("cd_notification", () => {
+                if (this.state.convId) this._loadThread(this.state.convId);
+            });
+        }
+    }
+
+    async _load(phone) {
+        const p = phone || this.phone;
+        if (!p) { this.state.loading = false; return; }
+        this.state.loading = true;
+        try {
+            const fullPhone = p.length === 10 ? `91${p}` : p;
+            const convs = await this.orm.searchRead(
+                "wa.conversation",
+                [["phone_number", "=", fullPhone]],
+                ["id"], { limit: 1 }
+            );
+            if (convs.length) {
+                this.state.convId = convs[0].id;
+                await this._loadThread(this.state.convId);
+                this.cdNotif.setActiveSuppressKey(fullPhone);
+            } else {
+                this.state.convId = null;
+                this.state.thread = null;
+                this.cdNotif.clearActiveSuppressKey();
+            }
+        } catch (e) {
+            this.state.error = String(e);
+        } finally {
+            this.state.loading = false;
+        }
+    }
+
+    async _loadThread(convId) {
+        try {
+            const data = await this.orm.call("wa.conversation", "get_thread", [[convId]], {});
+            // A refused thread comes back as {error}, not as a thread. Assigning
+            // it straight to state.thread rendered "No messages yet" over a chat
+            // that exists and is simply someone else's — show the reason.
+            if (data?.error) {
+                this.state.thread = null;
+                this.state.error = data.error;
+                return;
+            }
+            this.state.thread = data;
+            this.state.error = null;
+        } catch (e) {
+            this.state.error = String(e);
+        }
+    }
+
+    async _loadQuickReplies() {
+        try {
+            this.state.quickReplies = await this.orm.call(
+                "wa.quick.reply", "get_for_composer", [], {});
+        } catch (_) {}
+    }
+
+    async onSend(body, kind, opts = {}) {
+        const convId = this.state.convId;
+        if (!convId) return;
+        this.state.sendError = null;
+        try {
+            if (kind === "list") {
+                await this.orm.call("wa.conversation", "send_list_message", [[convId]], {
+                    body,
+                    button_text: opts.list_button_text || "",
+                    sections:    opts.list_sections || [],
+                });
+            } else {
+                await this.orm.call("wa.conversation", "send_message", [[convId]], {
+                    body, kind,
+                    media_url:      opts.media_url      || "",
+                    media_filename: opts.media_filename || "",
+                });
+            }
+            await this._loadThread(convId);
+        } catch (e) {
+            this.state.sendError = e.data?.message || String(e);
+        }
+    }
+
+    openInInterakt() {
+        const url = this.state.thread?.conversation?.interakt_url;
+        if (url) window.open(url, "_blank", "noopener");
+    }
+
+    // ── Share Property Details ─────────────────────────────────────────────────
+
+    get hasProperty() {
+        return Boolean(this.props.record?.data?.property_base_id);
+    }
+
+    /**
+     * Send the property-details card — the same one the initial-nudge workflow
+     * sends after the buyer taps "View Property Details", but on demand.
+     *
+     * Every variable is filled server-side from the linked property, so unlike
+     * "Send Template" there is nothing to type and nothing to get wrong.
+     */
+    async sendPropertyDetails() {
+        if (this.state.sharingDetails || !this.hasProperty) return;
+        this.state.sendError = null;
+        this.state.sharingDetails = true;
+        try {
+            const convId = await this.orm.call(
+                "wa.conversation", "send_property_details_for_lead", [], {
+                    lead_id: this.leadId,
+                }
+            );
+            if (!this.state.convId) {
+                this.state.convId = convId;
+                const fullPhone =
+                    this.phone.length === 10 ? `91${this.phone}` : this.phone;
+                this.cdNotif.setActiveSuppressKey(fullPhone);
+            }
+            await this._loadThread(convId);
+        } catch (e) {
+            this.state.sendError = e.data?.message || String(e);
+        } finally {
+            this.state.sharingDetails = false;
+        }
+    }
+
+    // ── Send Template ──────────────────────────────────────────────────────────
+
+    async openTemplatePicker() {
+        this.state.showTemplatePicker = true;
+        await this._loadTemplates();
+    }
+
+    async _loadTemplates() {
+        this.state.tplLoading = true;
+        this.state.tplError = "";
+        try {
+            this.state.templates = await this.orm.call(
+                "wa.conversation", "fetch_templates", [], {});
+        } catch (e) {
+            this.state.tplError = e.data?.message || String(e);
+            this.state.templates = [];
+        } finally {
+            this.state.tplLoading = false;
+        }
+    }
+
+    closeTemplatePicker() { this.state.showTemplatePicker = false; }
+
+    get leadName() {
+        return this.props.record?.data?.name || "";
+    }
+
+    async sendTemplate({ template_name, template_language, body_values, header_values }) {
+        this.state.sendError = null;
+        try {
+            if (!this.state.convId) {
+                // First outreach — create the conversation + send in one call.
+                const convId = await this.orm.call(
+                    "wa.conversation", "send_first_message", [], {
+                        phone:             this.phone,
+                        lead_id:           this.leadId || null,
+                        template_name,
+                        template_language: template_language || "en",
+                        body_values:       body_values   || [],
+                        header_values:     header_values || [],
+                    }
+                );
+                this.state.convId = convId;
+                await this._loadThread(convId);
+                // Start suppressing popups for this chat now that we're viewing it.
+                const fullPhone = this.phone.length === 10 ? `91${this.phone}` : this.phone;
+                this.cdNotif.setActiveSuppressKey(fullPhone);
+            } else {
+                // Existing conversation — normal send path.
+                await this.orm.call("wa.conversation", "send_message", [[this.state.convId]], {
+                    body: "", kind: "template",
+                    template_name, template_language, body_values, header_values,
+                });
+                await this._loadThread(this.state.convId);
+            }
+        } catch (e) {
+            this.state.sendError = e.data?.message || String(e);
+            throw e;
+        }
+    }
+
+    async openAssignPicker() {
+        this.state.assignUsers = await this.orm.searchRead(
+            "res.users", [["share", "=", false]], ["id", "name"], { limit: 50 }
+        );
+        this.state.showAssignPicker = true;
+    }
+
+    async pickAssignUser(userId) {
+        this.state.showAssignPicker = false;
+        try {
+            await this.orm.call("wa.conversation", "action_reassign", [[this.state.convId]], {
+                lead_id: this.leadId,
+                user_id: userId,
+            });
+            await this._loadThread(this.state.convId);
+        } catch (e) {
+            this.state.sendError = e.data?.message || String(e);
+        }
+    }
+
+    closePickers() {
+        this.state.showAssignPicker = false;
+    }
+
+    // Assignment gating (populated by get_thread in Feature 3; default open).
+    get canSend() {
+        const c = this.conversation;
+        return !c || c.can_send !== false;
+    }
+    get sendGateReason() {
+        return this.conversation?.send_gate_reason || "";
+    }
+    get assignmentPending() {
+        return !!this.conversation?.assignment_pending;
+    }
+    get isUnassigned() {
+        return !this.conversation?.assigned_user_id;
+    }
+
+    async claimChat() {
+        if (!this.state.convId) return;
+        try {
+            await this.orm.call("wa.conversation", "action_claim", [[this.state.convId]], {});
+            await this._loadThread(this.state.convId);
+        } catch (e) {
+            this.state.sendError = e.data?.message || String(e);
+        }
+    }
+
+    async requestAssignment() {
+        if (!this.state.convId) return;
+        const assignee = this.conversation?.assigned_user_name || "the current owner";
+        try {
+            await this.orm.call("wa.conversation", "request_assignment", [[this.state.convId]], {});
+            this.notification.add(
+                `Assignment requested from ${assignee}. You'll be notified when they approve.`,
+                { type: "success" }
+            );
+            await this._loadThread(this.state.convId);
+        } catch (e) {
+            const msg = e.data?.message || String(e);
+            this.state.sendError = msg;
+            this.notification.add(msg, { type: "danger" });
+        }
+    }
+
+    async approveRequest(reqId) {
+        try {
+            await this.orm.call("wa.reassignment.request", "approve", [[reqId]], {});
+            this.notification.add("Chat handed over.", { type: "success" });
+            await this._loadThread(this.state.convId);
+        } catch (e) {
+            this.notification.add(e.data?.message || "Could not approve the request.", { type: "danger" });
+        }
+    }
+
+    async declineRequest(reqId) {
+        try {
+            await this.orm.call("wa.reassignment.request", "decline", [[reqId]], {});
+            this.notification.add("Request declined.", { type: "warning" });
+            await this._loadThread(this.state.convId);
+        } catch (e) {
+            this.notification.add(e.data?.message || "Could not decline the request.", { type: "danger" });
+        }
+    }
+
+    // ── Inquiry segments ("Discussing: <property>") ────────────────────────────
+
+    get segmentsEnabled() {
+        return !!this.conversation?.segments_enabled;
+    }
+    get activeSegmentLabel() {
+        return this.conversation?.active_segment?.label || "Unassigned";
+    }
+    get inquiries() {
+        return this.conversation?.inquiries || [];
+    }
+    get activeSegmentInquiryId() {
+        return this.conversation?.active_segment?.inquiry_id || null;
+    }
+
+    get activeSegmentPropertyId() {
+        return this.conversation?.active_segment?.property_base_id || null;
+    }
+
+    switchInquiry(inquiryId) {
+        return this._startSegment({ inquiry_id: inquiryId });
+    }
+
+    startTopic(label) {
+        return this._startSegment({ label });
+    }
+
+    async searchProperties(query) {
+        try {
+            return await this.orm.call("wa.conversation", "search_properties", [], {
+                query: query || "", limit: 20 });
+        } catch (e) {
+            return [];
+        }
+    }
+
+    async pickProperty(prop) {
+        const convId = this.state.convId;
+        if (!convId) return;
+        try {
+            const res = await this.orm.call(
+                "wa.conversation", "start_property_topic", [], {
+                    conversation_id: convId, property_base_id: prop.id });
+            if (res?.action === "exists") {
+                this.notification.add(
+                    `This property already has an inquiry — switched to it.`,
+                    { type: "info" });
+            }
+            await this._loadThread(convId);
+        } catch (e) {
+            this.notification.add(e.data?.message || String(e), { type: "danger" });
+        }
+    }
+
+    // Open the Recommend Property wizard prefilled with the active span's property,
+    // parented to the current inquiry. After it commits, the leads.new create hook
+    // binds the span automatically; we reload the thread to reflect it.
+    async createInquiryForActive() {
+        const propId = this.activeSegmentPropertyId;
+        const inquiryId = this.props.record?.resId;
+        if (!propId || !inquiryId) return;
+        await this.action.doAction(
+            {
+                type: "ir.actions.act_window",
+                res_model: "lead.recommend.property.wizard",
+                view_mode: "form",
+                views: [[false, "form"]],
+                target: "new",
+                context: {
+                    default_inquiry_id: inquiryId,
+                    default_property_base_id: propId,
+                    active_id: inquiryId,
+                    active_model: "leads.new",
+                },
+            },
+            { onClose: () => this._loadThread(this.state.convId) },
+        );
+    }
+
+    async _startSegment(kw) {
+        const convId = this.state.convId;
+        if (!convId) return;
+        try {
+            await this.orm.call("wa.conversation", "start_segment", [], {
+                conversation_id: convId, ...kw,
+            });
+            await this._loadThread(convId);
+        } catch (e) {
+            this.notification.add(e.data?.message || String(e), { type: "danger" });
+        }
+    }
+
+    get segmentSuggestion() {
+        const conv = this.conversation;
+        if (!conv?.segments_enabled) return null;
+        const activeSegId = conv.active_segment?.id || null;
+        const msgs = this.messages;
+        let last = null;
+        for (let i = msgs.length - 1; i >= 0; i--) {
+            if (msgs[i].direction === "inbound" && msgs[i].segment_id) { last = msgs[i]; break; }
+        }
+        if (!last || last.segment_id === activeSegId) return null;
+        if (last.segment_id === this.state.dismissedSegmentId) return null;
+        return { segment_id: last.segment_id, label: last.segment_label };
+    }
+
+    async acceptSuggestion(segmentId) {
+        const convId = this.state.convId;
+        if (!convId) return;
+        try {
+            await this.orm.call("wa.conversation", "set_active_segment", [], {
+                conversation_id: convId, segment_id: segmentId });
+            this.state.dismissedSegmentId = null;
+            await this._loadThread(convId);
+        } catch (e) {
+            this.notification.add(e.data?.message || String(e), { type: "danger" });
+        }
+    }
+
+    dismissSuggestion(segmentId) {
+        this.state.dismissedSegmentId = segmentId;
+    }
+
+    // ── Derived from thread ───────────────────────────────────────────────────
+
+    get isSmall() { return this.ui.isSmall; }
+
+    /** One-line stats summary for the phone header — "49 sent · 100% read". */
+    get statsSummary() {
+        const st = this.stats || {};
+        return `${st.sent || 0} sent · ${st.read_pct || 0}% read`;
+    }
+
+    openActionSheet()  { this.state.showActionSheet = true; }
+    closeActionSheet() { this.state.showActionSheet = false; }
+    toggleStats()      { this.state.statsExpanded = !this.state.statsExpanded; }
+
+    /** Run a sidebar action from the phone sheet, closing it first. */
+    runFromSheet(fn) {
+        this.state.showActionSheet = false;
+        fn();
+    }
+
+    get conversation()    { return this.state.thread?.conversation || null; }
+    get myOpenRequest()   { return !!this.conversation?.my_open_request; }
+    get incomingRequests(){ return this.conversation?.incoming_requests || []; }
+    get messages()       { return this.state.thread?.messages     || []; }
+    get stats()          { return this.state.thread?.stats        || {}; }
+    get windowState()    { return this.conversation?.window_state || "closed"; }
+    // undefined (not null): CdWindowBadge types windowExpiresAt as an optional
+    // String — an absent prop is fine, but null fails OWL validation.
+    get windowExpiresAt(){ return this.conversation?.window_expires_at || undefined; }
+
+    get enrollments() {
+        // Derive from messages: collect unique workflow_slug entries with last known status
+        const seen = new Map();
+        for (const msg of this.messages) {
+            if (!msg.workflow_slug) continue;
+            const slug = msg.workflow_slug;
+            if (!seen.has(slug)) {
+                seen.set(slug, {
+                    slug,
+                    name: this._wfDisplayName(slug),
+                    step: msg.initiator === "workflow" ? (msg.template_name || "") : "",
+                    status_key: "active",
+                    status_label: "Active",
+                    active: true,
+                });
+            }
+            // Update step from the latest message
+            const e = seen.get(slug);
+            if (msg.template_name) e.step = msg.template_name;
+        }
+        // Also pick up system events that mark enrollment status
+        for (const msg of this.messages) {
+            if (msg.kind !== "system" || !msg.body) continue;
+            // e.g. "Enrolled in Lead Nurturing" → rough parse
+            const m = msg.body.match(/enrolled in (.+)/i);
+            if (m) {
+                const slug = m[1].toLowerCase().replace(/\s+/g, "_");
+                if (!seen.has(slug)) {
+                    seen.set(slug, {
+                        slug,
+                        name: m[1],
+                        step: "",
+                        status_key: "active",
+                        status_label: "Active",
+                        active: true,
+                    });
+                }
+            }
+        }
+        return [...seen.values()];
+    }
+
+    _wfDisplayName(slug) {
+        return slug.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+    }
+}
+
+registry.category("view_widgets").add("wa_whatsapp_tab", {
+    component: WaLeadTab,
+});

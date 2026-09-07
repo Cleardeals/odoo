@@ -1,0 +1,505 @@
+// WA Dashboard — page-level layout styles
+
+.o-wa-dashboard {
+    padding: 24px;
+    background: #f9fafb;
+    // Enable scrolling within the Odoo client-action container
+    height: 100%;
+    overflow-y: auto;
+    font-family: inherit;
+
+    // ── Header ──────────────────────────────────────────────────────────────
+
+    &__header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 16px;
+    }
+
+    &__header-left {
+        display: flex;
+        align-items: baseline;
+        gap: 12px;
+    }
+
+    &__title {
+        font-size: 1.4rem;
+        font-weight: 700;
+        color: #111827;
+        margin: 0;
+    }
+
+    &__last-fetched {
+        font-size: 0.75rem;
+        color: #9ca3af;
+    }
+
+    &__refresh-btn {
+        background: #7c3aed;
+        border-color: #7c3aed;
+        color: #fff;
+
+        &:hover {
+            background: #5b21b6;
+            border-color: #5b21b6;
+        }
+    }
+
+    // ── Filters ─────────────────────────────────────────────────────────────
+
+    &__filters {
+        display: flex;
+        justify-content: center;
+        margin-bottom: 24px;
+    }
+
+    &__filter-group {
+        display: flex;
+        gap: 16px;
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+
+    // Large pill-shaped filter button
+    &__filter-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 11px 22px;
+        min-width: 200px;
+        border-radius: 10px;
+        border: 1.5px solid #e5e7eb;
+        background: #fff;
+        cursor: pointer;
+        font-size: 0.9rem;
+        font-weight: 500;
+        color: #374151;
+        justify-content: center;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+        transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+
+        &:hover {
+            border-color: #7c3aed;
+            box-shadow: 0 2px 8px rgba(124, 58, 237, 0.12);
+        }
+
+        &--active, &--open {
+            border-color: #7c3aed;
+            background: #fdf4ff;
+            color: #7c3aed;
+        }
+    }
+
+    &__filter-icon {
+        font-size: 0.9rem;
+        opacity: 0.7;
+    }
+
+    &__filter-label {
+        flex: 1;
+        text-align: left;
+    }
+
+    &__filter-chevron {
+        font-size: 0.7rem;
+        opacity: 0.5;
+        margin-left: 2px;
+    }
+
+    &__dropdown-wrap {
+        position: relative;
+    }
+
+    &__dropdown {
+        position: absolute;
+        top: calc(100% + 8px);
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 200;
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+        padding: 12px;
+        min-width: 280px;
+    }
+
+    &__date-inputs {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 10px;
+
+        label {
+            display: flex;
+            flex-direction: column;
+            font-size: 0.78rem;
+            color: #374151;
+            gap: 3px;
+            flex: 1;
+
+            input {
+                border: 1px solid #d1d5db;
+                border-radius: 4px;
+                padding: 4px 8px;
+                font-size: 0.82rem;
+            }
+        }
+    }
+
+    &__presets {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
+
+        button {
+            background: #f3f4f6;
+            border: none;
+            border-radius: 4px;
+            padding: 6px 8px;
+            font-size: 0.78rem;
+            cursor: pointer;
+            text-align: left;
+            color: #374151;
+
+            &:hover {
+                background: #e5e7eb;
+            }
+        }
+    }
+
+    &__apply-btn {
+        grid-column: 1 / -1;
+        background: #7c3aed !important;
+        color: #fff !important;
+        font-weight: 600;
+        text-align: center !important;
+    }
+
+    // Workflow multi-select menu
+    &__workflow-menu {
+        min-width: 260px;
+        padding: 8px 0 0;
+    }
+
+    &__workflow-search-wrap {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 0 10px 6px;
+        border-bottom: 1px solid #f3f4f6;
+    }
+
+    &__workflow-search-icon {
+        color: #9ca3af;
+        font-size: 0.8rem;
+        flex-shrink: 0;
+    }
+
+    &__workflow-search {
+        flex: 1;
+        border: none;
+        outline: none;
+        font-size: 0.82rem;
+        color: #374151;
+        background: transparent;
+        padding: 2px 0;
+
+        &::placeholder {
+            color: #9ca3af;
+        }
+    }
+
+    &__workflow-list {
+        list-style: none;
+        margin: 0;
+        padding: 4px 0;
+        max-height: 260px;
+        overflow-y: auto;
+    }
+
+    &__wf-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 7px 12px;
+        cursor: pointer;
+        font-size: 0.85rem;
+        color: #374151;
+
+        &:hover {
+            background: #f9fafb;
+        }
+    }
+
+    // Checkbox-style check indicator
+    &__wf-check {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 16px;
+        height: 16px;
+        border: 1.5px solid #d1d5db;
+        border-radius: 4px;
+        flex-shrink: 0;
+        font-size: 0.65rem;
+        color: transparent;
+
+        &--checked {
+            background: #7c3aed;
+            border-color: #7c3aed;
+            color: #fff;
+        }
+    }
+
+    &__wf-name {
+        flex: 1;
+    }
+
+    &__wf-dot {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        flex-shrink: 0;
+
+        &--active { background: #16a34a; }
+        &--paused { background: #d1d5db; }
+    }
+
+    &__workflow-footer {
+        border-top: 1px solid #f3f4f6;
+        padding: 8px 12px;
+        text-align: right;
+    }
+
+    &__workflow-done-btn {
+        background: #7c3aed;
+        color: #fff;
+        border: none;
+        border-radius: 6px;
+        padding: 6px 18px;
+        font-size: 0.82rem;
+        font-weight: 600;
+        cursor: pointer;
+
+        &:hover {
+            background: #5b21b6;
+        }
+    }
+
+    // ── Loading ─────────────────────────────────────────────────────────────
+
+    &__loading {
+        text-align: center;
+        color: #9ca3af;
+        padding: 40px;
+        font-size: 0.95rem;
+    }
+
+    // ── Metric cards grid (3 cols × 2 rows) ─────────────────────────────────
+
+    &__metrics-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 14px;
+        margin-bottom: 20px;
+
+        @media (max-width: 991.98px) {
+            grid-template-columns: repeat(2, 1fr);
+        }
+
+        // Two columns, not one: each card is a single number with a short
+        // label, so one per row just doubles the scrolling.
+        @media (max-width: 767.98px) {
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+        }
+    }
+
+    // ── Two-panel row ────────────────────────────────────────────────────────
+
+    &__panels {
+        display: grid;
+        grid-template-columns: 3fr 2fr;
+        gap: 16px;
+        margin-bottom: 20px;
+
+        @media (max-width: 991.98px) {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    // ── Section card ────────────────────────────────────────────────────────
+
+    &__section {
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 16px 20px;
+        margin-bottom: 16px;
+
+        &--failures {
+            margin-bottom: 0;
+        }
+    }
+
+    &__section-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 12px;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    &__section-title {
+        font-size: 0.9rem;
+        font-weight: 700;
+        color: #374151;
+    }
+
+    // ── Time range tabs ──────────────────────────────────────────────────────
+
+    &__time-range-tabs {
+        display: flex;
+        gap: 4px;
+        flex-wrap: wrap;
+    }
+
+    &__range-tab {
+        padding: 3px 10px;
+        border: 1px solid #e5e7eb;
+        border-radius: 4px;
+        background: #f3f4f6;
+        font-size: 0.75rem;
+        cursor: pointer;
+        color: #6b7280;
+        font-weight: 500;
+
+        &:hover {
+            background: #e5e7eb;
+        }
+
+        &--active {
+            background: #ede9fe;
+            color: #7c3aed;
+            border-color: #c4b5fd;
+            font-weight: 700;
+        }
+
+        &--custom {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+    }
+
+    // ── Inline custom date range bar (below section headers) ────────────────
+
+    &__custom-range-bar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 10px;
+        background: #f9fafb;
+        border: 1px solid #e5e7eb;
+        border-radius: 6px;
+        margin-bottom: 12px;
+        flex-wrap: wrap;
+
+        input[type="date"] {
+            border: 1px solid #d1d5db;
+            border-radius: 4px;
+            padding: 4px 8px;
+            font-size: 0.82rem;
+            color: #374151;
+
+            &:focus {
+                outline: none;
+                border-color: #7c3aed;
+            }
+        }
+    }
+
+    &__custom-range-sep {
+        font-size: 0.78rem;
+        color: #9ca3af;
+    }
+
+    &__custom-range-apply {
+        background: #7c3aed;
+        color: #fff;
+        border: none;
+        border-radius: 5px;
+        padding: 5px 14px;
+        font-size: 0.78rem;
+        font-weight: 600;
+        cursor: pointer;
+
+        &:hover {
+            background: #5b21b6;
+        }
+    }
+}
+
+// ── Phone ────────────────────────────────────────────────────────────────────
+@media (max-width: 767.98px) {
+    .o-wa-dashboard {
+        padding: 12px;
+
+        &__header { flex-wrap: wrap; gap: 8px; }
+
+        // Filter groups stack; each control gets the full width rather than a
+        // third of it.
+        &__filters { flex-direction: column; align-items: stretch; gap: 10px; }
+
+        &__filter-group { width: 100%; }
+
+        // Range tabs scroll sideways instead of wrapping into three rows that
+        // push the numbers below the fold.
+        &__presets {
+            display: flex;
+            flex-wrap: nowrap;
+            overflow-x: auto;
+            overscroll-behavior-x: contain;
+            scrollbar-width: none;
+            gap: 6px;
+
+            &::-webkit-scrollbar { display: none; }
+        }
+
+        &__range-tab { flex: 0 0 auto; min-height: var(--cd-tap); }
+
+        &__date-inputs { flex-direction: column; align-items: stretch; gap: 6px; }
+
+        // Native pickers do the work, and 16px stops mobile Safari zooming.
+        input[type="date"] { min-height: var(--cd-tap); font-size: 16px; width: 100%; }
+
+        &__filter-btn,
+        &__refresh-btn,
+        &__apply-btn { min-height: var(--cd-tap); }
+
+        // The workflow multi-select is a long list: pin it to the bottom of the
+        // screen as a sheet rather than an anchored dropdown.
+        &__dropdown {
+            position: fixed;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            top: auto;
+            width: 100%;
+            max-width: none;
+            max-height: var(--cd-sheet-max-h);
+            transform: none;
+            border-radius: var(--cd-sheet-radius) var(--cd-sheet-radius) 0 0;
+            padding-bottom: var(--cd-safe-b);
+            z-index: var(--cd-sheet-z);
+            animation: cd-sheet-rise 180ms cubic-bezier(0.32, 0.72, 0, 1);
+        }
+
+        &__workflow-search { font-size: 16px; min-height: var(--cd-tap); }
+
+        &__section { padding: 12px; }
+    }
+}

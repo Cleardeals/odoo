@@ -1,0 +1,527 @@
+$bubble-inbound-bg:  #f0f0f0;
+$bubble-outbound-bg: #dcf8c6;
+$bubble-radius:      12px;
+$max-bubble-width:   72%;
+
+.cd-chat-bubble {
+    display: flex;
+    flex-direction: column;
+    max-width: $max-bubble-width;
+    padding: 6px 10px 4px;
+    border-radius: $bubble-radius;
+    margin-bottom: 4px;
+    word-break: break-word;
+    position: relative;
+
+    &--inbound {
+        align-self: flex-start;
+        background: $bubble-inbound-bg;
+        border-bottom-left-radius: 2px;
+    }
+
+    &--outbound {
+        align-self: flex-end;
+        background: $bubble-outbound-bg;
+        border-bottom-right-radius: 2px;
+    }
+
+    &__sender {
+        font-size: 11px;
+        font-weight: 700;
+        color: #7c3aed;
+        margin-bottom: 2px;
+    }
+
+    // Quoted / swipe-reply
+    &__quoted {
+        background: rgba(0,0,0,0.06);
+        border-left: 3px solid #7c3aed;
+        border-radius: 4px;
+        padding: 4px 8px;
+        margin-bottom: 6px;
+
+        &--clickable {
+            cursor: pointer;
+            &:hover { background: rgba(124,58,237,0.12); }
+        }
+    }
+
+    &__quoted-sender {
+        font-size: 11px;
+        font-weight: 700;
+        color: #7c3aed;
+        margin-bottom: 1px;
+    }
+
+    &__quoted-body {
+        font-size: 12px;
+        color: #555;
+        white-space: pre-wrap;
+        max-height: 60px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    // Media quoted block (image / video / audio)
+    &__quoted-media {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 36px;
+    }
+
+    &__quoted-thumb {
+        width: 48px;
+        height: 48px;
+        object-fit: cover;
+        border-radius: 4px;
+        flex-shrink: 0;
+    }
+
+    &__quoted-media-icon {
+        font-size: 20px;
+        color: #7c3aed;
+        width: 24px;
+        text-align: center;
+        flex-shrink: 0;
+    }
+
+    &__quoted-media-label {
+        font-size: 12px;
+        color: #555;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+    // Rendered template header (bold first line)
+    &__tmpl-header {
+        font-size: 14px;
+        font-weight: 700;
+        color: #1a1a1a;
+        line-height: 1.35;
+        margin-bottom: 3px;
+        white-space: pre-wrap;
+    }
+
+    // Body
+    &__body {
+        font-size: 14px;
+        line-height: 1.45;
+        white-space: pre-wrap;
+    }
+
+    // Rendered template footer (muted small line)
+    &__tmpl-footer {
+        font-size: 12px;
+        color: #8696a0;
+        margin-top: 4px;
+        white-space: pre-wrap;
+    }
+
+    // Media
+    &__media { margin-bottom: 4px; }
+
+    &__img {
+        max-width: 240px;
+        max-height: 220px;
+        border-radius: 8px;
+        display: block;
+        cursor: pointer;
+        object-fit: cover;
+
+        // Stickers are small, transparent WebP — no crop, no card chrome.
+        &--sticker {
+            max-width: 140px;
+            max-height: 140px;
+            object-fit: contain;
+            background: transparent;
+        }
+    }
+
+    // Location / contact chip — a compact labelled row so these bubbles are
+    // never empty even when the body carries no text.
+    &__special {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 4px 2px;
+        font-size: 13px;
+    }
+
+    &__special-icon { opacity: 0.7; }
+    &__special-label { font-weight: 500; }
+    &__special-link {
+        margin-left: auto;
+        font-size: 12px;
+        text-decoration: underline;
+    }
+
+    &__video-wrap {
+        position: relative;
+        max-width: 280px;
+        border-radius: 8px;
+        overflow: hidden;
+        cursor: pointer;
+    }
+
+    &__video {
+        width: 100%;
+        max-height: 200px;
+        display: block;
+        border-radius: 8px;
+        pointer-events: none; // overlay captures the click
+    }
+
+    &__video-play {
+        position: absolute;
+        inset: 0;
+        background: rgba(0,0,0,0.28);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        .fa { font-size: 44px; color: rgba(255,255,255,0.92); }
+        &:hover { background: rgba(0,0,0,0.38); }
+    }
+
+    &__audio {
+        width: 100%;
+        max-width: 260px;
+        height: 36px;
+    }
+
+    &__file-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        background: rgba(0,0,0,0.05);
+        border-radius: 8px;
+        padding: 8px 12px;
+        text-decoration: none;
+        color: inherit;
+        min-width: 180px;
+        max-width: 260px;
+        &:hover { background: rgba(0,0,0,0.09); }
+    }
+
+    &__file-icon {
+        width: 32px;
+        height: 32px;
+        border-radius: 6px;
+        background: #7c3aed;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+        font-size: 16px;
+        flex-shrink: 0;
+    }
+
+    &__file-info {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+    }
+
+    &__file-name {
+        font-size: 13px;
+        font-weight: 600;
+        color: #1a1a1a;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    &__file-label {
+        font-size: 10px;
+        color: #888;
+    }
+
+    &__file-dl {
+        color: #7c3aed;
+        font-size: 14px;
+        flex-shrink: 0;
+    }
+
+    &__media-placeholder {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: #6c757d;
+        font-size: 13px;
+    }
+
+    // Template buttons — WhatsApp-style stacked full-width reply buttons
+    &__btn-row {
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+        margin: 6px -10px -4px;
+        border-top: 1px solid rgba(0,0,0,0.08);
+    }
+
+    &__template-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        color: #00a5f4;
+        padding: 7px 12px;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: default;
+        border-top: 1px solid rgba(0,0,0,0.06);
+        &:first-child { border-top: none; }
+        .fa { font-size: 12px; }
+    }
+
+    &__template-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        background: rgba(0,0,0,0.06);
+        color: #555;
+        border-radius: 4px;
+        padding: 2px 6px;
+        font-size: 11px;
+        margin-top: 4px;
+    }
+
+    // ── ⓘ info button + popover (outbound only) ──────────────────────────────
+    &__info-btn {
+        position: absolute;
+        top: 3px;
+        right: 3px;
+        border: none;
+        background: transparent;
+        padding: 2px;
+        cursor: pointer;
+        color: rgba(0, 0, 0, 0.25);
+        font-size: 11px;
+        line-height: 1;
+        border-radius: 50%;
+        display: none; // shown on bubble hover
+        transition: color 0.15s;
+
+        &:hover { color: rgba(0, 0, 0, 0.6); }
+    }
+
+    &:hover &__info-btn { display: block; }
+
+    &__info-popover {
+        position: absolute;
+        bottom: calc(100% + 6px);
+        right: 0;
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.14);
+        padding: 8px 12px;
+        min-width: 210px;
+        z-index: 200;
+        white-space: nowrap;
+
+        // Small arrow pointing downward-right
+        &::after {
+            content: "";
+            position: absolute;
+            bottom: -6px;
+            right: 12px;
+            border-left: 6px solid transparent;
+            border-right: 6px solid transparent;
+            border-top: 6px solid #fff;
+            filter: drop-shadow(0 1px 1px rgba(0,0,0,0.08));
+        }
+    }
+
+    &__info-row {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        padding: 3px 0;
+        font-size: 12px;
+        color: #374151;
+
+        & + & { border-top: 1px solid #f3f4f6; }
+        &--read .cd-chat-bubble__info-icon { color: #53bdeb; }
+    }
+
+    &__info-icon {
+        flex-shrink: 0;
+        color: #8696a0;
+        fill: none;
+        stroke: currentColor;
+        width: 14px;
+        height: 11px;
+    }
+
+    &__info-label {
+        font-weight: 600;
+        color: #6b7280;
+        width: 58px;
+        flex-shrink: 0;
+    }
+
+    &__info-time {
+        color: #374151;
+    }
+
+    // Footer
+    &__footer {
+        display: flex;
+        align-items: center;
+        gap: 3px;
+        justify-content: flex-end;
+        margin-top: 2px;
+    }
+
+    &__time {
+        font-size: 11px;
+        color: #999;
+    }
+}
+
+// Status ticks — polyline SVG, WhatsApp geometry
+// stroke is set in SVG via currentColor so the CSS color drives both the
+// grey and blue states cleanly.
+.cd-ticks {
+    display: inline-block;
+    vertical-align: middle;
+    flex-shrink: 0;
+    fill:   none;
+    color:  #8696a0;   // WA grey (single + delivered)
+    stroke: currentColor;
+
+    &--sgl {
+        width:  12px;
+        height: 11px;
+    }
+
+    &--dbl {
+        width:  16px;
+        height: 11px;
+    }
+
+    &--read  { color: #53bdeb; }   // WA blue
+
+    &--failed {
+        stroke: none;
+        color:  #e74c3c;
+        font-size: 12px;
+        width:  auto;
+        height: auto;
+    }
+    &--pending {
+        stroke: none;
+        color:  #aaa;
+        font-size: 11px;
+        width:  auto;
+        height: auto;
+    }
+}
+
+// Flash highlight when a quoted message is tapped (scroll-to-original)
+.cd-chat-bubble--flash {
+    animation: cd-bubble-flash 1.4s ease-out;
+}
+
+@keyframes cd-bubble-flash {
+    0%   { box-shadow: 0 0 0 3px rgba(124,58,237,0.55); }
+    100% { box-shadow: 0 0 0 3px rgba(124,58,237,0); }
+}
+
+// In-chat search highlighting
+.cd-chat-bubble--search-hit {
+    box-shadow: 0 0 0 2px rgba(255, 196, 0, 0.65);
+}
+.cd-chat-bubble--search-current {
+    box-shadow: 0 0 0 3px rgba(255, 152, 0, 0.95);
+}
+
+// Phrase-level search highlight injected inside message body text
+mark.cd-search-highlight {
+    background: rgba(255, 230, 0, 0.65);
+    color: inherit;
+    border-radius: 2px;
+    padding: 0 1px;
+    font-weight: inherit;
+}
+.cd-chat-bubble--search-current mark.cd-search-highlight {
+    background: rgba(255, 152, 0, 0.75);
+}
+
+// System event chip
+.cd-chat-event-chip {
+    align-self: center;
+    background: rgba(0,0,0,0.08);
+    color: #555;
+    border-radius: 12px;
+    padding: 3px 12px;
+    font-size: 11px;
+    margin: 6px 0;
+    max-width: 80%;
+    text-align: center;
+}
+
+// ── Interactive list message (outbound kind='list') — WhatsApp style ────────
+// Full-bleed to the bubble edges; rows collapse behind a tappable button.
+.cd-chat-bubble__list {
+    margin: 6px -10px -4px;
+
+    &-rows {
+        padding: 2px 12px 4px;
+    }
+
+    &-section {
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        opacity: 0.55;
+        margin: 8px 0 2px;
+    }
+    &-row {
+        padding: 6px 0;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+        &:last-child { border-bottom: 0; }
+    }
+    &-row-title { font-size: 13px; font-weight: 500; }
+    &-row-desc  { font-size: 12px; opacity: 0.65; }
+
+    // Full-width WhatsApp-style action button (like template quick-reply buttons)
+    &-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        width: 100%;
+        border: 0;
+        background: transparent;
+        cursor: pointer;
+        color: #00a5f4;
+        font-weight: 500;
+        font-size: 13px;
+        padding: 8px 12px;
+        border-top: 1px solid rgba(0, 0, 0, 0.08);
+        .fa { font-size: 12px; }
+        &:hover { background: rgba(0, 0, 0, 0.03); }
+    }
+}
+
+// ── Phone ────────────────────────────────────────────────────────────────────
+// Wider bubbles and a slightly larger face: 70% of 390px leaves a 270px column
+// for text that is often Hindi or Gujarati, where truncation hurts most.
+@media (max-width: 767.98px) {
+    .cd-chat-bubble {
+        max-width: 85%;
+
+        &__body { font-size: 15px; }
+
+        // The buttons the buyer sees in WhatsApp: give them the same presence
+        // here so a screenshot of our thread matches the buyer's screen.
+        &__template-btn { padding: 11px 12px; font-size: 14px; }
+
+        // The delivery-detail popover would otherwise open past the screen edge.
+        &__info-popover { left: 8px; right: 8px; width: auto; max-width: none; }
+    }
+}

@@ -12,6 +12,9 @@ const STATUS_META = {
     ringing:                                     { label: "Ringing",            cls: "cd-badge-grey" },
     call_back_later:                             { label: "Call Back Later",    cls: "cd-badge-grey" },
     switched_off:                                { label: "Switched Off",       cls: "cd-badge-grey" },
+    // Yellow, not blue: blue is the "progressed" colour. This status means the
+    // buyer has the details and still has to be called.
+    contact_initiated:                           { label: "Contact Initiated",  cls: "cd-badge-yellow" },
     details_shared_of_property:                  { label: "Details Shared",     cls: "cd-badge-blue" },
     detail_shared_and_interested_for_site_visit: { label: "Details Shared",         cls: "cd-badge-blue" },
     site_visit_scheduled:                        { label: "SV Scheduled",       cls: "cd-badge-purple" },

@@ -1,0 +1,364 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="cleardeals_ui.ChatBubble">
+
+        <!-- System event chip (centred) -->
+        <t t-if="isSystemEvent">
+            <div class="cd-chat-event-chip">
+                <span t-esc="props.message.body"/>
+            </div>
+        </t>
+
+        <t t-else="">
+            <div t-att-class="bubbleClass" t-attf-id="cd-msg-{{ props.message.id }}"
+                 t-on-click="() => this.info.open = false">
+
+                <!-- Sender name (inbound or RM name for outbound) -->
+                <div class="cd-chat-bubble__sender" t-esc="senderLabel"/>
+
+                <!-- Quoted / swipe-reply context (clickable → scroll to original) -->
+                <t t-if="props.message.quoted_body or props.message.quoted_sender">
+                    <div t-attf-class="cd-chat-bubble__quoted {{ props.message.quoted_msg_id ? 'cd-chat-bubble__quoted--clickable' : '' }}"
+                         t-on-click="() => this.onQuotedClick()">
+                        <div class="cd-chat-bubble__quoted-sender"
+                             t-esc="props.message.quoted_sender || 'Previous message'"/>
+                        <!-- Image quoted: show thumbnail + label -->
+                        <t t-if="props.message.quoted_kind === 'image'">
+                            <div class="cd-chat-bubble__quoted-media">
+                                <t t-if="props.message.quoted_media_url">
+                                    <img class="cd-chat-bubble__quoted-thumb"
+                                         t-att-src="props.message.quoted_media_url" alt=""/>
+                                </t>
+                                <t t-else="">
+                                    <i class="fa fa-camera cd-chat-bubble__quoted-media-icon" aria-hidden="true"/>
+                                </t>
+                                <span class="cd-chat-bubble__quoted-media-label">
+                                    <i class="fa fa-camera" aria-hidden="true"/> Photo
+                                </span>
+                            </div>
+                        </t>
+                        <!-- Video quoted -->
+                        <t t-elif="props.message.quoted_kind === 'video'">
+                            <div class="cd-chat-bubble__quoted-media">
+                                <i class="fa fa-video-camera cd-chat-bubble__quoted-media-icon" aria-hidden="true"/>
+                                <span class="cd-chat-bubble__quoted-media-label">
+                                    <i class="fa fa-video-camera" aria-hidden="true"/> Video
+                                </span>
+                            </div>
+                        </t>
+                        <!-- Audio quoted -->
+                        <t t-elif="props.message.quoted_kind === 'audio'">
+                            <div class="cd-chat-bubble__quoted-media">
+                                <i class="fa fa-music cd-chat-bubble__quoted-media-icon" aria-hidden="true"/>
+                                <span class="cd-chat-bubble__quoted-media-label">
+                                    <i class="fa fa-music" aria-hidden="true"/> Audio
+                                </span>
+                            </div>
+                        </t>
+                        <!-- Document / text quoted -->
+                        <t t-else="">
+                            <div class="cd-chat-bubble__quoted-body"
+                                 t-esc="props.message.quoted_body || ''"/>
+                        </t>
+                    </div>
+                </t>
+
+                <!-- Media -->
+                <t t-if="isMedia">
+                    <div class="cd-chat-bubble__media">
+                        <t t-if="props.message.media_url">
+
+                            <!-- Image / Sticker -->
+                            <t t-if="isImageLike">
+                                <img t-att-src="props.message.media_url"
+                                     t-attf-class="cd-chat-bubble__img {{ props.message.kind === 'sticker' ? 'cd-chat-bubble__img--sticker' : '' }}"
+                                     alt="Image"
+                                     t-on-click="(ev) => this.onMediaClick(ev)"/>
+                            </t>
+
+                            <!-- Video — click the play overlay to open in lightbox -->
+                            <t t-elif="props.message.kind === 'video'">
+                                <div class="cd-chat-bubble__video-wrap"
+                                     t-on-click="(ev) => this.onMediaClick(ev)">
+                                    <video class="cd-chat-bubble__video"
+                                           t-att-src="props.message.media_url"
+                                           preload="metadata"/>
+                                    <div class="cd-chat-bubble__video-play">
+                                        <i class="fa fa-play-circle" aria-hidden="true"/>
+                                    </div>
+                                </div>
+                            </t>
+
+                            <!-- Audio -->
+                            <t t-elif="props.message.kind === 'audio'">
+                                <audio class="cd-chat-bubble__audio"
+                                       t-att-src="props.message.media_url"
+                                       controls="true" preload="metadata"/>
+                            </t>
+
+                            <!-- Document / other -->
+                            <t t-else="">
+                                <div class="cd-chat-bubble__file-link"
+                                     t-on-click="(ev) => this.onMediaClick(ev)">
+                                    <div class="cd-chat-bubble__file-icon">
+                                        <i t-attf-class="fa {{ mediaIcon }}" aria-hidden="true"/>
+                                    </div>
+                                    <div class="cd-chat-bubble__file-info">
+                                        <span class="cd-chat-bubble__file-name"
+                                              t-esc="props.message.media_filename || props.message.kind"/>
+                                        <span class="cd-chat-bubble__file-label">Document</span>
+                                    </div>
+                                    <i class="fa fa-eye cd-chat-bubble__file-dl" aria-hidden="true"/>
+                                </div>
+                            </t>
+
+                        </t>
+                        <t t-else="">
+                            <span class="cd-chat-bubble__media-placeholder">
+                                <i t-attf-class="fa {{ mediaIcon }}" aria-hidden="true"/>
+                                <span t-esc="props.message.kind"/>
+                            </span>
+                        </t>
+                    </div>
+                </t>
+
+                <!-- Rich non-media kinds (location pin, contact card) — always a
+                     readable chip so the bubble is never empty/invisible. -->
+                <t t-if="specialKind">
+                    <div class="cd-chat-bubble__special">
+                        <i t-attf-class="fa {{ specialKind.icon }} cd-chat-bubble__special-icon" aria-hidden="true"/>
+                        <span class="cd-chat-bubble__special-label" t-esc="specialKind.label"/>
+                        <t t-if="locationMapsUrl">
+                            <a class="cd-chat-bubble__special-link"
+                               t-att-href="locationMapsUrl" target="_blank" rel="noopener">
+                                Open in Maps
+                            </a>
+                        </t>
+                    </div>
+                </t>
+
+                <!-- Template header MEDIA (image / video / audio / document) —
+                     workflow templates whose header is media, shown above the body. -->
+                <t t-if="headerMediaUrl">
+                    <div class="cd-chat-bubble__media cd-chat-bubble__tmpl-header-media">
+                        <t t-if="headerMediaType === 'image'">
+                            <img t-att-src="headerMediaUrl"
+                                 class="cd-chat-bubble__img" alt="Header image"
+                                 t-on-click="(ev) => this.onHeaderMediaClick(ev)"/>
+                        </t>
+                        <t t-elif="headerMediaType === 'video'">
+                            <div class="cd-chat-bubble__video-wrap"
+                                 t-on-click="(ev) => this.onHeaderMediaClick(ev)">
+                                <video class="cd-chat-bubble__video"
+                                       t-att-src="headerMediaUrl" preload="metadata"/>
+                                <div class="cd-chat-bubble__video-play">
+                                    <i class="fa fa-play-circle" aria-hidden="true"/>
+                                </div>
+                            </div>
+                        </t>
+                        <t t-elif="headerMediaType === 'audio'">
+                            <audio class="cd-chat-bubble__audio"
+                                   t-att-src="headerMediaUrl" controls="true" preload="metadata"/>
+                        </t>
+                        <t t-else="">
+                            <div class="cd-chat-bubble__file-link"
+                                 t-on-click="(ev) => this.onHeaderMediaClick(ev)">
+                                <div class="cd-chat-bubble__file-icon">
+                                    <i class="fa fa-file" aria-hidden="true"/>
+                                </div>
+                                <div class="cd-chat-bubble__file-info">
+                                    <span class="cd-chat-bubble__file-name"
+                                          t-esc="headerMediaFilename"/>
+                                    <span class="cd-chat-bubble__file-label">Document</span>
+                                </div>
+                                <i class="fa fa-eye cd-chat-bubble__file-dl" aria-hidden="true"/>
+                            </div>
+                        </t>
+                    </div>
+                </t>
+
+                <!-- Template header (rendered, bold) -->
+                <t t-if="props.message.template_header">
+                    <div class="cd-chat-bubble__tmpl-header" t-out="headerHtml"/>
+                </t>
+
+                <!-- Body text (WhatsApp inline formatting) -->
+                <t t-if="props.message.body">
+                    <div class="cd-chat-bubble__body" t-out="bodyHtml"/>
+                </t>
+                <!-- Fallback: template name chip only when no rendered body is available yet -->
+                <t t-elif="props.message.template_name and !isInbound">
+                    <span class="cd-chat-bubble__template-chip">
+                        <i class="fa fa-envelope-o" aria-hidden="true"/>
+                        <span t-esc="props.message.template_name"/>
+                    </span>
+                </t>
+
+                <!-- Interactive list (outbound kind='list') — WhatsApp style:
+                     body + a tappable button; rows hidden until the button is
+                     tapped, then revealed inline. -->
+                <t t-if="listPayload">
+                    <div class="cd-chat-bubble__list">
+                        <t t-if="listUi.expanded">
+                            <div class="cd-chat-bubble__list-rows">
+                                <t t-foreach="listPayload.sections" t-as="sec" t-key="sec_index">
+                                    <t t-if="sec.title">
+                                        <div class="cd-chat-bubble__list-section" t-esc="sec.title"/>
+                                    </t>
+                                    <t t-foreach="sec.rows" t-as="row" t-key="row_index">
+                                        <div class="cd-chat-bubble__list-row">
+                                            <div class="cd-chat-bubble__list-row-title" t-esc="row.title"/>
+                                            <t t-if="row.description">
+                                                <div class="cd-chat-bubble__list-row-desc" t-esc="row.description"/>
+                                            </t>
+                                        </div>
+                                    </t>
+                                </t>
+                            </div>
+                        </t>
+                        <button class="cd-chat-bubble__list-btn"
+                                t-on-click="() => this.toggleList()">
+                            <i t-attf-class="fa {{ listUi.expanded ? 'fa-chevron-up' : 'fa-list-ul' }}"
+                               aria-hidden="true"/>
+                            <span t-esc="listPayload.button"/>
+                        </button>
+                    </div>
+                </t>
+
+                <!-- Template footer (muted) -->
+                <t t-if="props.message.template_footer">
+                    <div class="cd-chat-bubble__tmpl-footer" t-out="footerHtml"/>
+                </t>
+
+                <!-- Template buttons -->
+                <t t-if="templateButtons.length">
+                    <div class="cd-chat-bubble__btn-row">
+                        <t t-foreach="templateButtons" t-as="btn" t-key="btn_index">
+                            <span class="cd-chat-bubble__template-btn">
+                                <i class="fa fa-reply" aria-hidden="true"/>
+                                <span t-esc="btn"/>
+                            </span>
+                        </t>
+                    </div>
+                </t>
+
+                <!-- ⓘ Info button (outbound only) + popover -->
+                <t t-if="!isInbound">
+                    <button class="cd-chat-bubble__info-btn"
+                            title="Message info"
+                            t-on-click="(ev) => this.toggleInfo(ev)">
+                        <i class="fa fa-info-circle" aria-hidden="true"/>
+                    </button>
+                    <t t-if="info.open">
+                        <div class="cd-chat-bubble__info-popover" t-on-click.stop="() => {}">
+                            <div class="cd-chat-bubble__info-row">
+                                <svg class="cd-ticks cd-ticks--sgl cd-chat-bubble__info-icon"
+                                     viewBox="0 0 12 11" xmlns="http://www.w3.org/2000/svg">
+                                    <polyline points="1.5,6.2 4.7,9.2 10.5,2.8"
+                                              fill="none" stroke="currentColor" stroke-width="1.5"
+                                              stroke-linecap="round" stroke-linejoin="round"/>
+                                </svg>
+                                <span class="cd-chat-bubble__info-label">Sent</span>
+                                <span class="cd-chat-bubble__info-time" t-esc="sentLabel"/>
+                            </div>
+                            <t t-if="deliveredLabel">
+                                <div class="cd-chat-bubble__info-row">
+                                    <svg class="cd-ticks cd-ticks--dbl cd-chat-bubble__info-icon"
+                                         viewBox="0 0 16 11" xmlns="http://www.w3.org/2000/svg">
+                                        <polyline points="1,6.2 4.2,9.2 9,2.8"
+                                                  fill="none" stroke="currentColor" stroke-width="1.5"
+                                                  stroke-linecap="round" stroke-linejoin="round"/>
+                                        <polyline points="5.5,6.2 8.2,9.2 13.5,2.8"
+                                                  fill="none" stroke="currentColor" stroke-width="1.5"
+                                                  stroke-linecap="round" stroke-linejoin="round"/>
+                                    </svg>
+                                    <span class="cd-chat-bubble__info-label">Delivered</span>
+                                    <span class="cd-chat-bubble__info-time" t-esc="deliveredLabel"/>
+                                </div>
+                            </t>
+                            <t t-if="seenLabel">
+                                <div class="cd-chat-bubble__info-row cd-chat-bubble__info-row--read">
+                                    <svg class="cd-ticks cd-ticks--dbl cd-chat-bubble__info-icon"
+                                         viewBox="0 0 16 11" xmlns="http://www.w3.org/2000/svg">
+                                        <polyline points="1,6.2 4.2,9.2 9,2.8"
+                                                  fill="none" stroke="currentColor" stroke-width="1.5"
+                                                  stroke-linecap="round" stroke-linejoin="round"/>
+                                        <polyline points="5.5,6.2 8.2,9.2 13.5,2.8"
+                                                  fill="none" stroke="currentColor" stroke-width="1.5"
+                                                  stroke-linecap="round" stroke-linejoin="round"/>
+                                    </svg>
+                                    <span class="cd-chat-bubble__info-label">Read</span>
+                                    <span class="cd-chat-bubble__info-time" t-esc="seenLabel"/>
+                                </div>
+                            </t>
+                        </div>
+                    </t>
+                </t>
+
+                <!-- Footer: time + status ticks -->
+                <div class="cd-chat-bubble__footer">
+                    <span class="cd-chat-bubble__time" t-esc="timeLabel"/>
+                    <t t-if="!isInbound">
+
+                        <!--
+                            WhatsApp-style ticks on a 16×11 canvas. Two clean
+                            polylines offset 4.5px; the read state turns blue via
+                            currentColor. Flat angle + thin stroke = no blob.
+                        -->
+
+                        <!-- read — blue double tick -->
+                        <t t-if="props.message.status === 'read'">
+                            <svg class="cd-ticks cd-ticks--dbl cd-ticks--read"
+                                 viewBox="0 0 16 11" xmlns="http://www.w3.org/2000/svg">
+                                <polyline points="1,6.2 4.2,9.2 9,2.8"
+                                          fill="none" stroke="currentColor" stroke-width="1.5"
+                                          stroke-linecap="round" stroke-linejoin="round"/>
+                                <polyline points="5.5,6.2 8.2,9.2 13.5,2.8"
+                                          fill="none" stroke="currentColor" stroke-width="1.5"
+                                          stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </t>
+
+                        <!-- delivered — grey double tick -->
+                        <t t-elif="props.message.status === 'delivered'">
+                            <svg class="cd-ticks cd-ticks--dbl"
+                                 viewBox="0 0 16 11" xmlns="http://www.w3.org/2000/svg">
+                                <polyline points="1,6.2 4.2,9.2 9,2.8"
+                                          fill="none" stroke="currentColor" stroke-width="1.5"
+                                          stroke-linecap="round" stroke-linejoin="round"/>
+                                <polyline points="5.5,6.2 8.2,9.2 13.5,2.8"
+                                          fill="none" stroke="currentColor" stroke-width="1.5"
+                                          stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </t>
+
+                        <!-- sent — single grey tick -->
+                        <t t-elif="props.message.status === 'sent'">
+                            <svg class="cd-ticks cd-ticks--sgl"
+                                 viewBox="0 0 12 11" xmlns="http://www.w3.org/2000/svg">
+                                <polyline points="1.5,6.2 4.7,9.2 10.5,2.8"
+                                          fill="none" stroke="currentColor" stroke-width="1.5"
+                                          stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </t>
+
+                        <!-- failed -->
+                        <t t-elif="props.message.status === 'failed' or
+                                   props.message.status === 'meta_blocked' or
+                                   props.message.status === 'invalid_number'">
+                            <i class="fa fa-times-circle cd-ticks cd-ticks--failed" aria-hidden="true"/>
+                        </t>
+
+                        <!-- pending / queued -->
+                        <t t-else="">
+                            <i class="fa fa-clock-o cd-ticks cd-ticks--pending" aria-hidden="true"/>
+                        </t>
+
+                    </t>
+                </div>
+
+            </div>
+        </t>
+
+    </t>
+</templates>

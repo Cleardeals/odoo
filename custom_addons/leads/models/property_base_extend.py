@@ -1,7 +1,7 @@
 import logging
 
 from odoo import api, models
-from odoo.osv.expression import AND
+from odoo.fields import Domain
 
 _logger = logging.getLogger(__name__)
 
@@ -106,7 +106,11 @@ class PropertyBaseLeadRelink(models.Model):
             and self.env.user.has_group('properties.group_property_rm')
             and not self.env.user.has_group('properties.group_property_manager')
         ):
-            domain = AND([list(domain), [('rm_user_id', '=', self.env.user.id)]])
+            # Both operands must be Domain objects: Domain.__and__ returns
+            # NotImplemented for a plain list, and list has no __rand__, so
+            # `Domain(...) & [...]` raises TypeError rather than combining.
+            domain = Domain(domain) & Domain(
+                [('rm_user_id', '=', self.env.user.id)])
         return super()._search(
             domain, offset=offset, limit=limit, order=order,
             active_test=active_test, bypass_access=bypass_access,

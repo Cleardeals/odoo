@@ -1,0 +1,354 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="cleardeals_ui.ChatComposer">
+        <div class="cd-chat-composer">
+
+            <!-- Hidden file input (multi-select, triggered programmatically) -->
+            <input type="file" t-ref="fileInput" class="cd-chat-composer__file-hidden"
+                   t-on-change="(ev) => this.onFileSelected(ev)"/>
+
+            <!-- Assignee-gate notice (takes precedence over the window notice) -->
+            <t t-if="props.disabled and props.disabledReason">
+                <div class="cd-chat-composer__gate-notice">
+                    <i class="fa fa-lock" aria-hidden="true"/>
+                    <span t-esc="props.disabledReason"/>
+                </div>
+            </t>
+
+            <!-- Closed-window notice -->
+            <t t-elif="isClosed">
+                <div class="cd-chat-composer__closed-notice">
+                    <i class="fa fa-lock" aria-hidden="true"/>
+                    <span class="cd-chat-composer__closed-text">
+                        24h window closed — only templates can be sent
+                    </span>
+                    <t t-if="props.onOpenTemplates">
+                        <button class="btn btn-sm btn-warning cd-chat-composer__closed-cta"
+                                t-on-click="() => props.onOpenTemplates()">
+                            Send Template
+                        </button>
+                    </t>
+                </div>
+            </t>
+
+            <!-- Upload error (global) -->
+            <t t-if="state.uploadError">
+                <div class="cd-chat-composer__upload-error" t-esc="state.uploadError"/>
+            </t>
+
+            <!-- Multi-file preview panel -->
+            <t t-if="hasPending and canSendFreeText">
+                <div class="cd-chat-composer__files-panel">
+                    <div class="cd-chat-composer__files-grid">
+                        <t t-foreach="state.pendingFiles" t-as="pf" t-key="pf.id">
+                            <div t-attf-class="cd-chat-composer__file-thumb
+                                    {{ pf.uploading ? 'cd-chat-composer__file-thumb--uploading' : '' }}
+                                    {{ pf.error ? 'cd-chat-composer__file-thumb--error' : '' }}">
+
+                                <!-- Image thumbnail preview -->
+                                <t t-if="pf.kind === 'image' and pf.localPreviewUrl">
+                                    <img t-att-src="pf.localPreviewUrl"
+                                         class="cd-chat-composer__thumb-img" alt=""/>
+                                </t>
+                                <!-- Non-image: icon + filename -->
+                                <t t-else="">
+                                    <i t-attf-class="fa {{ pf.kind === 'video' ? 'fa-video-camera' : 'fa-file' }} cd-chat-composer__thumb-doc-icon"
+                                       aria-hidden="true"/>
+                                    <span class="cd-chat-composer__thumb-name" t-esc="pf.name"/>
+                                </t>
+
+                                <!-- Upload spinner overlay -->
+                                <t t-if="pf.uploading">
+                                    <div class="cd-chat-composer__thumb-overlay">
+                                        <i class="fa fa-spinner fa-spin" aria-hidden="true"/>
+                                    </div>
+                                </t>
+                                <!-- Error overlay -->
+                                <t t-elif="pf.error">
+                                    <div class="cd-chat-composer__thumb-overlay cd-chat-composer__thumb-overlay--error"
+                                         t-att-title="pf.error">
+                                        <i class="fa fa-exclamation-triangle" aria-hidden="true"/>
+                                    </div>
+                                </t>
+
+                                <!-- Remove button -->
+                                <button class="cd-chat-composer__thumb-remove"
+                                        t-on-click="() => this.removePendingFile(pf.id)"
+                                        title="Remove">
+                                    <i class="fa fa-times" aria-hidden="true"/>
+                                </button>
+                            </div>
+                        </t>
+                    </div>
+
+                    <!-- Shared caption for all files -->
+                    <input type="text" class="cd-chat-composer__attach-caption"
+                           placeholder="Add a caption (optional)…"
+                           t-att-value="state.sharedCaption"
+                           t-on-input="(ev) => { this.state.sharedCaption = ev.target.value; }"/>
+
+                    <div class="cd-chat-composer__attach-actions">
+                        <button class="btn btn-sm btn-primary"
+                                t-att-disabled="!allUploaded"
+                                t-on-click="() => this.sendAllMedia()">
+                            <i class="fa fa-send" aria-hidden="true"/>
+                            Send
+                            <t t-if="state.pendingFiles.length > 1">
+                                (<t t-esc="readyCount"/>/<t t-esc="state.pendingFiles.length"/>)
+                            </t>
+                        </button>
+                        <button class="btn btn-sm btn-secondary"
+                                t-on-click="() => this.cancelAllAttach()">
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            </t>
+
+            <!-- Compose row -->
+            <div class="cd-chat-composer__row">
+                <t t-if="canSendFreeText">
+                    <!-- Quick replies -->
+                    <div class="cd-chat-composer__qr-wrap">
+                        <button class="btn cd-chat-composer__attach-btn"
+                                t-att-class="{ 'cd-chat-composer__attach-btn--active': state.showQuickReplies }"
+                                title="Quick replies"
+                                t-on-click="() => this.toggleQuickReplies()">
+                            <i class="fa fa-bolt" aria-hidden="true"/>
+                        </button>
+                        <t t-if="state.showQuickReplies">
+                            <CdQuickReplyPicker
+                                replies="props.quickReplies"
+                                initialQuery="state.body"
+                                query="state.body"
+                                typeahead="qrTypeahead"
+                                onSelect="(reply) => this.insertQuickReply(reply)"
+                                onClose="() => this.closeQuickReplies()"/>
+                        </t>
+                    </div>
+
+                    <!-- Phone: one paperclip opening a sheet of large labelled
+                         rows. Four 30px icons side by side is a mis-tap
+                         generator, and it crowds out the input. -->
+                    <t t-if="isSmall">
+                        <button class="btn cd-chat-composer__attach-btn"
+                                title="Attach"
+                                t-on-click="() => this.openAttachSheet()">
+                            <i class="fa fa-paperclip" aria-hidden="true"/>
+                        </button>
+                    </t>
+                    <t t-else="">
+                        <button class="btn cd-chat-composer__attach-btn"
+                                title="Attach image(s)"
+                                t-on-click="() => this.selectAttach('image')">
+                            <i class="fa fa-image" aria-hidden="true"/>
+                        </button>
+                        <button class="btn cd-chat-composer__attach-btn"
+                                title="Attach video(s)"
+                                t-on-click="() => this.selectAttach('video')">
+                            <i class="fa fa-video-camera" aria-hidden="true"/>
+                        </button>
+                        <button class="btn cd-chat-composer__attach-btn"
+                                title="Attach document(s)"
+                                t-on-click="() => this.selectAttach('document')">
+                            <i class="fa fa-paperclip" aria-hidden="true"/>
+                        </button>
+                        <button class="btn cd-chat-composer__attach-btn"
+                                title="Send interactive list"
+                                t-on-click="() => this.openListBuilder()">
+                            <i class="fa fa-list-ul" aria-hidden="true"/>
+                        </button>
+                    </t>
+                </t>
+
+                <!-- Textarea wrapper (position:relative so the popup anchors to it) -->
+                <div class="cd-chat-composer__input-wrap">
+                    <!-- Floating format popup — fixed to viewport coords above selection -->
+                    <div t-if="fmtPopup.visible and canSendFreeText"
+                         t-attf-class="cd-chat-composer__fmt-popup {{ isSmall ? 'cd-chat-composer__fmt-popup--pinned' : '' }}"
+                         t-att-style="isSmall ? '' : `left:${fmtPopup.x}px; top:${fmtPopup.y}px;`">
+                        <button type="button" class="cd-chat-composer__fmt-popup-btn"
+                                title="Bold (Ctrl+B / ⌘B)"
+                                t-on-mousedown.prevent="() => this.applyFormat('*')">
+                            <b>B</b>
+                        </button>
+                        <button type="button" class="cd-chat-composer__fmt-popup-btn"
+                                title="Italic (Ctrl+I / ⌘I)"
+                                t-on-mousedown.prevent="() => this.applyFormat('_')">
+                            <i>I</i>
+                        </button>
+                        <button type="button" class="cd-chat-composer__fmt-popup-btn"
+                                title="Strikethrough (Ctrl+⇧S / ⌘⇧S)"
+                                t-on-mousedown.prevent="() => this.applyFormat('~')">
+                            <s>S</s>
+                        </button>
+                        <button type="button" class="cd-chat-composer__fmt-popup-btn"
+                                title="Monospace"
+                                t-on-mousedown.prevent="() => this.applyFormat('```')">
+                            <code>&lt;/&gt;</code>
+                        </button>
+                    </div>
+
+                    <textarea class="cd-chat-composer__input" t-ref="input"
+                              t-att-disabled="!canSendFreeText"
+                              t-att-placeholder="placeholderText"
+                              t-att-value="state.body"
+                              t-on-input="(ev) => this.onInput(ev)"
+                              t-on-keydown="(ev) => this.onKeydown(ev)"
+                              rows="1"/>
+                </div>
+
+                <button class="btn btn-primary cd-chat-composer__send-btn"
+                        t-att-disabled="!state.body.trim() or !canSendFreeText"
+                        t-on-click="() => this.sendText()">
+                    <i class="fa fa-send" aria-hidden="true"/>
+                </button>
+            </div>
+
+            <!-- Attachment sheet (phones only) -->
+            <t t-if="state.showAttachSheet">
+                <CdBottomSheet title="'Attach'" onClose.bind="closeAttachSheet">
+                    <button class="cd-sheet__action" t-on-click="() => this.pickAttach('image')">
+                        <i class="fa fa-image" aria-hidden="true"/> Photo
+                    </button>
+                    <button class="cd-sheet__action" t-on-click="() => this.pickAttach('video')">
+                        <i class="fa fa-video-camera" aria-hidden="true"/> Video
+                    </button>
+                    <button class="cd-sheet__action" t-on-click="() => this.pickAttach('document')">
+                        <i class="fa fa-file-o" aria-hidden="true"/> Document
+                    </button>
+                    <button class="cd-sheet__action" t-on-click="() => this.pickAttach('list')">
+                        <i class="fa fa-list-ul" aria-hidden="true"/> Interactive list
+                    </button>
+                </CdBottomSheet>
+            </t>
+
+            <!-- Interactive list builder modal -->
+            <t t-if="state.listBuilder">
+                <div class="cd-list-builder__backdrop" t-on-click="() => this.closeListBuilder()">
+                    <div class="cd-list-builder" t-on-click.stop="() => {}">
+                        <div class="cd-list-builder__head">
+                            <span class="cd-list-builder__title">
+                                <i class="fa fa-list-ul" aria-hidden="true"/> Interactive list message
+                            </span>
+                            <button class="cd-list-builder__close"
+                                    t-on-click="() => this.closeListBuilder()" title="Close">
+                                <i class="fa fa-times" aria-hidden="true"/>
+                            </button>
+                        </div>
+
+                        <div class="cd-list-builder__body">
+                            <!-- Live WhatsApp preview of the collapsed bubble -->
+                            <div class="cd-list-builder__preview">
+                                <div class="cd-list-builder__preview-label">Preview</div>
+                                <div class="cd-list-builder__preview-bubble">
+                                    <div class="cd-list-builder__preview-text"
+                                         t-esc="state.listBuilder.body.trim() || 'Message body…'"/>
+                                    <div class="cd-list-builder__preview-btn">
+                                        <i class="fa fa-list-ul" aria-hidden="true"/>
+                                        <span t-esc="state.listBuilder.button.trim() || 'Button'"/>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <label class="cd-list-builder__label">Message body</label>
+                            <textarea class="cd-list-builder__input" rows="2"
+                                      placeholder="e.g. Check out our top collections below!"
+                                      t-att-value="state.listBuilder.body"
+                                      t-on-input="(ev) => { state.listBuilder.body = ev.target.value; }"/>
+
+                            <label class="cd-list-builder__label">
+                                List button label
+                                <span class="cd-list-builder__hint">
+                                    max <t t-esc="LIMITS.button"/>
+                                </span>
+                            </label>
+                            <input type="text" class="cd-list-builder__input"
+                                   placeholder="e.g. View options"
+                                   t-att-maxlength="LIMITS.button"
+                                   t-att-value="state.listBuilder.button"
+                                   t-on-input="(ev) => { state.listBuilder.button = ev.target.value; }"/>
+
+                            <label class="cd-list-builder__label">Sections &amp; items</label>
+
+                            <t t-foreach="state.listBuilder.sections" t-as="sec" t-key="sec_index">
+                                <div class="cd-list-builder__section">
+                                    <div class="cd-list-builder__section-head">
+                                        <input type="text" class="cd-list-builder__input cd-list-builder__section-title"
+                                               placeholder="Section title (optional)"
+                                               t-att-maxlength="LIMITS.sectionTitle"
+                                               t-att-value="sec.title"
+                                               t-on-input="(ev) => { sec.title = ev.target.value; }"/>
+                                        <button class="cd-list-builder__icon-btn"
+                                                t-if="state.listBuilder.sections.length > 1"
+                                                title="Remove section"
+                                                t-on-click="() => this.removeListSection(sec_index)">
+                                            <i class="fa fa-trash" aria-hidden="true"/>
+                                        </button>
+                                    </div>
+
+                                    <t t-foreach="sec.rows" t-as="row" t-key="row_index">
+                                        <div class="cd-list-builder__row">
+                                            <span class="cd-list-builder__row-num" t-esc="row_index + 1"/>
+                                            <div class="cd-list-builder__row-fields">
+                                                <div class="cd-list-builder__row-title-wrap">
+                                                    <input type="text" class="cd-list-builder__input"
+                                                           placeholder="Item title (required)"
+                                                           t-att-maxlength="LIMITS.rowTitle"
+                                                           t-att-value="row.title"
+                                                           t-on-input="(ev) => { row.title = ev.target.value; }"/>
+                                                    <span t-attf-class="cd-list-builder__counter {{ (row.title || '').length >= LIMITS.rowTitle ? 'cd-list-builder__counter--max' : '' }}">
+                                                        <t t-esc="(row.title || '').length"/>/<t t-esc="LIMITS.rowTitle"/>
+                                                    </span>
+                                                </div>
+                                                <input type="text" class="cd-list-builder__input"
+                                                       placeholder="Description (optional)"
+                                                       t-att-maxlength="LIMITS.rowDesc"
+                                                       t-att-value="row.description"
+                                                       t-on-input="(ev) => { row.description = ev.target.value; }"/>
+                                            </div>
+                                            <button class="cd-list-builder__icon-btn"
+                                                    t-if="sec.rows.length > 1"
+                                                    title="Remove item"
+                                                    t-on-click="() => this.removeListRow(sec_index, row_index)">
+                                                <i class="fa fa-times" aria-hidden="true"/>
+                                            </button>
+                                        </div>
+                                    </t>
+
+                                    <button class="cd-list-builder__add-link"
+                                            t-on-click="() => this.addListRow(sec_index)">
+                                        <i class="fa fa-plus" aria-hidden="true"/> Add item
+                                    </button>
+                                </div>
+                            </t>
+
+                            <button class="cd-list-builder__add-link cd-list-builder__add-section"
+                                    t-on-click="() => this.addListSection()">
+                                <i class="fa fa-plus" aria-hidden="true"/> Add section
+                            </button>
+
+                            <t t-if="state.listBuilder.error">
+                                <div class="cd-list-builder__error" t-esc="state.listBuilder.error"/>
+                            </t>
+                        </div>
+
+                        <div class="cd-list-builder__foot">
+                            <span class="cd-list-builder__count">
+                                <t t-esc="listRowCount"/> / 10 items
+                            </span>
+                            <div class="cd-list-builder__foot-actions">
+                                <button class="btn btn-sm btn-secondary"
+                                        t-on-click="() => this.closeListBuilder()">Cancel</button>
+                                <button class="btn btn-sm btn-primary"
+                                        t-on-click="() => this.sendList()">
+                                    <i class="fa fa-send" aria-hidden="true"/> Send list
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </t>
+        </div>
+    </t>
+</templates>

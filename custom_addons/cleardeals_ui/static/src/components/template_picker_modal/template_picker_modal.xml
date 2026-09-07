@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="cleardeals_ui.TemplatePickerModal">
+        <div class="cd-tpl-overlay" t-on-click="() => this.props.onClose()">
+            <div class="cd-tpl-modal" t-on-click.stop="() => {}">
+
+                <div class="cd-tpl-modal__header">
+                    <!-- back button: on a real element, not a <t> wrapper -->
+                    <button t-if="state.selected" class="cd-tpl-modal__back"
+                            t-on-click="() => this.backToList()">
+                        <i class="fa fa-arrow-left" aria-hidden="true"/>
+                    </button>
+                    <span class="cd-tpl-modal__title">
+                        <t t-if="state.selected" t-esc="state.selected.display_name || state.selected.name"/>
+                        <t t-else="">Send a template</t>
+                    </span>
+                    <button class="cd-tpl-modal__close" t-on-click="() => this.props.onClose()">×</button>
+                </div>
+
+                <!-- STEP 1 — list
+                     Use a real <div> for t-if/t-else so OWL's VList always has a
+                     real DOM parentEl (not a fragment chain).                      -->
+                <div t-if="!state.selected" class="cd-tpl-modal__step">
+                    <div class="cd-tpl-modal__toolbar">
+                        <input type="text" class="cd-tpl-modal__search"
+                               placeholder="Search templates…"
+                               t-att-value="state.query"
+                               t-on-input="(ev) => { this.state.query = ev.target.value; }"/>
+                        <button t-if="props.onRefresh" class="cd-tpl-modal__refresh"
+                                title="Refresh from Interakt"
+                                t-on-click="() => this.props.onRefresh()">
+                            <i class="fa fa-refresh" aria-hidden="true"/>
+                        </button>
+                    </div>
+
+                    <div class="cd-tpl-modal__body">
+                        <!-- loading / error / empty all on real <div> elements — no <t> wrappers -->
+                        <div t-if="props.loading" class="cd-tpl-modal__loading">
+                            <i class="fa fa-spinner fa-spin"/> Loading templates…
+                        </div>
+                        <div t-elif="props.error" class="cd-tpl-modal__error">
+                            <i class="fa fa-exclamation-triangle" aria-hidden="true"/>
+                            <span t-esc="props.error"/>
+                        </div>
+                        <div t-elif="filtered.length === 0" class="cd-tpl-modal__empty">
+                            No approved templates found.
+                        </div>
+                        <!-- t-foreach is on the <div> itself — one real element per item,
+                             direct child of div.cd-tpl-modal__items (also a real element).
+                             This gives VList a stable, non-null parentEl. -->
+                        <div t-else="" class="cd-tpl-modal__items">
+                            <div t-foreach="filtered" t-as="tpl" t-key="tpl_index"
+                                 class="cd-tpl-modal__item"
+                                 t-on-click="() => this.selectTemplate(tpl)">
+                                <div class="cd-tpl-modal__item-head">
+                                    <span class="cd-tpl-modal__item-name"
+                                          t-esc="tpl.display_name || tpl.name"/>
+                                    <span t-if="tpl.category"
+                                          class="cd-tpl-modal__item-cat" t-esc="tpl.category"/>
+                                    <span class="cd-tpl-modal__item-lang" t-esc="tpl.language"/>
+                                </div>
+                                <div class="cd-tpl-modal__item-body" t-esc="tpl.body"/>
+                                <div t-if="tpl.variables.length" class="cd-tpl-modal__item-vars">
+                                    <i class="fa fa-pencil-square-o" aria-hidden="true"/>
+                                    <t t-esc="tpl.variables.length"/> variable(s)
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- STEP 2 — fill variables + live preview
+                     Also on a real <div> so switching steps doesn't orphan VNodes. -->
+                <div t-else="" class="cd-tpl-modal__step">
+                    <div class="cd-tpl-modal__body cd-tpl-modal__fill">
+                        <div class="cd-tpl-modal__fill-form">
+                            <div t-if="state.selected.variables.length === 0"
+                                 class="cd-tpl-modal__novar">
+                                This template has no variables.
+                            </div>
+                            <!-- Variables foreach: each iteration yields label+input (2 nodes),
+                                 so it stays as <t t-foreach> but its parent is the real
+                                 div.cd-tpl-modal__fill-form — stable DOM parent. -->
+                            <t t-foreach="state.selected.variables" t-as="v"
+                               t-key="v.scope + '_' + v.position">
+                                <label class="cd-tpl-modal__label" t-esc="v.label"/>
+                                <input type="text" class="cd-tpl-modal__input"
+                                       t-att-value="state.values[v.scope + ':' + v.position]"
+                                       t-on-input="(ev) => this.setValue(v, ev)"/>
+                            </t>
+                        </div>
+
+                        <div class="cd-tpl-modal__preview">
+                            <div class="cd-tpl-modal__preview-label">Preview</div>
+                            <div class="cd-tpl-modal__bubble">
+                                <div t-if="headerPreview"
+                                     class="cd-tpl-modal__bubble-header" t-esc="headerPreview"/>
+                                <div class="cd-tpl-modal__bubble-body" t-esc="bodyPreview"/>
+                                <div t-if="state.selected.footer"
+                                     class="cd-tpl-modal__bubble-footer"
+                                     t-esc="state.selected.footer"/>
+                                <div t-if="state.selected.buttons.length"
+                                     class="cd-tpl-modal__bubble-buttons">
+                                    <!-- buttons forEach on the <div> element itself -->
+                                    <div t-foreach="state.selected.buttons" t-as="btn"
+                                         t-key="btn_index" class="cd-tpl-modal__bubble-btn">
+                                        <i class="fa fa-reply" aria-hidden="true"/>
+                                        <span t-esc="btn"/>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="cd-tpl-modal__footer">
+                        <button class="btn btn-secondary"
+                                t-on-click="() => this.backToList()">Back</button>
+                        <button class="btn btn-primary"
+                                t-att-disabled="!canSend or state.sending"
+                                t-on-click="() => this.send()">
+                            <t t-if="state.sending"><i class="fa fa-spinner fa-spin"/></t>
+                            <t t-else=""><i class="fa fa-send" aria-hidden="true"/> Send template</t>
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </t>
+</templates>
