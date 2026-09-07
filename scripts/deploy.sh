@@ -168,6 +168,50 @@ log "pulling ${NEW}"
 docker compose pull odoo || die "cannot pull $NEW"
 
 echo "ODOO_IMAGE=${NEW}" > .env
+
+# ── Optional module upgrade ───────────────────────────────────────────────────
+# A release that changes a module's schema has to run Odoo's own upgrade before
+# the new code starts serving. Without it the container comes up with new Python
+# against an old schema, and the failure surfaces later as a missing column in
+# somebody's request rather than here, where it can still be stopped.
+#
+# Deliberately opt-in. Every ordinary deploy must stay exactly as fast and as
+# boring as it is today, so this does nothing at all unless asked:
+#
+#   * ODOO_UPGRADE_MODULES=leads,properties  — for a hand-run deploy;
+#   * a one-shot request file (.deploy-upgrade in the app dir) — for a deploy
+#     driven by Cloud Build, which has no way to pass an environment variable
+#     through the trigger. The operator writes the file before approving the
+#     build, and it is consumed on success so the next deploy is ordinary again.
+#
+# Ordering matters: this runs while the OLD container is still serving, using
+# the NEW image (already pulled). If it fails we die here, the image is never
+# swapped, and the old container keeps running against the schema it was built
+# for — the one combination that is definitely consistent.
+#
+# `run --rm --no-deps` starts a throwaway container on the new image. --no-deps
+# so it cannot restart the db container underneath a live Odoo.
+UPGRADE_FILE="${UPGRADE_FILE:-${APP_DIR}/.deploy-upgrade}"
+UPGRADE_MODULES="${ODOO_UPGRADE_MODULES:-}"
+if [[ -z "${UPGRADE_MODULES}" && -f "${UPGRADE_FILE}" ]]; then
+  UPGRADE_MODULES="$(tr -d '[:space:]' < "${UPGRADE_FILE}" || true)"
+  [[ -n "${UPGRADE_MODULES}" ]] && log "upgrade requested by ${UPGRADE_FILE}"
+fi
+
+if [[ -n "${UPGRADE_MODULES}" ]]; then
+  log "upgrading modules on ${NEW}: ${UPGRADE_MODULES}"
+  # No timeout wrapper: an upgrade over a large table can legitimately take
+  # many minutes, and killing one halfway is far worse than waiting.
+  docker compose run --rm --no-deps odoo \
+      odoo -c /etc/odoo/odoo.conf \
+           -u "${UPGRADE_MODULES}" \
+           --stop-after-init \
+    || die "module upgrade failed; image NOT swapped, ${PREV:-current} still serving"
+  log "module upgrade finished"
+  # Consumed only on success, so a failed deploy can simply be retried.
+  rm -f "${UPGRADE_FILE}"
+fi
+
 log "starting"
 docker compose up -d odoo
 
