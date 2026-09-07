@@ -3,9 +3,17 @@
     background: #f8f9fa;
     padding: 8px 12px;
 
+    // The composer is the floor of the screen: it keeps its natural height no
+    // matter what the parent does. Without this it is a shrinkable flex child,
+    // so inside a fixed-height chat panel a notice or a banner squeezes it
+    // until the input row collides with the notice above it — the defect on
+    // the lead form at phone widths.
+    flex: 0 0 auto;
+
     &__closed-notice {
         display: flex;
         align-items: center;
+        flex-wrap: wrap;
         gap: 6px;
         font-size: 12px;
         color: #856404;
@@ -14,6 +22,15 @@
         border-radius: 6px;
         padding: 6px 10px;
         margin-bottom: 6px;
+    }
+
+    &__closed-text { flex: 1 1 auto; min-width: 0; }
+
+    &__closed-cta {
+        flex: 0 0 auto;
+        font-size: 12px;
+        padding: 2px 10px;
+        white-space: nowrap;
     }
 
     &__gate-notice {
@@ -207,6 +224,21 @@
         }
     }
 
+    // Phone: pin above the input instead of chasing the caret. A viewport-
+    // positioned popup and Android's own selection handles land on top of each
+    // other, and the popup often opens off the edge of a 390px screen.
+    &__fmt-popup--pinned {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: auto;
+        bottom: calc(100% + 6px);
+        transform: none;
+        justify-content: space-around;
+
+        &::after { display: none; }
+    }
+
     &__fmt-popup-btn {
         border: none;
         background: transparent;
@@ -251,6 +283,76 @@
         align-items: center;
         justify-content: center;
         flex-shrink: 0;
+    }
+}
+
+
+// ── Phone ────────────────────────────────────────────────────────────────────
+// Odoo's own small breakpoint (SIZES.SM, ui_service.js) so the composer and the
+// client around it agree about what a phone is.
+@media (max-width: 767.98px) {
+    .cd-chat-composer {
+        padding: 6px 8px;
+        // Clear of the home indicator, which otherwise covers the send button.
+        padding-bottom: calc(6px + var(--cd-safe-b));
+
+        &__row { gap: 4px; align-items: flex-end; }
+
+        &__attach-btn {
+            width: var(--cd-tap);
+            height: var(--cd-tap);
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+        }
+
+        &__input {
+            // 16px minimum: a smaller font makes mobile Safari zoom the page on
+            // focus and it never zooms back out.
+            font-size: 16px;
+            padding: 10px 14px;
+            // Tall enough that a placeholder or a first line at 16px is never
+            // clipped by the one-row default height.
+            min-height: var(--cd-tap);
+            // Grow to roughly 40% of the visible viewport, then scroll inside.
+            max-height: 40vh;
+        }
+
+        &__send-btn {
+            width: 48px;
+            height: 48px;
+            font-size: 17px;
+        }
+
+        &__closed-notice,
+        &__gate-notice { font-size: 13px; }
+
+        &__fmt-popup-btn { padding: 10px 14px; font-size: 15px; }
+
+        // Thumbnails scroll sideways rather than stacking rows that push the
+        // input off-screen.
+        &__files-grid {
+            flex-wrap: nowrap;
+            overflow-x: auto;
+            overscroll-behavior-x: contain;
+            max-height: none;
+        }
+
+        &__thumb-remove { width: 32px; height: 32px; }
+    }
+
+    // The list builder is a desktop-sized job; on a phone it takes the whole
+    // screen rather than a centred panel with a sliver of margin.
+    .cd-list-builder {
+        width: 100%;
+        max-width: none;
+        height: 100dvh;
+        max-height: 100dvh;
+        border-radius: 0;
+
+        &__body { padding-bottom: calc(12px + var(--cd-safe-b)); }
     }
 }
 

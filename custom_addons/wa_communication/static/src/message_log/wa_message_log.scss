@@ -389,7 +389,7 @@
     gap: 16px;
 
     @media (max-width: 1100px) { grid-template-columns: repeat(2, 1fr); }
-    @media (max-width: 640px)  { grid-template-columns: 1fr; }
+    @media (max-width: 767.98px) { grid-template-columns: repeat(2, 1fr); gap: 8px; }
   }
 
   &__detail-field {
@@ -454,4 +454,86 @@
     font-size: 13px;
     color: #6c757d;
   }
+}
+
+// ── Phone: table → card list ─────────────────────────────────────────────────
+// Nine columns of message metadata cannot be read at 390px. Each row becomes a
+// card headed by the lead, with every other cell labelled from its data-label.
+@media (max-width: 767.98px) {
+    .cd-msg-log {
+        padding: 12px;
+
+        &__filter-bar { flex-direction: column; align-items: stretch; gap: 8px; }
+
+        &__search,
+        &__date-input { font-size: 16px; min-height: var(--cd-tap); }
+
+        &__tabs {
+            display: flex;
+            flex-wrap: nowrap;
+            overflow-x: auto;
+            scrollbar-width: none;
+
+            &::-webkit-scrollbar { display: none; }
+        }
+
+        &__tab { flex: 0 0 auto; min-height: var(--cd-tap); }
+
+        &__table-wrap { overflow-x: visible; }
+
+        &__table,
+        &__table thead,
+        &__table tbody,
+        &__table tr,
+        &__table td { display: block; width: 100%; }
+
+        &__table thead { display: none; }
+
+        &__row {
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            padding: 10px 12px;
+            background: #fff;
+        }
+
+        &__table td {
+            border: 0;
+            padding: 4px 0;
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 12px;
+            text-align: right;
+
+            &::before {
+                content: attr(data-label);
+                flex: 0 0 auto;
+                font-size: 11px;
+                font-weight: 600;
+                letter-spacing: 0.04em;
+                text-transform: uppercase;
+                color: #868e96;
+                text-align: left;
+            }
+
+            &:not([data-label]) { display: block; text-align: left; }
+        }
+
+        &__lead-cell {
+            font-size: 15px;
+            font-weight: 600;
+            padding-bottom: 6px;
+            margin-bottom: 4px;
+            border-bottom: 1px solid #f1f3f5;
+        }
+
+        // The message body is the reason you opened this screen: let it wrap.
+        &__body-text { white-space: normal; }
+
+        // Raw payloads are the one place sideways scrolling is right.
+        &__detail-mono { overflow-x: auto; }
+
+        &__detail-grid { grid-template-columns: 1fr; }
+    }
 }

@@ -108,3 +108,57 @@
         transform: translateX(18px);
     }
 }
+
+// ── Phone: table → card list ─────────────────────────────────────────────────
+// A six-column table cannot be read at 390px, and horizontal scroll inside a
+// vertically scrolling page is a trap — you lose the row you were reading. Each
+// row becomes a card: the identifying cell is the heading, every other cell is
+// a label/value pair drawn from its `data-label`.
+@media (max-width: 767.98px) {
+    .cd-workflow-health-table {
+        table, thead, tbody, tr, td { display: block; width: 100%; }
+
+        // The header row is meaningless once each cell carries its own label.
+        thead { display: none; }
+
+        tr {
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            padding: 10px 12px;
+            background: #fff;
+        }
+
+        td {
+            border: 0;
+            padding: 4px 0;
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 12px;
+            text-align: right;
+
+            &::before {
+                content: attr(data-label);
+                flex: 0 0 auto;
+                font-size: 11px;
+                font-weight: 600;
+                letter-spacing: 0.04em;
+                text-transform: uppercase;
+                color: #868e96;
+                text-align: left;
+            }
+
+            // Cells with no label are the heading and the action row.
+            &:not([data-label]) { display: block; text-align: left; }
+        }
+
+        .cd-workflow-health-table__name {
+            font-size: 15px;
+            font-weight: 600;
+            padding-bottom: 6px;
+            margin-bottom: 4px;
+            border-bottom: 1px solid #f1f3f5;
+        }
+    }
+}

@@ -76,7 +76,14 @@
                         <!-- Filters popover: sort / window / date / RM refinements
                              — tactile pill groups instead of native dropdowns. -->
                         <t t-if="state.showFilters">
+                            <!-- Phone: the popover is restyled into a bottom
+                                 sheet (wa_inbox.scss), so it needs a scrim to
+                                 read as one and to give the whole screen a
+                                 dismiss target. -->
+                            <div class="wa-inbox__filters-scrim"
+                                 t-on-click="() => this.toggleFilters()"/>
                             <div class="wa-inbox__filters-pop" t-on-click.stop="() => {}">
+                                <div class="wa-inbox__filters-grip" aria-hidden="true"/>
                                 <div class="wa-inbox__filters-head">
                                     <span class="wa-inbox__filters-title">
                                         <i class="fa fa-sliders" aria-hidden="true"/> Filters &amp; sort
@@ -244,7 +251,23 @@
                                     <t t-esc="(activeConversation and activeConversation.assigned_user_name) ? activeConversation.assigned_user_name : 'Unassigned'"/>
                                 </span>
                             </div>
-                            <div class="wa-inbox__thread-actions">
+                            <!-- Phone: up to five buttons never fit, so all but
+                                 Template collapse into one overflow. Template
+                                 stays out because a closed 24h window makes it
+                                 the only way to reach the buyer. -->
+                            <div class="wa-inbox__thread-actions" t-if="isSmall">
+                                <button class="btn btn-sm btn-outline-primary"
+                                        t-on-click="() => this.openTemplatePicker()">
+                                    <i class="fa fa-envelope-o" aria-hidden="true"/> Template
+                                </button>
+                                <button class="btn btn-sm btn-outline-secondary"
+                                        aria-label="More actions"
+                                        t-on-click="() => this.openActionSheet()">
+                                    <i class="fa fa-ellipsis-v" aria-hidden="true"/>
+                                </button>
+                            </div>
+
+                            <div class="wa-inbox__thread-actions" t-if="!isSmall">
                                 <button class="btn btn-sm btn-outline-primary"
                                         t-on-click="() => this.openTemplatePicker()">
                                     <i class="fa fa-envelope-o" aria-hidden="true"/> Template
@@ -386,7 +409,8 @@
                             quickReplies="state.quickReplies"
                             disabled="!canSend"
                             disabledReason="sendGateReason"
-                            onSend="(body, kind, opts) => this.onSend(body, kind, opts)"/>
+                            onSend="(body, kind, opts) => this.onSend(body, kind, opts)"
+                            onOpenTemplates="() => this.openTemplatePicker()"/>
                     </t>
 
                     <!-- Empty state when no chat is selected -->
@@ -401,6 +425,58 @@
                     </t>
                 </div>
             </div>
+
+            <!-- Phone: the thread actions that don't fit on the header row -->
+            <t t-if="state.showActionSheet">
+                <CdBottomSheet title="'Conversation actions'" onClose.bind="closeActionSheet">
+                    <t t-if="viewLeadId">
+                        <button class="cd-sheet__action"
+                                t-on-click="() => this.runFromSheet(() => this.openLead(viewLeadId))">
+                            <i class="fa fa-user" aria-hidden="true"/> View lead
+                        </button>
+                    </t>
+                    <t t-if="isOrphanChat">
+                        <button class="cd-sheet__action"
+                                t-on-click="() => this.runFromSheet(() => this.openCreateLead())">
+                            <i class="fa fa-user-plus" aria-hidden="true"/> Create lead
+                        </button>
+                    </t>
+                    <t t-if="state.isManager and activeConversation">
+                        <button class="cd-sheet__action"
+                                t-on-click="() => this.runFromSheet(() => this.openAssignPicker())">
+                            <i class="fa fa-user-plus" aria-hidden="true"/> Assign to RM
+                        </button>
+                    </t>
+                    <t t-if="activeConversation and activeConversation.interakt_url">
+                        <button class="cd-sheet__action"
+                                t-on-click="() => this.runFromSheet(() => this.openInInterakt(activeConversation.interakt_url))">
+                            <i class="fa fa-external-link" aria-hidden="true"/> Open in Interakt
+                        </button>
+                    </t>
+                </CdBottomSheet>
+            </t>
+
+            <!-- Phone: assign picker as a searchable sheet. The RM list is long
+                 enough that typing three letters beats scrolling it. -->
+            <t t-if="isSmall and state.showAssignPicker">
+                <CdBottomSheet title="'Assign to RM'" tall="true" onClose.bind="closeAssignPicker">
+                    <div class="cd-sheet__search">
+                        <input type="search" placeholder="Search RM…"
+                               t-att-value="state.assignQuery"
+                               t-on-input="(ev) => this.onAssignQueryInput(ev)"/>
+                    </div>
+                    <t t-foreach="filteredAssignUsers" t-as="u" t-key="u.id">
+                        <button class="cd-sheet__action"
+                                t-on-click="() => this.pickAssignUser(u.id)">
+                            <i class="fa fa-user-circle-o" aria-hidden="true"/>
+                            <span t-esc="u.name"/>
+                        </button>
+                    </t>
+                    <t t-if="!filteredAssignUsers.length">
+                        <div class="cd-sheet__section-title">No RM matches that search</div>
+                    </t>
+                </CdBottomSheet>
+            </t>
 
             <!-- Send-template modal -->
             <t t-if="state.showTemplatePicker">

@@ -168,3 +168,45 @@ $cd-notif-colors: (
         &:hover { color: #16a34a; }
     }
 }
+
+// ── Phone ────────────────────────────────────────────────────────────────────
+@media (max-width: 767.98px) {
+    // Toasts span the width and stack from the top edge. A 360px card pinned
+    // to the right of a 390px screen is a card with 15px of margin pretending
+    // to be a desktop notification.
+    .cd-notif-popups {
+        top: 8px;
+        left: 8px;
+        right: 8px;
+        width: auto;
+        max-width: none;
+    }
+
+    .cd-notif-card {
+        // Whole card is the target: tapping a notification should open the
+        // chat it is about, and a phone gives you no room for a small one.
+        min-height: 56px;
+    }
+
+    // The bell panel becomes a full-height sheet rather than a dropdown hanging
+    // off the systray, which on a phone opens past the edge of the screen.
+    .cd-notif-bell__panel {
+        position: fixed;
+        top: auto;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        width: 100%;
+        max-width: none;
+        max-height: var(--cd-sheet-max-h);
+        border-radius: var(--cd-sheet-radius) var(--cd-sheet-radius) 0 0;
+        padding-bottom: var(--cd-safe-b);
+        z-index: var(--cd-sheet-z);
+        animation: cd-sheet-rise 180ms cubic-bezier(0.32, 0.72, 0, 1);
+    }
+
+    .cd-notif-bell__header { min-height: 48px; }
+
+    .cd-notif-item { min-height: var(--cd-tap); padding: 12px; }
+}
+

@@ -11,6 +11,8 @@ import { CdWindowBadge } from "@cleardeals_ui/index";
 import { CdTemplatePickerModal } from "@cleardeals_ui/index";
 import { CdInquirySwitcher } from "@cleardeals_ui/index";
 import { CdConversationListItem } from "@cleardeals_ui/index";
+import { CdBottomSheet } from "@cleardeals_ui/index";
+import { useKeyboardInset } from "@cleardeals_ui/index";
 import { relativeTime } from "@cleardeals_ui/utils/datetime";
 
 const PAGE_SIZE = 50;
@@ -53,7 +55,7 @@ const SLA_TONE = { ok: "ok", warn: "warn", breach: "bad" };
 export class WaInbox extends Component {
     static template   = "wa_communication.WaInbox";
     static props      = { "*": true };
-    static components = { CdChatThread, CdChatComposer, CdWindowBadge, CdTemplatePickerModal, CdInquirySwitcher, CdConversationListItem, AutoComplete };
+    static components = { CdChatThread, CdChatComposer, CdWindowBadge, CdTemplatePickerModal, CdInquirySwitcher, CdConversationListItem, CdBottomSheet, AutoComplete };
 
     setup() {
         this.orm        = useService("orm");
@@ -61,6 +63,13 @@ export class WaInbox extends Component {
         this.busService = useService("bus_service");
         this.notification = useService("notification");
         this.cdNotif    = useService("cd_notification");
+        // Reactive so a rotation re-renders: below Odoo's own small breakpoint
+        // the thread actions collapse into a sheet and the popovers become
+        // bottom sheets.
+        this.ui         = useState(useService("ui"));
+        // Publishes --cd-kb so the thread shrinks out from under the on-screen
+        // keyboard rather than hiding the composer behind it.
+        useKeyboardInset();
 
         this.state = useState({
             // Filters — mirror the backend get_inbox contract exactly.
@@ -104,6 +113,8 @@ export class WaInbox extends Component {
 
             // Assign-conversation picker (managers only) — mirrors the lead form.
             showAssignPicker:   false,
+            assignQuery:        "",   // phone: the RM list is long enough to need search
+            showActionSheet:    false, // phone: thread actions behind one overflow button
             assignUsers:        [],
 
             // Inquiry segment: suggestion the RM dismissed this session
@@ -318,6 +329,26 @@ export class WaInbox extends Component {
         this.state.filters.search = ev.target.value;
         clearTimeout(this._searchDebounce);
         this._searchDebounce = setTimeout(() => this._loadInbox(), 350);
+    }
+
+    get isSmall() { return this.ui.isSmall; }
+
+    openActionSheet()  { this.state.showActionSheet = true; }
+    closeActionSheet() { this.state.showActionSheet = false; }
+
+    /** Run a thread action from the phone sheet, closing the sheet first. */
+    runFromSheet(fn) {
+        this.state.showActionSheet = false;
+        fn();
+    }
+
+    onAssignQueryInput(ev) { this.state.assignQuery = ev.target.value; }
+
+    /** Assignable RMs filtered by the sheet's search box. */
+    get filteredAssignUsers() {
+        const q = (this.state.assignQuery || "").trim().toLowerCase();
+        const users = this.state.assignUsers || [];
+        return q ? users.filter(u => (u.name || "").toLowerCase().includes(q)) : users;
     }
 
     toggleFilters() {

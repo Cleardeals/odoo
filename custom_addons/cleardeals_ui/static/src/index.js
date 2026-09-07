@@ -31,6 +31,11 @@ export { CdBarChart }                from "./components/bar_chart/bar_chart";
 export { CdLineChart }               from "./components/line_chart/line_chart";
 export { CdRecentFailuresTable }     from "./components/recent_failures_table/recent_failures_table";
 
+export { CdBottomSheet }             from "./components/bottom_sheet/bottom_sheet";
+
+// ── mobile helpers ───────────────────────────────────────────────────────────
+export { useKeyboardInset }          from "./core/mobile/keyboard_inset";
+
 // ── chat components ──────────────────────────────────────────────────────────
 export { CdWindowBadge }             from "./components/window_badge/window_badge";
 export { CdChatBubble }              from "./components/chat_bubble/chat_bubble";

@@ -19,7 +19,15 @@
             <t t-elif="isClosed">
                 <div class="cd-chat-composer__closed-notice">
                     <i class="fa fa-lock" aria-hidden="true"/>
-                    24h window closed — only templates can be sent
+                    <span class="cd-chat-composer__closed-text">
+                        24h window closed — only templates can be sent
+                    </span>
+                    <t t-if="props.onOpenTemplates">
+                        <button class="btn btn-sm btn-warning cd-chat-composer__closed-cta"
+                                t-on-click="() => props.onOpenTemplates()">
+                            Send Template
+                        </button>
+                    </t>
                 </div>
             </t>
 
@@ -119,34 +127,46 @@
                         </t>
                     </div>
 
-                    <button class="btn cd-chat-composer__attach-btn"
-                            title="Attach image(s)"
-                            t-on-click="() => this.selectAttach('image')">
-                        <i class="fa fa-image" aria-hidden="true"/>
-                    </button>
-                    <button class="btn cd-chat-composer__attach-btn"
-                            title="Attach video(s)"
-                            t-on-click="() => this.selectAttach('video')">
-                        <i class="fa fa-video-camera" aria-hidden="true"/>
-                    </button>
-                    <button class="btn cd-chat-composer__attach-btn"
-                            title="Attach document(s)"
-                            t-on-click="() => this.selectAttach('document')">
-                        <i class="fa fa-paperclip" aria-hidden="true"/>
-                    </button>
-                    <button class="btn cd-chat-composer__attach-btn"
-                            title="Send interactive list"
-                            t-on-click="() => this.openListBuilder()">
-                        <i class="fa fa-list-ul" aria-hidden="true"/>
-                    </button>
+                    <!-- Phone: one paperclip opening a sheet of large labelled
+                         rows. Four 30px icons side by side is a mis-tap
+                         generator, and it crowds out the input. -->
+                    <t t-if="isSmall">
+                        <button class="btn cd-chat-composer__attach-btn"
+                                title="Attach"
+                                t-on-click="() => this.openAttachSheet()">
+                            <i class="fa fa-paperclip" aria-hidden="true"/>
+                        </button>
+                    </t>
+                    <t t-else="">
+                        <button class="btn cd-chat-composer__attach-btn"
+                                title="Attach image(s)"
+                                t-on-click="() => this.selectAttach('image')">
+                            <i class="fa fa-image" aria-hidden="true"/>
+                        </button>
+                        <button class="btn cd-chat-composer__attach-btn"
+                                title="Attach video(s)"
+                                t-on-click="() => this.selectAttach('video')">
+                            <i class="fa fa-video-camera" aria-hidden="true"/>
+                        </button>
+                        <button class="btn cd-chat-composer__attach-btn"
+                                title="Attach document(s)"
+                                t-on-click="() => this.selectAttach('document')">
+                            <i class="fa fa-paperclip" aria-hidden="true"/>
+                        </button>
+                        <button class="btn cd-chat-composer__attach-btn"
+                                title="Send interactive list"
+                                t-on-click="() => this.openListBuilder()">
+                            <i class="fa fa-list-ul" aria-hidden="true"/>
+                        </button>
+                    </t>
                 </t>
 
                 <!-- Textarea wrapper (position:relative so the popup anchors to it) -->
                 <div class="cd-chat-composer__input-wrap">
                     <!-- Floating format popup — fixed to viewport coords above selection -->
                     <div t-if="fmtPopup.visible and canSendFreeText"
-                         class="cd-chat-composer__fmt-popup"
-                         t-att-style="`left:${fmtPopup.x}px; top:${fmtPopup.y}px;`">
+                         t-attf-class="cd-chat-composer__fmt-popup {{ isSmall ? 'cd-chat-composer__fmt-popup--pinned' : '' }}"
+                         t-att-style="isSmall ? '' : `left:${fmtPopup.x}px; top:${fmtPopup.y}px;`">
                         <button type="button" class="cd-chat-composer__fmt-popup-btn"
                                 title="Bold (Ctrl+B / ⌘B)"
                                 t-on-mousedown.prevent="() => this.applyFormat('*')">
@@ -184,6 +204,24 @@
                     <i class="fa fa-send" aria-hidden="true"/>
                 </button>
             </div>
+
+            <!-- Attachment sheet (phones only) -->
+            <t t-if="state.showAttachSheet">
+                <CdBottomSheet title="'Attach'" onClose.bind="closeAttachSheet">
+                    <button class="cd-sheet__action" t-on-click="() => this.pickAttach('image')">
+                        <i class="fa fa-image" aria-hidden="true"/> Photo
+                    </button>
+                    <button class="cd-sheet__action" t-on-click="() => this.pickAttach('video')">
+                        <i class="fa fa-video-camera" aria-hidden="true"/> Video
+                    </button>
+                    <button class="cd-sheet__action" t-on-click="() => this.pickAttach('document')">
+                        <i class="fa fa-file-o" aria-hidden="true"/> Document
+                    </button>
+                    <button class="cd-sheet__action" t-on-click="() => this.pickAttach('list')">
+                        <i class="fa fa-list-ul" aria-hidden="true"/> Interactive list
+                    </button>
+                </CdBottomSheet>
+            </t>
 
             <!-- Interactive list builder modal -->
             <t t-if="state.listBuilder">

@@ -113,3 +113,30 @@
         -webkit-box-orient: vertical;
     }
 }
+
+// ── Phone ────────────────────────────────────────────────────────────────────
+// Anchored above a 30px lightning button, a 340px panel opens half off-screen
+// on a 390px display. Same markup, sheet shape.
+@media (max-width: 767.98px) {
+    .cd-qr-picker {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        top: auto;
+        width: 100%;
+        max-width: none;
+        max-height: var(--cd-sheet-max-h);
+        border-radius: var(--cd-sheet-radius) var(--cd-sheet-radius) 0 0;
+        padding-bottom: var(--cd-safe-b);
+        z-index: var(--cd-sheet-z);
+        animation: cd-sheet-rise 180ms cubic-bezier(0.32, 0.72, 0, 1);
+
+        &__list { max-height: 60vh; }
+
+        &__item { min-height: var(--cd-tap); }
+
+        &__search { font-size: 16px; min-height: var(--cd-tap); }
+    }
+}
+

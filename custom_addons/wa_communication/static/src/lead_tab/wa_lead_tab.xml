@@ -51,6 +51,47 @@
                      class="wa-lead-tab__enrollments"> block here (JS getter and
                      SCSS are kept dormant). -->
 
+                <!-- Phone: the sidebar has nowhere to go, so its contents move
+                     into a header strip above the thread. Send Template is
+                     promoted out of the sheet on purpose — when the 24h window
+                     is closed a template is the ONLY way to reach the buyer, and
+                     hiding it behind an overflow made the phone a dead end. -->
+                <t t-if="isSmall">
+                    <div class="wa-lead-tab__mobile-bar">
+                        <div class="wa-lead-tab__mobile-row">
+                            <CdWindowBadge state="windowState" windowExpiresAt="windowExpiresAt"/>
+                            <span class="wa-lead-tab__mobile-assignee" t-if="conversation">
+                                <i class="fa fa-user-circle-o" aria-hidden="true"/>
+                                <t t-esc="conversation.assigned_user_name || 'Unassigned'"/>
+                            </span>
+                            <button class="wa-lead-tab__mobile-btn wa-lead-tab__mobile-btn--primary"
+                                    t-on-click="() => this.openTemplatePicker()">
+                                <i class="fa fa-envelope-o" aria-hidden="true"/> Template
+                            </button>
+                            <button class="wa-lead-tab__mobile-btn"
+                                    aria-label="More actions"
+                                    t-on-click="() => this.openActionSheet()">
+                                <i class="fa fa-ellipsis-v" aria-hidden="true"/>
+                            </button>
+                        </div>
+                        <button class="wa-lead-tab__mobile-stats"
+                                t-att-aria-expanded="state.statsExpanded ? 'true' : 'false'"
+                                t-on-click="() => this.toggleStats()">
+                            <span t-esc="statsSummary"/>
+                            <i t-attf-class="fa fa-chevron-{{ state.statsExpanded ? 'up' : 'down' }}"
+                               aria-hidden="true"/>
+                        </button>
+                        <t t-if="state.statsExpanded">
+                            <div class="wa-lead-tab__mobile-stats-grid">
+                                <div><b t-esc="stats.sent || 0"/><span>Sent</span></div>
+                                <div><b><t t-esc="stats.delivered_pct || 0"/>%</b><span>Delivered</span></div>
+                                <div><b><t t-esc="stats.read_pct || 0"/>%</b><span>Read</span></div>
+                                <div><b t-esc="stats.replies || 0"/><span>Replies</span></div>
+                            </div>
+                        </t>
+                    </div>
+                </t>
+
                 <!-- Centre: Chat thread + composer -->
                 <div class="wa-lead-tab__chat">
                     <t t-if="state.sendError">
@@ -130,11 +171,15 @@
                         quickReplies="state.quickReplies"
                         disabled="!canSend"
                         disabledReason="sendGateReason"
-                        onSend="(body, kind, opts) => this.onSend(body, kind, opts)"/>
+                        onSend="(body, kind, opts) => this.onSend(body, kind, opts)"
+                        onOpenTemplates="() => this.openTemplatePicker()"/>
                 </div>
 
-                <!-- Right: Stats + Actions -->
-                <div class="wa-lead-tab__sidebar">
+                <!-- Right: Stats + Actions.
+                     `t-if` rather than `display: none` — a hidden sidebar still
+                     renders and still fetches, and its actions were unreachable
+                     on a phone rather than merely invisible. -->
+                <div class="wa-lead-tab__sidebar" t-if="!isSmall">
                     <!-- Window badge -->
                     <div class="wa-lead-tab__window-row">
                         <CdWindowBadge state="windowState" windowExpiresAt="windowExpiresAt"/>
@@ -232,6 +277,40 @@
                         </button>
                     </div>
                 </div>
+            </t>
+
+            <!-- Phone: everything the sidebar used to hold -->
+            <t t-if="state.showActionSheet">
+                <CdBottomSheet title="'Conversation actions'" onClose.bind="closeActionSheet">
+                    <button class="cd-sheet__action"
+                            t-att-disabled="!hasProperty or state.sharingDetails"
+                            t-on-click="() => this.runFromSheet(() => this.sendPropertyDetails())">
+                        <i class="fa fa-home" aria-hidden="true"/>
+                        <t t-if="state.sharingDetails">Sending…</t>
+                        <t t-else="">Share Property Details</t>
+                    </button>
+                    <button class="cd-sheet__action"
+                            t-on-click="() => this.runFromSheet(() => this.openAssignPicker())">
+                        <i class="fa fa-user-plus" aria-hidden="true"/> Assign conversation
+                    </button>
+                    <button class="cd-sheet__action"
+                            t-on-click="() => this.runFromSheet(() => this.openInInterakt())">
+                        <i class="fa fa-external-link" aria-hidden="true"/> Open in Interakt
+                    </button>
+                </CdBottomSheet>
+            </t>
+
+            <!-- Phone: the assign dropdown becomes a sheet of full-width rows -->
+            <t t-if="isSmall and state.showAssignPicker">
+                <CdBottomSheet title="'Assign to RM'" tall="true" onClose.bind="closePickers">
+                    <t t-foreach="state.assignUsers" t-as="u" t-key="u.id">
+                        <button class="cd-sheet__action"
+                                t-on-click="() => this.pickAssignUser(u.id)">
+                            <i class="fa fa-user-circle-o" aria-hidden="true"/>
+                            <span t-esc="u.name"/>
+                        </button>
+                    </t>
+                </CdBottomSheet>
             </t>
 
             <!-- Send-template modal -->

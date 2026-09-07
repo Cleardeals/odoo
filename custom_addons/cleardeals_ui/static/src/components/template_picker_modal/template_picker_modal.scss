@@ -239,6 +239,28 @@
     }
 }
 
-@media (max-width: 640px) {
-    .cd-tpl-modal__fill { grid-template-columns: 1fr; }
+// ── Phone ────────────────────────────────────────────────────────────────────
+// Full screen, not a centred dialog: 24px of overlay padding on each side of a
+// 390px screen is a sixth of the width spent on backdrop, and the variable form
+// needs every pixel it can get.
+@media (max-width: 767.98px) {
+    .cd-tpl-overlay { padding: 0; align-items: stretch; }
+
+    .cd-tpl-modal {
+        width: 100%;
+        max-width: none;
+        height: 100dvh;
+        max-height: 100dvh;
+        border-radius: 0;
+
+        &__fill { grid-template-columns: 1fr; }
+
+        &__footer {
+            padding-bottom: calc(14px + var(--cd-safe-b));
+
+            .btn { min-height: var(--cd-tap); }
+        }
+
+        input, textarea, select { font-size: 16px; }
+    }
 }

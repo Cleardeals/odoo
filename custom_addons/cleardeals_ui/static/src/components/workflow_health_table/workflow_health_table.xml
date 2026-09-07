@@ -31,16 +31,16 @@
                 <td class="cd-workflow-health-table__name">
                   <t t-esc="row.name"/>
                 </td>
-                <td>
+                <td data-label="Status">
                   <span t-att-class="'cd-wf-badge ' + (row.is_active ? 'cd-wf-badge--active' : 'cd-wf-badge--paused')">
                     <t t-if="row.is_active">Active</t>
                     <t t-else="">Paused</t>
                   </span>
                 </td>
-                <td><t t-esc="row.sent"/></td>
-                <td><t t-esc="row.delivery_rate"/>%</td>
-                <td><t t-esc="row.failed"/></td>
-                <td>
+                <td data-label="Sent"><t t-esc="row.sent"/></td>
+                <td data-label="Delivered"><t t-esc="row.delivery_rate"/>%</td>
+                <td data-label="Failed"><t t-esc="row.failed"/></td>
+                <td data-label="On/Off">
                   <div
                     t-att-class="'cd-toggle ' + (row.is_active ? 'cd-toggle--on' : '')"
                     t-on-click="() => this.handleToggle(row)"

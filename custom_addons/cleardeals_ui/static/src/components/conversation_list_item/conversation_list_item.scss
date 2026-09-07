@@ -111,3 +111,25 @@
         margin-top: 2px;
     }
 }
+
+// ── Phone ────────────────────────────────────────────────────────────────────
+// A 40px row is a coin-toss with a thumb. Taller rows, a larger name, and a
+// name column that uses the width a phone actually has — the 160px cap was
+// sized for a 380px list pane, not a full-width screen.
+@media (max-width: 767.98px) {
+    .cd-conv-item {
+        min-height: 72px;
+        padding: 12px 12px;
+        // Removes the 300ms tap delay and the grey flash on Android.
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+
+        &:hover { background: inherit; }
+        &:active { background: #f1f3f5; }
+
+        &__name { font-size: 15px; max-width: none; }
+        &__preview { font-size: 13.5px; }
+        &__time { font-size: 12px; }
+    }
+}
+

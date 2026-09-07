@@ -1,7 +1,9 @@
 /** @odoo-module */
 
 import { Component, useState, useRef, onMounted, onWillUnmount } from "@odoo/owl";
+import { useService } from "@web/core/utils/hooks";
 import { CdQuickReplyPicker } from "../quick_reply_picker/quick_reply_picker";
+import { CdBottomSheet } from "../bottom_sheet/bottom_sheet";
 import { wrapSelection } from "../../utils/whatsapp_format";
 import { WA_LIST_LIMITS, findOverLongListText } from "../../utils/wa_list_limits";
 import { checkMediaFile } from "../../utils/wa_media_limits";
@@ -15,10 +17,14 @@ import { checkMediaFile } from "../../utils/wa_media_limits";
  *   disabled     {Boolean}  optional hard-disable
  *   disabledReason {String} optional — shown when disabled (e.g. assignee gate)
  *   quickReplies {Array}    optional — [{id,title,shortcut,body,is_shared}]
+ *   onOpenTemplates {Function} optional — opens the caller's template picker.
+ *                   When given, the closed-window notice offers it inline:
+ *                   the notice says a template is the only way through, so it
+ *                   should also be the way through.
  */
 export class CdChatComposer extends Component {
     static template = "cleardeals_ui.ChatComposer";
-    static components = { CdQuickReplyPicker };
+    static components = { CdQuickReplyPicker, CdBottomSheet };
 
     static props = {
         windowState:    { type: String },
@@ -26,6 +32,7 @@ export class CdChatComposer extends Component {
         disabled:       { type: Boolean, optional: true },
         disabledReason: { type: String, optional: true },
         quickReplies:   { type: Array, optional: true },
+        onOpenTemplates: { type: Function, optional: true },
     };
 
     static defaultProps = { disabled: false, disabledReason: "", quickReplies: [] };
@@ -37,8 +44,12 @@ export class CdChatComposer extends Component {
             sharedCaption: "",
             uploadError:   null,
             showQuickReplies: false,
+            showAttachSheet: false,
             listBuilder:   null,  // null | {body, button, sections:[{title,rows:[{title,description}]}], error}
         });
+        // Reactive so a rotation re-renders: the four attach buttons collapse
+        // into one sheet trigger below Odoo's own small breakpoint (767px).
+        this.ui = useState(useService("ui"));
         this.fmtPopup = useState({ visible: false, x: 0, y: 0 });
         this._nextFileId = 0;
         this._selectingKind = null;
@@ -51,6 +62,7 @@ export class CdChatComposer extends Component {
         onWillUnmount(() => document.removeEventListener("selectionchange", this._onSelChange));
     }
 
+    get isSmall()         { return this.ui.isSmall; }
     get isClosed()        { return this.props.windowState === "closed"; }
     get canSendFreeText() { return !this.isClosed && !this.props.disabled; }
     get hasPending()      { return this.state.pendingFiles.length > 0; }
@@ -62,9 +74,28 @@ export class CdChatComposer extends Component {
         return this.state.pendingFiles.filter(f => f.uploadUrl && !f.uploading).length;
     }
     get placeholderText() {
-        return this.isClosed
-            ? "Window closed — use Send Template to reach this contact"
-            : "Type a message…";
+        if (!this.isClosed) {
+            return "Type a message…";
+        }
+        // On a phone the long form wraps to two lines inside a one-row
+        // textarea and clips. It is also redundant there: the notice directly
+        // above says the same thing and carries the Send Template button.
+        return this.isSmall
+            ? "Window closed"
+            : "Window closed — use Send Template to reach this contact";
+    }
+
+    openAttachSheet()  { this.state.showAttachSheet = true; }
+    closeAttachSheet() { this.state.showAttachSheet = false; }
+
+    /** Pick an attachment kind from the mobile sheet, then close it. */
+    pickAttach(kind) {
+        this.closeAttachSheet();
+        if (kind === "list") {
+            this.openListBuilder();
+        } else {
+            this.selectAttach(kind);
+        }
     }
 
     onInput(ev) {

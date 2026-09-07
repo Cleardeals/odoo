@@ -11,14 +11,14 @@
         t-on-click="() => this.onClick()">
 
       <!-- Dir -->
-      <td>
+      <td data-label="Direction">
         <span t-att-class="dirBadgeClass">
           <t t-esc="props.row.direction === 'inbound' ? 'Inbound' : 'Outbound'"/>
         </span>
       </td>
 
       <!-- Type -->
-      <td>
+      <td data-label="Type">
         <span t-att-class="kindBadgeClass">
           <t t-if="props.row.kind === 'button_reply'">
             <i class="fa fa-reply"/> 
@@ -67,14 +67,14 @@
       </td>
 
       <!-- Status -->
-      <td>
+      <td data-label="Status">
         <span t-att-class="statusBadgeClass">
           <t t-esc="props.row.status.charAt(0).toUpperCase() + props.row.status.slice(1).replace('_', ' ')"/>
         </span>
       </td>
 
       <!-- Failure -->
-      <td class="cd-msg-log__failure-cell">
+      <td class="cd-msg-log__failure-cell" data-label="Failure">
         <t t-if="hasFailure">
           <t t-foreach="failureLines" t-as="line" t-key="line_index">
             <div t-att-class="line_index === 0 ? 'cd-msg-log__failure-label' : 'text-muted small'">
@@ -88,12 +88,12 @@
       </td>
 
       <!-- Time -->
-      <td class="cd-msg-log__time-cell">
+      <td class="cd-msg-log__time-cell" data-label="Time">
         <t t-esc="props.row.occurred_at"/>
       </td>
 
       <!-- Cost -->
-      <td class="cd-msg-log__cost-cell">
+      <td class="cd-msg-log__cost-cell" data-label="Cost">
         <t t-if="props.row.cost_inr">
           <span class="cd-msg-log__cost">₹<t t-esc="props.row.cost_inr.toFixed(2)"/></span>
         </t>
@@ -103,7 +103,7 @@
       </td>
 
       <!-- Workflow -->
-      <td class="cd-msg-log__workflow-cell">
+      <td class="cd-msg-log__workflow-cell" data-label="Workflow">
         <t t-if="props.row.workflow_slug">
           <div class="cd-msg-log__workflow-name" t-esc="props.row.workflow_slug"/>
           <t t-if="props.row.step_id">

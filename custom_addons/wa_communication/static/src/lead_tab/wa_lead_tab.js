@@ -10,6 +10,8 @@ import { CdChatComposer } from "@cleardeals_ui/index";
 import { CdWindowBadge }  from "@cleardeals_ui/index";
 import { CdTemplatePickerModal } from "@cleardeals_ui/index";
 import { CdInquirySwitcher } from "@cleardeals_ui/index";
+import { CdBottomSheet } from "@cleardeals_ui/index";
+import { useKeyboardInset } from "@cleardeals_ui/index";
 
 const WF_STATUS_MAP = {
     active:   { label: "Active",   key: "active" },
@@ -23,7 +25,7 @@ const WF_STATUS_MAP = {
 export class WaLeadTab extends Component {
     static template   = "wa_communication.WaLeadTab";
     static props      = { ...standardWidgetProps };
-    static components = { CdChatThread, CdChatComposer, CdWindowBadge, CdTemplatePickerModal, CdInquirySwitcher };
+    static components = { CdChatThread, CdChatComposer, CdWindowBadge, CdTemplatePickerModal, CdInquirySwitcher, CdBottomSheet };
 
     setup() {
         this.orm        = useService("orm");
@@ -51,7 +53,17 @@ export class WaLeadTab extends Component {
             sharingDetails:     false,
             // Inquiry segment: suggestion the RM dismissed this session
             dismissedSegmentId: null,
+            // Phone: the sidebar's actions move into a sheet, and the 2x2 stats
+            // grid collapses to one line that expands on demand.
+            showActionSheet: false,
+            statsExpanded:   false,
         });
+
+        // Reactive, so rotating the phone re-renders into the other layout.
+        this.ui = useState(useService("ui"));
+        // Publishes --cd-kb so the panel can shrink out from under the
+        // on-screen keyboard instead of hiding the composer behind it.
+        useKeyboardInset();
 
         onMounted(() => {
             this._load();
@@ -482,6 +494,24 @@ export class WaLeadTab extends Component {
     }
 
     // ── Derived from thread ───────────────────────────────────────────────────
+
+    get isSmall() { return this.ui.isSmall; }
+
+    /** One-line stats summary for the phone header — "49 sent · 100% read". */
+    get statsSummary() {
+        const st = this.stats || {};
+        return `${st.sent || 0} sent · ${st.read_pct || 0}% read`;
+    }
+
+    openActionSheet()  { this.state.showActionSheet = true; }
+    closeActionSheet() { this.state.showActionSheet = false; }
+    toggleStats()      { this.state.statsExpanded = !this.state.statsExpanded; }
+
+    /** Run a sidebar action from the phone sheet, closing it first. */
+    runFromSheet(fn) {
+        this.state.showActionSheet = false;
+        fn();
+    }
 
     get conversation()    { return this.state.thread?.conversation || null; }
     get myOpenRequest()   { return !!this.conversation?.my_open_request; }

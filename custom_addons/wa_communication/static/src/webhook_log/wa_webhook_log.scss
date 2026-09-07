@@ -273,7 +273,7 @@
     border-radius: 8px;
     margin-bottom: 16px;
 
-    @media (max-width: 900px) { grid-template-columns: repeat(2, 1fr); }
+    @media (max-width: 991.98px) { grid-template-columns: repeat(2, 1fr); }
   }
 
   &__detail-stat {
@@ -329,4 +329,17 @@
     font-family: "SFMono-Regular", Consolas, monospace;
     font-size: 11px;
   }
+}
+
+// ── Phone ────────────────────────────────────────────────────────────────────
+@media (max-width: 767.98px) {
+    .cd-webhook-log {
+        padding: 12px;
+
+        // Raw webhook JSON is the point of this screen, and it is the one place
+        // horizontal scrolling is the right answer — inside its own box.
+        pre, code { overflow-x: auto; font-size: 12px; }
+
+        input, select { font-size: 16px; min-height: var(--cd-tap); }
+    }
 }

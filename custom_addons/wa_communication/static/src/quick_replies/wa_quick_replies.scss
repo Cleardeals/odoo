@@ -334,3 +334,25 @@
     margin-right: 4px;
     font-size: 12px;
 }
+
+// ── Phone ────────────────────────────────────────────────────────────────────
+// The grid of reply cards goes to one column and the editor fields go
+// full-width; 336 lines of stylesheet had no breakpoint at all before this.
+@media (max-width: 767.98px) {
+    .wa-qr {
+        padding: 12px;
+
+        &__header { flex-wrap: wrap; gap: 8px; }
+
+        &__grid { grid-template-columns: 1fr; }
+
+        &__input { font-size: 16px; min-height: var(--cd-tap); }
+
+        &__icon-btn { width: var(--cd-tap); height: var(--cd-tap); }
+
+        &__kind-opt { min-height: var(--cd-tap); }
+
+        &__fmt-btn { min-width: 40px; min-height: 40px; }
+    }
+}
+

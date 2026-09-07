@@ -507,3 +507,21 @@ mark.cd-search-highlight {
         &:hover { background: rgba(0, 0, 0, 0.03); }
     }
 }
+
+// ── Phone ────────────────────────────────────────────────────────────────────
+// Wider bubbles and a slightly larger face: 70% of 390px leaves a 270px column
+// for text that is often Hindi or Gujarati, where truncation hurts most.
+@media (max-width: 767.98px) {
+    .cd-chat-bubble {
+        max-width: 85%;
+
+        &__body { font-size: 15px; }
+
+        // The buttons the buyer sees in WhatsApp: give them the same presence
+        // here so a screenshot of our thread matches the buyer's screen.
+        &__template-btn { padding: 11px 12px; font-size: 14px; }
+
+        // The delivery-detail popover would otherwise open past the screen edge.
+        &__info-popover { left: 8px; right: 8px; width: auto; max-width: none; }
+    }
+}

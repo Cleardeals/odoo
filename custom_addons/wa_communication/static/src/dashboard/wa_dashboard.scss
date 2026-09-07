@@ -305,12 +305,15 @@
         gap: 14px;
         margin-bottom: 20px;
 
-        @media (max-width: 900px) {
+        @media (max-width: 991.98px) {
             grid-template-columns: repeat(2, 1fr);
         }
 
-        @media (max-width: 600px) {
-            grid-template-columns: 1fr;
+        // Two columns, not one: each card is a single number with a short
+        // label, so one per row just doubles the scrolling.
+        @media (max-width: 767.98px) {
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
         }
     }
 
@@ -322,7 +325,7 @@
         gap: 16px;
         margin-bottom: 20px;
 
-        @media (max-width: 900px) {
+        @media (max-width: 991.98px) {
             grid-template-columns: 1fr;
         }
     }
@@ -437,5 +440,66 @@
         &:hover {
             background: #5b21b6;
         }
+    }
+}
+
+// ── Phone ────────────────────────────────────────────────────────────────────
+@media (max-width: 767.98px) {
+    .o-wa-dashboard {
+        padding: 12px;
+
+        &__header { flex-wrap: wrap; gap: 8px; }
+
+        // Filter groups stack; each control gets the full width rather than a
+        // third of it.
+        &__filters { flex-direction: column; align-items: stretch; gap: 10px; }
+
+        &__filter-group { width: 100%; }
+
+        // Range tabs scroll sideways instead of wrapping into three rows that
+        // push the numbers below the fold.
+        &__presets {
+            display: flex;
+            flex-wrap: nowrap;
+            overflow-x: auto;
+            overscroll-behavior-x: contain;
+            scrollbar-width: none;
+            gap: 6px;
+
+            &::-webkit-scrollbar { display: none; }
+        }
+
+        &__range-tab { flex: 0 0 auto; min-height: var(--cd-tap); }
+
+        &__date-inputs { flex-direction: column; align-items: stretch; gap: 6px; }
+
+        // Native pickers do the work, and 16px stops mobile Safari zooming.
+        input[type="date"] { min-height: var(--cd-tap); font-size: 16px; width: 100%; }
+
+        &__filter-btn,
+        &__refresh-btn,
+        &__apply-btn { min-height: var(--cd-tap); }
+
+        // The workflow multi-select is a long list: pin it to the bottom of the
+        // screen as a sheet rather than an anchored dropdown.
+        &__dropdown {
+            position: fixed;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            top: auto;
+            width: 100%;
+            max-width: none;
+            max-height: var(--cd-sheet-max-h);
+            transform: none;
+            border-radius: var(--cd-sheet-radius) var(--cd-sheet-radius) 0 0;
+            padding-bottom: var(--cd-safe-b);
+            z-index: var(--cd-sheet-z);
+            animation: cd-sheet-rise 180ms cubic-bezier(0.32, 0.72, 0, 1);
+        }
+
+        &__workflow-search { font-size: 16px; min-height: var(--cd-tap); }
+
+        &__section { padding: 12px; }
     }
 }
