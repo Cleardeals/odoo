@@ -157,6 +157,27 @@ services:
     environment:
       - ODOO_PROXY=true
       - WEB_BASE_URL=https://odoo.cleardeals.xyz
+      # Pub/Sub runtime environment. Both were absent on production while stage
+      # had them, which is a silent, total failure of the WhatsApp integration:
+      #
+      #   PUBSUB_PROJECT_ID — cleardeals_pubsub RAISES EnvironmentError when it
+      #     is unset, so EVERY publish fails. Nothing degrades gracefully.
+      #   GCP_ENV — wa_workflow builds the workflow-control topic as
+      #     cd-<env>-workflow-control at runtime. Unset means "local", so a
+      #     production pause/resume would publish to cd-local-workflow-control,
+      #     a topic that does not exist, inside a caught exception. Someone
+      #     pauses a workflow, Odoo agrees it is paused, and customers keep
+      #     receiving messages.
+      #
+      # Defaults are deliberately the SAFE ones rather than the production ones.
+      # An unset PUBSUB_PROJECT_ID fails loudly at the first publish; defaulting
+      # it to the real project would instead let a developer's laptop publish
+      # into production topics. Same reasoning for GCP_ENV=local.
+      #
+      # Real values are set per-host in .env, which scripts/deploy.sh now
+      # preserves across deploys instead of truncating.
+      - GCP_ENV=${GCP_ENV:-local}
+      - PUBSUB_PROJECT_ID=${PUBSUB_PROJECT_ID:-}
     labels:
       - "traefik.enable=true"
       # --- Main Odoo Router ---
