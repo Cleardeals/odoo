@@ -167,7 +167,26 @@ gcloud auth configure-docker "${REGISTRY}" --quiet >/dev/null 2>&1 \
 log "pulling ${NEW}"
 docker compose pull odoo || die "cannot pull $NEW"
 
-echo "ODOO_IMAGE=${NEW}" > .env
+# Rewrite ONLY the ODOO_IMAGE line, preserving every other key.
+#
+# This used to be `echo "ODOO_IMAGE=..." > .env`, which truncates the file. That
+# silently deleted any other variable on every deploy, so .env was unusable for
+# per-host runtime configuration and nobody could tell why their setting kept
+# vanishing. PUBSUB_PROJECT_ID and GCP_ENV (see docker-compose.yml) now live
+# there, and losing them mid-deploy would take the WhatsApp integration down
+# without a single error until the first publish.
+set_env_image() {
+  local image="$1" tmp
+  tmp="$(mktemp "${APP_DIR}/.env.XXXXXX")" || die "cannot create temp .env"
+  if [[ -f .env ]]; then
+    grep -v '^ODOO_IMAGE=' .env >> "${tmp}" || true
+  fi
+  echo "ODOO_IMAGE=${image}" >> "${tmp}"
+  chmod 600 "${tmp}"
+  mv -f "${tmp}" .env || die "cannot update .env"
+}
+
+set_env_image "${NEW}"
 
 # ── Optional module upgrade ───────────────────────────────────────────────────
 # A release that changes a module's schema has to run Odoo's own upgrade before
@@ -249,7 +268,7 @@ if [[ "$odoo_ok" != true ]]; then
   fi
 
   log "rolling back to ${PREV}"
-  echo "ODOO_IMAGE=${PREV}" > .env
+  set_env_image "${PREV}"
   docker compose up -d odoo
 
   # NOTE: this restores the IMAGE. It does not undo a schema migration — those are
