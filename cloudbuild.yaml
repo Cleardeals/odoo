@@ -110,6 +110,23 @@ steps:
         done
         echo "postgres never became ready" >&2; exit 1
 
+  # The module list is DERIVED, not written out. A hand-maintained list is a list
+  # that goes stale: the four modules named here before this change were the only
+  # ones that existed when it was written, so every module added since would have
+  # shipped to production through a gate that never installed it.
+  #
+  # Modules marked `installable: False` are skipped — they are deprecated, must
+  # never be installed in production, and `-i` on one fails the build outright.
+  #
+  # Shell variables are lowercase ON PURPOSE. A dollar sign followed by capitals
+  # is read as a Cloud Build substitution and the build is rejected when the name
+  # is not a known one — the deploy step below carries two scars from exactly
+  # that. Lowercase names pass through untouched.
+  #
+  # This applies inside the step's script string as well, comments included: the
+  # first build of this change failed because a comment in cloudbuild.ci.yaml
+  # spelled the pattern out literally. YAML comments like this one are stripped
+  # by the parser and are safe; anything inside `args` is not.
   - id: test
     name: gcr.io/cloud-builders/docker
     waitFor: [build, test-db]
@@ -118,15 +135,36 @@ steps:
       - -c
       - |
         set -euo pipefail
+
+        modules=""
+        for dir in custom_addons/*/; do
+          name="$(basename "$dir")"
+          manifest="${dir}__manifest__.py"
+          [ -f "$manifest" ] || continue
+          if grep -qE "['\"]installable['\"][[:space:]]*:[[:space:]]*False" "$manifest"; then
+            echo "skipping $name (installable: False)"
+            continue
+          fi
+          modules="${modules:+$modules,}$name"
+        done
+        [ -n "$modules" ] || { echo "no installable modules found" >&2; exit 1; }
+
+        # --test-tags takes /module form; reuse the same list so the two can
+        # never disagree about what is being tested.
+        tags="$(echo "$modules" | sed 's#[^,]*#/&#g')"
+
+        echo "installing: $modules"
+        echo "test tags : $tags"
+
         docker run --rm --network odoo-cd-net \
           "${_REGION}-docker.pkg.dev/$PROJECT_ID/odoo/odoo:$SHORT_SHA" \
           odoo -d odoo_test_db \
             --db_host=odoo-cd-db --db_port=5432 \
             --db_user=odoo --db_password=odoo \
             --addons-path=/opt/cleardeals-addons,/usr/lib/python3/dist-packages/odoo/addons \
-            -i leads,lead_suggestor,cleardeals_dashboards,properties \
+            -i "$modules" \
             --test-enable \
-            --test-tags /leads,/lead_suggestor,/cleardeals_dashboards,/properties \
+            --test-tags "$tags" \
             --stop-after-init --log-level=test
 
   # ── Push only after every gate is green ──────────────────────────────────────

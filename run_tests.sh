@@ -71,8 +71,28 @@ LOG_LEVEL="${LOG_LEVEL:-test}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Modules/tags to test — can be overridden by positional arguments
-DEFAULT_MODULES="leads,lead_suggestor,cleardeals_dashboards,properties"
-DEFAULT_TAGS="/leads,/lead_suggestor,/cleardeals_dashboards,/properties"
+# Derived from the tree so a local run matches CI exactly, and so adding a
+# module does not require remembering to edit three files. Modules marked
+# `installable: False` are deprecated and are skipped — `-i` on one fails.
+_discover_modules() {
+    local dir name manifest out=""
+    for dir in "${SCRIPT_DIR:-.}"/custom_addons/*/; do
+        name="$(basename "$dir")"
+        manifest="${dir}__manifest__.py"
+        [[ -f "$manifest" ]] || continue
+        # `if`, not `grep ... && continue`: under `set -e` an AND-list whose
+        # final command does not run exits the shell, so the && form would
+        # abort the script on the first *installable* module it met.
+        if grep -qE "['\"]installable['\"][[:space:]]*:[[:space:]]*False" "$manifest"; then
+            continue
+        fi
+        out="${out:+$out,}$name"
+    done
+    printf '%s' "$out"
+}
+
+DEFAULT_MODULES="$(_discover_modules)"
+DEFAULT_TAGS="$(echo "$DEFAULT_MODULES" | sed 's#[^,]*#/&#g')"
 
 if [[ $# -gt 0 ]]; then
     # Build comma-separated lists from positional args
