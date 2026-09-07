@@ -46,9 +46,10 @@ steps:
         echo "postgres never became ready" >&2; exit 1
 
   # ── The test suite ───────────────────────────────────────────────────────────
-  # Module list matches run_tests.sh DEFAULT_MODULES, which in turn matches the
-  # four modules actually installed in production (verified against
-  # ir_module_module: leads, lead_suggestor, cleardeals_dashboards, properties).
+  # The module list is derived from the tree rather than hand-written. It used to
+  # name the four modules installed in production, which was accurate when it was
+  # written and silently wrong the moment a fifth module was added — a new module
+  # could reach production through a PR gate that never installed it.
   - id: test
     name: gcr.io/cloud-builders/docker
     waitFor: [build-test-image, test-db]
@@ -57,14 +58,34 @@ steps:
       - -c
       - |
         set -euo pipefail
+
+        # Module list DERIVED from the tree, not hand-written — see the long note
+        # on the same step in cloudbuild.yaml. Lowercase shell variables only:
+        # Cloud Build substitutes $UPPERCASE before bash sees it.
+        modules=""
+        for dir in custom_addons/*/; do
+          name="$(basename "$dir")"
+          manifest="${dir}__manifest__.py"
+          [ -f "$manifest" ] || continue
+          if grep -qE "['\"]installable['\"][[:space:]]*:[[:space:]]*False" "$manifest"; then
+            echo "skipping $name (installable: False)"
+            continue
+          fi
+          modules="${modules:+$modules,}$name"
+        done
+        [ -n "$modules" ] || { echo "no installable modules found" >&2; exit 1; }
+        tags="$(echo "$modules" | sed 's#[^,]*#/&#g')"
+        echo "installing: $modules"
+        echo "test tags : $tags"
+
         docker run --rm --network odoo-ci-net odoo-ci:$SHORT_SHA \
           odoo -d odoo_test_db \
           --db_host=odoo-ci-db --db_port=5432 \
           --db_user=odoo --db_password=odoo \
           --addons-path=/opt/cleardeals-addons,/usr/lib/python3/dist-packages/odoo/addons \
-          -i leads,lead_suggestor,cleardeals_dashboards,properties \
+          -i "$modules" \
           --test-enable \
-          --test-tags /leads,/lead_suggestor,/cleardeals_dashboards,/properties \
+          --test-tags "$tags" \
           --stop-after-init \
           --log-level=test
 
