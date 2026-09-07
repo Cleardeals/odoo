@@ -31,11 +31,15 @@ RUN /opt/odoo-venv/bin/pip install --no-cache-dir -r /tmp/requirements.txt
 #
 # `HttpCase.browser_js` shells out to the first of google-chrome / chromium /
 # chromium-browser it finds on PATH (odoo/tests/common.py::_find_executable) and
-# *skips* the test when there is none. Ubuntu 24.04's `chromium` package is only
-# a stub that tells you to install a snap, which cannot run in a container — so
-# we take the browser from Playwright instead. It publishes builds for both
-# amd64 (CI) and arm64 (Apple Silicon dev machines), which the Chrome apt repo
-# does not.
+# *skips* the test when there is none — silently, so a suite that never runs
+# looks exactly like a suite that passed. cleardeals_ui and wa_communication
+# each ship a `test_browser_harness_is_available` that turns that skip into a
+# failure; this is what makes those pass.
+#
+# Ubuntu 24.04's `chromium` package is only a stub that tells you to install a
+# snap, which cannot run in a container, so the browser comes from Playwright
+# instead. It publishes builds for both amd64 (CI) and arm64 (Apple Silicon dev
+# machines), which the Chrome apt repo does not.
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright
 RUN /opt/odoo-venv/bin/pip install --no-cache-dir playwright \
     && /opt/odoo-venv/bin/playwright install --with-deps chromium \
@@ -43,6 +47,27 @@ RUN /opt/odoo-venv/bin/pip install --no-cache-dir playwright \
         /usr/local/bin/chromium \
     && chmod -R a+rX /opt/playwright \
     && rm -rf /var/lib/apt/lists/*
+
+# ── Bake the application code INTO the image ──────────────────────────────────
+#
+# custom_addons used to reach the container as a bind mount from the VM's git
+# checkout. That made an image tag meaningless: two containers running the same
+# image SHA could be running different application code, depending on what the
+# VM had checked out. It also made rollback a fiction — re-pinning the previous
+# image left the new addons sitting on disk, still mounted.
+#
+# Baking them in is what makes ":$SHORT_SHA" an honest answer to "what is in
+# production", and what makes the deploy script's rollback actually roll back.
+# NOT under /mnt/extra-addons. The odoo:19.0 base image declares
+#   VOLUME ["/mnt/extra-addons", "/var/lib/odoo"]
+# so at runtime Docker mounts an ANONYMOUS EMPTY VOLUME over that path and
+# silently hides anything baked beneath it. That took production down: the
+# addons vanished, the leads module never loaded, and the UI failed with
+# KeyNotFoundError on a view controller while crons died on KeyError 'leads.new'.
+#
+# Nothing here is wrong with COPY — the path was. /opt is not a declared volume,
+# so the baked code survives.
+COPY --chown=odoo:odoo ./custom_addons /opt/cleardeals-addons
 
 # Copy and set permissions for the custom entrypoint
 COPY ./entrypoint.sh /usr/local/bin/entrypoint.sh

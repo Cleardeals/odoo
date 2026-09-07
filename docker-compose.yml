@@ -1,186 +1,192 @@
-# ==============================================================================
-# Cleardeals — Odoo 19 Production Docker Compose
-# Optimized for e2-medium (2 shared vCPUs, 4 GiB RAM)
-# Stack: Traefik v3.2 + PostgreSQL 17 + Odoo 19
-# Domain: odoo.cleardeals.xyz
-# ==============================================================================
+# Compose derives the project name from the DIRECTORY unless it is pinned here.
+# Pinning it means the Phase 4 move from /home/cdgcphub/odoo-project to
+# /opt/odoo does not rename a single container: without this, odoo-project-db-1
+# becomes odoo-db-1 mid-migration, the old and new projects each own a separate
+# network and set of anonymous volumes, and a rollback has to reason about two
+# identities instead of one.
+#
+# Set to the CURRENT name so applying this is a no-op today and the move changes
+# nothing about container identity.
+name: odoo-project
 
 services:
-
-  # ----------------------------------------------------------------------------
-  # Traefik Reverse Proxy
-  # ----------------------------------------------------------------------------
+  # 1. The Traefik Reverse Proxy
   traefik:
-    image: traefik:v3.2
+    # v2.11, not v2.10. Traefik v2.10's Docker client speaks API 1.24, and
+    # Docker Engine 29 requires a minimum of 1.44:
+    #
+    #   Failed to retrieve information of the docker client and server host:
+    #   client version 1.24 is too old. Minimum supported API version is 1.44
+    #
+    # With the provider dead, Traefik saw no containers and served 404 for
+    # everything — Odoo was healthy and loading modules behind it the whole time.
+    #
+    # This was LATENT, not caused by any change here. The VM had not rebooted in
+    # months, so a Docker upgrade sat installed but inactive; the Phase 4c
+    # machine-type change was simply the first restart since. Any reboot would
+    # have done it, including an unplanned one — which is the worse version of
+    # this, at 3am with nobody expecting it.
+    #
+    # v2.11 is the final v2 release, so the configuration syntax below is
+    # unchanged. Moving to v3 is a real migration and belongs in its own change.
+    image: traefik:v2.11
     container_name: traefik
-    restart: unless-stopped
-
     command:
-      # API & Dashboard — restrict port 8080 in GCP firewall if not needed
       - "--api.insecure=true"
-
-      # Docker Provider — scope to 'web' network so Traefik only resolves
-      # containers explicitly attached to it
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
-      - "--providers.docker.network=web"
-
-      # Entrypoints
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
-
-      # Permanent HTTP → HTTPS redirect
       - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
       - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
-      - "--entrypoints.web.http.redirections.entrypoint.permanent=true"
-
-      # Let's Encrypt (TLS challenge)
       - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
       - "--certificatesresolvers.myresolver.acme.email=cdgcphub@gmail.com"
       - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
-
-      # Logging
-      - "--log.level=INFO"
-      - "--accesslog=true"
-
     ports:
-      - "80:80"       # HTTP (redirected to HTTPS)
-      - "443:443"     # HTTPS
-      - "8080:8080"   # Traefik dashboard
-
+      - "80:80"
+      - "443:443"
+      # The dashboard/API binds to LOOPBACK ONLY. It was previously published as
+      # "8080:8080", which means 0.0.0.0 — and combined with --api.insecure=true
+      # above, that is an unauthenticated admin API of the production reverse
+      # proxy listening on every interface.
+      #
+      # It was never reachable from the internet: no firewall rule has ever
+      # allowed 8069 or 8080 inbound. But the VPC's default-allow-internal rule
+      # permits ALL TCP between instances, so any other VM in the project could
+      # read it. That was confirmed rather than assumed — a request from the
+      # staging instance to this port on production returned 200 with the full
+      # routing configuration.
+      #
+      # Traefik v2's insecure API is read-only, so this was topology disclosure
+      # (routers, services, internal URLs, certificate state) rather than a way
+      # to change anything. Not an emergency; still not something to leave open
+      # after a hardening pass.
+      #
+      # Deliberately narrowed rather than removed. The dashboard is genuinely
+      # useful — when the provider died on the v2.10/Docker-29 API mismatch,
+      # Traefik served 404 for everything while Odoo was perfectly healthy
+      # behind it, and this endpoint would have shown an empty router table
+      # immediately. Keeping it on loopback keeps that diagnostic, reachable
+      # over the IAP SSH tunnel by whoever is already on the box:
+      #
+      #   gcloud compute ssh <instance> --zone=<zone> --tunnel-through-iap \
+      #     -- -L 8080:localhost:8080
+      - "127.0.0.1:8080:8080"
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
       - "./letsencrypt:/letsencrypt"
-
     networks:
       - web
+    restart: unless-stopped
+    # Docker's default json-file driver has NO size limit, and there was no
+    # /etc/docker/daemon.json on this host — so container logs grew without
+    # bound until something else noticed the disk. Capping here rather than in
+    # the daemon config keeps it in git and needs no daemon restart; it applies
+    # as each container is recreated by a deploy.
+    # 50MB x 5 = 250MB ceiling per container.
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
 
-  # ----------------------------------------------------------------------------
-  # PostgreSQL 17
-  # ----------------------------------------------------------------------------
+  # 2. Your Database Service
   db:
     image: postgres:17
-    container_name: odoo-db
-    restart: unless-stopped
-
     environment:
-      POSTGRES_DB: postgres
-      POSTGRES_USER: odoo
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-odoo}
-
-    # Performance tuning for e2-medium (4 GiB RAM, ~1 GiB allocated to Postgres).
-    # max_connections=60 covers db_maxconn=10 (odoo.conf) × workers with room to spare.
-    # synchronous_commit=off improves write throughput; tiny crash-recovery risk
-    # (last ~1 WAL record may be lost — acceptable for an Odoo CRM workload).
-    command: >
-      postgres
-      -c max_connections=60
-      -c shared_buffers=512MB
-      -c effective_cache_size=1536MB
-      -c work_mem=32MB
-      -c maintenance_work_mem=128MB
-      -c wal_buffers=16MB
-      -c synchronous_commit=off
-      -c checkpoint_completion_target=0.9
-      -c random_page_cost=1.1
-
+      - POSTGRES_DB=postgres
+      # POSTGRES_PASSWORD is deliberately ABSENT.
+      #
+      # It was `odoo`, hardcoded, in a PUBLIC repository — and it is in git
+      # history forever, so deleting the line was never the fix. The credential
+      # itself has been rotated to a 40-character value held in Secret Manager
+      # (see infrastructure/rotate_db_password.sh), which is what made the
+      # committed value worthless.
+      #
+      # It is not replaced with a variable because it is not needed: the
+      # variable is read only by initdb, on an EMPTY data directory. Verified
+      # against postgres:17 — a container restarted on an existing data dir with
+      # no POSTGRES_PASSWORD starts cleanly and authenticates fine. The password
+      # lives in the database, not the environment.
+      #
+      # If this volume is ever lost, Postgres will refuse to initialise without
+      # it. That is the correct failure: better a loud stop than silently
+      # recreating a database with whatever default was lying around.
+      - POSTGRES_USER=odoo
     volumes:
       - ./odoo-db-data:/var/lib/postgresql/data
-
     networks:
       - web
-
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U odoo -d postgres"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      # Allow extra time on first boot when Postgres initialises the data dir
-      start_period: 60s
-
-  # ----------------------------------------------------------------------------
-  # Odoo 19 Application
-  # ----------------------------------------------------------------------------
-  odoo:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: odoo-cleardeals:latest
-    container_name: odoo-app
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
 
+  # 3. Your Odoo 19 Service
+  odoo:
+    # Pinned by commit SHA, written into .env by scripts/deploy.sh. NEVER
+    # :latest — a floating tag makes "what is in production" unanswerable and
+    # rollback impossible.
+    #
+    # The fallback keeps a local `docker compose up` working for development;
+    # in production .env always sets it explicitly.
+    image: ${ODOO_IMAGE:-odoo-project-odoo}
     depends_on:
-      db:
-        condition: service_healthy
-
+      - db
+    volumes:
+      # Rendered by scripts/render_odoo_conf.sh from the COMMITTED odoo.prod.conf
+      # plus the two secrets in Secret Manager. /dev/shm is tmpfs, so the only
+      # file that contains both the config and the secrets is memory-backed and
+      # never lands on the persistent disk — and therefore never in one of the
+      # daily disk snapshots.
+      #
+      # Read-only: the container has no reason to write its own config.
+      #
+      # If this mount is missing, Odoo starts with its built-in defaults, which
+      # include list_db = True. Never let the render step fail silently.
+      - /dev/shm/odoo.conf:/etc/odoo/odoo.conf:ro
+      - ./odoo-web-data:/var/lib/odoo
+      # custom_addons is NO LONGER bind-mounted — it is baked into the image so
+      # the SHA tag identifies the running application code. Re-adding this mount
+      # would silently shadow the baked-in copy with whatever the VM has checked
+      # out, and quietly break rollback.
+    networks:
+      - web
     environment:
       - ODOO_PROXY=true
       - WEB_BASE_URL=https://odoo.cleardeals.xyz
-      # ── Google Cloud Pub/Sub ────────────────────────────────────────────────
-      # GCP project that owns the Pub/Sub topics.
-      # Required by cleardeals_pubsub, wa_pubsub, and wa_communication modules.
-      - PUBSUB_PROJECT_ID=cleardeals-prod
-      # On a GCP VM with the correct IAM service account attached, Application
-      # Default Credentials (ADC) resolve automatically via the metadata server —
-      # you do NOT need to set GOOGLE_APPLICATION_CREDENTIALS.
-      #
-      # If running outside GCP (staging VM, local Docker) uncomment both lines:
-      # - GOOGLE_APPLICATION_CREDENTIALS=/run/secrets/gcp-sa-key.json
-      #
-      # PUBSUB_EMULATOR_HOST must NOT be set in production. Only set it in
-      # local/staging environments that run the Pub/Sub emulator.
-      # - PUBSUB_EMULATOR_HOST=pubsub-emulator:8085
-
-    volumes:
-      # Read-only: all config is baked into odoo.conf, never mutated at runtime
-      - ./odoo.conf:/etc/odoo/odoo.conf:ro
-      # Persistent filestore (attachments, sessions)
-      - ./odoo-web-data:/var/lib/odoo
-      # Custom modules
-      - ./custom_addons:/mnt/extra-addons/custom
-      # Optional: GCP service-account key (only needed outside GCP Workload Identity)
-      # - ./gcp-credentials.json:/run/secrets/gcp-sa-key.json:ro
-
-    networks:
-      - web
-
     labels:
       - "traefik.enable=true"
-
-      # ── Main Odoo Router — lower priority, catches all paths ──────────────
+      # --- Main Odoo Router ---
+      # Ensure DNS for this domain points to the NEW VM IP
       - "traefik.http.routers.odoo.rule=Host(`odoo.cleardeals.xyz`)"
       - "traefik.http.routers.odoo.entrypoints=websecure"
       - "traefik.http.routers.odoo.tls.certresolver=myresolver"
       - "traefik.http.routers.odoo.service=odoo-service"
-      - "traefik.http.routers.odoo.priority=1"
-      - "traefik.http.routers.odoo.middlewares=security-headers@docker"
       - "traefik.http.services.odoo-service.loadbalancer.server.port=8069"
-
-      # ── Longpolling / WebSocket Router — higher priority, path-specific ───
-      # /websocket: Odoo 17+ bus (real-time messaging)
-      # /longpolling: legacy path kept for older clients
+      # --- Longpolling Router ---
+      # /websocket is the Odoo 17+ bus path; /longpolling is the Odoo 8-era one
+      # kept for any old client. BOTH must reach the gevent process on :8072.
+      #
+      # This is added BEFORE prefork is enabled, deliberately. With workers = 0
+      # Odoo serves the bus in-process on :8069 and this route is simply unused,
+      # so it is safe to ship now. The moment workers > 0 the bus moves to :8072
+      # and, without this, every realtime update in the UI stops — silently, with
+      # no error anywhere in the logs.
       - "traefik.http.routers.odoo-chat.rule=Host(`odoo.cleardeals.xyz`) && (PathPrefix(`/websocket`) || PathPrefix(`/longpolling`))"
       - "traefik.http.routers.odoo-chat.entrypoints=websecure"
       - "traefik.http.routers.odoo-chat.tls.certresolver=myresolver"
       - "traefik.http.routers.odoo-chat.service=odoo-chat-service"
-      - "traefik.http.routers.odoo-chat.priority=2"
-      - "traefik.http.routers.odoo-chat.middlewares=security-headers@docker"
       - "traefik.http.services.odoo-chat-service.loadbalancer.server.port=8072"
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
 
-      # ── Security Headers Middleware ────────────────────────────────────────
-      # X-Frame-Options: prevent clickjacking (SAMEORIGIN allows Odoo iframes)
-      - "traefik.http.middlewares.security-headers.headers.customFrameOptionsValue=SAMEORIGIN"
-      # X-Content-Type-Options: prevent MIME sniffing
-      - "traefik.http.middlewares.security-headers.headers.contentTypeNosniff=true"
-      # HSTS: force HTTPS for 1 year, including subdomains
-      - "traefik.http.middlewares.security-headers.headers.stsSeconds=31536000"
-      - "traefik.http.middlewares.security-headers.headers.stsIncludeSubdomains=true"
-      - "traefik.http.middlewares.security-headers.headers.stsPreload=true"
-
-# ==============================================================================
-# Networks
-# ==============================================================================
 networks:
   web:
     driver: bridge
-    name: web

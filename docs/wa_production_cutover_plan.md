@@ -286,55 +286,85 @@ else. Ship them as **their own release, before the suite**, so the mechanism is
 proven by an ordinary no-op deploy rather than debugged during the one that
 matters.
 
-**(a) `cloudbuild.yaml` — widen the test gate** to cover what is being shipped:
+**(a) Derive the test module list instead of hard-coding it.**
 
+The obvious fix — writing the eight module names into the gate — cannot ship
+before the suite: `development_19` has no `wa_communication`, and `-i` on a
+module that is not in the tree fails the build. So the list is derived from the
+tree at build time, skipping anything marked `installable: False`:
+
+```bash
+modules=""
+for dir in custom_addons/*/; do
+  name="$(basename "$dir")"
+  manifest="${dir}__manifest__.py"
+  [ -f "$manifest" ] || continue
+  if grep -qE "['\"]installable['\"][[:space:]]*:[[:space:]]*False" "$manifest"; then
+    continue
+  fi
+  modules="${modules:+$modules,}$name"
+done
+tags="$(echo "$modules" | sed 's#[^,]*#/&#g')"
 ```
--i leads,lead_suggestor,cleardeals_dashboards,properties,\
-   cleardeals_pubsub,cleardeals_notification,cleardeals_ui,wa_communication
---test-tags /leads,/lead_suggestor,/cleardeals_dashboards,/properties,\
-            /cleardeals_pubsub,/cleardeals_notification,/cleardeals_ui,/wa_communication
-```
 
-This makes the gate run the OWL/Hoot browser suites, which need Chromium. The
-repo `Dockerfile` installs it via Playwright — deliberately, because Ubuntu's
-`chromium` package is a snap stub that cannot run in a container (its own
-comment says so, and I hit exactly that failure locally on 7 Sep).
+Verified against both trees: on `development_19` it yields the four real
+modules and skips the three deprecated ones; with the suite present it yields
+all eight, including `wa_communication`, with no further edit. The gate widens
+itself the moment PR 1 lands.
 
-**This gate has to go green inside Cloud Build, not merely on a laptop.** That
-is the entire reason §4.4 ships as its own release: if Chromium does not start
-under Cloud Build's sandbox, we find out on a no-op deploy instead of on the one
-carrying the WhatsApp suite.
+Shell variables are lowercase deliberately — Cloud Build substitutes anything
+matching `$UPPERCASE` before bash sees it and rejects unknown names, which is
+what the deploy step's two scarred comments are about.
 
-Two properties make the result trustworthy:
-
-- `browser_js` **skips silently** when no browser is found, so a green build
-  proves nothing on its own. Each module's `test_browser_harness_is_available`
-  turns that skip into a **failure** — check the build log shows
-  `[HOOT] Passed N tests`, not a skip.
-- If Chromium cannot start under Cloud Build, the fallback is to run the Hoot
-  suites in the PR gate only and keep the CD gate to Python — but that is a
-  deliberate, recorded downgrade, not something to discover mid-release.
+The same list appears in **three** places, all now derived from the one rule:
+`cloudbuild.yaml` (CD), `cloudbuild.ci.yaml` (PR gate) and `run_tests.sh`
+(local). The PR gate matters most here: it is what runs on PR 1, and it is
+where the WhatsApp suite gets its first Cloud Build test.
 
 **(b) `scripts/deploy.sh` — an opt-in upgrade step** between the image pull and
 `up -d`, so the schema is migrated by the same image that is about to serve it,
-while Odoo is still stopped:
+while the *old* container is still up:
 
 ```bash
-# after: docker compose pull odoo
-if [[ -n "${ODOO_UPGRADE_MODULES:-}" ]]; then
-  log "upgrading modules: ${ODOO_UPGRADE_MODULES}"
-  docker compose run --rm --no-deps odoo \
-      odoo -c /etc/odoo/odoo.conf -d "${ODOO_DB:-odoo_db}" \
-           -u "${ODOO_UPGRADE_MODULES}" --stop-after-init \
-    || die "module upgrade failed; image not swapped"
+UPGRADE_FILE="${UPGRADE_FILE:-${APP_DIR}/.deploy-upgrade}"
+UPGRADE_MODULES="${ODOO_UPGRADE_MODULES:-}"
+if [[ -z "${UPGRADE_MODULES}" && -f "${UPGRADE_FILE}" ]]; then
+  UPGRADE_MODULES="$(tr -d '[:space:]' < "${UPGRADE_FILE}" || true)"
 fi
-# then: docker compose up -d odoo
+
+if [[ -n "${UPGRADE_MODULES}" ]]; then
+  docker compose run --rm --no-deps odoo \
+      odoo -c /etc/odoo/odoo.conf -u "${UPGRADE_MODULES}" --stop-after-init \
+    || die "module upgrade failed; image NOT swapped, ${PREV:-current} still serving"
+  rm -f "${UPGRADE_FILE}"          # consumed only on success
+fi
 ```
 
-Opt-in via an environment variable means every ordinary deploy is byte-for-byte
-unchanged, and the release that needs an upgrade asks for one explicitly.
-Failing *before* the swap leaves the old container running on the old image and
-the old schema — the one combination that is definitely consistent.
+Two inputs, because there are two ways this script gets run:
+
+- `ODOO_UPGRADE_MODULES=leads,properties` — for a deploy run by hand.
+- **A one-shot request file**, `.deploy-upgrade` in the app dir — for a deploy
+  driven by Cloud Build, which has no way to pass an environment variable
+  through an approval. The operator writes the file *before* approving the
+  build; it is consumed on success, so the next deploy is ordinary again. It
+  survives `git reset --hard` because it is untracked.
+
+Three details that make it safe rather than merely convenient:
+
+- **Placement.** It runs after `render_odoo_conf.sh` (so `/dev/shm/odoo.conf`
+  exists to mount) and after `.env` is repointed (so `compose run` uses the
+  **new** image), but before `up -d`. The migration is performed by the code
+  that is about to serve it.
+- **Failure leaves a consistent system.** `die` here means the image is never
+  swapped: old container, old image, old schema. The one combination that is
+  certainly coherent.
+- **No `-d` flag.** The rendered config already pins `db_name = odoo_db` and
+  `dbfilter`, so naming the database again would just be a second place to get
+  it wrong.
+
+Opt-in means every ordinary deploy is byte-for-byte unchanged — no extra
+minutes, no new failure mode — and the release that needs an upgrade asks for
+one explicitly.
 
 The install of brand-new modules (`-i`) is deliberately **not** wired into the
 pipeline. A first install is a one-time act that wants a human watching it, and
@@ -717,7 +747,12 @@ the body of this document:
 | Cloud SQL backup posture | Daily 07:00 + PITR, 7 days of logs |
 
 One thing is *unprovable in advance* rather than unverified: **whether the
-widened test gate passes inside Cloud Build**. Chromium starting under Cloud
-Build's sandbox cannot be established by inspection — only by running it. That
-is precisely why §4.4 is a separate, earlier release: the answer arrives on a
-no-op deploy rather than on the one that carries the suite.
+OWL/Hoot suites run under Cloud Build**. Chromium starting inside that sandbox
+cannot be established by inspection, only by running it.
+
+Correcting revision 3 on where that answer arrives: **not** from the §4.4
+release. No module on `development_19` has a Hoot suite, so that build runs
+Python tests only (905 of them, verified locally on this tree). Because the
+derived list also drives `cloudbuild.ci.yaml`, the browser suites first run in
+**PR 1's** Cloud Build check — a PR gate, before any merge, which is the right
+place to discover it.

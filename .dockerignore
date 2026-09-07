@@ -1,0 +1,51 @@
+# .dockerignore — what enters the Docker build context.
+#
+# Docker does NOT read .gitignore. Without this file the context is "everything
+# in the directory", which on a developer's machine includes untracked work.
+#
+# That is not hypothetical: the first build of the baked-addons image picked up
+# twelve modules from a working tree where only seven were tracked — silently
+# baking the entire unreleased WhatsApp suite into what would have been a
+# production image.
+#
+# Cloud Build gets a clean git checkout and would not have had that problem,
+# which is worse, not better: local and CI builds would disagree, and only the
+# local one would be wrong. Keeping both honest is the point of this file.
+#
+# The pipeline additionally ASSERTS that the baked module list matches the
+# git-tracked list, so a gap here fails CI rather than reaching production.
+
+.git/
+.github/
+.gitignore
+.gcloudignore
+
+# Vendored upstream Odoo — provided by the FROM odoo:19.0 base image.
+addons/
+odoo/
+doc/
+debian/
+setup/
+odoo-bin
+
+# Runtime data that must never enter an image.
+odoo-db-data/
+odoo-web-data/
+letsencrypt/
+.env
+
+# Editor and OS noise. .DS_Store was baked into the first build.
+.DS_Store
+**/.DS_Store
+**/__pycache__/
+**/*.pyc
+.venv/
+venv/
+
+# Infrastructure and docs are not application code.
+infrastructure/
+docs/
+postman/
+*.md
+docker-compose.yml
+**/terraform.tfvars

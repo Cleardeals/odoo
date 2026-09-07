@@ -1,0 +1,230 @@
+# cloudbuild.yaml — the production deploy pipeline.
+#
+# Trigger: push to 19.0, with approval_required. A merge QUEUES this build; it
+# waits for a human before anything is pushed or deployed.
+#
+# It replaces a GitHub Actions workflow that ran `docker compose build` on the
+# production VM — competing with Odoo for the CPU and a disk that is 82% full —
+# and then reported success whether or not Odoo came back up.
+#
+# The gates below are the same ones cloudbuild.ci.yaml runs on pull requests.
+# They are repeated rather than assumed: a merge can contain something no PR
+# ever tested.
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: E2_HIGHCPU_8
+
+serviceAccount: "projects/$PROJECT_ID/serviceAccounts/odoo-cloudbuild@$PROJECT_ID.iam.gserviceaccount.com"
+
+substitutions:
+  _ZONE: us-central1-f
+  _INSTANCE: odoo-19-prod
+  _REGION: us-central1
+  # _APP_DIR is gone deliberately. The bootstrap below tries /opt/odoo and
+  # falls back to the old path, so the Phase 4 move needs no flag day: the
+  # pipeline works on BOTH sides of it. Pinning either path would break the
+  # deploy for the window between the directory moving and the code that knows
+  # about it being deployed — and the only way to deploy that code is the deploy
+  # that is broken.
+  #
+  # It uses no shell variables at all. `cd A || cd B` and a literal
+  # safe.directory=* wildcard keep the command free of any dollar sign that
+  # Cloud Build substitution and two nested shells would otherwise fight over.
+  # Three deploys have already failed on exactly that.
+
+steps:
+  # ── Gate: build the image that will actually ship ────────────────────────────
+  - id: build
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -t
+      - "${_REGION}-docker.pkg.dev/$PROJECT_ID/odoo/odoo:$SHORT_SHA"
+      - -t
+      - "${_REGION}-docker.pkg.dev/$PROJECT_ID/odoo/odoo:$COMMIT_SHA"
+      - .
+
+  # ── Gate: the image contains exactly the repository's modules ────────────────
+  - id: image-contents
+    name: gcr.io/cloud-builders/docker
+    waitFor: [build]
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        baked=$(docker run --rm --entrypoint /bin/ls \
+                  "${_REGION}-docker.pkg.dev/$PROJECT_ID/odoo/odoo:$SHORT_SHA" \
+                  /opt/cleardeals-addons | sort)
+        tracked=$(ls custom_addons | sort)
+        [ "$baked" = "$tracked" ] || {
+          echo "image contents do not match the repository" >&2
+          diff <(echo "$tracked") <(echo "$baked") >&2 || true
+          exit 1
+        }
+        echo "image contents verified"
+
+  # ── Gate: config is sane and carries no secrets ──────────────────────────────
+  - id: config-check
+    name: python:3.12-slim
+    waitFor: ["-"]
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        python3 - <<'PY'
+        import configparser, sys
+        c = configparser.ConfigParser(); c.read("odoo.prod.conf")
+        o = c["options"]; fail = []
+        if o.get("list_db", "True").strip() != "False":
+            fail.append("list_db must be False — otherwise the database manager "
+                        "is served to unauthenticated requests on the internet")
+        if not o.get("dbfilter", "").strip():
+            fail.append("dbfilter must be set")
+        for k in ("admin_passwd", "db_password"):
+            if "__" not in o.get(k, ""):
+                fail.append(f"{k} must remain a placeholder — never commit a secret")
+        if fail:
+            print("odoo.prod.conf FAILED:"); [print("  -", f) for f in fail]; sys.exit(1)
+        print("odoo.prod.conf OK")
+        PY
+
+  # ── Gate: the test suite, against the image being shipped ────────────────────
+  - id: test-db
+    name: gcr.io/cloud-builders/docker
+    waitFor: ["-"]
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        docker network create odoo-cd-net 2>/dev/null || true
+        docker run -d --name odoo-cd-db --network odoo-cd-net \
+          -e POSTGRES_USER=odoo -e POSTGRES_PASSWORD=odoo \
+          -e POSTGRES_DB=odoo_test_db postgres:17
+        for i in $(seq 1 60); do
+          docker exec odoo-cd-db pg_isready -U odoo >/dev/null 2>&1 && exit 0
+          sleep 1
+        done
+        echo "postgres never became ready" >&2; exit 1
+
+  # The module list is DERIVED, not written out. A hand-maintained list is a list
+  # that goes stale: the four modules named here before this change were the only
+  # ones that existed when it was written, so every module added since would have
+  # shipped to production through a gate that never installed it.
+  #
+  # Modules marked `installable: False` are skipped — they are deprecated, must
+  # never be installed in production, and `-i` on one fails the build outright.
+  #
+  # Shell variables are lowercase ON PURPOSE. A dollar sign followed by capitals
+  # is read as a Cloud Build substitution and the build is rejected when the name
+  # is not a known one — the deploy step below carries two scars from exactly
+  # that. Lowercase names pass through untouched.
+  #
+  # This applies inside the step's script string as well, comments included: the
+  # first build of this change failed because a comment in cloudbuild.ci.yaml
+  # spelled the pattern out literally. YAML comments like this one are stripped
+  # by the parser and are safe; anything inside `args` is not.
+  - id: test
+    name: gcr.io/cloud-builders/docker
+    waitFor: [build, test-db]
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+
+        modules=""
+        for dir in custom_addons/*/; do
+          name="$(basename "$dir")"
+          manifest="${dir}__manifest__.py"
+          [ -f "$manifest" ] || continue
+          if grep -qE "['\"]installable['\"][[:space:]]*:[[:space:]]*False" "$manifest"; then
+            echo "skipping $name (installable: False)"
+            continue
+          fi
+          modules="${modules:+$modules,}$name"
+        done
+        [ -n "$modules" ] || { echo "no installable modules found" >&2; exit 1; }
+
+        # --test-tags takes /module form; reuse the same list so the two can
+        # never disagree about what is being tested.
+        tags="$(echo "$modules" | sed 's#[^,]*#/&#g')"
+
+        echo "installing: $modules"
+        echo "test tags : $tags"
+
+        docker run --rm --network odoo-cd-net \
+          "${_REGION}-docker.pkg.dev/$PROJECT_ID/odoo/odoo:$SHORT_SHA" \
+          odoo -d odoo_test_db \
+            --db_host=odoo-cd-db --db_port=5432 \
+            --db_user=odoo --db_password=odoo \
+            --addons-path=/opt/cleardeals-addons,/usr/lib/python3/dist-packages/odoo/addons \
+            -i "$modules" \
+            --test-enable \
+            --test-tags "$tags" \
+            --stop-after-init --log-level=test
+
+  # ── Push only after every gate is green ──────────────────────────────────────
+  # Nothing reaches the registry until the image has been proven. A registry
+  # full of images that never passed a test makes rollback a guess.
+  - id: push
+    name: gcr.io/cloud-builders/docker
+    waitFor: [image-contents, config-check, test]
+    args: ["push", "--all-tags", "${_REGION}-docker.pkg.dev/$PROJECT_ID/odoo/odoo"]
+
+  # ── Deploy ───────────────────────────────────────────────────────────────────
+  # All the logic lives in scripts/deploy.sh on the VM: image swap, health gate
+  # and rollback. Keeping it out of this YAML avoids passing a shell script
+  # through Cloud Build substitution, then bash, then ssh.
+  - id: deploy
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    waitFor: [push]
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        # gcloud mints an ephemeral OS Login key per invocation and needs a
+        # writable HOME to put it in.
+        export HOME=/workspace
+        # The first connection after an IAM change can race OS Login key
+        # propagation. Retry briefly rather than failing a deploy over it.
+        # The remote command is written INLINE, with no intermediate shell
+        # variable. Deliberate, after two failures on exactly that:
+        #
+        #   1. A variable named REMOTE was parsed by Cloud Build as a
+        #      substitution ("not a valid built-in substitution"), and the build
+        #      was rejected at approval.
+        #   2. Escaping it as a doubled dollar fixed the REFERENCE but also
+        #      rewrote the ASSIGNMENT, which bash then read as expanding an
+        #      unset variable rather than assigning one — so the deploy step
+        #      died with "REMOTE: unbound variable".
+        #
+        # Cloud Build substitution and shell expansion both act on the same
+        # dollar sign, and a variable that must survive both is fragile in a way
+        # no gate here can see. Having none is simpler than escaping correctly.
+        #
+        # COMMIT_SHA and _APP_DIR are real substitutions, resolved before the
+        # shell sees them. The fetch+reset runs BEFORE deploy.sh because on a
+        # first run that script is not yet on the VM — the pipeline bootstraps
+        # itself instead of depending on a hand-placed file.
+        for attempt in 1 2 3; do
+          if gcloud compute ssh "${_INSTANCE}" \
+               --zone="${_ZONE}" --tunnel-through-iap --quiet \
+               --command="sudo bash -c 'set -euo pipefail; cd /opt/odoo 2>/dev/null || cd /home/cdgcphub/odoo-project; git -c safe.directory=* remote set-url origin https://github.com/Cleardeals/odoo.git; git -c safe.directory=* fetch --depth 1 --quiet origin $BRANCH_NAME; git -c safe.directory=* reset --hard --quiet FETCH_HEAD; exec bash scripts/deploy.sh $COMMIT_SHA'"; then
+            exit 0
+          fi
+          echo "ssh attempt ${attempt} failed; retrying in 15s" >&2
+          sleep 15
+        done
+        echo "could not reach ${_INSTANCE} after 3 attempts" >&2
+        exit 1
+
+images:
+  - "${_REGION}-docker.pkg.dev/$PROJECT_ID/odoo/odoo:$SHORT_SHA"
+  - "${_REGION}-docker.pkg.dev/$PROJECT_ID/odoo/odoo:$COMMIT_SHA"
+
+timeout: 3600s

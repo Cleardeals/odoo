@@ -1,0 +1,43 @@
+# .gcloudignore — what Cloud Build uploads as build context.
+#
+# THIS FILE IS NOT OPTIONAL HERE. The repo is a full Odoo fork: .git alone is
+# ~15 GB and the vendored upstream tree adds another ~1.1 GB. Without this,
+# every build uploads all of it, on every commit.
+#
+# gcloud falls back to .gitignore when this file is absent — and .gitignore
+# deliberately TRACKS the vendored source, so the fallback uploads everything.
+#
+# The Dockerfile builds FROM odoo:19.0, so upstream addons come from the base
+# image and are not needed in the context at all.
+
+.git/
+.github/
+.gitignore
+
+# Vendored upstream Odoo — supplied by the FROM image.
+addons/
+odoo/
+doc/
+debian/
+setup/
+
+# Local and editor noise
+.DS_Store
+**/__pycache__/
+**/*.pyc
+.venv/
+venv/
+
+# Infrastructure: never part of an application image.
+infrastructure/
+docs/
+postman/
+*.md
+
+# Never upload: contains the project id, and this repo is public.
+**/terraform.tfvars
+
+# Kept, explicitly, because the build needs them:
+#   Dockerfile, entrypoint.sh, requirements.txt   -> the image
+#   custom_addons/                                -> baked into the image
+#   docker-compose.yml, odoo.prod.conf, scripts/  -> shipped to the VM

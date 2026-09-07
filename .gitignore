@@ -3,16 +3,19 @@ _build/
 
 # dotfiles
 .*
+
+# The blanket ".*" above hides dotfiles that MUST be committed.
+# .dockerignore controls what enters the Docker build context, and
+# .gcloudignore what Cloud Build uploads. If either is missing from the
+# repo, CI silently builds a different image from the one built locally.
+!.dockerignore
+!.gcloudignore
 !.gitignore
 !.gitattributes
 !.gitkeep
 !.github
 !.mailmap
 !.weblate.json
-# Claude Code: team-share skills only; keep the rest of .claude local
-!.claude/
-.claude/*
-!.claude/skills/
 # compiled python files
 *.py[co]
 __pycache__/
@@ -78,5 +81,9 @@ docker-compose.override.yml
 letsencrypt/
 
 hrms_addons/
-hrms_addons/
+
+# Claude Code: team-share skills only; keep the rest of .claude local
+!.claude/
+.claude/*
+!.claude/skills/
 .claude/skills/product-brainstorm-workspace/
