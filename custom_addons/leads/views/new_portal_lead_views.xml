@@ -137,7 +137,8 @@
             <list string="New Portal Leads"
                     js_class="leads_new_list_controller"
                     decoration-success="(state=='assigned' and current_status=='lead')"
-                    decoration-info="current_status != 'lead'"
+                    decoration-warning="current_status == 'contact_initiated'"
+                    decoration-info="current_status not in ['lead', 'contact_initiated']"
                     decoration-danger="state=='new'">
 
                 <!-- Appears in the control panel only when rows are selected.
