@@ -6,7 +6,7 @@
 #
 # The Pub/Sub emulator is NOT defined here — it runs in the WhatsApp
 # communications module's own Docker Compose stack. Odoo reaches it via
-# host.docker.internal:8085 (Docker Desktop routes this to the Mac host,
+# host.docker.internal:9085 (Docker Desktop routes this to the Mac host,
 # where the emulator's port is exposed). No network coordination needed.
 #
 # ── Quick start ───────────────────────────────────────────────────────────────
@@ -136,7 +136,7 @@ services:
       # To test against the TEST Interakt account end-to-end, leave these alone —
       # see docs/LOCAL_TEST_ACCOUNT.md in the platform repo.
       - PUBSUB_PROJECT_ID=${PUBSUB_PROJECT_ID:-cleardeals-wa-local}
-      - PUBSUB_EMULATOR_HOST=${PUBSUB_EMULATOR_HOST-host.docker.internal:8085}
+      - PUBSUB_EMULATOR_HOST=${PUBSUB_EMULATOR_HOST-host.docker.internal:9085}
 
       # Topic aliases that the code prefixes at runtime (wa_workflow.py builds
       # 'cd-{prefix}-{alias}'). 'local' → cd-local-*, which is what

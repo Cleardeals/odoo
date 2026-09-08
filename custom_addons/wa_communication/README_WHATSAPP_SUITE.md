@@ -103,7 +103,7 @@ with the WhatsApp platform infra (`wa-postgres`, `wa-pubsub-emulator`) alongside
 | URL | `http://localhost:8069` (via `odoo-dev-nginx`) |
 | Dev mode | `ODOO_DEV=all` — Python auto-reload + asset rebuild on file change |
 | Source mount | `custom_addons/` → `/mnt/extra-addons/custom` (live edits) |
-| Pub/Sub | emulator at `host.docker.internal:8085` (`PUBSUB_EMULATOR_HOST`) |
+| Pub/Sub | emulator at `host.docker.internal:9085` (`PUBSUB_EMULATOR_HOST`) |
 | Workers | `workers = 2` → bus runs over a websocket on the gevent port (8072), proxied by nginx at `/websocket` |
 
 ### Common dev tasks
