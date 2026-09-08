@@ -108,13 +108,47 @@ endif
 # ── One-time DB migration ──────────────────────────────────────────────────────
 # Copies cleardeals_19_dev from your Mac Postgres (port 5432) into the
 # Docker Postgres container. Safe to run only once on a fresh container.
+#
+# This copies the DATABASE ONLY — there is no filestore leg, and adding one is
+# not possible here because the source filestore path differs per machine. That
+# asymmetry has a specific, badly-misleading consequence, so it is handled
+# rather than left to be rediscovered:
+#
+# Odoo stores compiled asset bundles as ir.attachment rows whose bytes live in
+# the filestore. Copy the rows without the files and Odoo serves a bundle that
+# is not there:
+#
+#     GET /bus/websocket_worker_bundle
+#       -> ir_attachment._to_http_stream
+#       -> FileNotFoundError: .../filestore/<db>/f0/f040d52a...
+#
+# The casualty is bus.websocket_worker_assets.min.js. Without it the browser
+# cannot start the websocket worker, so the bus never connects and NOTHING in
+# the UI live-updates — not the WA inbox, not the notification popups, not the
+# systray bell. Every page still renders, and the server side stays perfectly
+# healthy: wa.message.create() writes its bus_bus rows exactly as it should, so
+# every check short of opening a browser says the feature works. There is
+# simply no client listening.
+#
+# Asset bundles are derived data, so the fix is to delete the rows and let Odoo
+# rebuild them on the next request. Done in SQL against the db container so it
+# needs neither a running Odoo nor an ORM unlink (whose whole job — removing the
+# backing files — is moot when the files are already gone).
 migrate-db:
 	@echo "→ Creating database $(DB_NAME) in the Docker container..."
 	$(DC) exec db createdb -U odoo $(DB_NAME) || true
 	@echo "→ Dumping from Mac Postgres and restoring into Docker..."
 	PGPASSWORD=odoo pg_dump -U odoo -h 127.0.0.1 -p 5432 $(DB_NAME) \
 		| $(DC) exec -T db psql -U odoo -d $(DB_NAME)
+	@echo "→ Dropping stale asset bundles so Odoo regenerates them..."
+	$(DC) exec -T db psql -U odoo -d $(DB_NAME) \
+		-c "DELETE FROM ir_attachment WHERE url LIKE '/web/assets/%';"
 	@echo "✓ Migration complete. Run: make up"
+	@echo ""
+	@echo "  NOTE: the filestore was NOT copied — only the database. Asset bundles"
+	@echo "  are handled above and need nothing from you. Attachments that are real"
+	@echo "  uploads (property images, chat media, avatars) will 404 until you copy"
+	@echo "  the source filestore into the odoo-dev-web-data volume yourself."
 
 # ── WhatsApp media local testing ───────────────────────────────────────────────
 # Interakt fetches image/video/document media over a PUBLIC URL, so localhost is
