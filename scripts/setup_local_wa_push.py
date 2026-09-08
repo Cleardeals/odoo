@@ -16,7 +16,7 @@ Requirements:
     pip install google-cloud-pubsub
 
 Environment:
-    PUBSUB_EMULATOR_HOST   default: localhost:8085
+    PUBSUB_EMULATOR_HOST   default: localhost:9085
     GCP_PROJECT            default: cleardeals-wa-local
     GCP_ENV                default: local
     ODOO_HOST              default: host.docker.internal:8069
@@ -29,7 +29,7 @@ from __future__ import annotations
 import os
 import sys
 
-EMULATOR_HOST = os.environ.get('PUBSUB_EMULATOR_HOST', 'localhost:8085')
+EMULATOR_HOST = os.environ.get('PUBSUB_EMULATOR_HOST', 'localhost:9085')
 GCP_PROJECT   = os.environ.get('GCP_PROJECT', 'cleardeals-wa-local')
 GCP_ENV       = os.environ.get('GCP_ENV', 'local')
 ODOO_HOST     = os.environ.get('ODOO_HOST', 'host.docker.internal:8069')
