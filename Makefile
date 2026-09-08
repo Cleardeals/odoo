@@ -192,13 +192,33 @@ wa-interakt:
 	  "print('OK  interakt_api_key  =', (k[:4] + '…' + k[-4:]) if len(k) > 8 else '(set)')" \
 	  | $(DC) exec -T odoo python3 /usr/bin/odoo shell -d $(DB_NAME) --no-http 2>/dev/null
 
-wa-config: ## Show the WA-related system parameters (API key masked)
+# The topic parameters are printed because leaving them out made this target
+# useless at the one job it has. It reported the container env only — GCP_ENV,
+# PUBSUB_PROJECT_ID, PUBSUB_EMULATOR_HOST — and passed green while all six
+# `wa_communication.topic_*` rows in the dev database still read `cd-prod-*`.
+# Those parameters are a SECOND, independent route to production: the topic name
+# comes from ir.config_parameter, not from GCP_ENV, and the module ships
+# `cd-prod-*` as its defaults, so every fresh install starts pointed at them.
+# Locally you are saved only by accident — the emulator holds `cd-local-*` only,
+# so the publish dies with "404 Topic not found". Unset PUBSUB_EMULATOR_HOST and
+# the same publish reaches real customers.
+wa-config: ## Show the WA system parameters (API key masked) and the Pub/Sub topics
 	@printf "%s\n" \
 	  "icp = env['ir.config_parameter'].sudo()" \
 	  "k = icp.get_param('wa_communication.interakt_api_key') or ''" \
 	  "print('interakt_api_key       =', (k[:4] + '…' + k[-4:]) if len(k) > 8 else ('(unset)' if not k else '(set)'))" \
 	  "print('interakt_base_url      =', icp.get_param('wa_communication.interakt_base_url') or '(unset)')" \
 	  "print('media_public_base_url  =', icp.get_param('wa_communication.media_public_base_url') or '(unset)')" \
+	  "names = ['actor_events','customer_events','nudge_events','odoo_wa_requests','property_events','visit_events']" \
+	  "vals = dict((n, icp.get_param('wa_communication.topic_' + n) or '(unset)') for n in names)" \
+	  "print('')" \
+	  "print('-- Pub/Sub topics, from ir.config_parameter --')" \
+	  "[print('  topic_%-17s = %s' % (n, vals[n])) for n in names]" \
+	  "print('  topic_%-17s = %s  (alias; env-derived at publish time)' % ('workflow_control', icp.get_param('wa_communication.topic_workflow_control') or '(unset)'))" \
+	  "bad = sorted(n for n in names if 'cd-prod' in vals[n])" \
+	  "print('')" \
+	  "print(('DANGER: topic parameter(s) pointing at PRODUCTION: ' + ', '.join(bad)) if bad else 'OK: no topic parameter points at cd-prod-*')" \
+	  "bad and print('        A publish from this stack can reach real customers. Set them to cd-local-* first.')" \
 	  | $(DC) exec -T odoo python3 /usr/bin/odoo shell -d $(DB_NAME) --no-http 2>/dev/null
 	@echo "── container env (must be the emulator for safe testing) ──"
 	@$(DC) exec -T odoo sh -c 'echo "  GCP_ENV=$$GCP_ENV"; echo "  PUBSUB_PROJECT_ID=$$PUBSUB_PROJECT_ID"; echo "  PUBSUB_EMULATOR_HOST=$$PUBSUB_EMULATOR_HOST"'
