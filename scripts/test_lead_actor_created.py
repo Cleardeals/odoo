@@ -17,7 +17,7 @@ Requirements:
 Environment variables (all have defaults for local dev):
     ODOO_DB               default: cleardeals_19_dev
     ODOO_CONTAINER        default: odoo-dev-app
-    PUBSUB_EMULATOR_HOST  default: localhost:8085
+    PUBSUB_EMULATOR_HOST  default: localhost:9085
     GCP_PROJECT           default: cleardeals-wa-local
     GCP_ENV               default: local
 ─────────────────────────────────────────────────────────────────────────────
@@ -37,7 +37,7 @@ from datetime import datetime
 ODOO_DB        = os.environ.get('ODOO_DB', 'cleardeals_19_dev')
 ODOO_CONTAINER = os.environ.get('ODOO_CONTAINER', 'odoo-dev-app')
 
-EMULATOR_HOST  = os.environ.get('PUBSUB_EMULATOR_HOST', 'localhost:8085')
+EMULATOR_HOST  = os.environ.get('PUBSUB_EMULATOR_HOST', 'localhost:9085')
 GCP_PROJECT    = os.environ.get('GCP_PROJECT', 'cleardeals-wa-local')
 GCP_ENV        = os.environ.get('GCP_ENV', 'local')
 

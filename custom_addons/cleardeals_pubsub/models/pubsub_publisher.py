@@ -10,7 +10,7 @@ PUBSUB_PROJECT_ID
     Required.  GCP project ID (e.g. ``cleardeals-prod``).
 
 PUBSUB_EMULATOR_HOST
-    Optional.  When set (e.g. ``host.docker.internal:8085``) the
+    Optional.  When set (e.g. ``host.docker.internal:9085``) the
     google-cloud-pubsub library routes every RPC to the local emulator
     instead of GCP.  Set automatically by docker-compose.dev.yml.
 
