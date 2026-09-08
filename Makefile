@@ -98,12 +98,17 @@ psql:
 # ── Module update ─────────────────────────────────────────────────────────────
 # Usage: make update MODULE=leads
 #        make update MODULE=leads,properties
+# --no-http is required, not cosmetic. This runs a SECOND odoo process inside a
+# container where the dev server is already listening on 8069, so without it the
+# upgrade dies on `OSError: [Errno 98] Address already in use` before touching a
+# single module — the server binds the port during startup, ahead of the upgrade.
+# The other odoo-shell targets below pass it for the same reason.
 update:
 ifndef MODULE
 	$(error MODULE is required. Usage: make update MODULE=my_module)
 endif
 	$(DC) exec odoo python3 /usr/bin/odoo \
-		-d $(DB_NAME) -u $(MODULE) --stop-after-init
+		-d $(DB_NAME) -u $(MODULE) --stop-after-init --no-http
 
 # ── One-time DB migration ──────────────────────────────────────────────────────
 # Copies cleardeals_19_dev from your Mac Postgres (port 5432) into the
