@@ -111,24 +111,37 @@ services:
       #   xml     → reload XML view definitions without restart
       - ODOO_DEV=all
 
-      # ── Pub/Sub — POINTED AT REAL PRODUCTION ─────────────────────────────────
-      # ⚠️  This local Odoo talks to the LIVE cd-prod-* topics, not the emulator.
-      # Publishing a lead event from here reaches real customers on WhatsApp.
+      # ── Pub/Sub — DEFAULTS TO THE OFFLINE EMULATOR ───────────────────────────
+      # This file previously HARDCODED cleardeals-wa-prod / GCP_ENV=production,
+      # which meant a `make up` on a laptop published straight into the live
+      # cd-prod-* topics and reached real customers on WhatsApp. The dev stack is
+      # for testing; the default must be the one that cannot page anybody.
       #
-      # To go back to the offline emulator, restore:
-      #   - PUBSUB_EMULATOR_HOST=host.docker.internal:8085
-      #   - PUBSUB_PROJECT_ID=cleardeals-wa-local
-      # and drop GCP_ENV + the credentials mount below.
+      # All three are overridable from .env so the escape hatch still exists, but
+      # reaching production is now an explicit, written-down act rather than the
+      # default state of a checked-out repo.
       #
-      # PUBSUB_EMULATOR_HOST is deliberately ABSENT: setting it would (a) send
-      # traffic to the emulator and (b) make the /wa/pubsub/push controller skip
-      # OIDC verification entirely (see push_controller.py) — we want real tokens.
-      - PUBSUB_PROJECT_ID=cleardeals-wa-prod
+      # PUBSUB_EMULATOR_HOST uses `-` and not `:-` deliberately. Compose's `:-`
+      # substitutes the default for an EMPTY value too, which would make
+      # `PUBSUB_EMULATOR_HOST=` in .env silently snap back to the emulator and
+      # strand you in local mode. With `-`, an explicitly empty value stays
+      # empty, and every consumer tests it with bool() — see
+      # push_controller.py:96 and cleardeals_pubsub/models/pubsub_publisher.py —
+      # so empty correctly means "not the emulator".
+      #
+      # Setting it also makes /wa/pubsub/push skip OIDC verification, which is
+      # what you want against the emulator (it issues no tokens) and exactly what
+      # you do NOT want when pointed at a real project.
+      #
+      # To test against the TEST Interakt account end-to-end, leave these alone —
+      # see docs/LOCAL_TEST_ACCOUNT.md in the platform repo.
+      - PUBSUB_PROJECT_ID=${PUBSUB_PROJECT_ID:-cleardeals-wa-local}
+      - PUBSUB_EMULATOR_HOST=${PUBSUB_EMULATOR_HOST-host.docker.internal:8085}
 
       # Topic aliases that the code prefixes at runtime (wa_workflow.py builds
-      # 'cd-{prefix}-{alias}' from this). 'production' → 'prod'. Without it the
-      # workflow pause/resume toggle would publish to cd-local-* and vanish.
-      - GCP_ENV=production
+      # 'cd-{prefix}-{alias}'). 'local' → cd-local-*, which is what
+      # scripts/create_local_pubsub.py seeds in the emulator. 'production' → prod.
+      - GCP_ENV=${GCP_ENV:-local}
 
       # Application Default Credentials — google-cloud-pubsub picks this up.
       # Mounted read-only from the host (see volumes below).

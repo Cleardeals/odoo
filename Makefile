@@ -18,7 +18,7 @@ DB_NAME = cleardeals_19_dev
         logs logs-odoo logs-db \
         shell odoo-shell psql \
         update migrate-db wipe \
-        wa-tunnel wa-media-url
+        wa-tunnel wa-media-url wa-interakt wa-config
 
 # ── Default target ─────────────────────────────────────────────────────────────
 help:
@@ -49,6 +49,8 @@ help:
 	@echo "────────────────────────────────────────────────────────────────────"
 	@echo "  make wa-tunnel                      (public cloudflared tunnel for WA media)"
 	@echo "  make wa-media-url URL=https://…     (set/clear WA media base URL)"
+	@echo "  make wa-interakt                    (set TEST Interakt key — hidden prompt)"
+	@echo "  make wa-config                      (show WA params + Pub/Sub env, key masked)"
 	@echo "════════════════════════════════════════════════════════════════════"
 	@echo "  Windows one-time setup:"
 	@echo "    Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser"
@@ -158,6 +160,48 @@ wa-media-url:
 		"env.cr.commit()" \
 		"print('✓ wa_communication.media_public_base_url =', repr(env['ir.config_parameter'].sudo().get_param('wa_communication.media_public_base_url')))" \
 		| $(DC) exec -T odoo python3 /usr/bin/odoo shell -d $(DB_NAME) --no-http 2>/dev/null
+
+# ── Interakt credentials (dev DB only) ────────────────────────────────────────
+# Odoo holds its own copy of the Interakt key, separate from the platform's
+# Kubernetes secret: interakt_client.py reads
+# `wa_communication.interakt_api_key` from ir.config_parameter to drive the live
+# Send-Template picker. Both copies must point at the SAME account or the picker
+# lists templates the sender cannot actually send.
+#
+# The key is read from a PROMPT with echo off, never as `make wa-interakt KEY=…`.
+# A make variable lands in ~/.zsh_history, in `ps` output for the duration of the
+# command, and in any terminal-sharing session. It is piped straight into the
+# odoo shell's stdin and never appears in a file or an argv.
+#
+# Use the TEST account key here. This target refuses to run against anything but
+# the dev compose stack, so it cannot touch production by mistake.
+wa-interakt:
+	@echo "→ Setting Interakt credentials in $(DB_NAME) (dev stack only)."
+	@echo "  Use the TEST account key. Input is hidden."
+	@printf "  Interakt API key: "; \
+	stty -echo 2>/dev/null; read APIKEY; stty echo 2>/dev/null; echo ""; \
+	if [ -z "$$APIKEY" ]; then echo "✗ Empty key — nothing changed."; exit 1; fi; \
+	BASE="$${BASE:-https://api.interakt.ai}"; \
+	printf "%s\n" \
+	  "icp = env['ir.config_parameter'].sudo()" \
+	  "icp.set_param('wa_communication.interakt_api_key', '''$$APIKEY''')" \
+	  "icp.set_param('wa_communication.interakt_base_url', '$$BASE')" \
+	  "env.cr.commit()" \
+	  "k = icp.get_param('wa_communication.interakt_api_key') or ''" \
+	  "print('OK  interakt_base_url =', icp.get_param('wa_communication.interakt_base_url'))" \
+	  "print('OK  interakt_api_key  =', (k[:4] + '…' + k[-4:]) if len(k) > 8 else '(set)')" \
+	  | $(DC) exec -T odoo python3 /usr/bin/odoo shell -d $(DB_NAME) --no-http 2>/dev/null
+
+wa-config: ## Show the WA-related system parameters (API key masked)
+	@printf "%s\n" \
+	  "icp = env['ir.config_parameter'].sudo()" \
+	  "k = icp.get_param('wa_communication.interakt_api_key') or ''" \
+	  "print('interakt_api_key       =', (k[:4] + '…' + k[-4:]) if len(k) > 8 else ('(unset)' if not k else '(set)'))" \
+	  "print('interakt_base_url      =', icp.get_param('wa_communication.interakt_base_url') or '(unset)')" \
+	  "print('media_public_base_url  =', icp.get_param('wa_communication.media_public_base_url') or '(unset)')" \
+	  | $(DC) exec -T odoo python3 /usr/bin/odoo shell -d $(DB_NAME) --no-http 2>/dev/null
+	@echo "── container env (must be the emulator for safe testing) ──"
+	@$(DC) exec -T odoo sh -c 'echo "  GCP_ENV=$$GCP_ENV"; echo "  PUBSUB_PROJECT_ID=$$PUBSUB_PROJECT_ID"; echo "  PUBSUB_EMULATOR_HOST=$$PUBSUB_EMULATOR_HOST"'
 
 # ── Wipe ──────────────────────────────────────────────────────────────────────
 wipe:
