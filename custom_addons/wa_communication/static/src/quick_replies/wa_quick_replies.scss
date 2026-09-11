@@ -1,0 +1,358 @@
+.wa-qr {
+    height: 100%;
+    overflow-y: auto;
+    padding: 24px 28px;
+    background: #f7f7f9;
+
+    &__header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        margin-bottom: 20px;
+    }
+
+    &__title {
+        font-size: 22px;
+        font-weight: 700;
+        margin: 0;
+        color: #1a1a1a;
+        .fa { color: #7c3aed; }
+    }
+
+    &__subtitle {
+        margin: 4px 0 0;
+        color: #777;
+        font-size: 13px;
+    }
+
+    &__new-btn { white-space: nowrap; }
+
+    &__loading {
+        text-align: center;
+        padding: 60px 0;
+        font-size: 28px;
+        color: #bbb;
+    }
+
+    &__section-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: #8a8a99;
+        margin: 22px 0 12px;
+        .fa { color: #7c3aed; }
+    }
+
+    &__readonly-tag {
+        font-size: 10px;
+        font-weight: 600;
+        color: #999;
+        background: #eee;
+        border-radius: 4px;
+        padding: 1px 6px;
+        text-transform: none;
+        letter-spacing: 0;
+    }
+
+    &__grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+        gap: 14px;
+    }
+
+    &__empty {
+        grid-column: 1 / -1;
+        color: #aaa;
+        font-size: 13px;
+        padding: 14px 4px;
+    }
+
+    &__card {
+        background: #fff;
+        border: 1px solid #ececf0;
+        border-radius: 12px;
+        padding: 14px;
+        display: flex;
+        flex-direction: column;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+        transition: box-shadow 0.15s, transform 0.15s;
+        &:hover { box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08); transform: translateY(-1px); }
+    }
+
+    &__card-head {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 8px;
+    }
+
+    &__card-title {
+        font-size: 14px;
+        font-weight: 700;
+        color: #1a1a1a;
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    &__card-shortcut {
+        font-size: 11px;
+        color: #7c3aed;
+        background: rgba(124, 58, 237, 0.1);
+        border-radius: 4px;
+        padding: 1px 6px;
+        font-family: monospace;
+    }
+
+    &__card-body {
+        font-size: 13px;
+        color: #555;
+        line-height: 1.45;
+        white-space: pre-wrap;
+        flex: 1;
+        max-height: 96px;
+        overflow: hidden;
+        margin-bottom: 10px;
+    }
+
+    &__card-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 6px;
+        min-height: 24px;
+    }
+
+    &__icon-btn {
+        border: none;
+        background: none;
+        color: #8a8a99;
+        cursor: pointer;
+        font-size: 13px;
+        padding: 4px 6px;
+        border-radius: 6px;
+        &:hover { background: #f0f0f4; color: #555; }
+        &--danger:hover { background: #fdecec; color: #e03131; }
+    }
+
+    &__card-lock { color: #ccc; font-size: 12px; }
+
+    // ── Editor modal ────────────────────────────────────────────────────────
+    &__overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.4);
+        z-index: 1050;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+    }
+
+    &__modal {
+        background: #fff;
+        border-radius: 14px;
+        width: 480px;
+        max-width: 100%;
+        // Constrain to the viewport (overlay has 24px padding) and lay out as a
+        // column so the header/footer stay fixed and the body scrolls.
+        max-height: calc(100vh - 48px);
+        display: flex;
+        flex-direction: column;
+        box-shadow: 0 16px 48px rgba(0, 0, 0, 0.25);
+        overflow: hidden;
+    }
+
+    &__modal-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 16px 20px;
+        font-size: 16px;
+        font-weight: 700;
+        border-bottom: 1px solid #eee;
+        flex-shrink: 0;
+    }
+
+    &__modal-close {
+        border: none;
+        background: none;
+        font-size: 22px;
+        line-height: 1;
+        color: #999;
+        cursor: pointer;
+        &:hover { color: #333; }
+    }
+
+    &__modal-body {
+        padding: 18px 20px;
+        display: flex;
+        flex-direction: column;
+        // Scroll the body (not the whole modal) when the list builder is tall.
+        overflow-y: auto;
+        flex: 1 1 auto;
+        min-height: 0;
+
+        // Flex children shrink below their natural height by default when the
+        // container is height-constrained — that squished the body textarea.
+        // Pin every field to its natural size so the body scrolls instead.
+        > * { flex-shrink: 0; }
+    }
+
+    &__label {
+        font-size: 12px;
+        font-weight: 600;
+        color: #666;
+        margin: 10px 0 4px;
+        &:first-child { margin-top: 0; }
+    }
+
+    // ── List preview (mirrors the composer's, plus the expanded row sheet) ────
+    &__preview {
+        margin-bottom: 12px;
+    }
+
+    &__preview-sheet {
+        margin-top: 6px;
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        background: #fff;
+        overflow: hidden;
+        max-height: 220px;
+        overflow-y: auto;
+    }
+
+    &__preview-row {
+        padding: 8px 12px;
+        border-bottom: 1px solid #f3f4f6;
+        &:last-child { border-bottom: none; }
+    }
+
+    &__preview-row-title {
+        font-size: 13px;
+        color: #111827;
+    }
+
+    &__preview-row-desc {
+        font-size: 12px;
+        color: #6b7280;
+        margin-top: 2px;
+    }
+
+    &__input,
+    &__textarea {
+        border: 1px solid #d5d5dd;
+        border-radius: 8px;
+        padding: 8px 12px;
+        font-size: 14px;
+        outline: none;
+        width: 100%;
+        &:focus { border-color: #7c3aed; box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.15); }
+    }
+
+    &__textarea { resize: vertical; }
+
+    &__fmt-bar {
+        display: flex;
+        gap: 4px;
+        margin-bottom: 6px;
+    }
+
+    &__fmt-btn {
+        border: 1px solid #d5d5dd;
+        background: #fff;
+        border-radius: 6px;
+        min-width: 30px;
+        height: 28px;
+        font-size: 13px;
+        line-height: 1;
+        color: #444;
+        cursor: pointer;
+        i { font-style: italic; }
+        code { font-size: 11px; }
+        &:hover { background: #f3effb; border-color: #7c3aed; color: #7c3aed; }
+    }
+
+    &__check {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 14px;
+        font-size: 13px;
+        color: #444;
+        cursor: pointer;
+    }
+
+    &__modal-footer {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        padding: 14px 20px;
+        border-top: 1px solid #eee;
+        flex-shrink: 0;
+    }
+}
+
+// ── Type toggle (Text / List) in the editor ─────────────────────────────────
+.wa-qr__kind-toggle {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+.wa-qr__kind-opt {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px;
+    border: 1px solid var(--cd-border, #d1d5db);
+    border-radius: 8px;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+
+    &--active {
+        border-color: #16a34a;
+        background: rgba(22, 163, 74, 0.08);
+        color: #16a34a;
+    }
+}
+
+// List badge on quick-reply cards / picker items
+.wa-qr__card-list-badge,
+.cd-qr-picker__item-list-badge {
+    display: inline-flex;
+    align-items: center;
+    color: #00a5f4;
+    margin-right: 4px;
+    font-size: 12px;
+}
+
+// ── Phone ────────────────────────────────────────────────────────────────────
+// The grid of reply cards goes to one column and the editor fields go
+// full-width; 336 lines of stylesheet had no breakpoint at all before this.
+@media (max-width: 767.98px) {
+    .wa-qr {
+        padding: 12px;
+
+        &__header { flex-wrap: wrap; gap: 8px; }
+
+        &__grid { grid-template-columns: 1fr; }
+
+        &__input { font-size: 16px; min-height: var(--cd-tap); }
+
+        &__icon-btn { width: var(--cd-tap); height: var(--cd-tap); }
+
+        &__kind-opt { min-height: var(--cd-tap); }
+
+        &__fmt-btn { min-width: 40px; min-height: 40px; }
+    }
+}
+

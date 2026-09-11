@@ -1,0 +1,59 @@
+# infrastructure/ops-agent/config.yaml
+#
+# Google Cloud Ops Agent configuration for odoo-19-prod.
+# Installed to /etc/google-cloud-ops-agent/config.yaml — see install.sh.
+#
+# BACKGROUND. The agent has been installed and running on this VM for months
+# and shipping NOTHING. It could not: the service account attached to the VM
+# (odoo-bq-access@) held BigQuery roles only, so every write failed with
+# "PermissionDenied: monitoring.timeSeries.create" — 1121 items dropped in a
+# single batch. Phase 4c attached odoo-prod-vm@, which holds logging.logWriter
+# and monitoring.metricWriter, and the errors stopped immediately.
+#
+# So this file is the second half of that fix: the agent is now authorised, but
+# by default it collects only syslog and host metrics. Container logs — which is
+# where Odoo actually writes — are not collected unless asked for.
+#
+# WHY THIS MATTERS BEYOND CONVENIENCE. Docker's json-file logs live on the
+# instance disk. Every diagnosis of a production problem so far has needed
+# `docker logs` over SSH, which means the evidence disappears when a container
+# is recreated — and a deploy recreates the Odoo container every time. The
+# addons outage was diagnosed from logs that a subsequent deploy would have
+# destroyed.
+
+logging:
+  receivers:
+    # Docker writes one JSON-per-line file per container.
+    docker_containers:
+      type: files
+      include_paths:
+        - /var/lib/docker/containers/*/*-json.log
+      # Rotation is handled by the json-file driver limits set in
+      # docker-compose.yml (50MB x 5). The agent follows rotated files.
+
+  processors:
+    # Each line is {"log":"...","stream":"stdout","time":"..."}; without this
+    # the whole JSON blob lands in Cloud Logging as an opaque string and is
+    # unsearchable.
+    parse_docker_json:
+      type: parse_json
+      time_key: time
+      time_format: "%Y-%m-%dT%H:%M:%S.%NZ"
+
+    # NOTE: a parse_regex processor to promote Odoo's own log level into
+    # severity was written and then removed. Ops Agent's parse_regex DROPS
+    # records that do not match, and this pipeline carries Postgres and Traefik
+    # lines too — an Odoo-shaped regex would have silently discarded both.
+    # Phase 6's log-based alert can match on text instead; severity promotion,
+    # if wanted, needs a per-container split first.
+
+  service:
+    pipelines:
+      docker:
+        receivers: [docker_containers]
+        processors: [parse_docker_json]
+
+# Metrics are left at the agent defaults deliberately. The default host metrics
+# already include what Phase 6 needs — and disk utilisation is the highest-value
+# alert on this machine, because the Postgres data directory, the filestore and
+# every Docker image share one disk.

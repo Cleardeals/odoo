@@ -16,9 +16,11 @@ from . import (
     test_portal_lead_duplicate,
     test_portal_lead_phone,
     test_portal_lead_processing,
+    test_portal_lead_property_link_duplicate,
     test_portal_lead_webhook,
     test_portal_lead_whatsapp,
     test_property_activity_dashboard,
+    test_recommend_wizard,
     test_seller_activity_api,
     test_seller_ai_suggestions_api,
     test_seller_funnel_api,
@@ -28,3 +30,6 @@ from . import (
     test_website_lead,
     test_squareyards_webhook,
 )
+from . import test_lead_phone_validation
+from . import test_lead_auto_created
+from . import test_property_rm_search_scope

@@ -58,6 +58,7 @@ class LeadScoreBqWizard(models.TransientModel):
             'call back from client': 'call_back_later',
             'sales-lead-ops': 'lead',
             'option not matching requirements': 'option_not_matching_requirements',
+            'contact initiated': 'contact_initiated',
             'details shared of property': 'details_shared_of_property',
             'no requirements': 'no_requirements',
             'details shared and interested for site visit': 'details_shared_and_interested_for_site_visit',

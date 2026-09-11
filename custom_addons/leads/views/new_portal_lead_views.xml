@@ -49,6 +49,10 @@
                         name="unassigned"
                         domain="[('user_id', '=', False)]"
                         help="Leads with no RM assigned"/>
+                <filter string="Contact Initiated"
+                        name="contact_initiated"
+                        domain="[('current_status', '=', 'contact_initiated')]"
+                        help="Details went out automatically — nobody has called them yet"/>
                 <filter string="Details Shared"
                         name="details_shared"
                         domain="[('current_status', 'in', ['details_shared_of_property', 'detail_shared_and_interested_for_site_visit'])]"
@@ -133,7 +137,8 @@
             <list string="New Portal Leads"
                     js_class="leads_new_list_controller"
                     decoration-success="(state=='assigned' and current_status=='lead')"
-                    decoration-info="current_status != 'lead'"
+                    decoration-warning="current_status == 'contact_initiated'"
+                    decoration-info="current_status not in ['lead', 'contact_initiated']"
                     decoration-danger="state=='new'">
 
                 <!-- Appears in the control panel only when rows are selected.
@@ -177,7 +182,7 @@
             <form string="Recommended Property Status">
                 <header>
                     <field name="current_status" widget="statusbar"
-                           statusbar_visible="lead,details_shared_of_property,site_visit_scheduled,site_visit_done,requirement_closed"/>
+                           statusbar_visible="lead,contact_initiated,details_shared_of_property,site_visit_scheduled,site_visit_done,requirement_closed"/>
                 </header>
                 <sheet>
                     <group>
@@ -217,7 +222,7 @@
                            groups="leads.group_lead_score_manager"/>
 
                     <field name="current_status" widget="statusbar"
-                              statusbar_visible="lead,details_shared_of_property,requirement_closed"
+                              statusbar_visible="lead,contact_initiated,details_shared_of_property,requirement_closed"
                            groups="leads.group_lead_score_rm"/>
 
                     <button name="action_open_add_site_visit_wizard"
@@ -237,7 +242,6 @@
                             type="object"
                             string="Recommend Property"
                             class="btn-secondary"
-                            invisible="inquiry_type != 'primary'"
                             groups="leads.group_lead_score_rm"/>
                 </header>
                 <sheet>
@@ -253,7 +257,9 @@
 
                             <label for="phone"/>
                             <div class="d-flex align-items-center">
-                                <field name="phone" nolabel="1" class="w-auto"/>
+                                <field name="phone" nolabel="1" class="w-auto"
+                                       required="1"
+                                       placeholder="10-digit mobile, e.g. 9876543210"/>
                                 <button name="action_whatsapp_with_copy"
                                         type="object"
                                         icon="fa-whatsapp"

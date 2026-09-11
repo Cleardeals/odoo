@@ -28,6 +28,7 @@ Response shape
         "busy":                                       {"count":  3, "pct_of_total":  7.1},
         "ringing":                                    {"count":  2, "pct_of_total":  4.8},
         "call_back_later":                            {"count":  1, "pct_of_total":  2.4},
+        "contact_initiated":                          {"count":  7, "pct_of_total": 16.7},
         "details_shared_of_property":                 {"count":  5, "pct_of_total": 11.9},
         "detail_shared_and_interested_for_site_visit":{"count":  4, "pct_of_total":  9.5},
         "option_not_matching_requirements":           {"count":  0, "pct_of_total":  0.0},
@@ -77,6 +78,7 @@ ALL_FUNNEL_STAGES = [
     "busy",
     "ringing",
     "call_back_later",
+    "contact_initiated",
     "details_shared_of_property",
     "detail_shared_and_interested_for_site_visit",
     "option_not_matching_requirements",
@@ -93,10 +95,19 @@ ALL_FUNNEL_STAGES = [
 ]
 
 # Logical groupings for key_metrics block
+# "contact_initiated" is here deliberately. It is set when the WhatsApp card is
+# DELIVERED, which is the same event that used to set details_shared_of_property
+# — so counting it keeps this metric identical to what sellers saw before the
+# split. The distinction the new status draws (no RM has spoken to the buyer
+# yet) is an internal queueing concern; to a property owner the outreach did
+# happen. Move it out of this set only if "contacted" is redefined to mean
+# "a human spoke to them", which would also change the meaning for every
+# existing status in it.
 _CONTACTED_STAGES = {
     "busy",
     "ringing",
     "call_back_later",
+    "contact_initiated",
     "details_shared_of_property",
     "detail_shared_and_interested_for_site_visit",
     "option_not_matching_requirements",

@@ -326,7 +326,9 @@ class TestPropertyActivityDashboard(PortalLeadTestCase):
         )
         # Recommended inquiry on test_property created via the same model
         # the Recommend Property wizard uses.
-        self.env["leads.new"].sudo().create(
+        # Every inquiry is created at "lead" (leads.new.create forces it), so
+        # the advanced status is applied afterwards, as it is in real use.
+        recommended = self.env["leads.new"].sudo().create(
             {
                 "name": buyer_lead.name,
                 "phone": buyer_lead.phone,
@@ -334,11 +336,11 @@ class TestPropertyActivityDashboard(PortalLeadTestCase):
                 "property_base_id": self.test_property.id,
                 "user_id": buyer_lead.user_id.id,
                 "state": "assigned",
-                "current_status": "site_visit_scheduled",
                 "inquiry_type": "recommended",
                 "parent_inquiry_id": buyer_lead.id,
             }
         )
+        recommended.sudo().write({"current_status": "site_visit_scheduled"})
 
         dash = self._run_dashboard(self.test_property.id)
 

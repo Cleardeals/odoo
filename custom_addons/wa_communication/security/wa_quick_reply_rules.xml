@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="0">
+
+    <!--
+        Quick-reply visibility / ownership rules.
+
+        Combined per-operation: a user passes if ANY of their group rules for
+        that operation grants access.
+
+        Plain user (base.group_user):
+          - READ   : own personal + all shared          (rule_qr_user_read)
+          - W/C/U  : own personal only                  (rule_qr_user_manage)
+            ⇒ cannot create a shared reply (user_id=False fails the domain),
+              cannot edit another user's personal or any shared reply.
+
+        Manager (group_wa_manager):
+          - R/W/C/U: own personal + all shared          (rule_qr_manager)
+            ⇒ can create/edit/delete shared replies and their own.
+    -->
+
+    <record id="rule_qr_user_read" model="ir.rule">
+        <field name="name">Quick Reply: read own + shared</field>
+        <field name="model_id" ref="model_wa_quick_reply"/>
+        <field name="groups" eval="[(4, ref('base.group_user'))]"/>
+        <field name="domain_force">['|', ('user_id', '=', user.id), ('user_id', '=', False)]</field>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="False"/>
+        <field name="perm_create" eval="False"/>
+        <field name="perm_unlink" eval="False"/>
+    </record>
+
+    <record id="rule_qr_user_manage" model="ir.rule">
+        <field name="name">Quick Reply: manage own personal</field>
+        <field name="model_id" ref="model_wa_quick_reply"/>
+        <field name="groups" eval="[(4, ref('base.group_user'))]"/>
+        <field name="domain_force">[('user_id', '=', user.id)]</field>
+        <field name="perm_read" eval="False"/>
+        <field name="perm_write" eval="True"/>
+        <field name="perm_create" eval="True"/>
+        <field name="perm_unlink" eval="True"/>
+    </record>
+
+    <record id="rule_qr_manager" model="ir.rule">
+        <field name="name">Quick Reply: manager manages shared + own</field>
+        <field name="model_id" ref="model_wa_quick_reply"/>
+        <field name="groups" eval="[(4, ref('group_wa_manager'))]"/>
+        <field name="domain_force">['|', ('user_id', '=', user.id), ('user_id', '=', False)]</field>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="True"/>
+        <field name="perm_create" eval="True"/>
+        <field name="perm_unlink" eval="True"/>
+    </record>
+
+</odoo>

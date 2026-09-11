@@ -1,3 +1,7 @@
+from datetime import date, datetime
+
+import pytz
+
 from odoo.tests import tagged
 from odoo.exceptions import ValidationError
 from odoo.tools import mute_logger
@@ -58,14 +62,75 @@ class TestPortalLeadCRUD(PortalLeadTestCase):
 
     
     def test_05_compute_create_date_only(self):
-        """Test that create_date_only is computed correctly."""
-        lead = self.create_portal_lead()
-        
-        self.assertIsNotNone(lead.create_date_only)
-        self.assertIsInstance(lead.create_date_only,  type(lead.create_date.date()))
-        self.assertEqual(lead.create_date_only, lead.create_date.date())
+        """
+        create_date_only is the IST calendar date of create_date, NOT the UTC one.
 
-    
+        The field exists precisely so that a lead created at 02:00 IST is
+        recorded as today rather than yesterday — see
+        _compute_create_date_only in new_portal_leads.py.
+
+        This previously asserted equality with create_date.date(), the UTC date.
+        That contradicts what the field is for, and it only passed by
+        coincidence: UTC and IST fall on the same calendar day for 18.5 hours
+        out of 24, so the suite was red every day between 18:30 and 00:00 UTC
+        (00:00-05:30 IST) and nobody noticed, because CI only ever ran during
+        working hours. It surfaced when a production deploy was gated on the
+        tests at 18:31 UTC.
+        """
+        lead = self.create_portal_lead()
+
+        self.assertIsNotNone(lead.create_date_only)
+        self.assertIsInstance(lead.create_date_only, date)
+
+        expected = (
+            pytz.utc.localize(lead.create_date)
+            .astimezone(pytz.timezone("Asia/Kolkata"))
+            .date()
+        )
+        self.assertEqual(lead.create_date_only, expected)
+
+    def test_05b_create_date_only_uses_ist_across_the_utc_midnight_boundary(self):
+        """
+        Pin the IST conversion deterministically, at any hour of the day.
+
+        20:00 UTC is 01:30 IST the FOLLOWING day, so a correct conversion gives
+        a different calendar date from the UTC one. That is the whole behaviour
+        the field exists for.
+
+        create_date is set with SQL, not `write()`. It is a readonly ORM field,
+        so `sudo().write({"create_date": ...})` is silently IGNORED — the record
+        keeps "now". The first version of this test did exactly that, and passed
+        only between 18:30 and 00:00 UTC, when "now" happens to have different
+        UTC and IST dates. It was a time-dependent test written to remove a
+        time-dependent test, and CI caught it at 03:43 UTC.
+        """
+        lead = self.create_portal_lead()
+
+        forced = datetime(2026, 9, 2, 20, 0, 0)          # 01:30 IST on the 3rd
+        self.env.cr.execute(
+            "UPDATE leads_new SET create_date = %s WHERE id = %s",
+            (forced, lead.id),
+        )
+        lead.invalidate_recordset()
+
+        # Confirm SQL actually took effect, so a silently-ignored write can
+        # never let the real assertions pass by coincidence again.
+        self.assertEqual(lead.create_date, forced)
+        self.assertEqual(lead.create_date.date(), date(2026, 9, 2))
+
+        lead._compute_create_date_only()
+
+        self.assertEqual(
+            lead.create_date_only,
+            date(2026, 9, 3),
+            "20:00 UTC is 01:30 IST the next day, so the IST date must be the 3rd",
+        )
+        self.assertNotEqual(
+            lead.create_date_only,
+            lead.create_date.date(),
+            "the UTC date is the 2nd; equality here means the IST conversion was lost",
+        )
+
     def test_06_compute_site_visit_date_only(self):
         """
         Verify that site_visit_date_only (Date) is computed from site_visit_date (Datetime).

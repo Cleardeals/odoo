@@ -1,8 +1,35 @@
-version: '3.8'
+# Compose derives the project name from the DIRECTORY unless it is pinned here.
+# Pinning it means the Phase 4 move from /home/cdgcphub/odoo-project to
+# /opt/odoo does not rename a single container: without this, odoo-project-db-1
+# becomes odoo-db-1 mid-migration, the old and new projects each own a separate
+# network and set of anonymous volumes, and a rollback has to reason about two
+# identities instead of one.
+#
+# Set to the CURRENT name so applying this is a no-op today and the move changes
+# nothing about container identity.
+name: odoo-project
+
 services:
   # 1. The Traefik Reverse Proxy
   traefik:
-    image: traefik:v2.10
+    # v2.11, not v2.10. Traefik v2.10's Docker client speaks API 1.24, and
+    # Docker Engine 29 requires a minimum of 1.44:
+    #
+    #   Failed to retrieve information of the docker client and server host:
+    #   client version 1.24 is too old. Minimum supported API version is 1.44
+    #
+    # With the provider dead, Traefik saw no containers and served 404 for
+    # everything — Odoo was healthy and loading modules behind it the whole time.
+    #
+    # This was LATENT, not caused by any change here. The VM had not rebooted in
+    # months, so a Docker upgrade sat installed but inactive; the Phase 4c
+    # machine-type change was simply the first restart since. Any reboot would
+    # have done it, including an unplanned one — which is the worse version of
+    # this, at 3am with nobody expecting it.
+    #
+    # v2.11 is the final v2 release, so the configuration syntax below is
+    # unchanged. Moving to v3 is a real migration and belongs in its own change.
+    image: traefik:v2.11
     container_name: traefik
     command:
       - "--api.insecure=true"
@@ -18,42 +45,139 @@ services:
     ports:
       - "80:80"
       - "443:443"
-      - "8080:8080"
+      # The dashboard/API binds to LOOPBACK ONLY. It was previously published as
+      # "8080:8080", which means 0.0.0.0 — and combined with --api.insecure=true
+      # above, that is an unauthenticated admin API of the production reverse
+      # proxy listening on every interface.
+      #
+      # It was never reachable from the internet: no firewall rule has ever
+      # allowed 8069 or 8080 inbound. But the VPC's default-allow-internal rule
+      # permits ALL TCP between instances, so any other VM in the project could
+      # read it. That was confirmed rather than assumed — a request from the
+      # staging instance to this port on production returned 200 with the full
+      # routing configuration.
+      #
+      # Traefik v2's insecure API is read-only, so this was topology disclosure
+      # (routers, services, internal URLs, certificate state) rather than a way
+      # to change anything. Not an emergency; still not something to leave open
+      # after a hardening pass.
+      #
+      # Deliberately narrowed rather than removed. The dashboard is genuinely
+      # useful — when the provider died on the v2.10/Docker-29 API mismatch,
+      # Traefik served 404 for everything while Odoo was perfectly healthy
+      # behind it, and this endpoint would have shown an empty router table
+      # immediately. Keeping it on loopback keeps that diagnostic, reachable
+      # over the IAP SSH tunnel by whoever is already on the box:
+      #
+      #   gcloud compute ssh <instance> --zone=<zone> --tunnel-through-iap \
+      #     -- -L 8080:localhost:8080
+      - "127.0.0.1:8080:8080"
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
       - "./letsencrypt:/letsencrypt"
     networks:
       - web
     restart: unless-stopped
+    # Docker's default json-file driver has NO size limit, and there was no
+    # /etc/docker/daemon.json on this host — so container logs grew without
+    # bound until something else noticed the disk. Capping here rather than in
+    # the daemon config keeps it in git and needs no daemon restart; it applies
+    # as each container is recreated by a deploy.
+    # 50MB x 5 = 250MB ceiling per container.
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
 
   # 2. Your Database Service
   db:
     image: postgres:17
     environment:
       - POSTGRES_DB=postgres
-      - POSTGRES_PASSWORD=odoo
+      # POSTGRES_PASSWORD is deliberately ABSENT.
+      #
+      # It was `odoo`, hardcoded, in a PUBLIC repository — and it is in git
+      # history forever, so deleting the line was never the fix. The credential
+      # itself has been rotated to a 40-character value held in Secret Manager
+      # (see infrastructure/rotate_db_password.sh), which is what made the
+      # committed value worthless.
+      #
+      # It is not replaced with a variable because it is not needed: the
+      # variable is read only by initdb, on an EMPTY data directory. Verified
+      # against postgres:17 — a container restarted on an existing data dir with
+      # no POSTGRES_PASSWORD starts cleanly and authenticates fine. The password
+      # lives in the database, not the environment.
+      #
+      # If this volume is ever lost, Postgres will refuse to initialise without
+      # it. That is the correct failure: better a loud stop than silently
+      # recreating a database with whatever default was lying around.
       - POSTGRES_USER=odoo
     volumes:
       - ./odoo-db-data:/var/lib/postgresql/data
     networks:
       - web
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
 
   # 3. Your Odoo 19 Service
   odoo:
-    build: .
+    # Pinned by commit SHA, written into .env by scripts/deploy.sh. NEVER
+    # :latest — a floating tag makes "what is in production" unanswerable and
+    # rollback impossible.
+    #
+    # The fallback keeps a local `docker compose up` working for development;
+    # in production .env always sets it explicitly.
+    image: ${ODOO_IMAGE:-odoo-project-odoo}
     depends_on:
       - db
     volumes:
-      # CHANGED: Mapping single config file from root to the default Odoo location
-      - ./odoo.conf:/etc/odoo/odoo.conf
+      # Rendered by scripts/render_odoo_conf.sh from the COMMITTED odoo.prod.conf
+      # plus the two secrets in Secret Manager. /dev/shm is tmpfs, so the only
+      # file that contains both the config and the secrets is memory-backed and
+      # never lands on the persistent disk — and therefore never in one of the
+      # daily disk snapshots.
+      #
+      # Read-only: the container has no reason to write its own config.
+      #
+      # If this mount is missing, Odoo starts with its built-in defaults, which
+      # include list_db = True. Never let the render step fail silently.
+      - /dev/shm/odoo.conf:/etc/odoo/odoo.conf:ro
       - ./odoo-web-data:/var/lib/odoo
-      - ./custom_addons:/mnt/extra-addons/custom
+      # custom_addons is NO LONGER bind-mounted — it is baked into the image so
+      # the SHA tag identifies the running application code. Re-adding this mount
+      # would silently shadow the baked-in copy with whatever the VM has checked
+      # out, and quietly break rollback.
     networks:
       - web
     environment:
       - ODOO_PROXY=true
       - WEB_BASE_URL=https://odoo.cleardeals.xyz
+      # Pub/Sub runtime environment. Both were absent on production while stage
+      # had them, which is a silent, total failure of the WhatsApp integration:
+      #
+      #   PUBSUB_PROJECT_ID — cleardeals_pubsub RAISES EnvironmentError when it
+      #     is unset, so EVERY publish fails. Nothing degrades gracefully.
+      #   GCP_ENV — wa_workflow builds the workflow-control topic as
+      #     cd-<env>-workflow-control at runtime. Unset means "local", so a
+      #     production pause/resume would publish to cd-local-workflow-control,
+      #     a topic that does not exist, inside a caught exception. Someone
+      #     pauses a workflow, Odoo agrees it is paused, and customers keep
+      #     receiving messages.
+      #
+      # Defaults are deliberately the SAFE ones rather than the production ones.
+      # An unset PUBSUB_PROJECT_ID fails loudly at the first publish; defaulting
+      # it to the real project would instead let a developer's laptop publish
+      # into production topics. Same reasoning for GCP_ENV=local.
+      #
+      # Real values are set per-host in .env, which scripts/deploy.sh now
+      # preserves across deploys instead of truncating.
+      - GCP_ENV=${GCP_ENV:-local}
+      - PUBSUB_PROJECT_ID=${PUBSUB_PROJECT_ID:-}
     labels:
       - "traefik.enable=true"
       # --- Main Odoo Router ---
@@ -64,12 +188,25 @@ services:
       - "traefik.http.routers.odoo.service=odoo-service"
       - "traefik.http.services.odoo-service.loadbalancer.server.port=8069"
       # --- Longpolling Router ---
-      - "traefik.http.routers.odoo-chat.rule=Host(`odoo.cleardeals.xyz`) && PathPrefix(`/longpolling`)"
+      # /websocket is the Odoo 17+ bus path; /longpolling is the Odoo 8-era one
+      # kept for any old client. BOTH must reach the gevent process on :8072.
+      #
+      # This is added BEFORE prefork is enabled, deliberately. With workers = 0
+      # Odoo serves the bus in-process on :8069 and this route is simply unused,
+      # so it is safe to ship now. The moment workers > 0 the bus moves to :8072
+      # and, without this, every realtime update in the UI stops — silently, with
+      # no error anywhere in the logs.
+      - "traefik.http.routers.odoo-chat.rule=Host(`odoo.cleardeals.xyz`) && (PathPrefix(`/websocket`) || PathPrefix(`/longpolling`))"
       - "traefik.http.routers.odoo-chat.entrypoints=websecure"
       - "traefik.http.routers.odoo-chat.tls.certresolver=myresolver"
       - "traefik.http.routers.odoo-chat.service=odoo-chat-service"
       - "traefik.http.services.odoo-chat-service.loadbalancer.server.port=8072"
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
 
 networks:
   web:

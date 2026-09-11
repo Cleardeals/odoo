@@ -19,5 +19,9 @@
         ],
     },
     'application': True,
-    'installable': True,
+        # DEPRECATED — never install. Kept in the tree so the image-contents gate
+    # in cloudbuild.yaml still matches, and so history is not rewritten, but
+    # `installable: False` keeps it out of the Apps list and out of the derived
+    # module list the CD test gate installs.
+    'installable': False,
 }

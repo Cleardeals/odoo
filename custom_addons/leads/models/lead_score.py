@@ -26,6 +26,7 @@ class LeadScore(models.Model):
             ("call_back_later", "Call Back Later"),
             ("site_visit_scheduled", "Site Visit Scheduled"),
             ("option_not_matching_requirements", "Option Not Matching Requirements"),
+            ("contact_initiated", "Contact Initiated"),
             ("details_shared_of_property", "Details Shared of Property"),
             ("no_requirements", "No Requirements"),
             (
@@ -106,6 +107,7 @@ class LeadScore(models.Model):
             ("call_back_later", "Call Back Later"),
             ("site_visit_scheduled", "Site Visit Scheduled"),
             ("option_not_matching_requirements", "Option Not Matching Requirements"),
+            ("contact_initiated", "Contact Initiated"),
             ("details_shared_of_property", "Details Shared of Property"),
             ("no_requirements", "No Requirements"),
             (

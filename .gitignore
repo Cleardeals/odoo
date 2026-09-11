@@ -3,6 +3,13 @@ _build/
 
 # dotfiles
 .*
+
+# The blanket ".*" above hides dotfiles that MUST be committed.
+# .dockerignore controls what enters the Docker build context, and
+# .gcloudignore what Cloud Build uploads. If either is missing from the
+# repo, CI silently builds a different image from the one built locally.
+!.dockerignore
+!.gcloudignore
 !.gitignore
 !.gitattributes
 !.gitkeep
@@ -74,8 +81,23 @@ docker-compose.override.yml
 letsencrypt/
 
 hrms_addons/
-# UI mockups (HTML) — design references, not shipped code
-docs/ml_matching/mockups/
 
-# Local session handoff — never commit (repo is public)
+# Claude Code: team-share skills only; keep the rest of .claude local
+!.claude/
+.claude/*
+!.claude/skills/
+.claude/skills/product-brainstorm-workspace/
+
+# Personal handoff note. Untracked by design and routinely stale — it also
+# carries infrastructure and access notes that must never reach this PUBLIC
+# repo. It was swept into a commit once by `git add -A`; this closes that.
 CHECKPOINT.md
+
+# ML-matching design scratch: mockups, wireframes and generated HTML stay local.
+# Written as contents-plus-negation, NOT a bare `docs/ml_matching/`, because git
+# cannot re-include a file whose parent directory is excluded — and the numbered
+# design docs at the top of this directory ARE tracked on
+# feature/ml-matching-integration. A bare directory ignore would silently
+# swallow the next one added to that series.
+docs/ml_matching/*
+!docs/ml_matching/*.md

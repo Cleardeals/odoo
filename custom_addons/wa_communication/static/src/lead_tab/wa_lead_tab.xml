@@ -1,0 +1,329 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="wa_communication.WaLeadTab">
+        <div class="wa-lead-tab">
+            <t t-if="state.loading">
+                <div class="wa-lead-tab__loading">
+                    <i class="fa fa-spinner fa-spin fa-2x" aria-hidden="true"/>
+                </div>
+            </t>
+            <t t-elif="state.error">
+                <div class="alert alert-danger m-2" t-esc="state.error"/>
+            </t>
+            <t t-elif="!state.convId">
+                <div class="wa-lead-tab__no-conv">
+                    <i class="fa fa-whatsapp wa-lead-tab__no-conv-icon" aria-hidden="true"/>
+                    <p class="wa-lead-tab__no-conv-title">No WhatsApp conversation yet</p>
+                    <p class="text-muted small">
+                        Send a template message to start the conversation.
+                        Templates work even before the customer messages you first.
+                    </p>
+                    <button class="btn btn-primary wa-lead-tab__first-msg-btn"
+                            t-on-click="() => this.openTemplatePicker()">
+                        <i class="fa fa-paper-plane" aria-hidden="true"/>
+                        Send First Message
+                    </button>
+                    <!-- The one-click first outreach: no variables to type,
+                         everything comes from the linked property. -->
+                    <button t-if="hasProperty"
+                            class="btn btn-outline-primary wa-lead-tab__first-msg-btn mt-2"
+                            t-att-disabled="state.sharingDetails"
+                            t-on-click="() => this.sendPropertyDetails()">
+                        <t t-if="state.sharingDetails">
+                            <i class="fa fa-spinner fa-spin" aria-hidden="true"/>
+                            Sending…
+                        </t>
+                        <t t-else="">
+                            <i class="fa fa-home" aria-hidden="true"/>
+                            Share Property Details
+                        </t>
+                    </button>
+                    <t t-if="state.sendError">
+                        <div class="alert alert-danger wa-lead-tab__send-error mt-2"
+                             t-esc="state.sendError"/>
+                    </t>
+                </div>
+            </t>
+            <t t-else="">
+                <!-- Layout: chat thread + right sidebar.
+                     Phase 2: the left "Enrollments" workflow rail was removed
+                     until workflows deploy — re-add the <div
+                     class="wa-lead-tab__enrollments"> block here (JS getter and
+                     SCSS are kept dormant). -->
+
+                <!-- Phone: the sidebar has nowhere to go, so its contents move
+                     into a header strip above the thread. Send Template is
+                     promoted out of the sheet on purpose — when the 24h window
+                     is closed a template is the ONLY way to reach the buyer, and
+                     hiding it behind an overflow made the phone a dead end. -->
+                <t t-if="isSmall">
+                    <div class="wa-lead-tab__mobile-bar">
+                        <div class="wa-lead-tab__mobile-row">
+                            <CdWindowBadge state="windowState" windowExpiresAt="windowExpiresAt"/>
+                            <span class="wa-lead-tab__mobile-assignee" t-if="conversation">
+                                <i class="fa fa-user-circle-o" aria-hidden="true"/>
+                                <t t-esc="conversation.assigned_user_name || 'Unassigned'"/>
+                            </span>
+                            <button class="wa-lead-tab__mobile-btn wa-lead-tab__mobile-btn--primary"
+                                    t-on-click="() => this.openTemplatePicker()">
+                                <i class="fa fa-envelope-o" aria-hidden="true"/> Template
+                            </button>
+                            <button class="wa-lead-tab__mobile-btn"
+                                    aria-label="More actions"
+                                    t-on-click="() => this.openActionSheet()">
+                                <i class="fa fa-ellipsis-v" aria-hidden="true"/>
+                            </button>
+                        </div>
+                        <button class="wa-lead-tab__mobile-stats"
+                                t-att-aria-expanded="state.statsExpanded ? 'true' : 'false'"
+                                t-on-click="() => this.toggleStats()">
+                            <span t-esc="statsSummary"/>
+                            <i t-attf-class="fa fa-chevron-{{ state.statsExpanded ? 'up' : 'down' }}"
+                               aria-hidden="true"/>
+                        </button>
+                        <t t-if="state.statsExpanded">
+                            <div class="wa-lead-tab__mobile-stats-grid">
+                                <div><b t-esc="stats.sent || 0"/><span>Sent</span></div>
+                                <div><b><t t-esc="stats.delivered_pct || 0"/>%</b><span>Delivered</span></div>
+                                <div><b><t t-esc="stats.read_pct || 0"/>%</b><span>Read</span></div>
+                                <div><b t-esc="stats.replies || 0"/><span>Replies</span></div>
+                            </div>
+                        </t>
+                    </div>
+                </t>
+
+                <!-- Centre: Chat thread + composer -->
+                <div class="wa-lead-tab__chat">
+                    <t t-if="state.sendError">
+                        <div class="alert alert-danger wa-lead-tab__send-error" t-esc="state.sendError"/>
+                    </t>
+                    <!-- Persistent handover-approval banner (shown to the assignee/manager) -->
+                    <t t-foreach="incomingRequests" t-as="req" t-key="req.id">
+                        <div class="wa-lead-tab__handover-banner">
+                            <span class="wa-lead-tab__handover-text">
+                                <i class="fa fa-user-plus" aria-hidden="true"/>
+                                <b t-esc="req.requester_name"/> requested to take over this chat.
+                                <t t-if="req.note"> — <i t-esc="req.note"/></t>
+                            </span>
+                            <span class="wa-lead-tab__handover-actions">
+                                <button class="btn btn-sm btn-success"
+                                        t-on-click="() => this.approveRequest(req.id)">
+                                    <i class="fa fa-check" aria-hidden="true"/> Approve
+                                </button>
+                                <button class="btn btn-sm btn-outline-secondary"
+                                        t-on-click="() => this.declineRequest(req.id)">
+                                    <i class="fa fa-times" aria-hidden="true"/> Decline
+                                </button>
+                            </span>
+                        </div>
+                    </t>
+                    <!-- Inquiry-attribution bar: which property this chat is currently about. -->
+                    <CdInquirySwitcher
+                        segmentsEnabled="segmentsEnabled"
+                        activeLabel="activeSegmentLabel"
+                        activeInquiryId="activeSegmentInquiryId"
+                        activePropertyId="activeSegmentPropertyId"
+                        inquiries="inquiries"
+                        suggestion="segmentSuggestion"
+                        searchProperties.bind="searchProperties"
+                        onSwitch.bind="switchInquiry"
+                        onPickProperty.bind="pickProperty"
+                        onStartTopic.bind="startTopic"
+                        onCreateInquiry.bind="createInquiryForActive"
+                        onAcceptSuggestion.bind="acceptSuggestion"
+                        onDismissSuggestion.bind="dismissSuggestion"/>
+
+                    <CdChatThread messages="messages"/>
+                    <!-- Ownership action bar (shown when the RM can't send) -->
+                    <t t-if="!canSend">
+                        <div class="wa-lead-tab__claim-bar">
+                            <t t-if="assignmentPending">
+                                <span class="wa-lead-tab__claim-msg">
+                                    <i class="fa fa-spinner fa-spin" aria-hidden="true"/>
+                                    Assigning…
+                                </span>
+                            </t>
+                            <t t-else="">
+                                <span class="wa-lead-tab__claim-msg" t-esc="sendGateReason"/>
+                                <t t-if="isUnassigned">
+                                    <button class="btn btn-sm btn-primary"
+                                            t-on-click="() => this.claimChat()">
+                                        <i class="fa fa-hand-paper-o" aria-hidden="true"/> Claim chat
+                                    </button>
+                                </t>
+                                <t t-elif="myOpenRequest">
+                                    <span class="wa-lead-tab__claim-msg">
+                                        <i class="fa fa-hourglass-half" aria-hidden="true"/>
+                                        Request sent — waiting for approval.
+                                    </span>
+                                </t>
+                                <t t-else="">
+                                    <button class="btn btn-sm btn-outline-primary"
+                                            t-on-click="() => this.requestAssignment()">
+                                        <i class="fa fa-user-plus" aria-hidden="true"/> Request assignment
+                                    </button>
+                                </t>
+                            </t>
+                        </div>
+                    </t>
+                    <CdChatComposer
+                        windowState="windowState"
+                        quickReplies="state.quickReplies"
+                        disabled="!canSend"
+                        disabledReason="sendGateReason"
+                        onSend="(body, kind, opts) => this.onSend(body, kind, opts)"
+                        onOpenTemplates="() => this.openTemplatePicker()"/>
+                </div>
+
+                <!-- Right: Stats + Actions.
+                     `t-if` rather than `display: none` — a hidden sidebar still
+                     renders and still fetches, and its actions were unreachable
+                     on a phone rather than merely invisible. -->
+                <div class="wa-lead-tab__sidebar" t-if="!isSmall">
+                    <!-- Window badge -->
+                    <div class="wa-lead-tab__window-row">
+                        <CdWindowBadge state="windowState" windowExpiresAt="windowExpiresAt"/>
+                    </div>
+
+                    <!-- Assigned RM -->
+                    <div class="wa-lead-tab__assignee" t-if="conversation">
+                        <i class="fa fa-user-circle-o" aria-hidden="true"/>
+                        <span class="wa-lead-tab__assignee-lbl">Assigned to</span>
+                        <span class="wa-lead-tab__assignee-name"
+                              t-esc="conversation.assigned_user_name || 'Unassigned'"/>
+                    </div>
+
+                    <!-- Stats -->
+                    <div class="wa-lead-tab__panel-title">STATS</div>
+                    <div class="wa-lead-tab__stats-grid">
+                        <div class="wa-lead-tab__stat-card">
+                            <div class="wa-lead-tab__stat-val" t-esc="stats.sent || 0"/>
+                            <div class="wa-lead-tab__stat-lbl">Sent</div>
+                        </div>
+                        <div class="wa-lead-tab__stat-card">
+                            <div class="wa-lead-tab__stat-val">
+                                <t t-esc="stats.delivered_pct || 0"/>%
+                            </div>
+                            <div class="wa-lead-tab__stat-lbl">Delivered</div>
+                        </div>
+                        <div class="wa-lead-tab__stat-card">
+                            <div class="wa-lead-tab__stat-val">
+                                <t t-esc="stats.read_pct || 0"/>%
+                            </div>
+                            <div class="wa-lead-tab__stat-lbl">Read</div>
+                        </div>
+                        <div class="wa-lead-tab__stat-card">
+                            <div class="wa-lead-tab__stat-val" t-esc="stats.replies || 0"/>
+                            <div class="wa-lead-tab__stat-lbl">Replies</div>
+                        </div>
+                    </div>
+
+                    <!-- Actions -->
+                    <div class="wa-lead-tab__panel-title" style="margin-top:16px">ACTIONS</div>
+                    <div class="wa-lead-tab__actions">
+                        <button class="wa-lead-tab__action-btn"
+                                t-on-click="() => this.openTemplatePicker()">
+                            <i class="fa fa-envelope-o" aria-hidden="true"/>
+                            Send Template
+                        </button>
+
+                        <!-- Sends the same property card the initial-nudge
+                             workflow sends, with every field filled from the
+                             linked property. -->
+                        <button class="wa-lead-tab__action-btn"
+                                t-att-disabled="!hasProperty or state.sharingDetails"
+                                t-att-title="hasProperty ? 'Send this property\'s details to the buyer' : 'Link a property to this inquiry first'"
+                                t-on-click="() => this.sendPropertyDetails()">
+                            <t t-if="state.sharingDetails">
+                                <i class="fa fa-spinner fa-spin" aria-hidden="true"/>
+                                Sending…
+                            </t>
+                            <t t-else="">
+                                <i class="fa fa-home" aria-hidden="true"/>
+                                Share Property Details
+                            </t>
+                        </button>
+
+                        <button class="wa-lead-tab__action-btn"
+                                t-att-class="state.showAssignPicker ? 'wa-lead-tab__action-btn wa-lead-tab__action-btn--active' : 'wa-lead-tab__action-btn'"
+                                t-on-click="() => this.openAssignPicker()">
+                            <i class="fa fa-user-plus" aria-hidden="true"/>
+                            Assign Conversation
+                        </button>
+                        <!-- Assign picker dropdown -->
+                        <t t-if="state.showAssignPicker">
+                            <div class="wa-lead-tab__picker">
+                                <div class="wa-lead-tab__picker-header">
+                                    Assign to RM
+                                    <button class="wa-lead-tab__picker-close"
+                                            t-on-click="() => this.closePickers()">×</button>
+                                </div>
+                                <div class="wa-lead-tab__picker-list">
+                                    <t t-foreach="state.assignUsers" t-as="u" t-key="u.id">
+                                        <button class="wa-lead-tab__picker-row"
+                                                t-on-click="() => this.pickAssignUser(u.id)">
+                                            <i class="fa fa-user-circle-o" aria-hidden="true"/>
+                                            <span t-esc="u.name"/>
+                                        </button>
+                                    </t>
+                                </div>
+                            </div>
+                        </t>
+
+                        <button class="wa-lead-tab__action-btn"
+                                t-on-click="() => this.openInInterakt()">
+                            <i class="fa fa-external-link" aria-hidden="true"/>
+                            Open in Interakt
+                        </button>
+                    </div>
+                </div>
+            </t>
+
+            <!-- Phone: everything the sidebar used to hold -->
+            <t t-if="state.showActionSheet">
+                <CdBottomSheet title="'Conversation actions'" onClose.bind="closeActionSheet">
+                    <button class="cd-sheet__action"
+                            t-att-disabled="!hasProperty or state.sharingDetails"
+                            t-on-click="() => this.runFromSheet(() => this.sendPropertyDetails())">
+                        <i class="fa fa-home" aria-hidden="true"/>
+                        <t t-if="state.sharingDetails">Sending…</t>
+                        <t t-else="">Share Property Details</t>
+                    </button>
+                    <button class="cd-sheet__action"
+                            t-on-click="() => this.runFromSheet(() => this.openAssignPicker())">
+                        <i class="fa fa-user-plus" aria-hidden="true"/> Assign conversation
+                    </button>
+                    <button class="cd-sheet__action"
+                            t-on-click="() => this.runFromSheet(() => this.openInInterakt())">
+                        <i class="fa fa-external-link" aria-hidden="true"/> Open in Interakt
+                    </button>
+                </CdBottomSheet>
+            </t>
+
+            <!-- Phone: the assign dropdown becomes a sheet of full-width rows -->
+            <t t-if="isSmall and state.showAssignPicker">
+                <CdBottomSheet title="'Assign to RM'" tall="true" onClose.bind="closePickers">
+                    <t t-foreach="state.assignUsers" t-as="u" t-key="u.id">
+                        <button class="cd-sheet__action"
+                                t-on-click="() => this.pickAssignUser(u.id)">
+                            <i class="fa fa-user-circle-o" aria-hidden="true"/>
+                            <span t-esc="u.name"/>
+                        </button>
+                    </t>
+                </CdBottomSheet>
+            </t>
+
+            <!-- Send-template modal -->
+            <t t-if="state.showTemplatePicker">
+                <CdTemplatePickerModal
+                    templates="state.templates"
+                    loading="state.tplLoading"
+                    error="state.tplError"
+                    defaultBodyValue1="leadName"
+                    onSend="(payload) => this.sendTemplate(payload)"
+                    onClose="() => this.closeTemplatePicker()"
+                    onRefresh="() => this._loadTemplates()"/>
+            </t>
+        </div>
+    </t>
+</templates>

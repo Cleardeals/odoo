@@ -1,0 +1,553 @@
+.cd-chat-composer {
+    border-top: 1px solid #dee2e6;
+    background: #f8f9fa;
+    padding: 8px 12px;
+
+    // The composer is the floor of the screen: it keeps its natural height no
+    // matter what the parent does. Without this it is a shrinkable flex child,
+    // so inside a fixed-height chat panel a notice or a banner squeezes it
+    // until the input row collides with the notice above it — the defect on
+    // the lead form at phone widths.
+    flex: 0 0 auto;
+
+    &__closed-notice {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 6px;
+        font-size: 12px;
+        color: #856404;
+        background: #fff3cd;
+        border: 1px solid #ffc107;
+        border-radius: 6px;
+        padding: 6px 10px;
+        margin-bottom: 6px;
+    }
+
+    &__closed-text { flex: 1 1 auto; min-width: 0; }
+
+    &__closed-cta {
+        flex: 0 0 auto;
+        font-size: 12px;
+        padding: 2px 10px;
+        white-space: nowrap;
+    }
+
+    &__gate-notice {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        color: #7c3a00;
+        background: #ffe8d6;
+        border: 1px solid #ff922b;
+        border-radius: 6px;
+        padding: 6px 10px;
+        margin-bottom: 6px;
+    }
+
+    &__qr-wrap {
+        position: relative;
+        display: flex;
+    }
+
+    &__file-hidden { display: none; }
+
+    &__upload-error {
+        font-size: 12px;
+        color: #dc2626;
+        padding: 4px 0;
+    }
+
+    // ── Multi-file preview panel ───────────────────────────────────────────
+    &__files-panel {
+        background: #f0f0f0;
+        border-radius: 8px;
+        padding: 10px 12px;
+        margin-bottom: 6px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    &__files-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        max-height: 210px;
+        overflow-y: auto;
+    }
+
+    &__file-thumb {
+        position: relative;
+        width: 80px;
+        height: 80px;
+        border-radius: 6px;
+        overflow: hidden;
+        background: #ddd;
+        flex-shrink: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+
+        &--error { border: 2px solid #ef4444; }
+        &--uploading { opacity: 0.75; }
+    }
+
+    &__thumb-img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    &__thumb-doc-icon {
+        font-size: 24px;
+        color: #7c3aed;
+        margin-bottom: 4px;
+    }
+
+    &__thumb-name {
+        font-size: 9px;
+        text-align: center;
+        padding: 0 4px;
+        color: #333;
+        overflow: hidden;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        word-break: break-all;
+    }
+
+    &__thumb-overlay {
+        position: absolute;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.42);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+        font-size: 20px;
+
+        &--error { background: rgba(239, 68, 68, 0.65); }
+    }
+
+    &__thumb-remove {
+        position: absolute;
+        top: 2px;
+        right: 2px;
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: rgba(0, 0, 0, 0.55);
+        border: none;
+        color: #fff;
+        font-size: 10px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        line-height: 1;
+        z-index: 1;
+
+        &:hover { background: rgba(0, 0, 0, 0.75); }
+    }
+
+    // Shared caption + actions (reused from old attach-panel)
+    &__attach-caption {
+        border: 1px solid #ced4da;
+        border-radius: 6px;
+        padding: 5px 10px;
+        font-size: 13px;
+        width: 100%;
+        outline: none;
+        &:focus { border-color: #7c3aed; }
+    }
+
+    &__attach-actions {
+        display: flex;
+        gap: 8px;
+    }
+
+    // ── Compose row ───────────────────────────────────────────────────────
+    &__row {
+        display: flex;
+        align-items: flex-end;
+        gap: 6px;
+        position: relative; // anchor for the format popup
+    }
+
+    &__attach-btn {
+        padding: 6px 8px;
+        color: #6c757d;
+        background: none;
+        border: none;
+        font-size: 18px;
+        &:hover { color: #495057; }
+        &--active { color: #7c3aed; }
+    }
+
+    // ── Input wrapper + floating format popup ────────────────────────────────
+    &__input-wrap {
+        flex: 1;
+        position: relative;
+        display: flex;
+        flex-direction: column;
+    }
+
+    &__fmt-popup {
+        // Positioned via viewport coordinates computed by the mirror-div technique
+        // (left/top set inline by the component).
+        position: fixed;
+        transform: translate(-50%, calc(-100% - 8px));
+        display: flex;
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        box-shadow: 0 3px 14px rgba(0, 0, 0, 0.18);
+        overflow: hidden;
+        z-index: 9999;
+        white-space: nowrap;
+
+        // Small arrow pointing downward toward the selection
+        &::after {
+            content: "";
+            position: absolute;
+            bottom: -6px;
+            left: 50%;
+            transform: translateX(-50%);
+            border-left: 6px solid transparent;
+            border-right: 6px solid transparent;
+            border-top: 6px solid #fff;
+            filter: drop-shadow(0 1px 1px rgba(0,0,0,0.12));
+        }
+    }
+
+    // Phone: pin above the input instead of chasing the caret. A viewport-
+    // positioned popup and Android's own selection handles land on top of each
+    // other, and the popup often opens off the edge of a 390px screen.
+    &__fmt-popup--pinned {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: auto;
+        bottom: calc(100% + 6px);
+        transform: none;
+        justify-content: space-around;
+
+        &::after { display: none; }
+    }
+
+    &__fmt-popup-btn {
+        border: none;
+        background: transparent;
+        padding: 6px 11px;
+        cursor: pointer;
+        font-size: 14px;
+        color: #374151;
+        border-right: 1px solid #e2e8f0;
+        line-height: 1.2;
+
+        &:last-child { border-right: none; }
+        &:hover { background: #f5f3ff; color: #7c3aed; }
+
+        b    { font-weight: 800; font-style: normal; }
+        i    { font-style: italic; font-weight: 600; }
+        s    { text-decoration: line-through; }
+        code { font-family: monospace; font-size: 11px; }
+    }
+
+    &__input {
+        width: 100%;
+        resize: none;
+        border: 1px solid #ced4da;
+        border-radius: 20px;
+        padding: 8px 14px;
+        font-size: 14px;
+        outline: none;
+        max-height: 120px;
+        overflow-y: auto;
+        box-sizing: border-box;
+
+        &:focus { border-color: #7c3aed; box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.15); }
+        &:disabled { background: #e9ecef; cursor: not-allowed; }
+    }
+
+    &__send-btn {
+        border-radius: 50%;
+        width: 38px;
+        height: 38px;
+        padding: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+}
+
+
+// ── Phone ────────────────────────────────────────────────────────────────────
+// Odoo's own small breakpoint (SIZES.SM, ui_service.js) so the composer and the
+// client around it agree about what a phone is.
+@media (max-width: 767.98px) {
+    .cd-chat-composer {
+        padding: 6px 8px;
+        // Clear of the home indicator, which otherwise covers the send button.
+        padding-bottom: calc(6px + var(--cd-safe-b));
+
+        &__row { gap: 4px; align-items: flex-end; }
+
+        &__attach-btn {
+            width: var(--cd-tap);
+            height: var(--cd-tap);
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+        }
+
+        &__input {
+            // 16px minimum: a smaller font makes mobile Safari zoom the page on
+            // focus and it never zooms back out.
+            font-size: 16px;
+            padding: 10px 14px;
+            // Tall enough that a placeholder or a first line at 16px is never
+            // clipped by the one-row default height.
+            min-height: var(--cd-tap);
+            // Grow to roughly 40% of the visible viewport, then scroll inside.
+            max-height: 40vh;
+        }
+
+        &__send-btn {
+            width: 48px;
+            height: 48px;
+            font-size: 17px;
+        }
+
+        &__closed-notice,
+        &__gate-notice { font-size: 13px; }
+
+        &__fmt-popup-btn { padding: 10px 14px; font-size: 15px; }
+
+        // Thumbnails scroll sideways rather than stacking rows that push the
+        // input off-screen.
+        &__files-grid {
+            flex-wrap: nowrap;
+            overflow-x: auto;
+            overscroll-behavior-x: contain;
+            max-height: none;
+        }
+
+        &__thumb-remove { width: 32px; height: 32px; }
+    }
+
+    // The list builder is a desktop-sized job; on a phone it takes the whole
+    // screen rather than a centred panel with a sliver of margin.
+    .cd-list-builder {
+        width: 100%;
+        max-width: none;
+        height: 100dvh;
+        max-height: 100dvh;
+        border-radius: 0;
+
+        &__body { padding-bottom: calc(12px + var(--cd-safe-b)); }
+    }
+}
+
+// ── Interactive list builder modal ──────────────────────────────────────────
+.cd-list-builder {
+    &__backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.35);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1050;
+    }
+
+    background: var(--cd-surface, #fff);
+    color: var(--cd-text, #111);
+    width: 520px;
+    max-width: 94vw;
+    max-height: 88vh;
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.28);
+    overflow: hidden;
+
+    &__head, &__foot {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 16px;
+    }
+    &__head { border-bottom: 1px solid var(--cd-border, #e5e7eb); }
+    &__foot { border-top: 1px solid var(--cd-border, #e5e7eb); }
+    &__title { font-weight: 600; }
+    &__close {
+        border: 0; background: transparent; cursor: pointer;
+        color: var(--cd-text-muted, #6b7280); font-size: 16px;
+    }
+
+    &__body {
+        padding: 14px 16px;
+        overflow-y: auto;
+    }
+    &__label {
+        display: block;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--cd-text-muted, #6b7280);
+        margin: 10px 0 4px;
+    }
+    &__input {
+        width: 100%;
+        padding: 7px 9px;
+        border: 1px solid var(--cd-border, #d1d5db);
+        border-radius: 7px;
+        background: var(--cd-surface, #fff);
+        color: inherit;
+        font-size: 13px;
+    }
+
+    &__section {
+        border: 1px solid var(--cd-border, #e5e7eb);
+        border-radius: 9px;
+        padding: 10px;
+        margin-top: 10px;
+    }
+    &__section-head {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+    }
+    &__section-title { flex: 1; font-weight: 600; }
+
+    &__row {
+        display: flex;
+        gap: 6px;
+        align-items: flex-start;
+        margin-top: 8px;
+    }
+    &__row-num {
+        flex-shrink: 0;
+        width: 20px;
+        height: 20px;
+        margin-top: 6px;
+        border-radius: 50%;
+        background: var(--cd-border, #e5e7eb);
+        color: var(--cd-text-muted, #6b7280);
+        font-size: 11px;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    &__row-fields {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    // Row title + its live character counter (WhatsApp caps titles at 24).
+    &__row-title-wrap {
+        position: relative;
+        display: flex;
+        align-items: center;
+
+        .cd-list-builder__input {
+            flex: 1;
+            padding-right: 48px;   // room for the counter
+        }
+    }
+
+    &__counter {
+        position: absolute;
+        right: 8px;
+        font-size: 11px;
+        color: var(--cd-text-muted, #9ca3af);
+        pointer-events: none;
+        font-variant-numeric: tabular-nums;
+
+        &--max { color: #d97706; font-weight: 600; }
+    }
+
+    &__hint {
+        margin-left: 6px;
+        font-size: 11px;
+        font-weight: 400;
+        color: var(--cd-text-muted, #9ca3af);
+        text-transform: none;
+    }
+
+    // Live WhatsApp-style preview of the collapsed bubble
+    &__preview {
+        margin-bottom: 6px;
+    }
+    &__preview-label {
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--cd-text-muted, #6b7280);
+        text-transform: uppercase;
+        margin-bottom: 4px;
+    }
+    &__preview-bubble {
+        background: #dcf8c6;
+        color: #111;
+        border-radius: 10px;
+        border-bottom-right-radius: 3px;
+        padding: 8px 10px 0;
+        max-width: 280px;
+        margin-left: auto;
+    }
+    &__preview-text {
+        font-size: 14px;
+        line-height: 1.4;
+        white-space: pre-wrap;
+        word-break: break-word;
+        min-height: 18px;
+    }
+    &__preview-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        margin: 6px -10px 0;
+        padding: 8px;
+        border-top: 1px solid rgba(0, 0, 0, 0.08);
+        color: #00a5f4;
+        font-size: 13px;
+        font-weight: 500;
+        .fa { font-size: 12px; }
+    }
+
+    &__icon-btn {
+        border: 0; background: transparent; cursor: pointer;
+        color: var(--cd-text-muted, #9ca3af);
+        padding: 6px;
+        &:hover { color: var(--cd-danger, #dc2626); }
+    }
+
+    &__add-link {
+        border: 0; background: transparent; cursor: pointer;
+        color: var(--cd-primary, #16a34a);
+        font-size: 12px; font-weight: 600;
+        padding: 6px 0;
+        margin-top: 6px;
+    }
+    &__add-section { display: block; }
+
+    &__error {
+        color: var(--cd-danger, #dc2626);
+        font-size: 12px;
+        margin-top: 8px;
+    }
+
+    &__count { font-size: 12px; color: var(--cd-text-muted, #6b7280); }
+    &__foot-actions { display: flex; gap: 8px; }
+}
