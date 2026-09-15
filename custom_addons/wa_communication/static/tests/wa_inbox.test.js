@@ -164,9 +164,9 @@ describe("WaInbox", () => {
         });
         onRpc("get_inbox", () => { counter.calls++; return inboxPayload(); });
         patchWithCleanup(user, { hasGroup: () => false });
-        await mountWithCleanup(WaInbox);
+        const inbox = await mountWithCleanup(WaInbox);
         await ready();
-        return { handlers, counter };
+        return { handlers, counter, inbox };
     }
 
     test("a burst of bus notifications collapses into a single refresh", async () => {
@@ -194,6 +194,38 @@ describe("WaInbox", () => {
         await animationFrame();
 
         expect(counter.calls).toBe(2);
+    });
+
+    test("the open thread still reloads, not just the list", async () => {
+        // The refresh moved behind a timer, and the thread reload moved with
+        // it. If only the list were reloaded, an RM watching a conversation
+        // would stop seeing incoming messages — the feature this bus exists
+        // for — while the inbox beside it kept updating.
+        const { handlers, counter, inbox } = await mountWithBus();
+        let threadLoads = 0;
+        inbox._loadThread = async () => { threadLoads++; };
+        inbox.state.activeConvId = 7;
+
+        handlers.wa_message_update();
+        await advanceTime(600);
+        await animationFrame();
+
+        expect(counter.calls).toBe(2);
+        expect(threadLoads).toBe(1);
+    });
+
+    test("unmounting cancels a refresh that has not fired yet", async () => {
+        // A timer outliving its component fires into a destroyed one. The
+        // symptom is a console error and a stray RPC, both of which are easy
+        // to miss and impossible to explain later.
+        const { handlers, counter, inbox } = await mountWithBus();
+
+        handlers.wa_message_update();
+        inbox.__owl__.app.destroy();
+        await advanceTime(600);
+        await animationFrame();
+
+        expect(counter.calls).toBe(1);        // the mount load, and nothing after
     });
 
     test("a sustained stream still refreshes at the ceiling", async () => {
