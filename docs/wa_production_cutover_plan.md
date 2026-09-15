@@ -725,6 +725,23 @@ Worth recording so they are not repeated, and so a regression is noticeable:
   the Share Property Details button. The `_u0`-in-Hindi failure that appears
   twice in the dead letter queue is historical; that template is no longer
   referenced.
+
+  **Superseded for message 1 (Sep 2026).** The property workflow now sends
+  `initial_nudge_v3_msg_1` — UTILITY rather than MARKETING, and three body
+  variables (buyer name, project, location) instead of four, the portal name
+  having been dropped. **Re-check this before cutover:** the template was
+  resubmitted on 15 Sep to strip two U+FFFD replacement characters that had been
+  approved into the body, so it went back to PENDING and `initial_nudge_v1_msg_1`
+  is no longer in the approved catalogue. Until Meta approves the corrected
+  copy, message 1 of the property workflow cannot be sent at all — and because
+  the engine logs the step `success` when it queues the send rather than when it
+  lands, a failure there strands the enrollment at `wait_for_details_tap` with
+  the per-step guard blocking any re-send. Confirm APPROVED, not merely present:
+
+  ```
+  GET /v1/public/track/organization/templates?approval_status=APPROVED
+      &template_name=initial_nudge_v3_msg_1
+  ```
 - **Platform schema is current** — Alembic `0012`, equal to the newest migration
   in the repo. No platform migration runs during this cutover.
 - **Cloud SQL has automated backups (daily 07:00) and PITR with 7 days of logs.**
