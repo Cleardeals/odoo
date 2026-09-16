@@ -1,0 +1,37 @@
+// ── Restore text wrapping inside notebook pages ──────────────────────────────
+//
+// An Odoo 19.0 core build published 2026-09-08 moved `white-space: nowrap`
+// off the tab headers and onto the notebook as a whole:
+//
+//     /* before */  .o_notebook .nav-item   { white-space: nowrap; ... }
+//     /* after  */  .o_notebook.horizontal  { white-space: nowrap; }
+//
+// The intent is clearly that tab LABELS should not wrap, but `.o_notebook`
+// wraps the headers *and* the tab content, so the rule also stops every
+// field, label and help text inside a page from wrapping. Any long text in a
+// group's label column then forces that column to the full width of the
+// unwrapped string, and pushes every value in the column to the right.
+//
+// This is what broke the Leads form on 2026-09-16: the help line in
+// leads/views/new_portal_lead_views.xml ("Use Schedule a Visit and Site Visit
+// History for all visit updates.") sits in a group inside the Primary Inquiry
+// page and is ~400px wide when it cannot wrap.
+//
+// We take the narrow fix rather than editing the view, because the change is
+// not specific to that one sentence — it affects every notebook page in every
+// module, ours and upstream's alike.
+//
+// Scoped to `.o_notebook.horizontal` so it matches core's own selector exactly
+// and relies on bundle order (our assets load after web's) rather than
+// `!important`. Drop this file if a later core build scopes its rule to the
+// headers itself — the two are equivalent once it does.
+
+.o_notebook.horizontal {
+    white-space: normal;
+
+    // Keep core's actual intent: tab labels stay on one line.
+    .o_notebook_headers .nav-item,
+    .o_notebook_headers .nav-link {
+        white-space: nowrap;
+    }
+}
