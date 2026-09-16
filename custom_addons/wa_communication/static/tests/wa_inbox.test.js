@@ -12,7 +12,7 @@
  */
 import { test, expect, describe, beforeEach } from "@odoo/hoot";
 import { click, queryAll } from "@odoo/hoot-dom";
-import { animationFrame } from "@odoo/hoot-mock";
+import { advanceTime, animationFrame } from "@odoo/hoot-mock";
 import {
     defineModels, models, onRpc, mockService,
     mountWithCleanup, patchWithCleanup,
@@ -146,5 +146,99 @@ describe("WaInbox", () => {
         await animationFrame();
         expect(".wa-inbox__filters-pop").toHaveCount(1);
         expect(".wa-inbox__filters-reset").toHaveCount(1);
+    });
+
+    // ── Bus refresh coalescing ───────────────────────────────────────────────
+    // `wa_message_log` is shared by every inbox and fires on every wa.message
+    // create and status write, so one customer message arrives here as several
+    // notifications. A refresh costs nine aggregate queries server-side, so the
+    // component must react once per burst rather than once per notification.
+
+    /** Mount with the bus stub capturing its handlers, and count get_inbox RPCs. */
+    async function mountWithBus() {
+        const handlers = {};
+        const counter = { calls: 0 };
+        mockService("bus_service", {
+            addChannel() {}, deleteChannel() {}, unsubscribe() {}, start() {},
+            subscribe(type, cb) { handlers[type] = cb; },
+        });
+        onRpc("get_inbox", () => { counter.calls++; return inboxPayload(); });
+        patchWithCleanup(user, { hasGroup: () => false });
+        const inbox = await mountWithCleanup(WaInbox);
+        await ready();
+        return { handlers, counter, inbox };
+    }
+
+    test("a burst of bus notifications collapses into a single refresh", async () => {
+        const { handlers, counter } = await mountWithBus();
+        expect(counter.calls).toBe(1);                 // the initial load on mount
+
+        // One message is created, then marked sent, delivered and read — times
+        // however many messages are moving at once.
+        for (let i = 0; i < 20; i++) {
+            handlers.wa_message_update();
+        }
+        await advanceTime(600);
+        await animationFrame();
+
+        expect(counter.calls).toBe(2);                 // twenty signals, one refresh
+    });
+
+    test("both bus channels share one refresh rather than racing", async () => {
+        const { handlers, counter } = await mountWithBus();
+
+        handlers.wa_message_update();
+        handlers.cd_notification();
+        handlers.wa_message_update();
+        await advanceTime(600);
+        await animationFrame();
+
+        expect(counter.calls).toBe(2);
+    });
+
+    test("the open thread still reloads, not just the list", async () => {
+        // The refresh moved behind a timer, and the thread reload moved with
+        // it. If only the list were reloaded, an RM watching a conversation
+        // would stop seeing incoming messages — the feature this bus exists
+        // for — while the inbox beside it kept updating.
+        const { handlers, counter, inbox } = await mountWithBus();
+        let threadLoads = 0;
+        inbox._loadThread = async () => { threadLoads++; };
+        inbox.state.activeConvId = 7;
+
+        handlers.wa_message_update();
+        await advanceTime(600);
+        await animationFrame();
+
+        expect(counter.calls).toBe(2);
+        expect(threadLoads).toBe(1);
+    });
+
+    test("unmounting cancels a refresh that has not fired yet", async () => {
+        // A timer outliving its component fires into a destroyed one. The
+        // symptom is a console error and a stray RPC, both of which are easy
+        // to miss and impossible to explain later.
+        const { handlers, counter, inbox } = await mountWithBus();
+
+        handlers.wa_message_update();
+        inbox.__owl__.app.destroy();
+        await advanceTime(600);
+        await animationFrame();
+
+        expect(counter.calls).toBe(1);        // the mount load, and nothing after
+    });
+
+    test("a sustained stream still refreshes at the ceiling", async () => {
+        const { handlers, counter } = await mountWithBus();
+
+        // An unbroken stream would starve a plain trailing debounce forever, so
+        // the ceiling must force a refresh even while events keep arriving.
+        for (let i = 0; i < 30; i++) {
+            handlers.wa_message_update();
+            await advanceTime(100);
+        }
+        await animationFrame();
+
+        expect(counter.calls > 1).toBe(true);
     });
 });

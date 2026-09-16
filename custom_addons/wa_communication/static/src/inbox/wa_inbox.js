@@ -17,6 +17,21 @@ import { relativeTime } from "@cleardeals_ui/utils/datetime";
 
 const PAGE_SIZE = 50;
 
+// How long to wait for a burst of bus notifications to settle before refreshing.
+//
+// `wa_message_log` is a channel shared by every inbox, and `wa.message` broadcasts
+// on it for every create AND every status write — so a single customer message
+// announces itself roughly four times (queued, sent, delivered, read), to every
+// open inbox at once. Refreshing is not cheap: `get_inbox` runs nine aggregate
+// queries over wa_conversation joined to leads_new. Reacting to each notification
+// individually is what pins production's two vCPUs during normal message bursts.
+//
+// A trailing debounce collapses a burst into one refresh. The ceiling keeps the
+// inbox honest under sustained traffic: without it, a steady stream of events
+// would push the refresh back indefinitely and the list would never update.
+const BUS_REFRESH_DEBOUNCE_MS = 400;
+const BUS_REFRESH_MAX_WAIT_MS = 2000;
+
 // Primary axis — who owns the chat. The default is role-aware (see setup()).
 const OWNERSHIP_TABS = [
     { key: "mine",       label: "Mine" },
@@ -61,6 +76,10 @@ export class WaInbox extends Component {
         this.orm        = useService("orm");
         this.action     = useService("action");
         this.busService = useService("bus_service");
+        // Pending coalesced bus refresh: the timer, and when the burst began.
+        // `null` means no burst is in flight — see _scheduleBusRefresh.
+        this._busRefreshTimer = null;
+        this._busRefreshFirstAt = null;
         this.notification = useService("notification");
         this.cdNotif    = useService("cd_notification");
         // Reactive so a rotation re-renders: below Odoo's own small breakpoint
@@ -158,6 +177,10 @@ export class WaInbox extends Component {
         });
 
         onWillUnmount(() => {
+            // Both timers outlive the component otherwise, and fire into a
+            // destroyed one — the search debounce had the same latent leak.
+            clearTimeout(this._busRefreshTimer);
+            clearTimeout(this._searchDebounce);
             this.cdNotif.clearActiveSuppressKey();
         });
     }
@@ -166,18 +189,39 @@ export class WaInbox extends Component {
 
     _subscribeBus() {
         this.busService.addChannel("wa_message_log");
-        this.busService.subscribe("wa_message_update", () => {
-            this._loadInbox();
-            if (this.state.activeConvId) this._loadThread(this.state.activeConvId);
-        });
+        this.busService.subscribe("wa_message_update", () => this._scheduleBusRefresh());
         const uid = user.userId || null;
         if (uid) {
             this.busService.addChannel(`cleardeals_notification_${uid}`);
-            this.busService.subscribe("cd_notification", () => {
-                this._loadInbox();
-                if (this.state.activeConvId) this._loadThread(this.state.activeConvId);
-            });
+            this.busService.subscribe("cd_notification", () => this._scheduleBusRefresh());
         }
+    }
+
+    /** Coalesce a burst of bus notifications into a single refresh.
+     *
+     *  Both channels mean the same thing to this component — "something you are
+     *  showing may have changed" — so they share one timer rather than racing
+     *  each other to reload the same data.
+     */
+    _scheduleBusRefresh() {
+        if (this._busRefreshFirstAt === null) {
+            this._busRefreshFirstAt = Date.now();
+        }
+        clearTimeout(this._busRefreshTimer);
+        // Never let the debounce push the refresh past the ceiling measured from
+        // the FIRST event of the burst, not the most recent one.
+        const elapsed = Date.now() - this._busRefreshFirstAt;
+        const delay = Math.min(
+            BUS_REFRESH_DEBOUNCE_MS,
+            Math.max(0, BUS_REFRESH_MAX_WAIT_MS - elapsed),
+        );
+        this._busRefreshTimer = setTimeout(() => this._runBusRefresh(), delay);
+    }
+
+    _runBusRefresh() {
+        this._busRefreshFirstAt = null;
+        this._loadInbox();
+        if (this.state.activeConvId) this._loadThread(this.state.activeConvId);
     }
 
     // ── Data loading ─────────────────────────────────────────────────────────
