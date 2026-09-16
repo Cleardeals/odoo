@@ -18,7 +18,7 @@ DB_NAME = cleardeals_19_dev
         logs logs-odoo logs-db \
         shell odoo-shell psql \
         update migrate-db wipe \
-        wa-tunnel wa-media-url
+        wa-tunnel wa-media-url wa-interakt wa-config
 
 # ── Default target ─────────────────────────────────────────────────────────────
 help:
@@ -49,6 +49,8 @@ help:
 	@echo "────────────────────────────────────────────────────────────────────"
 	@echo "  make wa-tunnel                      (public cloudflared tunnel for WA media)"
 	@echo "  make wa-media-url URL=https://…     (set/clear WA media base URL)"
+	@echo "  make wa-interakt                    (set TEST Interakt key — hidden prompt)"
+	@echo "  make wa-config                      (show WA params + Pub/Sub env, key masked)"
 	@echo "════════════════════════════════════════════════════════════════════"
 	@echo "  Windows one-time setup:"
 	@echo "    Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser"
@@ -96,23 +98,62 @@ psql:
 # ── Module update ─────────────────────────────────────────────────────────────
 # Usage: make update MODULE=leads
 #        make update MODULE=leads,properties
+# --no-http is required, not cosmetic. This runs a SECOND odoo process inside a
+# container where the dev server is already listening on 8069, so without it the
+# upgrade dies on `OSError: [Errno 98] Address already in use` before touching a
+# single module — the server binds the port during startup, ahead of the upgrade.
+# The other odoo-shell targets below pass it for the same reason.
 update:
 ifndef MODULE
 	$(error MODULE is required. Usage: make update MODULE=my_module)
 endif
 	$(DC) exec odoo python3 /usr/bin/odoo \
-		-d $(DB_NAME) -u $(MODULE) --stop-after-init
+		-d $(DB_NAME) -u $(MODULE) --stop-after-init --no-http
 
 # ── One-time DB migration ──────────────────────────────────────────────────────
 # Copies cleardeals_19_dev from your Mac Postgres (port 5432) into the
 # Docker Postgres container. Safe to run only once on a fresh container.
+#
+# This copies the DATABASE ONLY — there is no filestore leg, and adding one is
+# not possible here because the source filestore path differs per machine. That
+# asymmetry has a specific, badly-misleading consequence, so it is handled
+# rather than left to be rediscovered:
+#
+# Odoo stores compiled asset bundles as ir.attachment rows whose bytes live in
+# the filestore. Copy the rows without the files and Odoo serves a bundle that
+# is not there:
+#
+#     GET /bus/websocket_worker_bundle
+#       -> ir_attachment._to_http_stream
+#       -> FileNotFoundError: .../filestore/<db>/f0/f040d52a...
+#
+# The casualty is bus.websocket_worker_assets.min.js. Without it the browser
+# cannot start the websocket worker, so the bus never connects and NOTHING in
+# the UI live-updates — not the WA inbox, not the notification popups, not the
+# systray bell. Every page still renders, and the server side stays perfectly
+# healthy: wa.message.create() writes its bus_bus rows exactly as it should, so
+# every check short of opening a browser says the feature works. There is
+# simply no client listening.
+#
+# Asset bundles are derived data, so the fix is to delete the rows and let Odoo
+# rebuild them on the next request. Done in SQL against the db container so it
+# needs neither a running Odoo nor an ORM unlink (whose whole job — removing the
+# backing files — is moot when the files are already gone).
 migrate-db:
 	@echo "→ Creating database $(DB_NAME) in the Docker container..."
 	$(DC) exec db createdb -U odoo $(DB_NAME) || true
 	@echo "→ Dumping from Mac Postgres and restoring into Docker..."
 	PGPASSWORD=odoo pg_dump -U odoo -h 127.0.0.1 -p 5432 $(DB_NAME) \
 		| $(DC) exec -T db psql -U odoo -d $(DB_NAME)
+	@echo "→ Dropping stale asset bundles so Odoo regenerates them..."
+	$(DC) exec -T db psql -U odoo -d $(DB_NAME) \
+		-c "DELETE FROM ir_attachment WHERE url LIKE '/web/assets/%';"
 	@echo "✓ Migration complete. Run: make up"
+	@echo ""
+	@echo "  NOTE: the filestore was NOT copied — only the database. Asset bundles"
+	@echo "  are handled above and need nothing from you. Attachments that are real"
+	@echo "  uploads (property images, chat media, avatars) will 404 until you copy"
+	@echo "  the source filestore into the odoo-dev-web-data volume yourself."
 
 # ── WhatsApp media local testing ───────────────────────────────────────────────
 # Interakt fetches image/video/document media over a PUBLIC URL, so localhost is
@@ -158,6 +199,68 @@ wa-media-url:
 		"env.cr.commit()" \
 		"print('✓ wa_communication.media_public_base_url =', repr(env['ir.config_parameter'].sudo().get_param('wa_communication.media_public_base_url')))" \
 		| $(DC) exec -T odoo python3 /usr/bin/odoo shell -d $(DB_NAME) --no-http 2>/dev/null
+
+# ── Interakt credentials (dev DB only) ────────────────────────────────────────
+# Odoo holds its own copy of the Interakt key, separate from the platform's
+# Kubernetes secret: interakt_client.py reads
+# `wa_communication.interakt_api_key` from ir.config_parameter to drive the live
+# Send-Template picker. Both copies must point at the SAME account or the picker
+# lists templates the sender cannot actually send.
+#
+# The key is read from a PROMPT with echo off, never as `make wa-interakt KEY=…`.
+# A make variable lands in ~/.zsh_history, in `ps` output for the duration of the
+# command, and in any terminal-sharing session. It is piped straight into the
+# odoo shell's stdin and never appears in a file or an argv.
+#
+# Use the TEST account key here. This target refuses to run against anything but
+# the dev compose stack, so it cannot touch production by mistake.
+wa-interakt:
+	@echo "→ Setting Interakt credentials in $(DB_NAME) (dev stack only)."
+	@echo "  Use the TEST account key. Input is hidden."
+	@printf "  Interakt API key: "; \
+	stty -echo 2>/dev/null; read APIKEY; stty echo 2>/dev/null; echo ""; \
+	if [ -z "$$APIKEY" ]; then echo "✗ Empty key — nothing changed."; exit 1; fi; \
+	BASE="$${BASE:-https://api.interakt.ai}"; \
+	printf "%s\n" \
+	  "icp = env['ir.config_parameter'].sudo()" \
+	  "icp.set_param('wa_communication.interakt_api_key', '''$$APIKEY''')" \
+	  "icp.set_param('wa_communication.interakt_base_url', '$$BASE')" \
+	  "env.cr.commit()" \
+	  "k = icp.get_param('wa_communication.interakt_api_key') or ''" \
+	  "print('OK  interakt_base_url =', icp.get_param('wa_communication.interakt_base_url'))" \
+	  "print('OK  interakt_api_key  =', (k[:4] + '…' + k[-4:]) if len(k) > 8 else '(set)')" \
+	  | $(DC) exec -T odoo python3 /usr/bin/odoo shell -d $(DB_NAME) --no-http 2>/dev/null
+
+# The topic parameters are printed because leaving them out made this target
+# useless at the one job it has. It reported the container env only — GCP_ENV,
+# PUBSUB_PROJECT_ID, PUBSUB_EMULATOR_HOST — and passed green while all six
+# `wa_communication.topic_*` rows in the dev database still read `cd-prod-*`.
+# Those parameters are a SECOND, independent route to production: the topic name
+# comes from ir.config_parameter, not from GCP_ENV, and the module ships
+# `cd-prod-*` as its defaults, so every fresh install starts pointed at them.
+# Locally you are saved only by accident — the emulator holds `cd-local-*` only,
+# so the publish dies with "404 Topic not found". Unset PUBSUB_EMULATOR_HOST and
+# the same publish reaches real customers.
+wa-config: ## Show the WA system parameters (API key masked) and the Pub/Sub topics
+	@printf "%s\n" \
+	  "icp = env['ir.config_parameter'].sudo()" \
+	  "k = icp.get_param('wa_communication.interakt_api_key') or ''" \
+	  "print('interakt_api_key       =', (k[:4] + '…' + k[-4:]) if len(k) > 8 else ('(unset)' if not k else '(set)'))" \
+	  "print('interakt_base_url      =', icp.get_param('wa_communication.interakt_base_url') or '(unset)')" \
+	  "print('media_public_base_url  =', icp.get_param('wa_communication.media_public_base_url') or '(unset)')" \
+	  "names = ['actor_events','customer_events','nudge_events','odoo_wa_requests','property_events','visit_events']" \
+	  "vals = dict((n, icp.get_param('wa_communication.topic_' + n) or '(unset)') for n in names)" \
+	  "print('')" \
+	  "print('-- Pub/Sub topics, from ir.config_parameter --')" \
+	  "[print('  topic_%-17s = %s' % (n, vals[n])) for n in names]" \
+	  "print('  topic_%-17s = %s  (alias; env-derived at publish time)' % ('workflow_control', icp.get_param('wa_communication.topic_workflow_control') or '(unset)'))" \
+	  "bad = sorted(n for n in names if 'cd-prod' in vals[n])" \
+	  "print('')" \
+	  "print(('DANGER: topic parameter(s) pointing at PRODUCTION: ' + ', '.join(bad)) if bad else 'OK: no topic parameter points at cd-prod-*')" \
+	  "bad and print('        A publish from this stack can reach real customers. Set them to cd-local-* first.')" \
+	  | $(DC) exec -T odoo python3 /usr/bin/odoo shell -d $(DB_NAME) --no-http 2>/dev/null
+	@echo "── container env (must be the emulator for safe testing) ──"
+	@$(DC) exec -T odoo sh -c 'echo "  GCP_ENV=$$GCP_ENV"; echo "  PUBSUB_PROJECT_ID=$$PUBSUB_PROJECT_ID"; echo "  PUBSUB_EMULATOR_HOST=$$PUBSUB_EMULATOR_HOST"'
 
 # ── Wipe ──────────────────────────────────────────────────────────────────────
 wipe:

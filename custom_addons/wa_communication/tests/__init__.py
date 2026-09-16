@@ -25,3 +25,4 @@ from . import test_thread_own_lead_visibility
 from . import test_quick_share_paths
 from . import test_js
 from . import test_workflow_toggle_topic
+from . import test_message_bus_contract

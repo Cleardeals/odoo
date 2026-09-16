@@ -87,3 +87,17 @@ hrms_addons/
 .claude/*
 !.claude/skills/
 .claude/skills/product-brainstorm-workspace/
+
+# Personal handoff note. Untracked by design and routinely stale — it also
+# carries infrastructure and access notes that must never reach this PUBLIC
+# repo. It was swept into a commit once by `git add -A`; this closes that.
+CHECKPOINT.md
+
+# ML-matching design scratch: mockups, wireframes and generated HTML stay local.
+# Written as contents-plus-negation, NOT a bare `docs/ml_matching/`, because git
+# cannot re-include a file whose parent directory is excluded — and the numbered
+# design docs at the top of this directory ARE tracked on
+# feature/ml-matching-integration. A bare directory ignore would silently
+# swallow the next one added to that series.
+docs/ml_matching/*
+!docs/ml_matching/*.md
