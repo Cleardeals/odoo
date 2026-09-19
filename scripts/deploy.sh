@@ -1,8 +1,14 @@
 #!/usr/bin/env bash
 # scripts/deploy.sh — the production deploy, run ON the VM.
 #
-# Invoked by Cloud Build over SSH:
+# Invoked by Cloud Build over SSH, after the build has shipped the deploy
+# surface as a tarball and unpacked it here:
 #     sudo /opt/odoo/scripts/deploy.sh <commit-sha>
+#
+# It will not run against a tree the pipeline did not deliver: .deploy-sha must
+# be present and must match <commit-sha>. To run it by hand, unpack the tarball
+# the last deploy left at /tmp/odoo-deploy-surface.tar.gz, or write .deploy-sha
+# yourself and mean it.
 #
 # It lives in the repo rather than inline in cloudbuild.yaml on purpose. A
 # heredoc in the build config would pass through three layers of quoting —
@@ -32,14 +38,20 @@ SHA="${1:?usage: deploy.sh <commit-sha>}"
 #
 # /opt/odoo wins when it exists. Once the move is done and settled, the
 # fallback can be deleted.
+#
+# The probe is docker-compose.yml, not .git. It used to be .git, back when the
+# pipeline delivered the deploy surface by fetching it — a checkout was what
+# made a directory the app directory. The surface now arrives as a tarball, so
+# .git is incidental: a directory could have one and be the wrong tree, or lack
+# one and be exactly right. Probe for the file the deploy actually needs.
 if [[ -n "${APP_DIR:-}" ]]; then
   :                                   # explicit override always wins
-elif [[ -d /opt/odoo/.git ]]; then
+elif [[ -f /opt/odoo/docker-compose.yml ]]; then
   APP_DIR=/opt/odoo
-elif [[ -d /home/cdgcphub/odoo-project/.git ]]; then
+elif [[ -f /home/cdgcphub/odoo-project/docker-compose.yml ]]; then
   APP_DIR=/home/cdgcphub/odoo-project
 else
-  echo "[deploy] FATAL: no checkout at /opt/odoo or /home/cdgcphub/odoo-project" >&2
+  echo "[deploy] FATAL: no app directory at /opt/odoo or /home/cdgcphub/odoo-project" >&2
   exit 1
 fi
 REGISTRY="${REGISTRY:-us-central1-docker.pkg.dev}"
@@ -71,22 +83,51 @@ EDGE_TIMEOUT="${EDGE_TIMEOUT:-60}"        # Traefik's docker provider is event-d
 
 cd "$APP_DIR" || die "app dir not found: $APP_DIR"
 
-# git refuses to operate on a repository owned by another user ("detected
-# dubious ownership"). This script runs as root; the checkout is owned by
-# cdgcphub. The inline bootstrap in cloudbuild.yaml passes -c safe.directory on
-# every call, but this script's own git commands did not — so all of them failed
-# and the deploy died after the checkout.
+# ── Prove these files ARE the commit being deployed ───────────────────────────
 #
-# Set once here, for every git invocation in the script, via environment rather
-# than `git config --global`: a deploy should not leave persistent config behind
-# on the host.
+# This used to fetch from GitHub and reset the working tree. It no longer needs
+# to: the build ships the compose file, odoo.prod.conf and scripts/ as a tarball
+# over the IAP tunnel and unpacks them here before calling this script, so the
+# files are already the built commit and the production host has no GitHub
+# dependency at all — no credential, no deploy key, no network path to
+# github.com. It also retires the shallow-clone hazard that came with fetching:
+# a plain `git fetch` on that checkout unshallowed it, and .git was measured
+# growing from 980MB to 5.3GB before the fetch was killed.
 #
-# The real fix is Phase 4 moving the application out of a personal home
-# directory to /opt/odoo owned by a deploy group. This is the third distinct
-# failure caused by that location.
-export GIT_CONFIG_COUNT=1
-export GIT_CONFIG_KEY_0=safe.directory
-export GIT_CONFIG_VALUE_0="$APP_DIR"
+# The assertion stays, and is now stronger. It used to mean "the branch tip is
+# still the commit that was built", which quietly stopped holding if someone
+# pushed between the build starting and the deploy running — the old code said
+# so itself. It now means "these files ARE the commit that was built", which
+# cannot stop being true.
+#
+# It also runs BEFORE anything on the host is touched, so a surface that was
+# mis-delivered is refused rather than half-applied.
+#
+# Refuse rather than ship an untested tree alongside a tested image.
+STAMP="${STAMP:-${APP_DIR}/.deploy-sha}"
+[[ -f "$STAMP" ]] \
+  || die "no ${STAMP}: the deploy surface was not delivered by the pipeline — refusing to deploy"
+ACTUAL="$(tr -d '[:space:]' < "$STAMP")"
+[[ "$ACTUAL" == "$SHA" ]] \
+  || die "the delivered files are $ACTUAL but the built commit is $SHA — refusing to deploy"
+log "deploy surface verified at ${SHA}"
+
+# ── Restore ownership of the delivered files ──────────────────────────────────
+# The pipeline unpacks the surface as root with --no-same-owner, so the
+# extracted files land owned by root rather than by whoever owns the app
+# directory. Left alone that drifts a little further on every release, until the
+# directory is in a state nobody chose and a hand-run command fails for reasons
+# that have nothing to do with the deploy.
+#
+# The app directory itself is never inside the tarball, so its ownership is
+# still the original — which makes it the reference, and means this needs no
+# hardcoded user name and works identically on both sides of the Phase 4 move.
+#
+# A failure here warns and continues: ownership drift is worth fixing, and is
+# not worth failing a deploy over.
+chown -R --reference="$APP_DIR" \
+  .deploy-sha docker-compose.yml odoo.prod.conf scripts \
+  || log "WARNING: could not restore ownership under $APP_DIR — deploying anyway"
 
 # ── One deploy at a time ──────────────────────────────────────────────────────
 # Cloud Build does not serialise approved builds. Two people approving in quick
@@ -109,46 +150,6 @@ else
 fi
 
 NEW="${IMAGE_BASE}:${SHA}"
-
-# ── Bring the working tree to the exact commit being deployed ─────────────────
-# compose file, odoo.prod.conf and this script must match the image. The
-# application code itself is IN the image, not here.
-log "checking out ${SHA}"
-# HTTPS rather than the git@github.com remote the VM was set up with. This
-# script runs under sudo; root has no GitHub key, so an SSH fetch fails with
-# "Host key verification failed". The repository is public, so HTTPS needs no
-# credentials — and the VM no longer needs a GitHub deploy key at all.
-# Idempotent, so a hand-run deploy self-heals a remote someone changed back.
-# When invoked by the pipeline the tree is ALREADY at the target commit — the
-# build step checks it out before calling this script, because on a first run
-# this file does not yet exist on the VM. So only fetch when the tree is not
-# already where it needs to be. That makes the script idempotent and keeps it
-# runnable by hand.
-if [[ "$(git rev-parse HEAD)" != "$SHA" ]]; then
-  # HTTPS rather than the git@github.com remote the VM was set up with. This
-  # runs under sudo; root has no GitHub key, so an SSH fetch fails with "Host
-  # key verification failed". The repo is public, so HTTPS needs no credentials
-  # — and the VM no longer needs a GitHub deploy key at all.
-  git remote set-url origin "${REPO_URL:-https://github.com/Cleardeals/odoo.git}"
-
-  # --depth 1 is REQUIRED, not an optimisation. The checkout is a shallow clone,
-  # and a plain `git fetch` on a shallow repo unshallows it, pulling the whole
-  # history of a vendored Odoo fork. Measured live: .git grew from 980MB to
-  # 5.3GB before the fetch was killed, and it had not finished.
-  #
-  # The BRANCH is fetched, not the commit: GitHub refuses to serve an arbitrary
-  # SHA here ("couldn't find remote ref"). The assertion below then confirms the
-  # tree really is the commit that was built.
-  git fetch --depth 1 --quiet origin "${DEPLOY_BRANCH:-19.0}"
-  git reset --hard --quiet FETCH_HEAD
-fi
-# The checkout must be EXACTLY the commit that was built and tested. The
-# pipeline fetches a branch tip (GitHub will not serve an arbitrary SHA to
-# fetch), so if someone pushed to the branch between the build starting and the
-# deploy running, the tip is no longer what was tested. Refuse rather than ship
-# an untested tree alongside a tested image.
-ACTUAL="$(git rev-parse HEAD)"
-[[ "$ACTUAL" == "$SHA" ]] || die "checkout is $ACTUAL but the built commit is $SHA — the branch moved mid-build; refusing to deploy"
 
 # ── Config from Secret Manager into tmpfs ─────────────────────────────────────
 log "rendering config"
