@@ -190,8 +190,41 @@ steps:
         # gcloud mints an ephemeral OS Login key per invocation and needs a
         # writable HOME to put it in.
         export HOME=/workspace
+
+        # ── The deploy surface travels WITH the build ────────────────────────
+        #
+        # This step used to make the VM `git fetch` from GitHub anonymously.
+        # That was the only place GitHub sat in the production deploy path, and
+        # it bought nothing: Cloud Build is already standing in a checkout of
+        # the exact commit being deployed. Fetching it a second time, from a
+        # third party, over an unauthenticated transport, only added ways to
+        # fail — a GitHub outage could block a deploy, and taking this
+        # repository private would have broken it outright.
+        #
+        # So the surface is packed here and shipped over the same IAP tunnel the
+        # deploy already uses. The VM needs no GitHub credential, no deploy key,
+        # and no network path to github.com.
+        #
+        # Only these three paths travel. The application code is in the IMAGE;
+        # what the VM needs from the repo is the compose file, the config
+        # template and the scripts, at the commit that was built.
+        #
+        # .deploy-sha is the provenance stamp. deploy.sh refuses to run unless
+        # it matches the SHA it was invoked with, which is the same guarantee
+        # the old `git rev-parse HEAD` assertion gave — but stronger, because it
+        # no longer depends on nobody having pushed to the branch mid-build.
+        #
+        # It also removes the last reason this step needed the branch name, so
+        # a deploy no longer cares which branch a commit arrived on.
+        echo "$COMMIT_SHA" > .deploy-sha
+        tar -czf /workspace/deploy-surface.tar.gz \
+            .deploy-sha docker-compose.yml odoo.prod.conf scripts
+
         # The first connection after an IAM change can race OS Login key
-        # propagation. Retry briefly rather than failing a deploy over it.
+        # propagation. Retry briefly rather than failing a deploy over it. Both
+        # the copy and the command are inside the loop: either can lose that
+        # race, and re-running both is idempotent.
+        #
         # The remote command is written INLINE, with no intermediate shell
         # variable. Deliberate, after two failures on exactly that:
         #
@@ -206,18 +239,49 @@ steps:
         # Cloud Build substitution and shell expansion both act on the same
         # dollar sign, and a variable that must survive both is fragile in a way
         # no gate here can see. Having none is simpler than escaping correctly.
+        # The lowercase `attempt` below is safe: substitution only fires on a
+        # dollar followed by CAPITALS.
         #
-        # COMMIT_SHA and _APP_DIR are real substitutions, resolved before the
-        # shell sees them. The fetch+reset runs BEFORE deploy.sh because on a
-        # first run that script is not yet on the VM — the pipeline bootstraps
-        # itself instead of depending on a hand-placed file.
+        # The unpack runs BEFORE deploy.sh because on a first run that script is
+        # not yet on the VM at this commit — the pipeline bootstraps itself
+        # instead of depending on a hand-placed file. That was true of the old
+        # fetch too, and is why this is not simply a step inside deploy.sh.
+        #
+        # `cd /opt/odoo || cd /home/cdgcphub/odoo-project` resolves either path,
+        # so this works on BOTH sides of the Phase 4 move.
+        #
+        # /tmp, not the login user's home: gcloud connects as an OS Login
+        # account whose name is derived from the build service account, so `~`
+        # is not a path this file can write down. /tmp is world-writable, which
+        # is not a privilege boundary here — every human on this VM already has
+        # sudo — and the stamp check in deploy.sh is what actually establishes
+        # that the extracted tree is the built commit. The tarball is left in
+        # place deliberately: it is exactly what a hand-run recovery deploy
+        # needs, and it holds no secrets (odoo.prod.conf is a template of
+        # placeholder tokens; the real values come from Secret Manager).
+        #
+        # --no-same-owner keeps tar from restoring the archive's root:root
+        # ownership onto the app directory. It is only half the job — the
+        # extracted files still land owned by root, the user running tar — and
+        # deploy.sh puts that right immediately afterwards, using the app
+        # directory itself as the reference.
+        #
+        # That fix lives THERE and not here on purpose. Everything in this
+        # --command= string passes through Cloud Build substitution, then local
+        # bash, then the remote login shell, then sudo bash -c, and the comments
+        # above record what that has already cost this pipeline twice. So this
+        # string stays as close to a single verb as it can: unpack, then hand
+        # over. Logic that can live in a reviewable script does.
         for attempt in 1 2 3; do
-          if gcloud compute ssh "${_INSTANCE}" \
+          if gcloud compute scp "/workspace/deploy-surface.tar.gz" \
+               "${_INSTANCE}:/tmp/odoo-deploy-surface.tar.gz" \
                --zone="${_ZONE}" --tunnel-through-iap --quiet \
-               --command="sudo bash -c 'set -euo pipefail; cd /opt/odoo 2>/dev/null || cd /home/cdgcphub/odoo-project; git -c safe.directory=* remote set-url origin https://github.com/Cleardeals/odoo.git; git -c safe.directory=* fetch --depth 1 --quiet origin $BRANCH_NAME; git -c safe.directory=* reset --hard --quiet FETCH_HEAD; exec bash scripts/deploy.sh $COMMIT_SHA'"; then
+             && gcloud compute ssh "${_INSTANCE}" \
+               --zone="${_ZONE}" --tunnel-through-iap --quiet \
+               --command="sudo bash -c 'set -euo pipefail; cd /opt/odoo 2>/dev/null || cd /home/cdgcphub/odoo-project; tar -xzf /tmp/odoo-deploy-surface.tar.gz --no-same-owner; exec bash scripts/deploy.sh $COMMIT_SHA'"; then
             exit 0
           fi
-          echo "ssh attempt ${attempt} failed; retrying in 15s" >&2
+          echo "deploy attempt ${attempt} failed; retrying in 15s" >&2
           sleep 15
         done
         echo "could not reach ${_INSTANCE} after 3 attempts" >&2
